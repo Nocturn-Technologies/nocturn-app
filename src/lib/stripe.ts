@@ -12,4 +12,4 @@ export function getStripe(): Stripe {
 }
 
 // Platform fee percentage (Nocturn's cut)
-export const PLATFORM_FEE_PERCENT = 5; // 5% per ticket
+export const PLATFORM_FEE_PERCENT = 5;

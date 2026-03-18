@@ -2,7 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { stripe, PLATFORM_FEE_PERCENT } from "@/lib/stripe";
+import { PLATFORM_FEE_PERCENT } from "@/lib/stripe";
 
 function createAdminClient() {
   return createClient(

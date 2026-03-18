@@ -2,7 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { stripe } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 
 function createAdminClient() {
   return createClient(
@@ -55,7 +55,7 @@ export async function executePayouts(settlementId: string) {
   const netAmount = Number(settlement.profit);
   if (netAmount > 0) {
     try {
-      const transfer = await stripe.transfers.create({
+      const transfer = await getStripe().transfers.create({
         amount: Math.round(netAmount * 100), // convert to cents
         currency: "usd",
         destination: collective.stripe_account_id,

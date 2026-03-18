@@ -219,9 +219,9 @@ export default async function TicketPage({ params }: TicketPageProps) {
                   Price
                 </p>
                 <p className="text-sm font-medium text-foreground">
-                  {ticket.price_paid === 0
+                  {Number(ticket.price_paid) === 0
                     ? "Free"
-                    : `$${(ticket.price_paid / 100).toFixed(2)}`}
+                    : `$${Number(ticket.price_paid).toFixed(2)}`}
                 </p>
               </div>
               <div>
