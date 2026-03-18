@@ -75,8 +75,6 @@ export async function createCollective(formData: {
     return { error: "You must be logged in. Please refresh the page and try again." };
   }
 
-  console.log("createCollective: User found:", user.id, user.email);
-
   // Use admin client to bypass RLS for initial collective + member creation
   const admin = createAdminClient();
 

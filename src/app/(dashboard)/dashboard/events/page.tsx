@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, Plus, MapPin, Clock } from "lucide-react";
+import { Calendar, Plus, MapPin, Clock, Music } from "lucide-react";
 import Link from "next/link";
 
 export default async function EventsPage() {
@@ -155,6 +155,13 @@ function EventCard({
             </span>
           </div>
         </div>
+        <Link
+          href={`/dashboard/events/${event.id}/lineup`}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-nocturn/10 hover:text-nocturn transition-colors"
+        >
+          <Music className="h-3 w-3" />
+          Lineup
+        </Link>
         <span
           className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
             statusColors[event.status] ?? ""
