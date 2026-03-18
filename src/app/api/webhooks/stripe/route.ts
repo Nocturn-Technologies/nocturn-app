@@ -171,4 +171,42 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       `[stripe-webhook] Generated QR codes for ${insertedTickets.length} ticket(s)`
     );
   }
+
+  // Send branded confirmation email
+  try {
+    const customerEmail = session.customer_email ?? session.customer_details?.email;
+    if (customerEmail) {
+      const { data: event } = await supabase
+        .from("events")
+        .select("title, starts_at, venues(name)")
+        .eq("id", eventId)
+        .single();
+
+      const { data: tierInfo } = await supabase
+        .from("ticket_tiers")
+        .select("name")
+        .eq("id", tierId)
+        .single();
+
+      if (event) {
+        const venue = event.venues as unknown as { name: string } | null;
+        const { sendTicketConfirmation } = await import("@/app/actions/email");
+        await sendTicketConfirmation({
+          to: customerEmail,
+          eventTitle: event.title || "Event",
+          eventDate: new Date(event.starts_at).toLocaleDateString("en", {
+            weekday: "long", month: "long", day: "numeric", year: "numeric",
+          }),
+          venueName: venue?.name || "TBA",
+          tierName: tierInfo?.name || "General Admission",
+          quantity,
+          totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
+          ticketLink: `https://nocturn-app-navy.vercel.app/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+        });
+        console.log(`[stripe-webhook] Sent confirmation email to ${customerEmail}`);
+      }
+    }
+  } catch (emailErr) {
+    console.error("[stripe-webhook] Email send failed (non-blocking):", emailErr);
+  }
 }

@@ -156,7 +156,14 @@ export default async function EventDetailPage({ params }: Props) {
 
       {/* Quick Links */}
       <div className="flex flex-wrap gap-2">
-        {/* Edit page coming soon — link disabled for now */}
+        {event.status === "draft" && (
+          <Link href={`/dashboard/events/${event.id}/edit`}>
+            <Button variant="outline" size="sm">
+              <Pencil className="mr-2 h-3 w-3" />
+              Edit Event
+            </Button>
+          </Link>
+        )}
         <Link href={`/dashboard/events/${event.id}/tasks`}>
           <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10">
             <ListChecks className="mr-2 h-3 w-3" />
