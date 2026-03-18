@@ -142,46 +142,62 @@ function localParse(message: string, existing: Partial<ParsedEventDetails>): Par
   if (times.length >= 1 && result.doorsOpen) result.startTime = times[0];
 
   // === VENUE ===
-  // "at The Warehouse", "venue is Biblio", "@ Rebel"
+  // "venue is Biblio", "venue name is biblio", "the venue is Story", "at The Warehouse", "@ Rebel"
   const venuePatterns = [
-    /venue\s+(?:is|:)\s+(.+?)(?:\s+(?:and|,|in|on|\.|$))/i,
+    /(?:venue|venue\s*name)\s+(?:is|:)\s+(.+)/i,
+    /(?:the\s+venue\s+is)\s+(.+)/i,
     /(?:at|@)\s+([A-Z][A-Za-z\s'&]+?)(?:\s*[,.]|\s+(?:in|on|at|\d)|$)/,
     /(?:at|@)\s+(.+?)(?:\s+(?:in|on|,|\.|$))/i,
   ];
   for (const pattern of venuePatterns) {
     const venueMatch = message.match(pattern);
     if (venueMatch) {
-      const name = venueMatch[1].trim().replace(/\s+and\s*$/, "").replace(/\s+city\s+is.*$/i, "");
-      if (name.length > 1 && name.length < 50) {
-        result.venueName = name;
+      let name = venueMatch[1].trim();
+      // Clean trailing punctuation and conjunctions
+      name = name.replace(/[.,!?]+$/, "").replace(/\s+and\s+city.*$/i, "").replace(/\s+in\s+.*$/i, "").trim();
+      if (name.length > 0 && name.length < 50) {
+        result.venueName = name.charAt(0).toUpperCase() + name.slice(1);
         break;
       }
     }
   }
 
   // === CITY ===
-  // "in Toronto", "city is Toronto", "toronto", "city: toronto"
+  // "city is Toronto", "in Toronto", "city: toronto"
   const cityPatterns = [
-    /city\s+(?:is|:)\s+([a-z][a-z\s]+)/i,
-    /\bin\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/,
-    /\bin\s+([a-z][a-z\s]+?)(?:\s*[,.]|\s+(?:at|on|and|$))/i,
+    /city\s+(?:is|:)\s+(.+)/i,
+    /\bin\s+([A-Za-z][a-z]+(?:\s+[A-Za-z][a-z]+)*)/,
   ];
   for (const pattern of cityPatterns) {
     const cityMatch = message.match(pattern);
     if (cityMatch) {
-      const city = cityMatch[1].trim();
+      let city = cityMatch[1].trim().replace(/[.,!?]+$/, "");
       if (city.length > 1 && city.length < 30) {
-        result.venueCity = city.charAt(0).toUpperCase() + city.slice(1);
+        result.venueCity = city.charAt(0).toUpperCase() + city.slice(1).toLowerCase();
         break;
       }
     }
   }
 
-  // If message is just a city name (single word, no other content parsed)
-  if (!result.venueCity && !result.date && !result.startTime && !result.venueName) {
-    const knownCities = ["toronto", "montreal", "vancouver", "ottawa", "calgary", "edmonton", "winnipeg", "new york", "nyc", "los angeles", "la", "miami", "chicago", "detroit", "brooklyn", "london", "berlin"];
-    if (knownCities.includes(lower.replace(/[.,!?]/g, ""))) {
-      result.venueCity = lower.charAt(0).toUpperCase() + lower.slice(1);
+  // === SMART FALLBACK ===
+  // If nothing else was parsed from this message, treat the whole message
+  // as filling the most important missing field
+  const nothingParsed = !result.date && !result.startTime && !result.venueName && !result.venueCity && !result.ticketPrice && !result.doorsOpen;
+  if (nothingParsed && lower.length > 0 && lower.length < 50) {
+    const cleanText = message.trim().replace(/[.,!?]+$/, "");
+
+    // Known cities
+    const knownCities = ["toronto", "montreal", "vancouver", "ottawa", "calgary", "edmonton", "winnipeg", "new york", "nyc", "los angeles", "la", "miami", "chicago", "detroit", "brooklyn", "london", "berlin", "paris"];
+    if (knownCities.includes(lower.replace(/[.,!?]/g, "").trim())) {
+      result.venueCity = cleanText.charAt(0).toUpperCase() + cleanText.slice(1).toLowerCase();
+    }
+    // If venue is the missing field, treat as venue name
+    else if (!existing.venueName && existing.title) {
+      result.venueName = cleanText.charAt(0).toUpperCase() + cleanText.slice(1);
+    }
+    // If city is the missing field and venue exists, treat as city
+    else if (!existing.venueCity && existing.venueName) {
+      result.venueCity = cleanText.charAt(0).toUpperCase() + cleanText.slice(1).toLowerCase();
     }
   }
 
