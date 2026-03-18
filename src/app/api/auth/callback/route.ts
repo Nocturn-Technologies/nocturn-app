@@ -5,12 +5,15 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/dashboard";
+  const redirectTo = searchParams.get("redirect_to");
 
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      return NextResponse.redirect(`${origin}${next}`);
+      // If there's a redirect_to param (e.g. from password reset), use it
+      const destination = redirectTo || next;
+      return NextResponse.redirect(`${origin}${destination}`);
     }
   }
 
