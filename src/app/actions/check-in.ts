@@ -66,9 +66,9 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
       success: false,
       error: `Already checked in at ${checkedInTime}`,
       ticket: {
-        tierName: (ticket.ticket_tiers as { name: string } | null)?.name ?? "General",
-        guestName: (ticket.profiles as { full_name: string; email: string } | null)?.full_name ?? "Guest",
-        guestEmail: (ticket.profiles as { full_name: string; email: string } | null)?.email ?? null,
+        tierName: (ticket.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
+        guestName: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
+        guestEmail: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.email ?? null,
       },
     };
   }
@@ -104,9 +104,9 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
     success: true,
     error: null,
     ticket: {
-      tierName: (ticket.ticket_tiers as { name: string } | null)?.name ?? "General",
-      guestName: (ticket.profiles as { full_name: string; email: string } | null)?.full_name ?? "Guest",
-      guestEmail: (ticket.profiles as { full_name: string; email: string } | null)?.email ?? null,
+      tierName: (ticket.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
+      guestName: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
+      guestEmail: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.email ?? null,
     },
   };
 }
@@ -165,9 +165,9 @@ export async function getCheckInStats(eventId: string): Promise<CheckInStats> {
   const recentCheckIns = (recentData ?? []).map((t) => ({
     id: t.id,
     guestName:
-      (t.profiles as { full_name: string } | null)?.full_name ?? "Guest",
+      (t.profiles as unknown as { full_name: string } | null)?.full_name ?? "Guest",
     tierName:
-      (t.ticket_tiers as { name: string } | null)?.name ?? "General",
+      (t.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
     checkedInAt: t.checked_in_at!,
   }));
 
