@@ -469,9 +469,9 @@ function TaskGroup({
                     <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${categoryColors[task.category as string] ?? categoryColors.general}`}>
                       {task.category as string}
                     </span>
-                    {task.due_date && (
+                    {typeof task.due_date === "string" && task.due_date && (
                       <span className="text-[10px] text-muted-foreground">
-                        Due {new Date(task.due_date as string).toLocaleDateString("en", { month: "short", day: "numeric" })}
+                        Due {new Date(task.due_date).toLocaleDateString("en", { month: "short", day: "numeric" })}
                       </span>
                     )}
                     {assignee && (
