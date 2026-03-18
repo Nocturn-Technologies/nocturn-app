@@ -8,35 +8,35 @@
 
 ## Phase 1: Agentic OS MVP (Weeks 1-12)
 
-### Week 1 (Mar 16-22): Foundation
+### Week 1 (Mar 16-22): Foundation ✅
 - [x] Repo setup, Next.js + Tailwind + shadcn/ui
 - [x] Supabase client/server/middleware setup
 - [x] Stripe Connect integration scaffolding
 - [x] GitHub repo + Vercel deployment
-- [ ] Create Supabase project + run initial migration (00001_initial_schema.sql)
-- [ ] Set up Supabase Auth (email/magic link)
-- [ ] Create signup/login pages with Supabase Auth UI
+- [x] Create Supabase project + run initial migration (00001_initial_schema.sql)
+- [x] Set up Supabase Auth (email/magic link)
+- [x] Create signup/login pages with Supabase Auth UI
 
-### Week 2 (Mar 23-29): Auth & Collective CRUD
-- [ ] Complete auth flow: signup → create collective → dashboard
-- [ ] Collective creation form (name, slug, logo, bio, social links)
-- [ ] Collective settings page
-- [ ] Dashboard layout (sidebar nav, header, main content area)
-- [ ] Protected routes working end-to-end
+### Week 2 (Mar 23-29): Auth & Collective CRUD ✅
+- [x] Complete auth flow: signup → create collective → dashboard
+- [x] Collective creation form (name, slug, bio, city, instagram, website)
+- [x] Collective settings page
+- [x] Dashboard layout (sidebar nav, header, main content area, mobile bottom tabs)
+- [x] Protected routes working end-to-end
 
-### Week 3 (Mar 30 - Apr 5): Member Management
-- [ ] Member invite system (email + invite link)
-- [ ] Member list with role management (admin/promoter/talent_buyer/door_staff)
-- [ ] Accept invitation flow
+### Week 3 (Mar 30 - Apr 5): Member Management ✅ (done early)
+- [x] Member add system (email lookup + add to collective)
+- [x] Member list with role management (admin/promoter/talent_buyer/door_staff)
+- [ ] Accept invitation flow (email invite link)
 - [ ] Member activity feed on dashboard
 - [ ] RLS policies tested for member access control
 
-### Week 4 (Apr 6-12): Event Creation
-- [ ] Event builder form (title, date, venue, description, flyer upload)
-- [ ] Venue selection/creation (search + add new)
-- [ ] Ticket tier configuration (name, price, quantity, sales dates)
+### Week 4 (Apr 6-12): Event Creation ✅ (done early)
+- [x] Event builder form (3-step wizard: details → venue → tickets)
+- [x] Venue creation (inline during event creation)
+- [x] Ticket tier configuration (name, price, quantity)
 - [ ] Event status management (draft → published → completed)
-- [ ] Public event page (shareable URL: /e/[collective-slug]/[event-slug])
+- [x] Public event page (shareable URL: /e/[collective-slug]/[event-slug])
 
 ### Week 5 (Apr 13-19): Artist Booking
 - [ ] Artist database (create, search, browse)
