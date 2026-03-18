@@ -18,7 +18,7 @@ export default async function PublicCheckInPage({ params }: Props) {
     notFound();
   }
 
-  const event = ticket.events as {
+  const event = ticket.events as unknown as {
     id: string;
     title: string;
     slug: string;
@@ -28,7 +28,7 @@ export default async function PublicCheckInPage({ params }: Props) {
     venues: { name: string; address: string; city: string } | null;
   } | null;
 
-  const tier = ticket.ticket_tiers as {
+  const tier = ticket.ticket_tiers as unknown as {
     name: string;
     price: number;
   } | null;
