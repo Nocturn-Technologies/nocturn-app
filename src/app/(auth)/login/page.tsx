@@ -25,6 +25,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -71,6 +72,46 @@ export default function LoginPage() {
     setLoading(false);
   }
 
+  async function handleResetPassword() {
+    setError(null);
+    if (!email) {
+      setError("Enter your email first.");
+      return;
+    }
+    setLoading(true);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/reset-password`,
+    });
+
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+      return;
+    }
+
+    setResetSent(true);
+    setLoading(false);
+  }
+
+  if (resetSent) {
+    return (
+      <Card>
+        <CardHeader className="text-center">
+          <CardTitle>Check your email</CardTitle>
+          <CardDescription>
+            We sent a password reset link to <strong>{email}</strong>
+          </CardDescription>
+        </CardHeader>
+        <CardFooter className="justify-center">
+          <Button variant="ghost" onClick={() => setResetSent(false)}>
+            Back to login
+          </Button>
+        </CardFooter>
+      </Card>
+    );
+  }
+
   if (magicLinkSent) {
     return (
       <Card>
@@ -109,7 +150,16 @@ export default function LoginPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                className="text-xs text-nocturn hover:underline"
+              >
+                Forgot password?
+              </button>
+            </div>
             <Input
               id="password"
               type="password"
