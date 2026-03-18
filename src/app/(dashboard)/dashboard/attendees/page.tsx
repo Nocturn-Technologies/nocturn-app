@@ -5,18 +5,30 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Users, UserCheck, DollarSign, Download, Search } from "lucide-react";
-import { getAttendees, exportAttendeesCSV, type AttendeeRow, type AttendeeStats } from "@/app/actions/attendees";
+import {
+  getAttendees,
+  exportAttendeesCSV,
+  type AttendeeRow,
+  type AttendeeStats,
+} from "@/app/actions/attendees";
 
 export default function AttendeesPage() {
   const [attendees, setAttendees] = useState<AttendeeRow[]>([]);
-  const [stats, setStats] = useState<AttendeeStats>({ totalAttendees: 0, repeatAttendees: 0, totalRevenue: 0 });
+  const [stats, setStats] = useState<AttendeeStats>({
+    totalAttendees: 0,
+    repeatAttendees: 0,
+    totalRevenue: 0,
+  });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     getAttendees().then((result) => {
-      setAttendees(result.attendees);
-      setStats(result.stats);
+      if (!result.error) {
+        setAttendees(result.attendees);
+        setStats(result.stats);
+      }
       setLoading(false);
     });
   }, []);
@@ -26,8 +38,9 @@ export default function AttendeesPage() {
   );
 
   async function handleExport() {
+    setExporting(true);
     const result = await exportAttendeesCSV();
-    if (result.csv) {
+    if (!result.error && result.csv) {
       const blob = new Blob([result.csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -36,6 +49,7 @@ export default function AttendeesPage() {
       a.click();
       URL.revokeObjectURL(url);
     }
+    setExporting(false);
   }
 
   if (loading) {
@@ -52,13 +66,17 @@ export default function AttendeesPage() {
         <div>
           <h1 className="text-2xl font-bold">Attendees</h1>
           <p className="text-sm text-muted-foreground">
-            Your audience from ticket purchases
+            Your audience CRM from ticket purchases
           </p>
         </div>
         {attendees.length > 0 && (
-          <Button variant="outline" onClick={handleExport}>
+          <Button
+            variant="outline"
+            onClick={handleExport}
+            disabled={exporting}
+          >
             <Download className="mr-2 h-4 w-4" />
-            Export CSV
+            {exporting ? "Exporting..." : "Export CSV"}
           </Button>
         )}
       </div>
@@ -82,7 +100,9 @@ export default function AttendeesPage() {
               <UserCheck className="h-5 w-5 text-green-500" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Repeat (2+ events)</p>
+              <p className="text-xs text-muted-foreground">
+                Repeat (2+ events)
+              </p>
               <p className="text-xl font-bold">{stats.repeatAttendees}</p>
             </div>
           </CardContent>
@@ -94,7 +114,9 @@ export default function AttendeesPage() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Total Revenue</p>
-              <p className="text-xl font-bold">${stats.totalRevenue.toFixed(2)}</p>
+              <p className="text-xl font-bold">
+                ${stats.totalRevenue.toFixed(2)}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -116,27 +138,95 @@ export default function AttendeesPage() {
       {/* Attendee list */}
       {filtered.length > 0 ? (
         <div className="space-y-2">
-          <div className="grid grid-cols-5 gap-2 px-4 text-xs font-medium text-muted-foreground">
-            <span className="col-span-2">Email</span>
-            <span className="text-center">Events</span>
-            <span className="text-center">Tickets</span>
-            <span className="text-right">Total Spent</span>
+          {/* Desktop header */}
+          <div className="hidden sm:grid grid-cols-12 gap-2 px-4 text-xs font-medium text-muted-foreground">
+            <span className="col-span-4">Email</span>
+            <span className="col-span-2 text-center">Events</span>
+            <span className="col-span-2 text-center">Tickets</span>
+            <span className="col-span-2 text-right">Total Spent</span>
+            <span className="col-span-2 text-right">Last Event</span>
           </div>
+
           {filtered.map((attendee) => (
             <Card key={attendee.email}>
-              <CardContent className="grid grid-cols-5 items-center gap-2 p-4">
-                <div className="col-span-2 min-w-0">
-                  <p className="truncate font-medium text-sm">{attendee.email}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {attendee.eventTitles.slice(0, 2).join(", ")}
-                    {attendee.eventTitles.length > 2 && ` +${attendee.eventTitles.length - 2} more`}
+              <CardContent className="p-4">
+                {/* Desktop row */}
+                <div className="hidden sm:grid grid-cols-12 items-center gap-2">
+                  <div className="col-span-4 min-w-0">
+                    <p className="truncate font-medium text-sm">
+                      {attendee.email}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {attendee.eventTitles.slice(0, 2).join(", ")}
+                      {attendee.eventTitles.length > 2 &&
+                        ` +${attendee.eventTitles.length - 2} more`}
+                    </p>
+                  </div>
+                  <p className="col-span-2 text-center text-sm">
+                    {attendee.totalEvents}
+                  </p>
+                  <p className="col-span-2 text-center text-sm">
+                    {attendee.ticketCount}
+                  </p>
+                  <p className="col-span-2 text-right font-medium text-nocturn">
+                    ${attendee.totalSpent.toFixed(2)}
+                  </p>
+                  <p className="col-span-2 text-right text-xs text-muted-foreground">
+                    {attendee.lastEventDate
+                      ? new Date(attendee.lastEventDate).toLocaleDateString(
+                          "en",
+                          { month: "short", day: "numeric", year: "numeric" }
+                        )
+                      : "N/A"}
                   </p>
                 </div>
-                <p className="text-center text-sm">{attendee.totalEvents}</p>
-                <p className="text-center text-sm">{attendee.ticketCount}</p>
-                <p className="text-right font-medium text-nocturn">
-                  ${attendee.totalSpent.toFixed(2)}
-                </p>
+
+                {/* Mobile layout */}
+                <div className="sm:hidden space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="truncate font-medium text-sm flex-1 min-w-0 mr-2">
+                      {attendee.email}
+                    </p>
+                    <p className="font-medium text-nocturn shrink-0">
+                      ${attendee.totalSpent.toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>
+                      {attendee.totalEvents} event
+                      {attendee.totalEvents !== 1 ? "s" : ""}
+                    </span>
+                    <span>
+                      {attendee.ticketCount} ticket
+                      {attendee.ticketCount !== 1 ? "s" : ""}
+                    </span>
+                    <span className="ml-auto">
+                      {attendee.lastEventDate
+                        ? new Date(attendee.lastEventDate).toLocaleDateString(
+                            "en",
+                            { month: "short", day: "numeric" }
+                          )
+                        : ""}
+                    </span>
+                  </div>
+                  {attendee.eventTitles.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {attendee.eventTitles.slice(0, 3).map((title) => (
+                        <span
+                          key={title}
+                          className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[10px] font-medium text-nocturn"
+                        >
+                          {title}
+                        </span>
+                      ))}
+                      {attendee.eventTitles.length > 3 && (
+                        <span className="text-[10px] text-muted-foreground">
+                          +{attendee.eventTitles.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
@@ -150,7 +240,8 @@ export default function AttendeesPage() {
             <div className="text-center">
               <p className="font-medium">No attendees yet</p>
               <p className="text-sm text-muted-foreground">
-                When people buy tickets to your events, they&apos;ll appear here.
+                When people buy tickets to your events, they&apos;ll appear
+                here.
               </p>
             </div>
           </CardContent>
