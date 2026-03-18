@@ -15,6 +15,7 @@ import {
   Users,
   Ticket,
   ScanLine,
+  ListChecks,
 } from "lucide-react";
 import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
@@ -159,6 +160,12 @@ export default async function EventDetailPage({ params }: Props) {
             </Button>
           </Link>
         )}
+        <Link href={`/dashboard/events/${event.id}/tasks`}>
+          <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10">
+            <ListChecks className="mr-2 h-3 w-3" />
+            Playbook
+          </Button>
+        </Link>
         <Link href={`/dashboard/events/${event.id}/lineup`}>
           <Button variant="outline" size="sm">
             <Music className="mr-2 h-3 w-3" />
