@@ -1,6 +1,5 @@
 "use client";
 
-import * as Sentry from "@sentry/nextjs";
 import { useEffect } from "react";
 
 export default function GlobalError({
@@ -11,85 +10,24 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    console.error("[global-error]", error);
   }, [error]);
 
   return (
-    <html lang="en" className="dark">
-      <body
-        style={{
-          margin: 0,
-          fontFamily:
-            '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-          backgroundColor: "#09090B",
-          color: "#FAFAFA",
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            minHeight: "100vh",
-            alignItems: "center",
-            justifyContent: "center",
-            padding: "1rem",
-          }}
-        >
-          <div
-            style={{
-              maxWidth: "28rem",
-              width: "100%",
-              textAlign: "center",
-            }}
+    <html lang="en">
+      <body style={{ backgroundColor: "#09090B", color: "#FAFAFA", fontFamily: "system-ui, sans-serif" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100vh", padding: "24px" }}>
+          <h1 style={{ color: "#7B2FF7", fontSize: "24px", fontWeight: 700, marginBottom: "8px" }}>nocturn.</h1>
+          <h2 style={{ fontSize: "20px", fontWeight: 600, marginBottom: "8px" }}>Something went wrong</h2>
+          <p style={{ color: "#A1A1AA", fontSize: "14px", marginBottom: "24px" }}>
+            {error.message || "An unexpected error occurred."}
+          </p>
+          <button
+            onClick={reset}
+            style={{ backgroundColor: "#7B2FF7", color: "#fff", border: "none", borderRadius: "8px", padding: "12px 24px", fontSize: "14px", fontWeight: 600, cursor: "pointer" }}
           >
-            <div
-              style={{
-                width: "4rem",
-                height: "4rem",
-                margin: "0 auto 1.5rem",
-                borderRadius: "50%",
-                backgroundColor: "rgba(239, 68, 68, 0.1)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "1.5rem",
-              }}
-            >
-              !
-            </div>
-            <h2
-              style={{
-                fontSize: "1.25rem",
-                fontWeight: 700,
-                marginBottom: "0.5rem",
-              }}
-            >
-              Something went wrong
-            </h2>
-            <p
-              style={{
-                fontSize: "0.875rem",
-                color: "#A1A1AA",
-                marginBottom: "1.5rem",
-              }}
-            >
-              An unexpected error occurred. Our team has been notified.
-            </p>
-            <button
-              onClick={reset}
-              style={{
-                padding: "0.5rem 1.5rem",
-                backgroundColor: "#7B2FF7",
-                color: "#FAFAFA",
-                border: "none",
-                borderRadius: "0.375rem",
-                fontSize: "0.875rem",
-                fontWeight: 500,
-                cursor: "pointer",
-              }}
-            >
-              Try again
-            </button>
-          </div>
+            Try again
+          </button>
         </div>
       </body>
     </html>
