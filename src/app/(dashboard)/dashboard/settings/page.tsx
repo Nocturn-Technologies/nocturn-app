@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import {
+  createConnectAccount,
+  getConnectAccountStatus,
+  createConnectLoginLink,
+} from "@/app/actions/stripe";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -31,6 +36,16 @@ export default function SettingsPage() {
   const [city, setCity] = useState("");
   const [instagram, setInstagram] = useState("");
   const [website, setWebsite] = useState("");
+
+  // Stripe Connect state
+  const searchParams = useSearchParams();
+  const [stripeLoading, setStripeLoading] = useState(false);
+  const [stripeStatus, setStripeStatus] = useState<{
+    hasAccount: boolean;
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
+  } | null>(null);
+  const stripeParam = searchParams.get("stripe");
 
   // User profile fields
   const [fullName, setFullName] = useState("");
@@ -78,6 +93,10 @@ export default function SettingsPage() {
         setCity(c.metadata?.city ?? "");
         setInstagram(c.instagram ?? "");
         setWebsite(c.website ?? "");
+
+        // Load Stripe Connect status
+        const status = await getConnectAccountStatus(c.id);
+        setStripeStatus(status);
       }
       setLoading(false);
     }
@@ -281,6 +300,118 @@ export default function SettingsPage() {
               {saving ? "Saving..." : "Save Collective"}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Separator />
+
+      {/* Stripe Connect */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Stripe Connect</CardTitle>
+          <CardDescription>
+            Connect a Stripe account to accept payments and receive payouts
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {stripeParam === "connected" && (
+            <div className="mb-4 rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-500">
+              Stripe onboarding complete! Your account status will update
+              shortly.
+            </div>
+          )}
+
+          {!stripeStatus || !stripeStatus.hasAccount ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Connect a Stripe Express account to start accepting ticket
+                payments for your events.
+              </p>
+              <Button
+                className="bg-nocturn hover:bg-nocturn-light"
+                disabled={stripeLoading || !collectiveId}
+                onClick={async () => {
+                  setStripeLoading(true);
+                  const result = await createConnectAccount(collectiveId);
+                  if (result.url) {
+                    window.location.href = result.url;
+                  } else {
+                    setError(result.error ?? "Failed to create Stripe account");
+                    setStripeLoading(false);
+                  }
+                }}
+              >
+                {stripeLoading ? "Connecting..." : "Connect Stripe"}
+              </Button>
+            </div>
+          ) : stripeStatus.chargesEnabled && stripeStatus.payoutsEnabled ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500">
+                  <svg
+                    className="h-3 w-3 text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={3}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                </div>
+                <span className="text-sm font-medium text-emerald-500">
+                  Stripe Connected
+                </span>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Your account is fully set up. Charges and payouts are enabled.
+              </p>
+              <Button
+                variant="outline"
+                disabled={stripeLoading}
+                onClick={async () => {
+                  setStripeLoading(true);
+                  const result = await createConnectLoginLink(collectiveId);
+                  if (result.url) {
+                    window.open(result.url, "_blank");
+                  } else {
+                    setError(
+                      result.error ?? "Failed to open Stripe Dashboard"
+                    );
+                  }
+                  setStripeLoading(false);
+                }}
+              >
+                Open Stripe Dashboard
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="rounded-md bg-yellow-500/10 p-3 text-sm text-yellow-600 dark:text-yellow-400">
+                Your Stripe account setup is incomplete. Please complete the
+                onboarding to start accepting payments.
+              </div>
+              <Button
+                className="bg-nocturn hover:bg-nocturn-light"
+                disabled={stripeLoading}
+                onClick={async () => {
+                  setStripeLoading(true);
+                  const result = await createConnectAccount(collectiveId);
+                  if (result.url) {
+                    window.location.href = result.url;
+                  } else {
+                    setError(result.error ?? "Failed to resume Stripe setup");
+                    setStripeLoading(false);
+                  }
+                }}
+              >
+                {stripeLoading ? "Loading..." : "Complete Setup"}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

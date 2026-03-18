@@ -1,0 +1,127 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { stripe } from "@/lib/stripe";
+import Stripe from "stripe";
+import { randomUUID } from "crypto";
+
+function createAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.text();
+  const signature = request.headers.get("stripe-signature");
+
+  if (!signature) {
+    return NextResponse.json(
+      { error: "Missing stripe-signature header" },
+      { status: 400 }
+    );
+  }
+
+  let event: Stripe.Event;
+
+  try {
+    event = stripe.webhooks.constructEvent(
+      body,
+      signature,
+      process.env.STRIPE_WEBHOOK_SECRET!
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    console.error("[stripe-webhook] Signature verification failed:", message);
+    return NextResponse.json(
+      { error: `Webhook signature verification failed: ${message}` },
+      { status: 400 }
+    );
+  }
+
+  try {
+    switch (event.type) {
+      case "checkout.session.completed": {
+        await handleCheckoutCompleted(
+          event.data.object as Stripe.Checkout.Session
+        );
+        break;
+      }
+      default:
+        // Acknowledge unhandled event types without error
+        console.log(`[stripe-webhook] Unhandled event type: ${event.type}`);
+    }
+  } catch (err) {
+    console.error(`[stripe-webhook] Error handling ${event.type}:`, err);
+    return NextResponse.json(
+      { error: "Webhook handler failed" },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({ received: true });
+}
+
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+  const metadata = session.metadata;
+
+  if (!metadata?.eventId || !metadata?.tierId || !metadata?.quantity) {
+    console.error(
+      "[stripe-webhook] Missing metadata on checkout session:",
+      session.id
+    );
+    return;
+  }
+
+  const eventId = metadata.eventId;
+  const tierId = metadata.tierId;
+  const quantity = parseInt(metadata.quantity, 10);
+  const paymentIntentId =
+    typeof session.payment_intent === "string"
+      ? session.payment_intent
+      : session.payment_intent?.id ?? null;
+
+  const supabase = createAdminClient();
+
+  // Look up the tier to get the price
+  const { data: tier, error: tierError } = await supabase
+    .from("ticket_tiers")
+    .select("price")
+    .eq("id", tierId)
+    .single();
+
+  if (tierError || !tier) {
+    console.error("[stripe-webhook] Ticket tier not found:", tierId);
+    return;
+  }
+
+  // Build ticket records
+  const tickets = Array.from({ length: quantity }, () => ({
+    event_id: eventId,
+    ticket_tier_id: tierId,
+    user_id: null, // Guest purchase — no user linked
+    status: "paid" as const,
+    price_paid: tier.price,
+    currency: "usd",
+    stripe_payment_intent_id: paymentIntentId,
+    ticket_token: randomUUID(),
+    metadata: {
+      checkout_session_id: session.id,
+      customer_email: session.customer_email ?? session.customer_details?.email,
+    },
+  }));
+
+  const { error: insertError } = await supabase
+    .from("tickets")
+    .insert(tickets);
+
+  if (insertError) {
+    console.error("[stripe-webhook] Failed to insert tickets:", insertError);
+    throw insertError; // Will cause 500 so Stripe retries
+  }
+
+  console.log(
+    `[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`
+  );
+}

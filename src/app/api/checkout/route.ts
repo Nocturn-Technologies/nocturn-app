@@ -1,0 +1,164 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
+import { stripe, PLATFORM_FEE_PERCENT } from "@/lib/stripe";
+
+function createAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+interface CheckoutBody {
+  eventId: string;
+  tierId: string;
+  quantity: number;
+  buyerEmail: string;
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body: CheckoutBody = await request.json();
+    const { eventId, tierId, quantity, buyerEmail } = body;
+
+    if (!eventId || !tierId || !quantity || !buyerEmail) {
+      return NextResponse.json(
+        { error: "Missing required fields: eventId, tierId, quantity, buyerEmail" },
+        { status: 400 }
+      );
+    }
+
+    if (quantity < 1 || quantity > 10) {
+      return NextResponse.json(
+        { error: "Quantity must be between 1 and 10" },
+        { status: 400 }
+      );
+    }
+
+    const supabase = createAdminClient();
+
+    // Look up the event and its collective's stripe_account_id
+    const { data: event, error: eventError } = await supabase
+      .from("events")
+      .select("id, title, slug, collective_id, collectives(stripe_account_id)")
+      .eq("id", eventId)
+      .single();
+
+    if (eventError || !event) {
+      return NextResponse.json(
+        { error: "Event not found" },
+        { status: 404 }
+      );
+    }
+
+    const collective = event.collectives as unknown as {
+      stripe_account_id: string | null;
+    };
+
+    if (!collective?.stripe_account_id) {
+      return NextResponse.json(
+        { error: "The organizer hasn't connected payments yet. Please contact them to set up Stripe." },
+        { status: 422 }
+      );
+    }
+
+    // Look up the ticket tier
+    const { data: tier, error: tierError } = await supabase
+      .from("ticket_tiers")
+      .select("id, name, price, capacity, sales_start, sales_end, event_id")
+      .eq("id", tierId)
+      .eq("event_id", eventId)
+      .single();
+
+    if (tierError || !tier) {
+      return NextResponse.json(
+        { error: "Ticket tier not found" },
+        { status: 404 }
+      );
+    }
+
+    // Validate sales window
+    const now = new Date();
+    if (tier.sales_start && new Date(tier.sales_start) > now) {
+      return NextResponse.json(
+        { error: "Ticket sales have not started yet" },
+        { status: 400 }
+      );
+    }
+    if (tier.sales_end && new Date(tier.sales_end) < now) {
+      return NextResponse.json(
+        { error: "Ticket sales have ended" },
+        { status: 400 }
+      );
+    }
+
+    // Check remaining capacity
+    const { count: soldCount, error: countError } = await supabase
+      .from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("ticket_tier_id", tierId)
+      .in("status", ["reserved", "paid", "checked_in"]);
+
+    if (countError) {
+      return NextResponse.json(
+        { error: "Failed to check ticket availability" },
+        { status: 500 }
+      );
+    }
+
+    const remaining = tier.capacity - (soldCount ?? 0);
+    if (remaining < quantity) {
+      return NextResponse.json(
+        { error: `Only ${remaining} ticket(s) remaining for this tier` },
+        { status: 409 }
+      );
+    }
+
+    // Calculate fees
+    const unitAmountCents = Math.round(tier.price * 100);
+    const totalCents = unitAmountCents * quantity;
+    const applicationFee = Math.round(totalCents * (PLATFORM_FEE_PERCENT / 100));
+
+    // Create Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: buyerEmail,
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `${tier.name} — ${event.title}`,
+            },
+            unit_amount: unitAmountCents,
+          },
+          quantity,
+        },
+      ],
+      payment_intent_data: {
+        application_fee_amount: applicationFee,
+        transfer_data: {
+          destination: collective.stripe_account_id,
+        },
+      },
+      metadata: {
+        eventId,
+        tierId,
+        quantity: String(quantity),
+      },
+      success_url: `${APP_URL}/e/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: request.headers.get("referer") || APP_URL,
+    });
+
+    return NextResponse.json({ url: session.url });
+  } catch (error) {
+    console.error("[checkout] Error creating checkout session:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
+  }
+}
