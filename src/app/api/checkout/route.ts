@@ -11,7 +11,7 @@ function createAdminClient() {
   );
 }
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+const APP_URL = "https://nocturn-app-navy.vercel.app";
 
 interface CheckoutBody {
   eventId: string;
@@ -59,12 +59,7 @@ export async function POST(request: NextRequest) {
       stripe_account_id: string | null;
     };
 
-    if (!collective?.stripe_account_id) {
-      return NextResponse.json(
-        { error: "The organizer hasn't connected payments yet. Please contact them to set up Stripe." },
-        { status: 422 }
-      );
-    }
+    const hasConnectAccount = !!collective?.stripe_account_id;
 
     // Look up the ticket tier
     const { data: tier, error: tierError } = await supabase
@@ -134,11 +129,12 @@ export async function POST(request: NextRequest) {
     }
 
     const totalCents = unitAmountCents * quantity;
-    const applicationFee = Math.round(totalCents * (PLATFORM_FEE_PERCENT / 100));
 
-    // Create Stripe Checkout Session
-    const session = await getStripe().checkout.sessions.create({
-      mode: "payment",
+    // Build Stripe Checkout Session params
+    const sessionParams: Parameters<typeof getStripe>["0"] extends never
+      ? Record<string, unknown>
+      : Record<string, unknown> = {
+      mode: "payment" as const,
       customer_email: buyerEmail,
       line_items: [
         {
@@ -152,12 +148,6 @@ export async function POST(request: NextRequest) {
           quantity,
         },
       ],
-      payment_intent_data: {
-        application_fee_amount: applicationFee,
-        transfer_data: {
-          destination: collective.stripe_account_id,
-        },
-      },
       metadata: {
         eventId,
         tierId,
@@ -165,7 +155,23 @@ export async function POST(request: NextRequest) {
       },
       success_url: `${APP_URL}/e/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: request.headers.get("referer") || APP_URL,
-    });
+    };
+
+    // If organizer has Stripe Connect, split payment with platform fee
+    // Otherwise, payment goes directly to Nocturn (platform collects all)
+    if (hasConnectAccount) {
+      const applicationFee = Math.round(totalCents * (PLATFORM_FEE_PERCENT / 100));
+      sessionParams.payment_intent_data = {
+        application_fee_amount: applicationFee,
+        transfer_data: {
+          destination: collective.stripe_account_id,
+        },
+      };
+    }
+
+    // Create Stripe Checkout Session
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const session = await getStripe().checkout.sessions.create(sessionParams as any);
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
