@@ -4,12 +4,12 @@ import { getStripe } from "@/lib/stripe";
 import Stripe from "stripe";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
-import { SUPABASE_URL } from "@/lib/supabase/config";
+import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 
 function createAdminClient() {
   return createClient(
     SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    SUPABASE_SERVICE_ROLE_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
 }
