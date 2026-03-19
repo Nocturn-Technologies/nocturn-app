@@ -131,9 +131,8 @@ export async function POST(request: NextRequest) {
     const totalCents = unitAmountCents * quantity;
 
     // Build Stripe Checkout Session params
-    const sessionParams: Parameters<typeof getStripe>["0"] extends never
-      ? Record<string, unknown>
-      : Record<string, unknown> = {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sessionParams: any = {
       mode: "payment" as const,
       customer_email: buyerEmail,
       line_items: [
