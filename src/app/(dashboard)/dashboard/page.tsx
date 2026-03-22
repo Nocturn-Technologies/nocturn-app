@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { DashboardHome } from "@/components/dashboard-home";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { getFinancialPulse } from "@/app/actions/finance-pulse";
 
 function createAdminClient() {
   return createClient(
@@ -109,6 +110,9 @@ export default async function DashboardPage() {
     );
   }
 
+  // Financial Pulse
+  const financialPulse = await getFinancialPulse();
+
   // Attendee count
   let totalAttendees = 0;
   if (collectiveIds.length > 0) {
@@ -140,6 +144,7 @@ export default async function DashboardPage() {
       draftEventTitle={draftEventTitle}
       totalRevenue={totalRevenue}
       totalAttendees={totalAttendees}
+      financialPulse={financialPulse}
     />
   );
 }

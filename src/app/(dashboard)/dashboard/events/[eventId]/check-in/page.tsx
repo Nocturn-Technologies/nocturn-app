@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, ScanLine, CheckCircle2, XCircle, Users } from "lucide-react";
 import Link from "next/link";
+import { haptic } from "@/lib/haptics";
 
 type ScanResult = {
   type: "success" | "error";
@@ -87,6 +88,7 @@ export default function CheckInScannerPage() {
       const result = await checkInTicket(ticketToken, eventId);
 
       if (result.success) {
+        haptic('success');
         setScanResult({
           type: "success",
           message: "Checked in!",

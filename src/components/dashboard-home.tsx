@@ -18,6 +18,14 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
+interface FinancialPulseData {
+  revenue: number;
+  expenses: number;
+  netPL: number;
+  outstandingSettlements: number;
+  recentEvents: Array<{ title: string; profit: number }>;
+}
+
 interface DashboardHomeProps {
   firstName: string;
   collectiveName: string;
@@ -28,6 +36,7 @@ interface DashboardHomeProps {
   draftEventTitle?: string;
   totalRevenue: number;
   totalAttendees: number;
+  financialPulse: FinancialPulseData;
 }
 
 function getGreeting(): string {
@@ -204,6 +213,63 @@ export function DashboardHome(props: DashboardHomeProps) {
           })}
         </div>
       </div>
+
+      {/* Financial Pulse */}
+      <Link href="/dashboard/finance" className="block animate-fade-in-up delay-75">
+        <Card className="border-nocturn/20 transition-all hover:border-nocturn/40 hover:shadow-lg hover:shadow-nocturn/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-nocturn/10">
+                  <TrendingUp className="h-4 w-4 text-nocturn" />
+                </div>
+                <span className="text-sm font-semibold">Financial Pulse</span>
+              </div>
+              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+            </div>
+
+            {/* P&L headline */}
+            <p className={`text-lg font-bold ${props.financialPulse.netPL >= 0 ? "text-green-500" : "text-red-500"}`}>
+              {props.financialPulse.netPL >= 0
+                ? `You're up $${Math.abs(props.financialPulse.netPL).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} this month`
+                : `Down $${Math.abs(props.financialPulse.netPL).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} this month`}
+            </p>
+
+            {/* Sparkline — CSS dots for last 5 events */}
+            {props.financialPulse.recentEvents.length > 0 && (
+              <div className="my-3 flex items-end gap-1 h-8">
+                {(() => {
+                  const events = props.financialPulse.recentEvents.slice(0, 5);
+                  const maxAbs = Math.max(...events.map((e) => Math.abs(e.profit)), 1);
+                  return events.map((e, i) => {
+                    const normalized = (e.profit / maxAbs) * 100;
+                    const height = Math.max(Math.abs(normalized) * 0.28 + 4, 4);
+                    const isPositive = e.profit >= 0;
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-0.5 flex-1">
+                        <div
+                          className={`w-2 rounded-full transition-all ${isPositive ? "bg-green-500" : "bg-red-500"}`}
+                          style={{ height: `${height}px` }}
+                        />
+                        {i < events.length - 1 && (
+                          <div className="w-full h-px bg-border" />
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            )}
+
+            {/* Outstanding settlements */}
+            <p className="text-xs text-muted-foreground">
+              {props.financialPulse.outstandingSettlements > 0
+                ? `${props.financialPulse.outstandingSettlements} outstanding settlement${props.financialPulse.outstandingSettlements !== 1 ? "s" : ""}`
+                : "All settled \u2713"}
+            </p>
+          </CardContent>
+        </Card>
+      </Link>
 
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-3">

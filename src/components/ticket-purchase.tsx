@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Ticket, Minus, Plus, Loader2 } from "lucide-react";
+import { haptic } from "@/lib/haptics";
 
 interface Tier {
   id: string;
@@ -28,6 +29,7 @@ export function TicketPurchase({
 
   async function handleCheckout() {
     if (!selectedTier || !email) return;
+    haptic('medium');
     setError(null);
     setLoading(true);
 

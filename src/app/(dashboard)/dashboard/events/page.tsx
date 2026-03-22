@@ -3,8 +3,9 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, Plus, MapPin, Clock, Music } from "lucide-react";
+import { Calendar, Plus } from "lucide-react";
 import Link from "next/link";
+import { SwipeableEventList } from "@/components/events/swipeable-event-list";
 
 export default async function EventsPage() {
   const supabase = await createClient();
@@ -94,9 +95,7 @@ export default async function EventsPage() {
             <div className="space-y-3">
               <h2 className="text-lg font-semibold">Upcoming</h2>
               <div className="grid gap-3">
-                {upcoming.map((event) => (
-                  <EventCard key={event.id} event={event} />
-                ))}
+                <SwipeableEventList events={upcoming} />
               </div>
             </div>
           )}
@@ -104,9 +103,7 @@ export default async function EventsPage() {
             <div className="space-y-3">
               <h2 className="text-lg font-semibold text-muted-foreground">Past</h2>
               <div className="grid gap-3">
-                {past.map((event) => (
-                  <EventCard key={event.id} event={event} />
-                ))}
+                <SwipeableEventList events={past} />
               </div>
             </div>
           )}
@@ -116,64 +113,3 @@ export default async function EventsPage() {
   );
 }
 
-function EventCard({
-  event,
-}: {
-  event: {
-    id: string;
-    title: string;
-    starts_at: string;
-    status: string;
-    venues: { name: string; city: string } | null;
-  };
-}) {
-  const date = new Date(event.starts_at);
-  const statusColors: Record<string, string> = {
-    draft: "bg-yellow-500/10 text-yellow-500",
-    published: "bg-green-500/10 text-green-500",
-    completed: "bg-muted text-muted-foreground",
-    cancelled: "bg-red-500/10 text-red-500",
-  };
-
-  return (
-    <Link href={`/dashboard/events/${event.id}`}>
-      <Card className="transition-colors hover:border-nocturn/30 cursor-pointer">
-        <CardContent className="flex items-center gap-4 p-4">
-          <div className="flex h-12 w-12 flex-col items-center justify-center rounded-lg bg-nocturn/10 text-nocturn">
-            <span className="text-xs font-medium uppercase">
-              {date.toLocaleDateString("en", { month: "short" })}
-            </span>
-            <span className="text-lg font-bold leading-none">
-              {date.getDate()}
-            </span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-medium truncate">{event.title}</p>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {event.venues && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {event.venues.name}
-                </span>
-              )}
-              <span className="flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {date.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}
-              </span>
-            </div>
-          </div>
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Music className="h-3 w-3" />
-          </span>
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-              statusColors[event.status] ?? ""
-            }`}
-          >
-            {event.status}
-          </span>
-        </CardContent>
-      </Card>
-    </Link>
-  );
-}

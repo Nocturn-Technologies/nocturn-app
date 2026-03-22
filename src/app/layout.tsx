@@ -23,28 +23,27 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   title: "Nocturn — The Agentic Work OS for Nightlife",
   description:
-    "AI-powered event management for nightlife collectives. Ticketing, settlements, artist booking, and marketing — all in one platform.",
+    "You run the night. Nocturn runs the business.",
   openGraph: {
     title: "Nocturn — The Agentic Work OS for Nightlife",
-    description:
-      "AI-powered event management for nightlife collectives. Ticketing, settlements, artist booking, and marketing — all in one platform.",
-    type: "website",
-    url: "https://nocturn.app",
+    description: "You run the night. Nocturn runs the business.",
+    url: "https://app.trynocturn.com",
+    siteName: "Nocturn",
     images: [
       {
-        url: "https://nocturn.app/og-default.png",
+        url: "https://app.trynocturn.com/og-image",
         width: 1200,
         height: 630,
         alt: "Nocturn — The Agentic Work OS for Nightlife",
       },
     ],
+    type: "website",
   },
   twitter: {
     card: "summary_large_image",
     title: "Nocturn — The Agentic Work OS for Nightlife",
-    description:
-      "AI-powered event management for nightlife collectives. Ticketing, settlements, artist booking, and marketing — all in one platform.",
-    images: ["https://nocturn.app/og-default.png"],
+    description: "You run the night. Nocturn runs the business.",
+    images: ["https://app.trynocturn.com/og-image"],
   },
 };
 

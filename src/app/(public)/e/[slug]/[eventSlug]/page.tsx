@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Calendar, Clock, MapPin, Navigation, Music } from "lucide-react";
 import { TicketSection } from "@/components/public-event/ticket-section";
 import { ShareButton } from "@/components/public-event/share-button";
+import { PublicEventShareCard } from "@/components/public-event/public-event-share-card";
 import { ExpandableText } from "@/components/public-event/expandable-text";
 import type { Metadata } from "next";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
@@ -137,6 +138,13 @@ export default async function PublicEventPage({ params }: Props) {
   const dressCode = metadata.dressCode || null;
   const minAge = event.min_age as number | null;
   const vibeTags = (event.vibe_tags ?? []) as string[];
+
+  // Share card data
+  const shareCardDate = `${dayName} ${monthName} ${dayNum} \u2022 ${startTime}`;
+  const shareCardVenue = venue ? `${venue.name} \u2022 ${venue.city}` : "";
+  const lowestTierPrice = tiers && tiers.length > 0
+    ? `$${Math.min(...tiers.map((t) => Number(t.price)))}+`
+    : "Free";
 
   return (
     <div className="min-h-screen bg-[#09090B]" style={{ scrollBehavior: "smooth" }}>
@@ -394,6 +402,19 @@ export default async function PublicEventPage({ params }: Props) {
 
           {/* ─── Share ─── */}
           <ShareButton url={publicUrl} title={event.title} />
+
+          {/* ─── Share Card ─── */}
+          <PublicEventShareCard
+            event={{
+              title: event.title,
+              date: shareCardDate,
+              venue: shareCardVenue,
+              price: lowestTierPrice,
+              flyerUrl: event.flyer_url,
+              publicUrl,
+            }}
+            accentColor={accentColor}
+          />
 
           {/* ─── Footer ─── */}
           <div className="border-t border-white/5 pt-8 pb-4 text-center">

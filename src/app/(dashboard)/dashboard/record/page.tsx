@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { haptic } from "@/lib/haptics";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -309,6 +310,7 @@ export default function RecordPage() {
   }, [isRecording]);
 
   const startRecording = async () => {
+    haptic('medium');
     setPermissionError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -343,6 +345,7 @@ export default function RecordPage() {
   };
 
   const stopRecording = async () => {
+    haptic('success');
     const mr = mediaRecorderRef.current;
     if (!mr) return;
 

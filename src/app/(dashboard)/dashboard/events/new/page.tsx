@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import VenuePicker, { type SelectedVenue } from "@/components/venue-picker";
+import { useSpeech } from "@/hooks/use-speech";
 import {
   Sparkles,
   ArrowLeft,
@@ -22,8 +23,10 @@ import {
   Users,
   Loader2,
   Pencil,
+  Mic,
 } from "lucide-react";
 import Link from "next/link";
+import { haptic } from "@/lib/haptics";
 
 function slugify(text: string): string {
   return text
@@ -485,6 +488,20 @@ export default function NewEventPage() {
   const [showVenuePicker, setShowVenuePicker] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { listening, transcript, startListening, stopListening, clearTranscript } = useSpeech();
+
+  // Auto-submit speech transcript
+  useEffect(() => {
+    if (transcript && !thinking) {
+      setInput(transcript);
+      clearTranscript();
+      // Submit on next tick so the input state is set
+      setTimeout(() => {
+        const form = document.getElementById("chat-form") as HTMLFormElement;
+        if (form) form.requestSubmit();
+      }, 50);
+    }
+  }, [transcript, thinking, clearTranscript]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -820,6 +837,7 @@ export default function NewEventPage() {
       return;
     }
 
+    haptic('success');
     setPhase("done");
     setTimeout(() => {
       router.push(`/dashboard/events/${result.eventId}`);
@@ -944,6 +962,7 @@ export default function NewEventPage() {
       {/* Input bar — shown during chat steps that need text input */}
       {showInput && (
         <form
+          id="chat-form"
           onSubmit={handleSend}
           className="shrink-0 flex gap-2 border-t border-white/5 pt-3 pb-2"
           style={{
@@ -956,8 +975,21 @@ export default function NewEventPage() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             className="flex-1 text-sm bg-zinc-900 border-white/10 rounded-full px-4 focus:border-[#7B2FF7]/50 min-h-[44px]"
-            disabled={thinking}
+            disabled={thinking || listening}
           />
+          <Button
+            type="button"
+            size="icon"
+            onClick={listening ? stopListening : startListening}
+            className={`shrink-0 rounded-full min-h-[44px] min-w-[44px] transition-colors ${
+              listening
+                ? "bg-red-600 hover:bg-red-700 animate-pulse"
+                : "bg-zinc-800 hover:bg-zinc-700 border border-white/10"
+            }`}
+            disabled={thinking}
+          >
+            <Mic className={`h-4 w-4 ${listening ? "text-white" : "text-zinc-400"}`} />
+          </Button>
           <Button
             type="submit"
             size="icon"

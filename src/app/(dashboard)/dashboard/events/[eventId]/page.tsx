@@ -23,9 +23,12 @@ import {
   BarChart3,
   FileText,
   Palette,
+  Coffee,
 } from "lucide-react";
 import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
+import { LiveModeBanner } from "./live-mode-banner";
+import { EventShareCard } from "./event-share-card";
 
 interface Props {
   params: Promise<{ eventId: string }>;
@@ -132,6 +135,21 @@ export default async function EventDetailPage({ params }: Props) {
       ? `/e/${collective.slug}/${event.slug}`
       : null;
 
+  const fullPublicUrl = publicUrl
+    ? `${process.env.NEXT_PUBLIC_APP_URL || "https://nocturn.app"}${publicUrl}`
+    : null;
+
+  // Format date for share card
+  const dayName = eventDate.toLocaleDateString("en", { weekday: "short" }).toUpperCase();
+  const monthName = eventDate.toLocaleDateString("en", { month: "short" }).toUpperCase();
+  const dayNum = eventDate.getDate();
+  const timeStr = eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" });
+  const shareCardDate = `${dayName} ${monthName} ${dayNum} \u2022 ${timeStr}`;
+  const shareCardVenue = venue ? `${venue.name} \u2022 ${venue.city}` : "";
+  const lowestPrice = tiers && tiers.length > 0
+    ? `$${Math.min(...tiers.map((t) => Number(t.price)))}+`
+    : "Free";
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       {/* Header */}
@@ -158,6 +176,13 @@ export default async function EventDetailPage({ params }: Props) {
           )}
         </div>
       </div>
+
+      {/* Live Mode Banner */}
+      <LiveModeBanner
+        eventId={event.id}
+        startsAt={event.starts_at}
+        endsAt={event.ends_at}
+      />
 
       {/* Status Actions */}
       <EventStatusActions eventId={event.id} status={event.status} />
@@ -217,12 +242,20 @@ export default async function EventDetailPage({ params }: Props) {
           </Button>
         </Link>
         {(event.status === "completed" || event.status === "settled") && (
-          <Link href={`/dashboard/events/${event.id}/recap`}>
-            <Button variant="outline" size="sm" className="border-nocturn-amber/30 text-nocturn-amber hover:bg-nocturn-amber/10">
-              <FileText className="mr-2 h-3 w-3" />
-              Recap
-            </Button>
-          </Link>
+          <>
+            <Link href={`/dashboard/events/${event.id}/recap`}>
+              <Button variant="outline" size="sm" className="border-nocturn-amber/30 text-nocturn-amber hover:bg-nocturn-amber/10">
+                <FileText className="mr-2 h-3 w-3" />
+                Recap
+              </Button>
+            </Link>
+            <Link href={`/dashboard/events/${event.id}/wrap`}>
+              <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10">
+                <Coffee className="mr-2 h-3 w-3" />
+                View Wrap
+              </Button>
+            </Link>
+          </>
         )}
         {publicUrl && (
           <Link href={publicUrl} target="_blank">
@@ -231,6 +264,18 @@ export default async function EventDetailPage({ params }: Props) {
               View Public Page
             </Button>
           </Link>
+        )}
+        {fullPublicUrl && (
+          <EventShareCard
+            event={{
+              title: event.title,
+              date: shareCardDate,
+              venue: shareCardVenue,
+              price: lowestPrice,
+              flyerUrl: event.flyer_url,
+              publicUrl: fullPublicUrl,
+            }}
+          />
         )}
       </div>
 

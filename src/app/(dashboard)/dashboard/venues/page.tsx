@@ -17,6 +17,9 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { haptic } from "@/lib/haptics";
+import { getDistance, formatDistance } from "@/lib/geo";
+import { VenueScout } from "@/components/venue-scout";
 import {
   Search,
   Heart,
@@ -30,6 +33,8 @@ import {
   Trash2,
   Bookmark,
   X,
+  Locate,
+  ClipboardList,
 } from "lucide-react";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -104,6 +109,63 @@ export default function VenuesPage() {
   // Saving animation
   const [savingId, setSavingId] = useState<string | null>(null);
 
+  // Location state
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+  const [locationDenied, setLocationDenied] = useState(false);
+  const [nearbyVenue, setNearbyVenue] = useState<SavedVenue | null>(null);
+  const [scoutingVenue, setScoutingVenue] = useState<{ placeId: string; name: string } | null>(null);
+
+  // ── Request geolocation ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude });
+      },
+      () => {
+        setLocationDenied(true);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
+
+  // ── Check if user is near a saved venue (within 200m) ──────────────────
+  useEffect(() => {
+    if (!userLocation || savedVenues.length === 0) {
+      setNearbyVenue(null);
+      return;
+    }
+    for (const sv of savedVenues) {
+      if (sv.latitude != null && sv.longitude != null) {
+        const dist = getDistance(userLocation.lat, userLocation.lon, sv.latitude, sv.longitude);
+        if (dist <= 0.2) {
+          setNearbyVenue(sv);
+          return;
+        }
+      }
+    }
+    setNearbyVenue(null);
+  }, [userLocation, savedVenues]);
+
+  // ── Sort discover venues by distance when location available ───────────
+  const venuesSorted = userLocation
+    ? [...venues].sort((a, b) => {
+        const da = getDistance(userLocation.lat, userLocation.lon, a.latitude, a.longitude);
+        const db = getDistance(userLocation.lat, userLocation.lon, b.latitude, b.longitude);
+        return da - db;
+      })
+    : venues;
+
+  const savedVenuesSorted = userLocation
+    ? [...savedVenues].sort((a, b) => {
+        if (a.latitude == null || a.longitude == null) return 1;
+        if (b.latitude == null || b.longitude == null) return -1;
+        const da = getDistance(userLocation.lat, userLocation.lon, a.latitude, a.longitude);
+        const db = getDistance(userLocation.lat, userLocation.lon, b.latitude, b.longitude);
+        return da - db;
+      })
+    : savedVenues;
+
   // ── Discover search ──────────────────────────────────────────────────────
 
   const fetchVenues = useCallback(async () => {
@@ -137,6 +199,7 @@ export default function VenuesPage() {
 
   async function handleSave(venue: VenueResult) {
     if (savingId) return;
+    haptic('light');
     setSavingId(venue.place_id);
     const { error } = await saveVenueAction(venue);
     if (!error) {
@@ -182,6 +245,57 @@ export default function VenuesPage() {
           Discover and save venues for your events
         </p>
       </div>
+
+      {/* Check-in banner — shown when within 200m of a saved venue */}
+      {nearbyVenue && (
+        <div className="rounded-xl border border-nocturn/30 bg-nocturn/10 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Locate className="h-5 w-5 text-nocturn" />
+            <span className="font-semibold">
+              You&apos;re at {nearbyVenue.name}!
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              size="sm"
+              className="bg-nocturn hover:bg-nocturn-light text-white"
+              onClick={() =>
+                setScoutingVenue({ placeId: nearbyVenue.place_id, name: nearbyVenue.name })
+              }
+            >
+              <ClipboardList className="mr-2 h-3.5 w-3.5" />
+              Start Scouting
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const sv = nearbyVenue;
+                openDetail({
+                  place_id: sv.place_id,
+                  name: sv.name,
+                  venue_type: (sv.venue_type as VenueType) ?? "Club",
+                  neighbourhood: sv.neighbourhood ?? "",
+                  address: sv.address ?? "",
+                  city: sv.city ?? "Toronto",
+                  rating: sv.rating ?? 0,
+                  review_count: sv.review_count ?? 0,
+                  phone: sv.phone ?? "",
+                  website: sv.website ?? "",
+                  capacity: sv.capacity,
+                  latitude: sv.latitude ?? 0,
+                  longitude: sv.longitude ?? 0,
+                  photo_url: sv.photo_url,
+                  hours: sv.hours,
+                });
+              }}
+            >
+              <Users className="mr-2 h-3.5 w-3.5" />
+              Check Capacity
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Sub-tabs */}
       <div className="flex gap-1 rounded-lg bg-muted p-1">
@@ -249,7 +363,7 @@ export default function VenuesPage() {
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {venues.map((venue, i) => (
+              {venuesSorted.map((venue, i) => (
                 <VenueCard
                   key={venue.place_id}
                   venue={venue}
@@ -259,6 +373,11 @@ export default function VenuesPage() {
                   onTap={() => openDetail(venue)}
                   onSave={() => handleSave(venue)}
                   onRemove={() => handleRemove(venue.place_id)}
+                  distance={
+                    userLocation
+                      ? getDistance(userLocation.lat, userLocation.lon, venue.latitude, venue.longitude)
+                      : undefined
+                  }
                 />
               ))}
             </div>
@@ -279,12 +398,20 @@ export default function VenuesPage() {
             />
           ) : (
             <div className="grid gap-3 md:grid-cols-2">
-              {savedVenues.map((sv, i) => (
+              {savedVenuesSorted.map((sv, i) => (
                 <SavedVenueCard
                   key={sv.id}
                   venue={sv}
                   index={i}
                   isSaving={savingId === sv.place_id}
+                  distance={
+                    userLocation && sv.latitude != null && sv.longitude != null
+                      ? getDistance(userLocation.lat, userLocation.lon, sv.latitude, sv.longitude)
+                      : undefined
+                  }
+                  onScout={() =>
+                    setScoutingVenue({ placeId: sv.place_id, name: sv.name })
+                  }
                   onTap={() =>
                     openDetail({
                       place_id: sv.place_id,
@@ -426,6 +553,15 @@ export default function VenuesPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Venue Scout Modal */}
+      {scoutingVenue && (
+        <VenueScout
+          venuePlaceId={scoutingVenue.placeId}
+          venueName={scoutingVenue.name}
+          onClose={() => setScoutingVenue(null)}
+        />
+      )}
     </div>
   );
 }
@@ -490,6 +626,7 @@ function VenueCard({
   onTap,
   onSave,
   onRemove,
+  distance,
 }: {
   venue: VenueResult;
   index: number;
@@ -498,6 +635,7 @@ function VenueCard({
   onTap: () => void;
   onSave: () => void;
   onRemove: () => void;
+  distance?: number;
 }) {
   return (
     <Card
@@ -521,6 +659,11 @@ function VenueCard({
             }}
           />
         </div>
+        {distance != null && (
+          <div className="absolute right-3 bottom-3 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+            {formatDistance(distance)}
+          </div>
+        )}
       </div>
 
       {/* Info */}
@@ -548,14 +691,18 @@ function SavedVenueCard({
   venue,
   index,
   isSaving,
+  distance,
   onTap,
   onRemove,
+  onScout,
 }: {
   venue: SavedVenue;
   index: number;
   isSaving: boolean;
+  distance?: number;
   onTap: () => void;
   onRemove: () => void;
+  onScout: () => void;
 }) {
   return (
     <Card
@@ -565,8 +712,14 @@ function SavedVenueCard({
       <CardContent className="flex items-center gap-3 p-3">
         {/* Mini gradient thumbnail */}
         <div
-          className={`h-14 w-14 shrink-0 rounded-lg bg-gradient-to-br ${gradientForIndex(index)}`}
-        />
+          className={`h-14 w-14 shrink-0 rounded-lg bg-gradient-to-br ${gradientForIndex(index)} flex items-end justify-center`}
+        >
+          {distance != null && (
+            <span className="mb-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
+              {formatDistance(distance)}
+            </span>
+          )}
+        </div>
 
         {/* Info */}
         <div className="min-w-0 flex-1 space-y-0.5">
@@ -577,6 +730,22 @@ function SavedVenueCard({
           </div>
           {venue.rating && <RatingStars rating={venue.rating} />}
         </div>
+
+        {/* Scout button (shown when nearby) */}
+        {distance != null && distance <= 0.5 && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation();
+              onScout();
+            }}
+            className="shrink-0 text-nocturn hover:bg-nocturn/10 hover:text-nocturn"
+            title="Scout this venue"
+          >
+            <ClipboardList className="h-4 w-4" />
+          </Button>
+        )}
 
         {/* Remove button */}
         <Button
