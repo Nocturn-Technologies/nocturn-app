@@ -237,9 +237,9 @@ export default function VenuesPage() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       {/* Header */}
-      <div>
+      <div className="px-4 md:px-0">
         <h1 className="text-2xl font-bold">Venues</h1>
         <p className="text-sm text-muted-foreground">
           Discover and save venues for your events
@@ -248,7 +248,7 @@ export default function VenuesPage() {
 
       {/* Check-in banner — shown when within 200m of a saved venue */}
       {nearbyVenue && (
-        <div className="rounded-xl border border-nocturn/30 bg-nocturn/10 p-4 space-y-3">
+        <div className="mx-4 md:mx-0 rounded-xl border border-nocturn/30 bg-nocturn/10 p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Locate className="h-5 w-5 text-nocturn" />
             <span className="font-semibold">
@@ -298,7 +298,7 @@ export default function VenuesPage() {
       )}
 
       {/* Sub-tabs */}
-      <div className="flex gap-1 rounded-lg bg-muted p-1">
+      <div className="flex gap-1 rounded-lg bg-muted p-1 mx-4 md:mx-0">
         <TabButton
           active={activeTab === "discover"}
           onClick={() => setActiveTab("discover")}
@@ -316,78 +316,82 @@ export default function VenuesPage() {
       {activeTab === "discover" && (
         <div className="space-y-4">
           {/* Search bar */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="relative px-4 md:px-0">
+            <Search className="absolute left-7 md:left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search venues in Toronto..."
-              className="pl-10 pr-10"
+              className="w-full pl-10 pr-10"
             />
             {query && (
               <button
                 onClick={() => setQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-muted-foreground hover:bg-muted-foreground/30"
+                className="absolute right-7 md:right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-muted-foreground hover:bg-muted-foreground/30"
               >
                 <X className="h-3 w-3" />
               </button>
             )}
           </div>
 
-          {/* Filter chips */}
-          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
-                  filter === f
-                    ? "bg-nocturn text-white"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-
-          {/* Venue list */}
-          {loadingDiscover ? (
-            <LoadingSpinner />
-          ) : venues.length === 0 ? (
-            <EmptyState
-              icon={<Search className="h-10 w-10 text-muted-foreground" />}
-              title="No venues found"
-              subtitle="Try a different search or filter"
-            />
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {venuesSorted.map((venue, i) => (
-                <VenueCard
-                  key={venue.place_id}
-                  venue={venue}
-                  index={i}
-                  isSaved={savedIds.has(venue.place_id)}
-                  isSaving={savingId === venue.place_id}
-                  onTap={() => openDetail(venue)}
-                  onSave={() => handleSave(venue)}
-                  onRemove={() => handleRemove(venue.place_id)}
-                  distance={
-                    userLocation
-                      ? getDistance(userLocation.lat, userLocation.lon, venue.latitude, venue.longitude)
-                      : undefined
-                  }
-                />
+          {/* Filter chips — horizontal scroll within screen bounds */}
+          <div className="-mx-4 px-4 md:mx-0 md:px-0">
+            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+              {FILTERS.map((f) => (
+                <button
+                  key={f}
+                  onClick={() => setFilter(f)}
+                  className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                    filter === f
+                      ? "bg-nocturn text-white"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {f}
+                </button>
               ))}
             </div>
-          )}
+          </div>
+
+          {/* Venue list — single column mobile, 2-col md+ */}
+          <div className="px-4 md:px-0">
+            {loadingDiscover ? (
+              <LoadingSpinner />
+            ) : venues.length === 0 ? (
+              <EmptyState
+                icon={<Search className="h-10 w-10 text-muted-foreground" />}
+                title="No venues found"
+                subtitle="Try a different search or filter"
+              />
+            ) : (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {venuesSorted.map((venue, i) => (
+                  <VenueCard
+                    key={venue.place_id}
+                    venue={venue}
+                    index={i}
+                    isSaved={savedIds.has(venue.place_id)}
+                    isSaving={savingId === venue.place_id}
+                    onTap={() => openDetail(venue)}
+                    onSave={() => handleSave(venue)}
+                    onRemove={() => handleRemove(venue.place_id)}
+                    distance={
+                      userLocation
+                        ? getDistance(userLocation.lat, userLocation.lon, venue.latitude, venue.longitude)
+                        : undefined
+                    }
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
       {/* ── Saved tab ────────────────────────────────────────────────────── */}
       {activeTab === "saved" && (
-        <div className="space-y-4">
+        <div className="space-y-4 px-4 md:px-0">
           {loadingSaved ? (
             <LoadingSpinner />
           ) : savedVenues.length === 0 ? (
@@ -397,7 +401,7 @@ export default function VenuesPage() {
               subtitle="Save venues from Discover to build your go-to list"
             />
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {savedVenuesSorted.map((sv, i) => (
                 <SavedVenueCard
                   key={sv.id}

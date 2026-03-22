@@ -174,9 +174,18 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("[checkout] Error creating checkout session:", error);
+    const errMsg = error instanceof Error ? error.message : "Unknown error";
+    console.error("[checkout] Error:", errMsg);
+
+    if (errMsg.includes("STRIPE_SECRET_KEY") || errMsg.includes("not configured")) {
+      return NextResponse.json(
+        { error: "Payments are not yet configured. The organizer needs to add their Stripe key." },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: "Something went wrong processing your payment. Please try again." },
       { status: 500 }
     );
   }

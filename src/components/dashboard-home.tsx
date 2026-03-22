@@ -190,7 +190,7 @@ export function DashboardHome(props: DashboardHomeProps) {
           </h1>
           <Sparkles className="h-5 w-5 text-nocturn animate-text-glow" />
         </div>
-        <p className="text-sm text-muted-foreground mt-0.5">{message}</p>
+        <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">{message}</p>
       </div>
 
       {/* Quick Actions — horizontal scroll on mobile */}
