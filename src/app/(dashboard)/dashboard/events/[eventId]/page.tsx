@@ -22,6 +22,7 @@ import {
   ClipboardList,
   BarChart3,
   FileText,
+  Palette,
 } from "lucide-react";
 import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
@@ -171,6 +172,12 @@ export default async function EventDetailPage({ params }: Props) {
             </Button>
           </Link>
         )}
+        <Link href={`/dashboard/events/${event.id}/design`}>
+          <Button variant="outline" size="sm" className="border-nocturn-glow/30 text-nocturn-glow hover:bg-nocturn-glow/10">
+            <Palette className="mr-2 h-3 w-3" />
+            Design
+          </Button>
+        </Link>
         <Link href={`/dashboard/events/${event.id}/tasks`}>
           <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10">
             <ListChecks className="mr-2 h-3 w-3" />
