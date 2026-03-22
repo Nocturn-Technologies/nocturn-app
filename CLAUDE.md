@@ -81,8 +81,8 @@ import { createClient } from "@/lib/supabase/client";
 - Prices stored in dollars (NUMERIC), NOT cents
 
 ### Responsive Layout
-- Mobile (< 768px): bottom tab bar with 5 tabs (Home, Events, Chat, Venues, Record)
-- Desktop (≥ 768px): left sidebar with full nav
+- Mobile (< 768px): bottom tab bar with 4 tabs (Home, Events, Chat, Discover) — pill-style active state, 48px tap targets. Record is accessible via floating button on Chat page and Quick Actions on Home.
+- Desktop (≥ 768px): left sidebar with full nav (Home, Events, Chat, Venues, Record, Artists, Attendees, Marketing, Finance, Members, Settings)
 - Use Tailwind `md:` prefix for desktop enhancements
 - Min 44px tap targets on all interactive elements
 

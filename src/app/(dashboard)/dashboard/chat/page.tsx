@@ -3,8 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Sparkles, Hash, Pin } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { Sparkles, Hash, Pin, Mic, Calendar, MessageSquare } from "lucide-react";
 
 interface Channel {
   id: string;
@@ -19,6 +18,7 @@ interface ChannelWithMeta extends Channel {
   last_message?: string;
   last_message_at?: string;
   unread: boolean;
+  unread_count: number;
   event_date?: string;
 }
 
@@ -142,6 +142,7 @@ export default function ChatPage() {
             : undefined,
           last_message_at: lastMsg?.created_at,
           unread: false,
+          unread_count: 0,
           event_date: eventDate,
         };
       })
@@ -155,22 +156,28 @@ export default function ChatPage() {
     loadChannels();
   }, [loadChannels]);
 
-  // Sort: general first, then by event date
-  const sorted = [...channels].sort((a, b) => {
-    if (a.type === "general" && b.type !== "general") return -1;
-    if (a.type !== "general" && b.type === "general") return 1;
-    if (a.event_date && b.event_date) {
-      return (
-        new Date(a.event_date).getTime() - new Date(b.event_date).getTime()
-      );
-    }
-    return 0;
-  });
+  // Separate general from event channels, split upcoming vs past
+  const now = new Date();
+  const generalChannel = channels.find((ch) => ch.type === "general");
+  const eventChannels = channels.filter((ch) => ch.type === "event");
+  const upcomingThreads = eventChannels
+    .filter((ch) => !ch.event_date || new Date(ch.event_date) >= now)
+    .sort((a, b) => {
+      if (a.event_date && b.event_date)
+        return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+      return 0;
+    });
+  const pastThreads = eventChannels
+    .filter((ch) => ch.event_date && new Date(ch.event_date) < now)
+    .sort((a, b) => {
+      if (a.event_date && b.event_date)
+        return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
+      return 0;
+    });
 
   function formatTime(dateStr: string | undefined) {
     if (!dateStr) return "";
     const d = new Date(dateStr);
-    const now = new Date();
     const diff = now.getTime() - d.getTime();
     if (diff < 86400000) {
       return d.toLocaleTimeString("en", {
@@ -190,82 +197,148 @@ export default function ChatPage() {
     return d.toLocaleDateString("en", { month: "short", day: "numeric" });
   }
 
+  function ThreadCard({ ch }: { ch: ChannelWithMeta }) {
+    const isGeneral = ch.type === "general";
+    return (
+      <Link
+        key={ch.id}
+        href={`/dashboard/chat/${ch.id}`}
+        className="flex items-center gap-3 p-4 rounded-2xl bg-card border border-border hover:border-[#7B2FF7]/30 hover:bg-accent/50 transition-all min-h-[72px] active:scale-[0.98]"
+      >
+        {/* Avatar / Icon */}
+        <div
+          className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
+            isGeneral
+              ? "bg-[#7B2FF7]/15"
+              : "bg-zinc-800"
+          }`}
+        >
+          {isGeneral ? (
+            <Hash size={22} className="text-[#7B2FF7]" />
+          ) : (
+            <Calendar size={20} className="text-zinc-400" />
+          )}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {isGeneral && (
+              <Pin size={12} className="text-[#7B2FF7] shrink-0" />
+            )}
+            <p className="font-semibold truncate text-[15px] leading-tight">
+              {ch.name}
+            </p>
+            {ch.event_date && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#7B2FF7]/10 text-[#7B2FF7] shrink-0">
+                {formatEventDate(ch.event_date)}
+              </span>
+            )}
+          </div>
+          {ch.last_message ? (
+            <p className="text-[13px] text-muted-foreground truncate mt-0.5">
+              {ch.last_message}
+            </p>
+          ) : (
+            <p className="text-[13px] text-muted-foreground/40 mt-0.5">
+              No messages yet
+            </p>
+          )}
+        </div>
+
+        {/* Right side: time + unread */}
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          {ch.last_message_at && (
+            <span className="text-[11px] text-muted-foreground">
+              {formatTime(ch.last_message_at)}
+            </span>
+          )}
+          {ch.unread_count > 0 && (
+            <div className="min-w-[20px] h-5 rounded-full bg-[#7B2FF7] flex items-center justify-center px-1.5">
+              <span className="text-[11px] font-bold text-white">
+                {ch.unread_count}
+              </span>
+            </div>
+          )}
+        </div>
+      </Link>
+    );
+  }
+
   return (
-    <div className="space-y-4 max-w-2xl mx-auto">
+    <div className="max-w-2xl mx-auto pb-24 md:pb-0">
       {/* Header */}
-      <div className="flex items-center gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">Team Sync</h1>
-        <Sparkles size={20} className="text-nocturn" />
+      <div className="flex items-center gap-2.5 mb-6">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-6 w-6 text-[#7B2FF7]" />
+          <h1 className="text-2xl font-bold tracking-tight font-[family-name:var(--font-space-grotesk)]">
+            Team Sync
+          </h1>
+          <Sparkles size={18} className="text-[#7B2FF7] animate-pulse" />
+        </div>
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="w-6 h-6 border-2 border-nocturn border-t-transparent rounded-full animate-spin" />
+        <div className="flex justify-center py-16">
+          <div className="w-7 h-7 border-2 border-[#7B2FF7] border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : sorted.length === 0 ? (
-        <Card className="p-8 text-center border-border">
-          <Hash size={40} className="text-muted-foreground mx-auto mb-3" />
-          <p className="font-medium mb-1">No channels yet</p>
-          <p className="text-sm text-muted-foreground">
+      ) : channels.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+          <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-4">
+            <Hash size={28} className="text-[#7B2FF7]" />
+          </div>
+          <p className="font-semibold text-lg mb-1">No channels yet</p>
+          <p className="text-sm text-muted-foreground max-w-xs">
             Join a collective to start chatting with your team.
           </p>
-        </Card>
+        </div>
       ) : (
-        <div className="space-y-2">
-          {sorted.map((ch) => (
-            <Link
-              key={ch.id}
-              href={`/dashboard/chat/${ch.id}`}
-              className="flex items-center gap-3 p-3 rounded-2xl bg-card border border-border hover:bg-accent/50 transition-colors min-h-[68px]"
-            >
-              {/* Icon */}
-              <div className="w-11 h-11 rounded-xl bg-nocturn/10 flex items-center justify-center shrink-0">
-                {ch.type === "general" ? (
-                  <Hash size={20} className="text-nocturn" />
-                ) : (
-                  <Sparkles size={20} className="text-nocturn" />
-                )}
-              </div>
+        <div className="space-y-6">
+          {/* General channel — always first, pinned */}
+          {generalChannel && (
+            <div>
+              <ThreadCard ch={generalChannel} />
+            </div>
+          )}
 
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5">
-                  {ch.type === "general" && (
-                    <Pin size={12} className="text-nocturn shrink-0" />
-                  )}
-                  <p className="font-medium truncate text-[15px]">{ch.name}</p>
-                  {ch.event_date && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-nocturn/15 text-nocturn shrink-0">
-                      {formatEventDate(ch.event_date)}
-                    </span>
-                  )}
-                </div>
-                {ch.last_message ? (
-                  <p className="text-xs text-muted-foreground truncate mt-0.5">
-                    {ch.last_message}
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground/50 mt-0.5">
-                    No messages yet
-                  </p>
-                )}
+          {/* Upcoming event threads */}
+          {upcomingThreads.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
+                Upcoming Events
+              </p>
+              <div className="space-y-2">
+                {upcomingThreads.map((ch) => (
+                  <ThreadCard key={ch.id} ch={ch} />
+                ))}
               </div>
+            </div>
+          )}
 
-              {/* Right side: time + unread */}
-              <div className="flex flex-col items-end gap-1 shrink-0">
-                {ch.last_message_at && (
-                  <span className="text-[11px] text-muted-foreground">
-                    {formatTime(ch.last_message_at)}
-                  </span>
-                )}
-                {ch.unread && (
-                  <div className="w-2.5 h-2.5 rounded-full bg-nocturn" />
-                )}
+          {/* Past event threads */}
+          {pastThreads.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
+                Past Events
+              </p>
+              <div className="space-y-2">
+                {pastThreads.map((ch) => (
+                  <ThreadCard key={ch.id} ch={ch} />
+                ))}
               </div>
-            </Link>
-          ))}
+            </div>
+          )}
         </div>
       )}
+
+      {/* Floating Record Call button — makes Record accessible from Chat on mobile */}
+      <Link
+        href="/dashboard/record"
+        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full bg-[#7B2FF7] text-white shadow-lg shadow-[#7B2FF7]/30 px-5 py-3.5 hover:bg-[#6B1FE7] active:scale-95 transition-all md:bottom-6"
+      >
+        <Mic className="h-5 w-5" />
+        <span className="text-sm font-semibold">Record Call</span>
+      </Link>
     </div>
   );
 }

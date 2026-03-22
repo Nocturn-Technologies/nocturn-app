@@ -1,5 +1,11 @@
 "use server";
 
+export interface TicketTier {
+  name: string;
+  price: number;
+  capacity: number;
+}
+
 export interface ParsedEventDetails {
   title?: string;
   date?: string;
@@ -14,6 +20,7 @@ export interface ParsedEventDetails {
   ticketPrice?: number;
   ticketQuantity?: number;
   ticketTierName?: string;
+  tiers?: TicketTier[];
 }
 
 export async function parseEventDetails(

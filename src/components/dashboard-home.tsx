@@ -12,6 +12,9 @@ import {
   Plus,
   Send,
   Users,
+  Mic,
+  MapPin,
+  MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -161,6 +164,13 @@ export function DashboardHome(props: DashboardHomeProps) {
   const actions = getSmartActions(props);
   const insights = getInsights(props);
 
+  const quickActions = [
+    { href: "/dashboard/record", label: "Record Call", icon: Mic, emoji: "" },
+    { href: "/dashboard/venues", label: "Find Venue", icon: MapPin, emoji: "" },
+    { href: "/dashboard/events/new", label: "New Event", icon: Sparkles, emoji: "" },
+    { href: "/dashboard/chat", label: "Team Chat", icon: MessageSquare, emoji: "" },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Greeting */}
@@ -172,6 +182,27 @@ export function DashboardHome(props: DashboardHomeProps) {
           <Sparkles className="h-5 w-5 text-nocturn animate-text-glow" />
         </div>
         <p className="text-sm text-muted-foreground mt-0.5">{message}</p>
+      </div>
+
+      {/* Quick Actions — horizontal scroll on mobile */}
+      <div className="animate-fade-in-up delay-50">
+        <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
+          {quickActions.map((action) => {
+            const Icon = action.icon;
+            return (
+              <Link
+                key={action.href}
+                href={action.href}
+                className="flex items-center gap-2 shrink-0 rounded-full border border-[#7B2FF7]/20 bg-[#7B2FF7]/5 px-4 py-2.5 min-h-[44px] hover:bg-[#7B2FF7]/10 hover:border-[#7B2FF7]/40 active:scale-95 transition-all"
+              >
+                <Icon className="h-4 w-4 text-[#7B2FF7]" />
+                <span className="text-sm font-medium text-white whitespace-nowrap">
+                  {action.label}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
       </div>
 
       {/* Stats */}

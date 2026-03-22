@@ -23,6 +23,7 @@ import {
   MessageSquare,
   MapPin,
   Mic,
+  Search,
 } from "lucide-react";
 
 interface DashboardShellProps {
@@ -46,13 +47,12 @@ const sidebarNavItems = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-/* ── Mobile bottom tab bar items (5 tabs only) ── */
+/* ── Mobile bottom tab bar items (4 tabs — simpler, focused) ── */
 const mobileTabItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/events", label: "Events", icon: Calendar },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard/venues", label: "Venues", icon: MapPin },
-  { href: "/dashboard/record", label: "Record", icon: Mic },
+  { href: "/dashboard/venues", label: "Discover", icon: Search },
 ];
 
 export function DashboardShell({ user, collectives, children }: DashboardShellProps) {
@@ -171,7 +171,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
         <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
 
         {/* ── Mobile bottom tab bar (hidden on desktop) ── */}
-        <nav className="fixed inset-x-0 bottom-0 z-50 flex h-16 items-center justify-around border-t border-border bg-card/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom)] md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-around border-t border-border bg-card/95 backdrop-blur-sm px-2 pt-2 pb-[max(env(safe-area-inset-bottom),8px)] md:hidden">
           {mobileTabItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -179,15 +179,19 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
-                  active ? "text-nocturn" : "text-muted-foreground"
+                className={`flex items-center justify-center gap-1.5 rounded-full px-4 min-h-[48px] min-w-[48px] transition-all ${
+                  active
+                    ? "bg-[#7B2FF7] text-white shadow-lg shadow-[#7B2FF7]/25"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
                 <Icon
-                  className="h-5 w-5"
-                  {...(active ? { fill: "currentColor", strokeWidth: 0 } : {})}
+                  className="h-5 w-5 shrink-0"
+                  {...(active ? { strokeWidth: 2.5 } : {})}
                 />
-                <span className="text-[10px] font-medium">{item.label}</span>
+                <span className={`text-xs font-semibold whitespace-nowrap ${active ? "" : "hidden"}`}>
+                  {item.label}
+                </span>
               </Link>
             );
           })}

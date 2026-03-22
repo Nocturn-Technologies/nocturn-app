@@ -404,3 +404,105 @@ export async function completeEvent(eventId: string) {
   if (error) return { error: `Failed to complete: ${error.message}` };
   return { error: null };
 }
+
+interface EventDesignInput {
+  flyerUrl?: string | null;
+  description?: string | null;
+  vibeTags?: string[];
+  minAge?: number | null;
+  dressCode?: string | null;
+  themeColor?: string | null;
+}
+
+export async function updateEventDesign(eventId: string, input: EventDesignInput) {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "You must be logged in." };
+
+  const ownership = await verifyEventOwnership(user.id, eventId);
+  if (ownership.error) return { error: ownership.error };
+
+  const admin = createAdminClient();
+
+  // Fetch current metadata to merge
+  const { data: currentEvent } = await admin
+    .from("events")
+    .select("metadata")
+    .eq("id", eventId)
+    .single();
+
+  const existingMetadata = (currentEvent?.metadata ?? {}) as Record<string, unknown>;
+
+  // Build update payload
+  const updatePayload: Record<string, unknown> = {};
+
+  if (input.flyerUrl !== undefined) {
+    updatePayload.flyer_url = input.flyerUrl;
+  }
+  if (input.description !== undefined) {
+    updatePayload.description = input.description;
+  }
+  if (input.vibeTags !== undefined) {
+    updatePayload.vibe_tags = input.vibeTags;
+  }
+  if (input.minAge !== undefined) {
+    updatePayload.min_age = input.minAge;
+  }
+
+  // Store extras in metadata JSONB
+  const newMetadata = { ...existingMetadata };
+  if (input.dressCode !== undefined) {
+    newMetadata.dressCode = input.dressCode;
+  }
+  if (input.themeColor !== undefined) {
+    newMetadata.themeColor = input.themeColor;
+  }
+  updatePayload.metadata = newMetadata;
+
+  const { error } = await admin
+    .from("events")
+    .update(updatePayload)
+    .eq("id", eventId);
+
+  if (error) return { error: `Failed to update design: ${error.message}` };
+  return { error: null };
+}
+
+export async function getEventDesign(eventId: string) {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return { error: "You must be logged in.", event: null };
+
+  const ownership = await verifyEventOwnership(user.id, eventId);
+  if (ownership.error) return { error: ownership.error, event: null };
+
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from("events")
+    .select("id, title, slug, description, flyer_url, vibe_tags, min_age, metadata, collective_id")
+    .eq("id", eventId)
+    .single();
+
+  if (!event) return { error: "Event not found.", event: null };
+
+  // Get collective slug for preview link
+  const { data: collective } = await admin
+    .from("collectives")
+    .select("slug")
+    .eq("id", event.collective_id)
+    .single();
+
+  return {
+    error: null,
+    event: {
+      ...event,
+      collectiveSlug: collective?.slug ?? null,
+    },
+  };
+}

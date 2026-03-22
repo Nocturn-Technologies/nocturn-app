@@ -1,11 +1,12 @@
-import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
-import { Card, CardContent } from "@/components/ui/card";
-import { Calendar, Clock, MapPin } from "lucide-react";
-import { TicketPurchase } from "@/components/ticket-purchase";
+import { Calendar, Clock, MapPin, Navigation, Music } from "lucide-react";
+import { TicketSection } from "@/components/public-event/ticket-section";
+import { ShareButton } from "@/components/public-event/share-button";
+import { ExpandableText } from "@/components/public-event/expandable-text";
 import type { Metadata } from "next";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import Link from "next/link";
 
 function createAdminClient() {
   return createClient(
@@ -79,7 +80,7 @@ export default async function PublicEventPage({ params }: Props) {
 
   if (!collective) notFound();
 
-  // Fetch event with venue
+  // Fetch event with venue + metadata
   const { data: event } = await supabase
     .from("events")
     .select("*, venues(name, address, city, capacity)")
@@ -116,117 +117,253 @@ export default async function PublicEventPage({ params }: Props) {
   const doorsAt = event.doors_at ? new Date(event.doors_at) : null;
   const isUpcoming = eventDate >= new Date() && event.status === "published";
 
+  // Theme color from metadata or default nocturn purple
+  const metadata = (event.metadata ?? {}) as Record<string, string>;
+  const accentColor = metadata.themeColor || "#7B2FF7";
+
+  // Formatted date pieces
+  const dayName = eventDate.toLocaleDateString("en", { weekday: "short" }).toUpperCase();
+  const monthName = eventDate.toLocaleDateString("en", { month: "short" }).toUpperCase();
+  const dayNum = eventDate.getDate();
+
+  const startTime = eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" });
+  const endTime = endsAt ? endsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" }) : null;
+  const doorsTime = doorsAt ? doorsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" }) : null;
+
+  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://nocturn.app"}/e/${slug}/${eventSlug}`;
+  const mapsUrl = venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}` : null;
+
+  // Dress code / min age from metadata
+  const dressCode = metadata.dressCode || null;
+  const minAge = event.min_age as number | null;
+  const vibeTags = (event.vibe_tags ?? []) as string[];
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Hero */}
+    <div className="min-h-screen bg-[#09090B]" style={{ scrollBehavior: "smooth" }}>
+      {/* ─── Hero Section ─── */}
       <div className="relative">
         {event.flyer_url ? (
-          <div
-            className="h-64 bg-cover bg-center sm:h-80"
-            style={{ backgroundImage: `url(${event.flyer_url})` }}
-          >
-            <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
+          <div className="relative aspect-[4/5] max-h-[520px] w-full sm:aspect-[16/9] sm:max-h-[480px]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={event.flyer_url}
+              alt={event.title}
+              className="h-full w-full object-cover"
+            />
+            {/* Bottom gradient fade */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/40 to-transparent" />
           </div>
         ) : (
-          <div className="h-48 bg-gradient-to-br from-nocturn/30 via-nocturn/10 to-nocturn-glow/10 sm:h-64">
-            <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
+          /* Animated gradient fallback with noise */
+          <div
+            className="relative h-72 w-full sm:h-96"
+            style={{
+              background: `linear-gradient(135deg, ${accentColor}40 0%, ${accentColor}15 40%, #09090B 100%)`,
+            }}
+          >
+            {/* CSS noise texture */}
+            <div
+              className="absolute inset-0 opacity-30"
+              style={{
+                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")`,
+                backgroundSize: "128px 128px",
+              }}
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/60 to-transparent" />
           </div>
         )}
       </div>
 
-      <div className="mx-auto max-w-2xl px-4 pb-12">
-        {/* Event info */}
-        <div className="-mt-12 relative space-y-4">
-          {/* Collective badge */}
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-nocturn text-xs font-bold text-white">
-              {collective.name.charAt(0).toUpperCase()}
+      {/* ─── Content ─── */}
+      <div className="mx-auto max-w-[640px] px-6 pb-32 sm:pb-12">
+        <div className="-mt-16 relative space-y-8">
+          {/* ─── Collective badge + Title ─── */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2.5">
+              {collective.logo_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={collective.logo_url}
+                  alt={collective.name}
+                  className="h-8 w-8 rounded-full object-cover ring-2 ring-white/10"
+                />
+              ) : (
+                <div
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white ring-2 ring-white/10"
+                  style={{ backgroundColor: accentColor }}
+                >
+                  {collective.name.charAt(0).toUpperCase()}
+                </div>
+              )}
+              <span className="text-sm font-medium text-white/50">
+                {collective.name}
+              </span>
             </div>
-            <span className="text-sm font-medium text-muted-foreground">
-              {collective.name}
-            </span>
+
+            <h1 className="font-heading text-4xl font-bold tracking-tight text-white sm:text-5xl">
+              {event.title}
+            </h1>
+
+            {/* Vibe tags */}
+            {vibeTags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {vibeTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/60"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
-          <h1 className="text-3xl font-bold sm:text-4xl">{event.title}</h1>
-
-          {/* Date & Time */}
-          <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Calendar className="h-4 w-4 text-nocturn" />
-              {eventDate.toLocaleDateString("en", {
-                weekday: "long",
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Clock className="h-4 w-4 text-nocturn" />
-              {doorsAt && `Doors ${doorsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })} · `}
-              Start {eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}
-              {endsAt && ` · End ${endsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}`}
-            </span>
+          {/* ─── Date & Time Card ─── */}
+          <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
+            <div className="flex items-center gap-5">
+              {/* Big date block */}
+              <div className="flex flex-col items-center rounded-xl bg-white/5 px-4 py-3 min-w-[72px]">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
+                  {dayName}
+                </span>
+                <span className="font-heading text-2xl font-bold text-white">
+                  {dayNum}
+                </span>
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
+                  {monthName}
+                </span>
+              </div>
+              {/* Time info */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-white/30" />
+                  <span className="font-heading text-lg font-semibold text-white">
+                    {startTime}
+                    {endTime && ` — ${endTime}`}
+                  </span>
+                </div>
+                {doorsTime && (
+                  <p className="text-sm text-white/40">
+                    Doors open at {doorsTime}
+                  </p>
+                )}
+                {minAge && (
+                  <p className="text-sm text-white/40">
+                    {minAge}+ only
+                  </p>
+                )}
+              </div>
+            </div>
           </div>
 
-          {/* Venue */}
+          {/* ─── Venue Section ─── */}
           {venue && (
-            <div className="flex items-start gap-1.5 text-sm text-muted-foreground">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-nocturn" />
-              <div>
-                <p className="font-medium text-foreground">{venue.name}</p>
-                <p>
-                  {venue.address}, {venue.city}
-                </p>
+            <div className="space-y-3">
+              <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+                Venue
+              </h2>
+              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-4">
+                <div className="flex items-start gap-3">
+                  <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-white/30" />
+                  <div>
+                    <p className="font-heading text-base font-semibold text-white">
+                      {venue.name}
+                    </p>
+                    <p className="text-sm text-white/50">
+                      {venue.address}, {venue.city}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Map placeholder */}
+                <div className="flex h-28 items-center justify-center rounded-xl bg-white/5 border border-white/5">
+                  <div className="flex flex-col items-center gap-1 text-white/20">
+                    <MapPin className="h-6 w-6" />
+                    <span className="text-xs">Map</span>
+                  </div>
+                </div>
+
+                {mapsUrl && (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
+                  >
+                    <Navigation className="h-4 w-4" />
+                    Get Directions
+                  </a>
+                )}
               </div>
             </div>
           )}
 
-          {/* Description */}
+          {/* ─── About / Description ─── */}
           {event.description && (
-            <p className="text-muted-foreground leading-relaxed">
-              {event.description}
-            </p>
+            <div className="space-y-3">
+              <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+                About
+              </h2>
+              <ExpandableText text={event.description} />
+            </div>
           )}
 
-          {/* Lineup */}
+          {/* Dress code */}
+          {dressCode && (
+            <div className="space-y-2">
+              <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+                Dress Code
+              </h2>
+              <p className="text-[15px] text-white/70">{dressCode}</p>
+            </div>
+          )}
+
+          {/* ─── Lineup ─── */}
           {artists && artists.length > 0 && (
-            <Card>
-              <CardContent className="p-4">
-                <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                  Lineup
-                </h2>
-                <div className="space-y-2">
-                  {artists.map((a: { artist_id: string; set_time: string | null; artists: unknown }) => {
-                    const artist = a.artists as unknown as { name: string; genre: string | null };
-                    return (
-                      <div
-                        key={a.artist_id}
-                        className="flex items-center justify-between"
-                      >
-                        <div>
-                          <p className="font-medium">{artist.name}</p>
-                          {artist.genre && (
-                            <p className="text-xs text-muted-foreground">
-                              {artist.genre}
-                            </p>
-                          )}
-                        </div>
-                        {a.set_time && (
-                          <span className="text-xs text-muted-foreground">
-                            {a.set_time}
-                          </span>
-                        )}
+            <div className="space-y-3">
+              <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+                Lineup
+              </h2>
+              {/* Horizontal scroll on mobile */}
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
+                {artists.map((a: { artist_id: string; set_time: string | null; artists: unknown }) => {
+                  const artist = a.artists as unknown as { name: string; genre: string | null };
+                  return (
+                    <div
+                      key={a.artist_id}
+                      className="flex-none rounded-2xl border border-white/5 bg-white/[0.02] p-4 min-w-[140px] space-y-1.5"
+                    >
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5">
+                        <Music className="h-5 w-5 text-white/30" />
                       </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
+                      <p className="font-heading text-sm font-semibold text-white">
+                        {artist.name}
+                      </p>
+                      {artist.genre && (
+                        <span
+                          className="inline-block rounded-full px-2 py-0.5 text-[11px] font-medium"
+                          style={{
+                            backgroundColor: `${accentColor}20`,
+                            color: accentColor,
+                          }}
+                        >
+                          {artist.genre}
+                        </span>
+                      )}
+                      {a.set_time && (
+                        <p className="text-xs text-white/40">{a.set_time}</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
-          {/* Ticket tiers + purchase */}
+          {/* ─── Tickets ─── */}
           {isUpcoming && tiers && tiers.length > 0 && (
-            <TicketPurchase
+            <TicketSection
               tiers={tiers.map((t) => ({
                 id: t.id,
                 name: t.name,
@@ -234,27 +371,41 @@ export default async function PublicEventPage({ params }: Props) {
                 capacity: t.capacity,
               }))}
               eventId={event.id}
+              accentColor={accentColor}
             />
           )}
 
+          {/* Status banners */}
           {event.status === "cancelled" && (
-            <div className="rounded-lg bg-red-500/10 p-4 text-center text-red-500">
-              This event has been cancelled.
+            <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-center">
+              <p className="font-heading text-lg font-semibold text-red-400">
+                This event has been cancelled.
+              </p>
             </div>
           )}
 
           {event.status === "completed" && (
-            <div className="rounded-lg bg-muted p-4 text-center text-muted-foreground">
-              This event has ended. Thanks for coming!
+            <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 text-center">
+              <p className="font-heading text-lg font-semibold text-white/50">
+                This event has ended. Thanks for coming!
+              </p>
             </div>
           )}
 
-          {/* Footer */}
-          <div className="border-t border-border pt-6 text-center">
-            <p className="text-xs text-muted-foreground">
+          {/* ─── Share ─── */}
+          <ShareButton url={publicUrl} title={event.title} />
+
+          {/* ─── Footer ─── */}
+          <div className="border-t border-white/5 pt-8 pb-4 text-center">
+            <Link
+              href="https://nocturn.app"
+              className="text-xs text-white/30 transition-colors hover:text-white/50"
+            >
               Powered by{" "}
-              <span className="font-semibold text-nocturn">nocturn.</span>
-            </p>
+              <span className="font-semibold" style={{ color: accentColor }}>
+                nocturn.
+              </span>
+            </Link>
           </div>
         </div>
       </div>

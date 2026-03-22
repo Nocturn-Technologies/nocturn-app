@@ -4,11 +4,12 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createEvent } from "@/app/actions/events";
 import {
-  parseEventDetails,
   type ParsedEventDetails,
+  type TicketTier,
 } from "@/app/actions/ai-parse-event";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import VenuePicker, { type SelectedVenue } from "@/components/venue-picker";
 import {
   Sparkles,
   ArrowLeft,
@@ -31,12 +32,83 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+/**
+ * Parse a ticket tier from natural language (client-side).
+ * Handles: "$25 for 200", "$50 VIP, 50 tickets", "free", "$25 for 200 tickets"
+ */
+function parseTicketTier(message: string): TicketTier | null {
+  const lower = message.toLowerCase().trim();
+
+  // "free" or "free event"
+  if (/^free\b/.test(lower)) {
+    return { name: "General Admission", price: 0, capacity: 100 };
+  }
+
+  // "$25 for 200" or "$25 for 200 tickets"
+  const priceForQty = lower.match(/\$(\d+(?:\.\d{2})?)\s+(?:for\s+)?(\d+)(?:\s*tickets?)?/);
+  if (priceForQty) {
+    const price = parseFloat(priceForQty[1]);
+    const capacity = parseInt(priceForQty[2]);
+    const tierName = extractTierName(lower) || "General Admission";
+    return { name: tierName, price, capacity };
+  }
+
+  // "$50 VIP, 50 tickets" or "$50 VIP 50 tickets"
+  const priceNameQty = lower.match(/\$(\d+(?:\.\d{2})?)\s+(\w+)[\s,]+(\d+)\s*tickets?/);
+  if (priceNameQty) {
+    const price = parseFloat(priceNameQty[1]);
+    const name = priceNameQty[2].charAt(0).toUpperCase() + priceNameQty[2].slice(1);
+    const capacity = parseInt(priceNameQty[3]);
+    return { name, price, capacity };
+  }
+
+  // "$25 GA" or "$50 VIP" (no quantity specified — default 100)
+  const priceAndName = lower.match(/\$(\d+(?:\.\d{2})?)\s+(\w+)/);
+  if (priceAndName) {
+    const price = parseFloat(priceAndName[1]);
+    const name = priceAndName[2].charAt(0).toUpperCase() + priceAndName[2].slice(1);
+    return { name, price, capacity: 100 };
+  }
+
+  // Just "$25" (no name, no qty)
+  const justPrice = lower.match(/\$(\d+(?:\.\d{2})?)/);
+  if (justPrice) {
+    const price = parseFloat(justPrice[1]);
+    const tierName = extractTierName(lower) || "General Admission";
+    return { name: tierName, price, capacity: 100 };
+  }
+
+  return null;
+}
+
+function extractTierName(lower: string): string | null {
+  const tierKeywords = ["vip", "ga", "general admission", "early bird", "table", "bottle service"];
+  for (const kw of tierKeywords) {
+    if (lower.includes(kw)) {
+      if (kw === "ga") return "General Admission";
+      return kw.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    }
+  }
+  return null;
+}
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface Message {
   role: "ai" | "user";
   content: string;
+  /** If set, render venue picker inline below this message */
+  widget?: "venue-picker";
 }
+
+type ChatStep =
+  | "name"
+  | "venue"
+  | "venue-custom"
+  | "datetime"
+  | "tickets"
+  | "vip"
+  | "review";
 
 // ─── Chat Bubbles ────────────────────────────────────────────────────────────
 
@@ -56,7 +128,7 @@ function AiBubble({ children }: { children: React.ReactNode }) {
 function UserBubble({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex justify-end animate-fade-in-up">
-      <div className="rounded-2xl rounded-tr-sm bg-[#7B2FF7]/10 border border-[#7B2FF7]/20 px-4 py-3 max-w-[85%]">
+      <div className="rounded-2xl rounded-tr-sm bg-[#7B2FF7] px-4 py-3 max-w-[85%]">
         {children}
       </div>
     </div>
@@ -151,6 +223,7 @@ function EditableRow({
 
 function EventConfirmationCard({
   data,
+  tiers,
   onUpdate,
   onEdit,
   onCreate,
@@ -158,6 +231,7 @@ function EventConfirmationCard({
   error,
 }: {
   data: ParsedEventDetails;
+  tiers: TicketTier[];
   onUpdate: (field: keyof ParsedEventDetails, value: string | number) => void;
   onEdit: () => void;
   onCreate: () => void;
@@ -228,9 +302,7 @@ function EventConfirmationCard({
               label="When"
               value={`${dateDisplay}${timeDisplay ? ` at ${timeDisplay}` : ""}`}
               icon={Calendar}
-              onSave={(val) => {
-                // If user edits, try to keep it as-is for display
-                // Real editing would need a date picker, but for now allow text
+              onSave={() => {
                 onUpdate("date", data.date!);
               }}
             />
@@ -259,35 +331,42 @@ function EventConfirmationCard({
               }}
             />
           )}
-
-          {data.ticketPrice !== undefined && (
-            <EditableRow
-              label="Price"
-              value={
-                data.ticketPrice === 0
-                  ? "Free"
-                  : `$${data.ticketPrice}${data.ticketTierName ? ` ${data.ticketTierName}` : " GA"}`
-              }
-              icon={Ticket}
-              onSave={(val) => {
-                const num = parseFloat(val.replace(/[^0-9.]/g, ""));
-                if (!isNaN(num)) onUpdate("ticketPrice", num);
-              }}
-            />
-          )}
-
-          {data.venueCapacity && (
-            <EditableRow
-              label="Capacity"
-              value={`${data.venueCapacity}`}
-              icon={Users}
-              onSave={(val) => {
-                const num = parseInt(val.replace(/[^0-9]/g, ""));
-                if (!isNaN(num)) onUpdate("venueCapacity", num);
-              }}
-            />
-          )}
         </div>
+
+        {/* Ticket Tiers */}
+        {tiers.length > 0 && (
+          <div className="border-t border-white/5 pt-3 mt-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <Ticket className="h-3.5 w-3.5 text-[#7B2FF7]" />
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Tickets</span>
+            </div>
+            <div className="space-y-2">
+              {tiers.map((tier, i) => (
+                <div key={i} className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white">{tier.name}</span>
+                    <span className="text-xs text-zinc-500">{tier.capacity} tickets</span>
+                  </div>
+                  <span className="text-sm font-semibold text-[#7B2FF7]">
+                    {tier.price === 0 ? "Free" : `$${tier.price}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {data.venueCapacity !== undefined && data.venueCapacity > 0 && (
+          <EditableRow
+            label="Capacity"
+            value={`${data.venueCapacity}`}
+            icon={Users}
+            onSave={(val) => {
+              const num = parseInt(val.replace(/[^0-9]/g, ""));
+              if (!isNaN(num)) onUpdate("venueCapacity", num);
+            }}
+          />
+        )}
       </div>
 
       {error && (
@@ -324,36 +403,93 @@ function EventConfirmationCard({
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
+// ─── Date/time parsing helpers ───────────────────────────────────────────────
 
-function getMissingFields(data: ParsedEventDetails): string[] {
-  const missing: string[] = [];
-  if (!data.title) missing.push("event name");
-  if (!data.date) missing.push("date");
-  if (!data.startTime) missing.push("start time");
-  if (!data.venueName) missing.push("venue");
-  if (!data.venueCity) missing.push("city");
-  return missing;
+function parseDateTimeFromMessage(message: string): {
+  date?: string;
+  startTime?: string;
+} {
+  const result: { date?: string; startTime?: string } = {};
+  const lower = message.toLowerCase().trim();
+
+  // ISO date "2026-04-25"
+  const isoDate = message.match(/(\d{4}-\d{2}-\d{2})/);
+  if (isoDate) result.date = isoDate[1];
+
+  // "april 25", "apr 25"
+  if (!result.date) {
+    const monthDay = lower.match(
+      /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})\b/
+    );
+    if (monthDay) {
+      const months: Record<string, string> = {
+        jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
+        jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
+      };
+      const m = months[monthDay[1].slice(0, 3)];
+      result.date = `2026-${m}-${monthDay[2].padStart(2, "0")}`;
+    }
+  }
+
+  // Time: "10pm", "10:30 pm"
+  const timeRegex = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/gi;
+  let match;
+  while ((match = timeRegex.exec(lower)) !== null) {
+    let hour = parseInt(match[1]);
+    const min = match[2] || "00";
+    if (match[3].toLowerCase() === "pm" && hour < 12) hour += 12;
+    if (match[3].toLowerCase() === "am" && hour === 12) hour = 0;
+    result.startTime = `${hour.toString().padStart(2, "0")}:${min}`;
+    break;
+  }
+
+  // 24h format "22:00"
+  if (!result.startTime) {
+    const time24 = lower.match(/\b(\d{2}):(\d{2})\b/);
+    if (time24) {
+      result.startTime = `${time24[1]}:${time24[2]}`;
+    }
+  }
+
+  // Implied time "at 10" (assume PM for nightlife)
+  if (!result.startTime) {
+    const implied = lower.match(
+      /(?:at\s+)(\d{1,2})(?::(\d{2}))?\b(?!\s*(?:am|pm))/
+    );
+    if (implied) {
+      let hour = parseInt(implied[1]);
+      const min = implied[2] || "00";
+      if (hour < 12 && hour >= 1) hour += 12;
+      result.startTime = `${hour.toString().padStart(2, "0")}:${min}`;
+    }
+  }
+
+  return result;
 }
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function NewEventPage() {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [eventData, setEventData] = useState<ParsedEventDetails>({});
+  const [tiers, setTiers] = useState<TicketTier[]>([]);
   const [thinking, setThinking] = useState(false);
+  const [step, setStep] = useState<ChatStep>("name");
   const [phase, setPhase] = useState<"chat" | "review" | "creating" | "done">(
     "chat"
   );
   const [error, setError] = useState<string | null>(null);
   const [introShown, setIntroShown] = useState(false);
+  const [showVenuePicker, setShowVenuePicker] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Scroll to bottom on new messages
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, thinking, phase]);
+  }, [messages, thinking, phase, showVenuePicker]);
 
   // Show intro message
   useEffect(() => {
@@ -362,13 +498,54 @@ export default function NewEventPage() {
       setMessages([
         {
           role: "ai",
-          content:
-            'Describe your event and I\'ll set it up. Try something like:\n\n"Midnight Sessions at CODA, April 25 10pm, Toronto, $25"',
+          content: "What\u2019s the event called?",
         },
       ]);
       setTimeout(() => inputRef.current?.focus(), 500);
     }
   }, [introShown]);
+
+  // ── Step advancement helper ──────────────────────────────────────────────
+
+  function advanceToStep(nextStep: ChatStep) {
+    setStep(nextStep);
+
+    if (nextStep === "review") {
+      setPhase("review");
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", content: "Here\u2019s what I\u2019ve set up:" },
+      ]);
+    } else if (nextStep === "venue") {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          content: "Where\u2019s it happening?",
+          widget: "venue-picker",
+        },
+      ]);
+      setShowVenuePicker(true);
+    } else {
+      const prompts: Record<string, string> = {
+        "venue-custom":
+          'Type the venue name, address, and city.\n\nE.g. "CODA, 794 Bathurst St, Toronto"',
+        datetime:
+          'When? Date and time?\n\nTry something like "April 25 10pm" or "2026-04-25 at 22:00"',
+        tickets:
+          'Ticket price and capacity?\n\nE.g. "$25, 200 tickets" or "free"',
+        vip: 'Want to add a VIP tier?\n\nE.g. "$50 VIP, 50 tickets" or type "skip"',
+      };
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", content: prompts[nextStep] || "" },
+      ]);
+    }
+
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
+
+  // ── Handle text input send ───────────────────────────────────────────────
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -377,36 +554,204 @@ export default function NewEventPage() {
     const userMsg = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+
+    // Brief thinking delay
     setThinking(true);
-
-    // Use the server action to parse (AI with local fallback)
-    const currentData = { ...eventData };
-
-    // If the user typed a short message with no numbers and we have no title yet,
-    // hint that it might be a title
-    if (!currentData.title && !userMsg.match(/\d/) && userMsg.length < 50) {
-      currentData.title = userMsg;
-    }
-
-    const result = await parseEventDetails(userMsg, currentData);
-    setEventData(result.parsed);
+    await new Promise((r) => setTimeout(r, 400));
     setThinking(false);
 
-    // Check what's still needed
-    const missing = getMissingFields(result.parsed);
+    switch (step) {
+      case "name": {
+        setEventData((prev) => ({ ...prev, title: userMsg }));
+        advanceToStep("venue");
+        break;
+      }
 
-    if (missing.length === 0) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", content: "Got it! Here's what I've set up:" },
-      ]);
-      setPhase("review");
-    } else {
-      setMessages((prev) => [...prev, { role: "ai", content: result.reply }]);
+      case "venue-custom": {
+        const parts = userMsg.split(",").map((s) => s.trim());
+        const updated: ParsedEventDetails = {
+          ...eventData,
+          venueName: parts[0] || userMsg,
+          venueAddress: parts[1] || "",
+          venueCity: parts[2] || "Toronto",
+        };
+        setEventData(updated);
+        advanceToStep("datetime");
+        break;
+      }
+
+      case "datetime": {
+        const dt = parseDateTimeFromMessage(userMsg);
+        const updated = { ...eventData };
+        if (dt.date) updated.date = dt.date;
+        if (dt.startTime) updated.startTime = dt.startTime;
+
+        if (!dt.date && !dt.startTime) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "ai",
+              content:
+                'I didn\'t catch that. Try something like "April 25 10pm" or "2026-04-25 at 22:00".',
+            },
+          ]);
+          setTimeout(() => inputRef.current?.focus(), 100);
+          return;
+        }
+
+        if (!dt.date) {
+          setEventData(updated);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "ai",
+              content:
+                'Got the time! What date? E.g. "April 25" or "2026-04-25".',
+            },
+          ]);
+          setTimeout(() => inputRef.current?.focus(), 100);
+          return;
+        }
+
+        if (!dt.startTime) {
+          setEventData(updated);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "ai",
+              content: 'Got the date! What time? E.g. "10pm" or "22:00".',
+            },
+          ]);
+          setTimeout(() => inputRef.current?.focus(), 100);
+          return;
+        }
+
+        setEventData(updated);
+        advanceToStep("tickets");
+        break;
+      }
+
+      case "tickets": {
+        const lower = userMsg.toLowerCase().trim();
+
+        // Skip tickets entirely
+        if (lower === "skip" || lower === "no" || lower === "none") {
+          advanceToStep("review");
+          return;
+        }
+
+        const tier = parseTicketTier(userMsg);
+        if (tier) {
+          if (tier.name === "General Admission" || tier.name === "Ga") {
+            tier.name = "General Admission";
+          }
+          setTiers([tier]);
+          setEventData((prev) => ({
+            ...prev,
+            ticketPrice: tier.price,
+            ticketQuantity: tier.capacity,
+            ticketTierName: tier.name,
+          }));
+          advanceToStep("vip");
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "ai",
+              content:
+                'I didn\'t catch that. Try "$25, 200 tickets" or "free".',
+            },
+          ]);
+          setTimeout(() => inputRef.current?.focus(), 100);
+        }
+        break;
+      }
+
+      case "vip": {
+        const lower = userMsg.toLowerCase().trim();
+        if (
+          lower === "skip" ||
+          lower === "no" ||
+          lower === "nah" ||
+          lower === "none" ||
+          lower === "no thanks" ||
+          lower === "done"
+        ) {
+          advanceToStep("review");
+        } else {
+          const tier = parseTicketTier(userMsg);
+          if (tier) {
+            if (tier.name === "General Admission") {
+              tier.name = "VIP";
+            }
+            setTiers((prev) => [...prev, tier]);
+            advanceToStep("review");
+          } else {
+            setMessages((prev) => [
+              ...prev,
+              {
+                role: "ai",
+                content:
+                  'Try something like "$50 VIP, 50 tickets" \u2014 or type "skip" to finish.',
+              },
+            ]);
+            setTimeout(() => inputRef.current?.focus(), 100);
+          }
+        }
+        break;
+      }
+
+      default:
+        break;
     }
+  }
 
+  // ── Venue picker handlers ────────────────────────────────────────────────
+
+  function handleVenueSelect(venue: SelectedVenue) {
+    setShowVenuePicker(false);
+
+    setEventData((prev) => ({
+      ...prev,
+      venueName: venue.name,
+      venueAddress: venue.address,
+      venueCity: venue.city,
+      venueCapacity: venue.capacity,
+    }));
+
+    // Add user message showing the selection
+    const addressShort = venue.address.split(",")[0] ?? venue.address;
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "user",
+        content: `\u{1F4CD} ${venue.name} \u2014 ${addressShort}, ${venue.city}`,
+      },
+    ]);
+
+    // Brief thinking delay then advance
+    setThinking(true);
+    setTimeout(() => {
+      setThinking(false);
+      advanceToStep("datetime");
+    }, 500);
+  }
+
+  function handleVenueCustom() {
+    setShowVenuePicker(false);
+    setStep("venue-custom");
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "ai",
+        content:
+          'Type the venue name, address, and city.\n\nE.g. "CODA, 794 Bathurst St, Toronto"',
+      },
+    ]);
     setTimeout(() => inputRef.current?.focus(), 100);
   }
+
+  // ── Review / create handlers ─────────────────────────────────────────────
 
   function handleUpdateField(
     field: keyof ParsedEventDetails,
@@ -417,11 +762,14 @@ export default function NewEventPage() {
 
   function handleBackToChat() {
     setPhase("chat");
-    setMessages((prev) => [
-      ...prev,
+    setStep("name");
+    setEventData({});
+    setTiers([]);
+    setShowVenuePicker(false);
+    setMessages([
       {
         role: "ai",
-        content: "No problem — tell me what to change.",
+        content: "No problem \u2014 let\u2019s start over. What\u2019s the event called?",
       },
     ]);
     setTimeout(() => inputRef.current?.focus(), 100);
@@ -432,16 +780,24 @@ export default function NewEventPage() {
     setError(null);
 
     const d = eventData;
-    const validTiers =
-      d.ticketPrice !== undefined
-        ? [
-            {
-              name: d.ticketTierName || "General Admission",
-              price: d.ticketPrice,
-              quantity: d.ticketQuantity || d.venueCapacity || 100,
-            },
-          ]
-        : [];
+
+    // Build tiers from the collected ticket tiers, or fallback to single-tier legacy
+    let validTiers: { name: string; price: number; quantity: number }[] = [];
+    if (tiers.length > 0) {
+      validTiers = tiers.map((t) => ({
+        name: t.name,
+        price: t.price,
+        quantity: t.capacity,
+      }));
+    } else if (d.ticketPrice !== undefined) {
+      validTiers = [
+        {
+          name: d.ticketTierName || "General Admission",
+          price: d.ticketPrice,
+          quantity: d.ticketQuantity || d.venueCapacity || 100,
+        },
+      ];
+    }
 
     const result = await createEvent({
       title: d.title || "Untitled Event",
@@ -471,12 +827,35 @@ export default function NewEventPage() {
     }, 2000);
   }
 
+  // ── Should show text input? ──────────────────────────────────────────────
+  // Hide during venue picker step (uses the picker instead) and during review/creating/done
+  const showInput =
+    phase === "chat" && step !== "venue" && step !== "review";
+
+  // ── Placeholder text based on current step ───────────────────────────────
+  function getPlaceholder(): string {
+    switch (step) {
+      case "name":
+        return 'E.g. "Midnight Sessions"';
+      case "venue-custom":
+        return "CODA, 794 Bathurst St, Toronto";
+      case "datetime":
+        return 'E.g. "April 25 10pm"';
+      case "tickets":
+        return '$25 for 200 tickets, or "free"...';
+      case "vip":
+        return '$50 VIP, 50 tickets, or "skip"...';
+      default:
+        return "Type your answer...";
+    }
+  }
+
   return (
     <div className="mx-auto max-w-lg flex flex-col h-[calc(100dvh-8rem)]">
       {/* Header */}
       <div className="flex items-center gap-3 pb-4 shrink-0">
         <Link href="/dashboard/events">
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -491,19 +870,31 @@ export default function NewEventPage() {
 
       {/* Chat area */}
       <div className="flex-1 overflow-y-auto space-y-4 pb-4 min-h-0">
-        {messages.map((msg, i) =>
-          msg.role === "ai" ? (
-            <AiBubble key={i}>
-              <p className="text-sm leading-relaxed whitespace-pre-line">
-                {msg.content}
-              </p>
-            </AiBubble>
-          ) : (
+        {messages.map((msg, i) => {
+          if (msg.role === "ai") {
+            return (
+              <div key={i} className="space-y-3">
+                <AiBubble>
+                  <p className="text-sm leading-relaxed whitespace-pre-line">
+                    {msg.content}
+                  </p>
+                </AiBubble>
+                {/* Show venue picker inline right after the venue AI message */}
+                {msg.widget === "venue-picker" && showVenuePicker && (
+                  <VenuePicker
+                    onSelect={handleVenueSelect}
+                    onCustom={handleVenueCustom}
+                  />
+                )}
+              </div>
+            );
+          }
+          return (
             <UserBubble key={i}>
-              <p className="text-sm">{msg.content}</p>
+              <p className="text-sm text-white">{msg.content}</p>
             </UserBubble>
-          )
-        )}
+          );
+        })}
 
         {thinking && <ThinkingDots />}
 
@@ -511,6 +902,7 @@ export default function NewEventPage() {
         {phase === "review" && (
           <EventConfirmationCard
             data={eventData}
+            tiers={tiers}
             onUpdate={handleUpdateField}
             onEdit={handleBackToChat}
             onCreate={handleCreate}
@@ -549,8 +941,8 @@ export default function NewEventPage() {
         <div ref={chatEndRef} />
       </div>
 
-      {/* Input bar — only shown in chat phase */}
-      {phase === "chat" && (
+      {/* Input bar — shown during chat steps that need text input */}
+      {showInput && (
         <form
           onSubmit={handleSend}
           className="shrink-0 flex gap-2 border-t border-white/5 pt-3 pb-2"
@@ -560,16 +952,16 @@ export default function NewEventPage() {
         >
           <Input
             ref={inputRef}
-            placeholder="Midnight Sessions at CODA, Apr 25 10pm..."
+            placeholder={getPlaceholder()}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            className="flex-1 text-sm bg-zinc-900 border-white/10 focus:border-[#7B2FF7]/50"
+            className="flex-1 text-sm bg-zinc-900 border-white/10 rounded-full px-4 focus:border-[#7B2FF7]/50 min-h-[44px]"
             disabled={thinking}
           />
           <Button
             type="submit"
             size="icon"
-            className="bg-[#7B2FF7] hover:bg-[#6B1FE7] shrink-0"
+            className="bg-[#7B2FF7] hover:bg-[#6B1FE7] shrink-0 rounded-full min-h-[44px] min-w-[44px]"
             disabled={!input.trim() || thinking}
           >
             {thinking ? (
