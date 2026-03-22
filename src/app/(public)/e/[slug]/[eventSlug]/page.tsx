@@ -426,7 +426,7 @@ export default async function PublicEventPage({ params }: Props) {
               <span className="inline-flex items-center gap-1">
                 <span>🌙</span>
                 <span className="font-semibold text-white">
-                  noctur<span style={{ color: "#A855F7" }}>n</span>
+                  nocturn.
                 </span>
               </span>
             </Link>

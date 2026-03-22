@@ -138,7 +138,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
       {!betaDismissed && (
         <div className="relative w-full bg-nocturn/10 border-b border-nocturn/20 py-1.5 px-4 flex items-center justify-center shrink-0 z-50">
           <span className="text-xs text-nocturn text-center">
-            🌙 Nocturn Beta — Help us improve
+            🌙 Nocturn is in beta — We'd love your feedback
           </span>
           <a
             href="mailto:shawn@trynocturn.com"

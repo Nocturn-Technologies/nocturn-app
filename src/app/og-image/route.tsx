@@ -13,7 +13,7 @@ export async function GET() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
           <span style={{ fontSize: 80 }}>🌙</span>
           <span style={{ fontSize: 72, fontWeight: 800, color: 'white' }}>
-            noctur<span style={{ color: '#A855F7' }}>n</span>
+            nocturn.
           </span>
         </div>
         <div style={{ fontSize: 28, color: '#a1a1aa' }}>

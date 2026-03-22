@@ -20,7 +20,7 @@ export function NocturnLogo({ size = "md", showText = true, className = "" }: No
       <span className={s.moon}>🌙</span>
       {showText && (
         <span className={`${s.text} font-bold tracking-tight font-heading`}>
-          noctur<span className="text-[#A855F7]">n</span>
+          nocturn.
         </span>
       )}
     </div>
