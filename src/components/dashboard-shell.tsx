@@ -20,6 +20,9 @@ import {
   Music,
   Settings,
   LogOut,
+  MessageSquare,
+  MapPin,
+  Mic,
 } from "lucide-react";
 
 interface DashboardShellProps {
@@ -28,15 +31,28 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
-const navItems = [
+/* ── Desktop sidebar nav items (full list) ── */
+const sidebarNavItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/events", label: "Events", icon: Calendar },
+  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard/venues", label: "Venues", icon: MapPin },
+  { href: "/dashboard/record", label: "Record", icon: Mic },
   { href: "/dashboard/artists", label: "Artists", icon: Music },
   { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
   { href: "/dashboard/marketing", label: "Marketing", icon: Sparkles },
   { href: "/dashboard/finance", label: "Finance", icon: DollarSign },
   { href: "/dashboard/members", label: "Members", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
+];
+
+/* ── Mobile bottom tab bar items (5 tabs only) ── */
+const mobileTabItems = [
+  { href: "/dashboard", label: "Home", icon: Home },
+  { href: "/dashboard/events", label: "Events", icon: Calendar },
+  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard/venues", label: "Venues", icon: MapPin },
+  { href: "/dashboard/record", label: "Record", icon: Mic },
 ];
 
 export function DashboardShell({ user, collectives, children }: DashboardShellProps) {
@@ -66,7 +82,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
 
   return (
     <div className="flex min-h-screen">
-      {/* Desktop sidebar */}
+      {/* ── Desktop sidebar (hidden on mobile) ── */}
       <aside className="hidden w-64 shrink-0 border-r border-border bg-card md:flex md:flex-col">
         <div className="flex h-14 items-center border-b border-border px-4">
           <Link href="/dashboard" className="text-lg font-bold text-nocturn">
@@ -82,7 +98,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
         )}
 
         <nav className="flex-1 space-y-1 p-3">
-          {navItems.map((item) => {
+          {sidebarNavItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (
@@ -122,7 +138,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* ── Main content area ── */}
       <div className="flex flex-1 flex-col">
         {/* Mobile header */}
         <header className="flex h-14 items-center justify-between border-b border-border px-4 md:hidden">
@@ -151,12 +167,12 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
           </DropdownMenu>
         </header>
 
-        {/* Page content — add bottom padding on mobile for tab bar */}
+        {/* Page content — pb-20 on mobile for bottom tab bar clearance, normal on desktop */}
         <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
 
-        {/* Mobile bottom tab navigation */}
-        <nav className="fixed inset-x-0 bottom-0 z-50 flex h-16 items-center justify-around border-t border-border bg-card/95 backdrop-blur-sm md:hidden">
-          {navItems.map((item) => {
+        {/* ── Mobile bottom tab bar (hidden on desktop) ── */}
+        <nav className="fixed inset-x-0 bottom-0 z-50 flex h-16 items-center justify-around border-t border-border bg-card/95 backdrop-blur-sm pb-[env(safe-area-inset-bottom)] md:hidden">
+          {mobileTabItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (
@@ -167,7 +183,10 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
                   active ? "text-nocturn" : "text-muted-foreground"
                 }`}
               >
-                <Icon className="h-5 w-5" />
+                <Icon
+                  className="h-5 w-5"
+                  {...(active ? { fill: "currentColor", strokeWidth: 0 } : {})}
+                />
                 <span className="text-[10px] font-medium">{item.label}</span>
               </Link>
             );
