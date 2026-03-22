@@ -38,7 +38,7 @@ export default async function EditEventPage({ params }: Props) {
       "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_id, venues(id, name, address, city, capacity)"
     )
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event || !collectiveIds.includes(event.collective_id)) notFound();
 

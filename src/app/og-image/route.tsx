@@ -10,8 +10,11 @@ export async function GET() {
         alignItems: 'center', justifyContent: 'center',
         background: '#09090B', color: 'white', fontFamily: 'sans-serif'
       }}>
-        <div style={{ fontSize: 72, fontWeight: 800, color: '#7B2FF7', marginBottom: 20 }}>
-          nocturn.
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <span style={{ fontSize: 80 }}>🌙</span>
+          <span style={{ fontSize: 72, fontWeight: 800, color: 'white' }}>
+            noctur<span style={{ color: '#A855F7' }}>n</span>
+          </span>
         </div>
         <div style={{ fontSize: 28, color: '#a1a1aa' }}>
           The Agentic Work OS for Nightlife

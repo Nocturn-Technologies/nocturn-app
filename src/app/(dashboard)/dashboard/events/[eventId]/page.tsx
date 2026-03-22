@@ -101,7 +101,7 @@ export default async function EventDetailPage({ params }: Props) {
       "id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, collective_id, venues(name, address, city, capacity)"
     )
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event || !collectiveIds.includes(event.collective_id)) notFound();
 
@@ -110,7 +110,7 @@ export default async function EventDetailPage({ params }: Props) {
     .from("collectives")
     .select("slug, name")
     .eq("id", event.collective_id)
-    .single();
+    .maybeSingle();
 
   // Fetch ticket tiers
   const { data: tiers } = await admin

@@ -174,9 +174,9 @@ export async function updateTaskStatus(taskId: string, status: string) {
     .update(updates)
     .eq("id", taskId)
     .select("title, event_id")
-    .single();
+    .maybeSingle();
 
-  if (error) return { error: error.message };
+  if (error || !task) return { error: error?.message ?? "Task not found" };
 
   await admin.from("event_activity").insert({
     event_id: task.event_id,
@@ -201,14 +201,14 @@ export async function assignTask(taskId: string, userId: string | null) {
     .update({ assigned_to: userId, updated_at: new Date().toISOString() })
     .eq("id", taskId)
     .select("title, event_id")
-    .single();
+    .maybeSingle();
 
-  if (error) return { error: error.message };
+  if (error || !task) return { error: error?.message ?? "Task not found" };
 
   // Get assignee name
   let assigneeName = "Unassigned";
   if (userId) {
-    const { data: assignee } = await admin.from("users").select("full_name").eq("id", userId).single();
+    const { data: assignee } = await admin.from("users").select("full_name").eq("id", userId).maybeSingle();
     assigneeName = assignee?.full_name || "someone";
   }
 

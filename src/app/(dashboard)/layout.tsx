@@ -45,7 +45,7 @@ export default async function DashboardLayout({
     .from("users")
     .select("*")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
   // Fetch user's collectives (admin to bypass RLS)
   const { data: memberships } = await admin

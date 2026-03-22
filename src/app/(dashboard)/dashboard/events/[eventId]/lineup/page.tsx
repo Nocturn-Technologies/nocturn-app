@@ -75,7 +75,7 @@ export default function LineupPage() {
       .from("events")
       .select("title")
       .eq("id", eventId)
-      .single();
+      .maybeSingle();
     if (event) setEventTitle(event.title);
 
     // Get lineup

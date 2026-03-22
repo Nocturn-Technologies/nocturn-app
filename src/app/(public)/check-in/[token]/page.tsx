@@ -72,7 +72,7 @@ export default async function PublicCheckInPage({ params }: Props) {
         .from("events")
         .select("collective_id")
         .eq("id", event.id)
-        .single();
+        .maybeSingle();
 
       if (ev && collectiveIds.includes(ev.collective_id)) {
         isAdmin = true;

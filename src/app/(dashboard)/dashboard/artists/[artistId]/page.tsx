@@ -73,7 +73,7 @@ export default function ArtistDetailPage() {
         "id, name, slug, bio, genre, instagram, soundcloud, spotify, booking_email, default_fee"
       )
       .eq("id", artistId)
-      .single();
+      .maybeSingle();
 
     if (artistData) setArtist(artistData as Artist);
 

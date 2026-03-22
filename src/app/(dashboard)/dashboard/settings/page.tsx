@@ -63,7 +63,7 @@ export default function SettingsPage() {
         .from("users")
         .select("full_name, phone")
         .eq("id", user.id)
-        .single();
+        .maybeSingle();
       if (profile) {
         setFullName(profile.full_name ?? "");
         setPhone(profile.phone ?? "");

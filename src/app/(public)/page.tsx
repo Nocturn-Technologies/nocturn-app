@@ -1,11 +1,10 @@
 import Link from "next/link";
+import { NocturnLogo } from "@/components/nocturn-logo";
 
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 text-center">
-      <h1 className="text-5xl font-bold tracking-tight text-nocturn">
-        nocturn.
-      </h1>
+      <NocturnLogo size="xl" className="justify-center" />
       <p className="mt-4 max-w-md text-lg text-muted-foreground">
         You run the night. Nocturn runs the business.
       </p>

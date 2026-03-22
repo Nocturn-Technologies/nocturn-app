@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
+import { NocturnLogo } from "@/components/nocturn-logo";
 
 interface DashboardShellProps {
   user: { id: string; email: string; fullName: string };
@@ -137,7 +138,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
       {!betaDismissed && (
         <div className="relative w-full bg-nocturn/10 border-b border-nocturn/20 py-1.5 px-4 flex items-center justify-center shrink-0 z-50">
           <span className="text-xs text-nocturn text-center">
-            ✨ Nocturn Beta — Help us improve
+            🌙 Nocturn Beta — Help us improve
           </span>
           <a
             href="mailto:shawn@trynocturn.com"
@@ -162,8 +163,8 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
       {/* ── Desktop sidebar (hidden on mobile) ── */}
       <aside className="hidden w-64 shrink-0 border-r border-border bg-card md:flex md:flex-col">
         <div className="flex h-14 items-center border-b border-border px-4">
-          <Link href="/dashboard" className="text-lg font-bold text-nocturn">
-            nocturn.
+          <Link href="/dashboard">
+            <NocturnLogo size="md" />
           </Link>
         </div>
 
@@ -219,8 +220,8 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
       <div className="flex flex-1 flex-col">
         {/* Mobile header */}
         <header className="flex h-14 items-center justify-between border-b border-border px-4 md:hidden">
-          <Link href="/dashboard" className="text-lg font-bold text-nocturn">
-            nocturn.
+          <Link href="/dashboard">
+            <NocturnLogo size="sm" />
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center">

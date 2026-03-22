@@ -24,6 +24,9 @@ export const metadata: Metadata = {
   title: "Nocturn — The Agentic Work OS for Nightlife",
   description:
     "You run the night. Nocturn runs the business.",
+  icons: {
+    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌙</text></svg>",
+  },
   openGraph: {
     title: "Nocturn — The Agentic Work OS for Nightlife",
     description: "You run the night. Nocturn runs the business.",

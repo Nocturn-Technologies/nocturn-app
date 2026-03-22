@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .from("collectives")
     .select("id, name")
     .eq("slug", slug)
-    .single();
+    .maybeSingle();
 
   if (!collective) return { title: "Event Not Found" };
 
@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .select("title, description, flyer_url")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
-    .single();
+    .maybeSingle();
 
   if (!event) return { title: "Event Not Found" };
 
@@ -77,7 +77,7 @@ export default async function PublicEventPage({ params }: Props) {
     .from("collectives")
     .select("id, name, slug, logo_url, instagram")
     .eq("slug", slug)
-    .single();
+    .maybeSingle();
 
   if (!collective) notFound();
 
@@ -87,7 +87,7 @@ export default async function PublicEventPage({ params }: Props) {
     .select("*, venues(name, address, city, capacity)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
-    .single();
+    .maybeSingle();
 
   if (!event || event.status === "draft") notFound();
 
@@ -423,8 +423,11 @@ export default async function PublicEventPage({ params }: Props) {
               className="text-xs text-white/30 transition-colors hover:text-white/50"
             >
               Powered by{" "}
-              <span className="font-semibold" style={{ color: accentColor }}>
-                nocturn.
+              <span className="inline-flex items-center gap-1">
+                <span>🌙</span>
+                <span className="font-semibold text-white">
+                  noctur<span style={{ color: "#A855F7" }}>n</span>
+                </span>
               </span>
             </Link>
           </div>

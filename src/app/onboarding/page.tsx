@@ -8,6 +8,7 @@ import { useTypewriter } from "@/lib/typewriter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sparkles, Check, ArrowRight } from "lucide-react";
+import { NocturnLogo } from "@/components/nocturn-logo";
 
 type Step = "welcome" | "name" | "city" | "thinking" | "suggestions" | "creating" | "done";
 
@@ -133,10 +134,8 @@ export default function OnboardingPage() {
       <div className="w-full max-w-lg space-y-6">
 
         {/* Logo */}
-        <div className="text-center animate-fade-in-up">
-          <h1 className="text-2xl font-bold tracking-tight text-nocturn animate-text-glow">
-            nocturn.
-          </h1>
+        <div className="flex justify-center animate-fade-in-up">
+          <NocturnLogo size="md" />
         </div>
 
         {/* Chat area */}

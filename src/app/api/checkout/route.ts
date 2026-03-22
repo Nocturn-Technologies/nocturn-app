@@ -11,7 +11,7 @@ function createAdminClient() {
   );
 }
 
-const APP_URL = "https://nocturn-app-navy.vercel.app";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
 interface CheckoutBody {
   eventId: string;
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
       .from("events")
       .select("id, title, slug, collective_id, collectives(stripe_account_id)")
       .eq("id", eventId)
-      .single();
+      .maybeSingle();
 
     if (eventError || !event) {
       return NextResponse.json(
@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       .select("id, name, price, capacity, sales_start, sales_end, event_id")
       .eq("id", tierId)
       .eq("event_id", eventId)
-      .single();
+      .maybeSingle();
 
     if (tierError || !tier) {
       return NextResponse.json(

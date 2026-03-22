@@ -432,7 +432,7 @@ export async function updateEventDesign(eventId: string, input: EventDesignInput
     .from("events")
     .select("metadata")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   const existingMetadata = (currentEvent?.metadata ?? {}) as Record<string, unknown>;
 
@@ -487,7 +487,7 @@ export async function getEventDesign(eventId: string) {
     .from("events")
     .select("id, title, slug, description, flyer_url, vibe_tags, min_age, metadata, collective_id")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return { error: "Event not found.", event: null };
 
@@ -496,7 +496,7 @@ export async function getEventDesign(eventId: string) {
     .from("collectives")
     .select("slug")
     .eq("id", event.collective_id)
-    .single();
+    .maybeSingle();
 
   return {
     error: null,

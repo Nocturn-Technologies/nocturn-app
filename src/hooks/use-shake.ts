@@ -27,6 +27,7 @@ export function useShake(callback: () => void, threshold = 30) {
       lastTime = now;
     }
 
+    if (typeof window === 'undefined') return;
     window.addEventListener('devicemotion', handleMotion);
     return () => window.removeEventListener('devicemotion', handleMotion);
   }, [callback, threshold]);

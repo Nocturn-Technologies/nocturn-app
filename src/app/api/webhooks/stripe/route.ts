@@ -142,7 +142,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   // Generate QR codes for each ticket
   if (insertedTickets && insertedTickets.length > 0) {
-    const BASE_URL = "https://nocturn-app-navy.vercel.app";
+    const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://nocturn-app-navy.vercel.app";
 
     await Promise.allSettled(
       insertedTickets.map(async (ticket) => {
@@ -181,13 +181,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         .from("events")
         .select("title, starts_at, venues(name)")
         .eq("id", eventId)
-        .single();
+        .maybeSingle();
 
       const { data: tierInfo } = await supabase
         .from("ticket_tiers")
         .select("name")
         .eq("id", tierId)
-        .single();
+        .maybeSingle();
 
       if (event) {
         const venue = event.venues as unknown as { name: string } | null;
@@ -202,7 +202,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           tierName: tierInfo?.name || "General Admission",
           quantity,
           totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
-          ticketLink: `https://nocturn-app-navy.vercel.app/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+          ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://nocturn-app-navy.vercel.app"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
         });
         console.log(`[stripe-webhook] Sent confirmation email to ${customerEmail}`);
       }
