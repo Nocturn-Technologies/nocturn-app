@@ -103,7 +103,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .from("ticket_tiers")
     .select("price")
     .eq("id", tierId)
-    .single();
+    .maybeSingle();
 
   if (tierError || !tier) {
     console.error("[stripe-webhook] Ticket tier not found:", tierId);

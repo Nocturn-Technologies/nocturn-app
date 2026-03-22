@@ -162,7 +162,7 @@ export async function applyPromoCode(codeId: string) {
       .from("promo_codes")
       .select("current_uses")
       .eq("id", codeId)
-      .single();
+      .maybeSingle();
 
     if (!current) return { error: "Promo code not found" };
 

@@ -1,5 +1,5 @@
 export function haptic(type: 'light' | 'medium' | 'heavy' | 'success' | 'error' = 'light') {
-  if (!navigator.vibrate) return;
+  if (typeof navigator === 'undefined' || !navigator.vibrate) return;
   switch (type) {
     case 'light': navigator.vibrate(10); break;
     case 'medium': navigator.vibrate(30); break;
