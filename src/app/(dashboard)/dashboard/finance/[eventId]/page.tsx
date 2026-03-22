@@ -25,7 +25,7 @@ import {
   addEventExpense,
   getEventExpenses,
 } from "@/app/actions/settlements";
-import { executePayouts } from "@/app/actions/payouts";
+import { markSettlementPaid } from "@/app/actions/payouts";
 import { generateSettlementReport } from "@/app/actions/settlement-email";
 
 export default function SettlementDetailPage() {
@@ -340,21 +340,21 @@ export default function SettlementDetailPage() {
               onClick={async () => {
                 setPayingOut(true);
                 setError(null);
-                const result = await executePayouts(settlement.id as string);
+                const result = await markSettlementPaid(settlement.id as string);
                 if (result.error) setError(result.error);
                 await loadData();
                 setPayingOut(false);
               }}
               disabled={payingOut}
             >
-              <DollarSign className="mr-2 h-4 w-4" />
-              {payingOut ? "Processing Payout..." : "Execute Payout via Stripe"}
+              <CheckCircle className="mr-2 h-4 w-4" />
+              {payingOut ? "Marking as Paid..." : "Mark as Paid (Manual Payout)"}
             </Button>
           )}
 
           {settlement.status === "paid" && (
             <div className="rounded-lg bg-green-500/10 p-4 text-center text-green-500 font-medium">
-              ✓ Payout complete — funds transferred to connected account
+              Settlement complete — payout confirmed
             </div>
           )}
 

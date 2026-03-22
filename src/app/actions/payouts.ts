@@ -2,7 +2,6 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { getStripe } from "@/lib/stripe";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 
 function createAdminClient() {
@@ -13,8 +12,8 @@ function createAdminClient() {
   );
 }
 
-// Execute payouts for an approved settlement via Stripe Connect transfers
-export async function executePayouts(settlementId: string) {
+// Mark a settlement as paid (manual payout — e-transfer, Venmo, etc.)
+export async function markSettlementPaid(settlementId: string, payoutMethod?: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -24,86 +23,54 @@ export async function executePayouts(settlementId: string) {
   // Get settlement
   const { data: settlement } = await admin
     .from("settlements")
-    .select("*, collectives(stripe_account_id)")
+    .select("id, status, collective_id")
     .eq("id", settlementId)
     .maybeSingle();
 
   if (!settlement) return { error: "Settlement not found" };
   if (settlement.status !== "approved") return { error: "Settlement must be approved first" };
 
-  const collective = settlement.collectives as unknown as { stripe_account_id: string | null };
-  if (!collective?.stripe_account_id) {
-    return { error: "Collective has no Stripe account connected" };
-  }
+  // Verify user is a member of this collective
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", settlement.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
 
-  // Get pending line items that need payout
-  const { data: lines } = await admin
+  if (!count || count === 0) return { error: "You don't have permission" };
+
+  // Mark all pending line items as paid
+  const { error: linesError } = await admin
     .from("settlement_lines")
-    .select("*")
+    .update({
+      payout_status: "paid",
+    })
     .eq("settlement_id", settlementId)
-    .eq("payout_status", "pending")
-    .neq("type", "stripe_fee")
-    .neq("type", "platform_fee");
+    .eq("payout_status", "pending");
 
-  if (!lines || lines.length === 0) {
-    return { error: "No pending payouts" };
-  }
-
-  const errors: string[] = [];
-  let paidCount = 0;
-
-  // Transfer the net profit to the collective's connected account
-  const netAmount = Number(settlement.profit);
-  if (netAmount > 0) {
-    try {
-      const transfer = await getStripe().transfers.create({
-        amount: Math.round(netAmount * 100), // convert to cents
-        currency: "usd",
-        destination: collective.stripe_account_id,
-        description: `Settlement payout for event`,
-        metadata: {
-          settlement_id: settlementId,
-          event_id: settlement.event_id,
-        },
-      });
-
-      // Mark all lines as paid
-      for (const line of lines) {
-        await admin
-          .from("settlement_lines")
-          .update({
-            payout_status: "paid",
-            stripe_transfer_id: transfer.id,
-          })
-          .eq("id", line.id);
-      }
-      paidCount = lines.length;
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Transfer failed";
-      errors.push(message);
-
-      // Mark as failed
-      for (const line of lines) {
-        await admin
-          .from("settlement_lines")
-          .update({ payout_status: "failed" })
-          .eq("id", line.id);
-      }
-    }
+  if (linesError) {
+    console.error("Failed to update settlement lines:", linesError);
+    return { error: linesError.message };
   }
 
   // Update settlement status
-  if (errors.length === 0) {
-    await admin
-      .from("settlements")
-      .update({ status: "paid", updated_at: new Date().toISOString() })
-      .eq("id", settlementId);
-  }
+  const { error: settlementError } = await admin
+    .from("settlements")
+    .update({
+      status: "paid",
+      updated_at: new Date().toISOString(),
+      metadata: {
+        payout_method: payoutMethod || "manual",
+        paid_by: user.id,
+        paid_at: new Date().toISOString(),
+      },
+    })
+    .eq("id", settlementId);
 
-  return {
-    error: errors.length > 0 ? errors.join("; ") : null,
-    paidCount,
-  };
+  if (settlementError) return { error: settlementError.message };
+
+  return { error: null };
 }
 
 // Get payout status for a settlement
@@ -112,7 +79,7 @@ export async function getPayoutStatus(settlementId: string) {
 
   const { data: lines } = await admin
     .from("settlement_lines")
-    .select("id, label, amount, payout_status, stripe_transfer_id, type")
+    .select("id, label, amount, payout_status, type")
     .eq("settlement_id", settlementId)
     .order("created_at");
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getStripe, PLATFORM_FEE_PERCENT } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 
 function createAdminClient() {
@@ -11,7 +11,7 @@ function createAdminClient() {
   );
 }
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://nocturn-app-navy.vercel.app";
 
 interface CheckoutBody {
   eventId: string;
@@ -41,25 +41,20 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Look up the event and its collective's stripe_account_id
+    // Look up the event
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, title, slug, collective_id, collectives(stripe_account_id)")
+      .select("id, title, slug, collective_id")
       .eq("id", eventId)
       .maybeSingle();
 
     if (eventError || !event) {
+      console.error("[checkout] Event lookup failed:", eventError?.message);
       return NextResponse.json(
         { error: "Event not found" },
         { status: 404 }
       );
     }
-
-    const collective = event.collectives as unknown as {
-      stripe_account_id: string | null;
-    };
-
-    const hasConnectAccount = !!collective?.stripe_account_id;
 
     // Look up the ticket tier
     const { data: tier, error: tierError } = await supabase
@@ -70,6 +65,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle();
 
     if (tierError || !tier) {
+      console.error("[checkout] Tier lookup failed:", tierError?.message);
       return NextResponse.json(
         { error: "Ticket tier not found" },
         { status: 404 }
@@ -99,6 +95,7 @@ export async function POST(request: NextRequest) {
       .in("status", ["reserved", "paid", "checked_in"]);
 
     if (countError) {
+      console.error("[checkout] Capacity check failed:", countError.message);
       return NextResponse.json(
         { error: "Failed to check ticket availability" },
         { status: 500 }
@@ -128,12 +125,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const totalCents = unitAmountCents * quantity;
+    // Stripe minimum is $0.50 USD
+    if (unitAmountCents < 50) {
+      return NextResponse.json(
+        { error: "Ticket price must be at least $0.50" },
+        { status: 400 }
+      );
+    }
 
-    // Build Stripe Checkout Session params
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const sessionParams: any = {
-      mode: "payment" as const,
+    const referer = request.headers.get("referer");
+    const cancelUrl = referer && referer.startsWith("http") ? referer : APP_URL;
+
+    // All payments go to Nocturn platform account — payouts handled manually
+    const session = await getStripe().checkout.sessions.create({
+      mode: "payment",
       customer_email: buyerEmail,
       line_items: [
         {
@@ -153,24 +158,8 @@ export async function POST(request: NextRequest) {
         quantity: String(quantity),
       },
       success_url: `${APP_URL}/e/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: request.headers.get("referer") || APP_URL,
-    };
-
-    // If organizer has Stripe Connect, split payment with platform fee
-    // Otherwise, payment goes directly to Nocturn (platform collects all)
-    if (hasConnectAccount) {
-      const applicationFee = Math.round(totalCents * (PLATFORM_FEE_PERCENT / 100));
-      sessionParams.payment_intent_data = {
-        application_fee_amount: applicationFee,
-        transfer_data: {
-          destination: collective.stripe_account_id,
-        },
-      };
-    }
-
-    // Create Stripe Checkout Session
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const session = await getStripe().checkout.sessions.create(sessionParams as any);
+      cancel_url: cancelUrl,
+    });
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
@@ -179,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     if (errMsg.includes("STRIPE_SECRET_KEY") || errMsg.includes("not configured")) {
       return NextResponse.json(
-        { error: "Payments are not yet configured. The organizer needs to add their Stripe key." },
+        { error: "Payments are not yet configured." },
         { status: 503 }
       );
     }
