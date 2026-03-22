@@ -40,12 +40,12 @@ export async function generateSettlement(eventId: string) {
 
   if (existing) return { error: "Settlement already exists", settlementId: existing.id };
 
-  // Calculate revenue from paid tickets
+  // Calculate revenue from paid and checked-in tickets
   const { data: tickets } = await admin
     .from("tickets")
     .select("price_paid")
     .eq("event_id", eventId)
-    .eq("status", "paid");
+    .in("status", ["paid", "checked_in"]);
 
   const grossRevenue = (tickets ?? []).reduce(
     (sum, t) => sum + (Number(t.price_paid) || 0),
