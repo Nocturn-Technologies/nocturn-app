@@ -47,7 +47,7 @@ interface Booking {
   events: {
     id: string;
     title: string;
-    date: string;
+    starts_at: string;
     status: string;
     venues: { name: string; city: string } | null;
   };
@@ -81,7 +81,7 @@ export default function ArtistDetailPage() {
     const { data: bookingData } = await supabase
       .from("event_artists")
       .select(
-        "id, fee, set_time, set_duration, status, notes, events(id, title, date, status, venues(name, city))"
+        "id, fee, set_time, set_duration, status, notes, events(id, title, starts_at, status, venues(name, city))"
       )
       .eq("artist_id", artistId)
       .order("created_at", { ascending: false });
@@ -116,13 +116,13 @@ export default function ArtistDetailPage() {
   const upcoming = bookings.filter(
     (b) =>
       b.events &&
-      new Date(b.events.date) >= new Date() &&
+      new Date(b.events.starts_at) >= new Date() &&
       b.status !== "cancelled"
   );
   const past = bookings.filter(
     (b) =>
       b.events &&
-      (new Date(b.events.date) < new Date() || b.status === "cancelled")
+      (new Date(b.events.starts_at) < new Date() || b.status === "cancelled")
   );
 
   const totalEarnings = bookings
@@ -293,7 +293,7 @@ function BookingCard({
   statusColors: Record<string, string>;
   statusIcons: Record<string, typeof Check>;
 }) {
-  const date = new Date(booking.events.date);
+  const date = new Date(booking.events.starts_at);
   const StatusIcon = statusIcons[booking.status] ?? Clock;
 
   return (

@@ -26,7 +26,7 @@ export async function generateSettlement(eventId: string) {
     .from("events")
     .select("id, title, collective_id, status")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return { error: "Event not found" };
   if (event.status !== "completed") return { error: "Event must be completed before settlement" };
@@ -182,7 +182,7 @@ export async function approveSettlement(settlementId: string) {
     .from("settlements")
     .select("collective_id")
     .eq("id", settlementId)
-    .single();
+    .maybeSingle();
 
   if (!settlement) return { error: "Settlement not found" };
 
@@ -249,7 +249,7 @@ export async function addEventExpense(input: {
     .from("events")
     .select("collective_id")
     .eq("id", input.eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return { error: "Event not found" };
 

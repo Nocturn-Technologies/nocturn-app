@@ -35,7 +35,7 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
     `
     )
     .eq("ticket_token", ticketToken)
-    .single();
+    .maybeSingle();
 
   if (fetchError || !ticket) {
     return {

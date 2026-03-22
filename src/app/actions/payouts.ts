@@ -26,7 +26,7 @@ export async function executePayouts(settlementId: string) {
     .from("settlements")
     .select("*, collectives(stripe_account_id)")
     .eq("id", settlementId)
-    .single();
+    .maybeSingle();
 
   if (!settlement) return { error: "Settlement not found" };
   if (settlement.status !== "approved") return { error: "Settlement must be approved first" };

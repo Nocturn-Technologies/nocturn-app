@@ -24,7 +24,7 @@ export async function createConnectAccount(collectiveId: string) {
     .from("collectives")
     .select("stripe_account_id, name")
     .eq("id", collectiveId)
-    .single();
+    .maybeSingle();
 
   if (fetchError || !collective) {
     return { error: "Collective not found" };
@@ -76,7 +76,7 @@ export async function getConnectAccountStatus(collectiveId: string) {
     .from("collectives")
     .select("stripe_account_id")
     .eq("id", collectiveId)
-    .single();
+    .maybeSingle();
 
   if (error || !collective || !collective.stripe_account_id) {
     return { hasAccount: false, chargesEnabled: false, payoutsEnabled: false };
@@ -103,7 +103,7 @@ export async function createConnectLoginLink(collectiveId: string) {
     .from("collectives")
     .select("stripe_account_id")
     .eq("id", collectiveId)
-    .single();
+    .maybeSingle();
 
   if (error || !collective || !collective.stripe_account_id) {
     return { error: "No Stripe account found" };

@@ -23,7 +23,7 @@ async function verifyEventAccess(eventId: string) {
     .from("events")
     .select("collective_id")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return { error: "Event not found", userId: null };
 
@@ -73,7 +73,7 @@ export async function createPromoCode(input: {
     .select("id")
     .eq("event_id", input.eventId)
     .ilike("code", input.code)
-    .single();
+    .maybeSingle();
 
   if (existing) {
     return { error: "A promo code with this name already exists for this event" };
@@ -121,7 +121,7 @@ export async function validatePromoCode(eventId: string, code: string) {
     .eq("event_id", eventId)
     .ilike("code", code.trim())
     .eq("is_active", true)
-    .single();
+    .maybeSingle();
 
   if (error || !data) {
     return { valid: false, error: "Invalid promo code", discount: null };

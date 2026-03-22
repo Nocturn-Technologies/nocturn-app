@@ -26,7 +26,7 @@ export async function generateTicketQRCode(ticketToken: string) {
     .from("tickets")
     .select("id, qr_code")
     .eq("ticket_token", ticketToken)
-    .single();
+    .maybeSingle();
 
   if (fetchError || !ticket) {
     return { error: "Ticket not found", qrCode: null };
@@ -122,7 +122,7 @@ export async function getTicketByToken(ticketToken: string) {
     `
     )
     .eq("ticket_token", ticketToken)
-    .single();
+    .maybeSingle();
 
   if (error || !ticket) {
     return { error: "Ticket not found", ticket: null };

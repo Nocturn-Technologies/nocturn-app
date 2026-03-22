@@ -62,7 +62,7 @@ export async function generateEventForecast(eventId: string): Promise<{
     .from("events")
     .select("id, title, starts_at, collective_id")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return { error: "Event not found", forecast: null };
 
@@ -255,7 +255,7 @@ export async function generatePostEventRecap(eventId: string): Promise<{
     .from("events")
     .select("id, title, starts_at, collective_id, status, venues(name, city)")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return { error: "Event not found", recap: null };
 

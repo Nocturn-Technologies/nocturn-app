@@ -25,7 +25,7 @@ export async function generatePostEventEmail(eventId: string) {
     .from("events")
     .select("*, venues(name, city), collectives(name, slug)")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return { error: "Event not found", email: null };
 
@@ -139,7 +139,7 @@ export async function generatePromoEmail(eventId: string) {
     .from("events")
     .select("*, venues(name, city, address), collectives(name, slug)")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return { error: "Event not found", email: null };
 

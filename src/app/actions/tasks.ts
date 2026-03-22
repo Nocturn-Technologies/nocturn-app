@@ -35,7 +35,7 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
     .from("events")
     .select("starts_at, collective_id")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return { error: "Event not found" };
 
@@ -263,7 +263,7 @@ export async function getAITaskSuggestions(eventId: string) {
     .from("events")
     .select("title, starts_at, status")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) return [];
 

@@ -20,7 +20,7 @@ export async function generateSettlementReport(settlementId: string) {
     .from("settlements")
     .select("*, events(title, starts_at, venues(name, city)), collectives(name)")
     .eq("id", settlementId)
-    .single();
+    .maybeSingle();
 
   if (!settlement) return { error: "Settlement not found", report: null };
 

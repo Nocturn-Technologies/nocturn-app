@@ -312,7 +312,7 @@ async function verifyEventOwnership(userId: string, eventId: string) {
     .from("events")
     .select("id, status, collective_id")
     .eq("id", eventId)
-    .single();
+    .maybeSingle();
 
   if (!event) {
     return { error: "Event not found.", event: null };
