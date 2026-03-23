@@ -3,6 +3,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { generateAutoSettlement } from "./auto-settlement";
 
 function slugify(text: string): string {
   return text
@@ -428,6 +429,14 @@ export async function completeEvent(eventId: string) {
     .eq("id", eventId);
 
   if (error) return { error: `Failed to complete: ${error.message}` };
+
+  // Auto-generate settlement + CRM enrichment
+  const settlementResult = await generateAutoSettlement(eventId);
+  if (settlementResult.error) {
+    console.error("Auto-settlement warning:", settlementResult.error);
+    // Non-fatal — event was still completed successfully
+  }
+
   return { error: null };
 }
 
