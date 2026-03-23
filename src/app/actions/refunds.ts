@@ -26,14 +26,18 @@ export async function refundTicket(ticketId: string) {
   // Get ticket with event info for ownership check
   const { data: ticket } = await sb
     .from("tickets")
-    .select("id, event_id, status, price_paid, stripe_payment_intent_id, metadata, events(collective_id)")
+    .select("id, event_id, status, price_paid, stripe_payment_intent_id, metadata, events(collective_id, metadata)")
     .eq("id", ticketId)
     .maybeSingle();
 
   if (!ticket) return { error: "Ticket not found" };
 
-  // Verify user is admin/promoter of the collective
-  const event = ticket.events as unknown as { collective_id: string };
+  // Check if refunds are enabled for this event
+  const event = ticket.events as unknown as { collective_id: string; metadata: Record<string, unknown> | null };
+  const eventMeta = event.metadata || {};
+  if (eventMeta.refunds_enabled === false) {
+    return { error: "Refunds are disabled for this event. The organizer has set a no-refund policy." };
+  }
   const { data: membership } = await sb
     .from("collective_members")
     .select("role")
@@ -119,7 +123,7 @@ export async function refundTicket(ticketId: string) {
               Your ticket for <strong style="color: #FAFAFA;">${eventData?.title || "the event"}</strong> has been refunded.
               ${pricePaid > 0 ? `<strong style="color: #FAFAFA;">$${pricePaid.toFixed(2)}</strong> will be returned to your original payment method within 5-10 business days.` : ""}
             </p>
-            <p style="color: #71717A; font-size: 12px; margin-top: 24px;">Questions? Contact <a href="mailto:shawn@trynocturn.com" style="color: #7B2FF7;">shawn@trynocturn.com</a></p>
+            <p style="color: #71717A; font-size: 12px; margin-top: 24px;">Questions? Contact <a href="mailto:shawn@trynocturn.com" style="color: #7B2FF7;">shawn@trynocturn.com</a><br/><span style="font-size: 11px;">This is a transactional email about your purchase. No action needed to unsubscribe.</span></p>
           </div>
         `,
       });
@@ -163,4 +167,63 @@ export async function getRefundableTickets(eventId: string) {
       };
     }),
   };
+}
+
+/**
+ * Toggle refund policy for an event (on/off).
+ * Stored in events.metadata.refunds_enabled
+ */
+export async function toggleRefundPolicy(eventId: string, enabled: boolean) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const sb = admin();
+
+  // Get current event metadata
+  const { data: event } = await sb
+    .from("events")
+    .select("metadata, collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found" };
+
+  // Verify admin/promoter
+  const { data: membership } = await sb
+    .from("collective_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("collective_id", event.collective_id)
+    .in("role", ["admin", "promoter"])
+    .maybeSingle();
+
+  if (!membership) return { error: "Only admins and promoters can change refund policy" };
+
+  const currentMeta = (event.metadata as Record<string, unknown>) || {};
+  const { error } = await sb
+    .from("events")
+    .update({
+      metadata: { ...currentMeta, refunds_enabled: enabled },
+    })
+    .eq("id", eventId);
+
+  if (error) return { error: error.message };
+  return { error: null, enabled };
+}
+
+/**
+ * Get refund policy status for an event.
+ */
+export async function getRefundPolicy(eventId: string) {
+  const sb = admin();
+  const { data: event } = await sb
+    .from("events")
+    .select("metadata")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return { enabled: true }; // Default to enabled
+  const meta = (event.metadata as Record<string, unknown>) || {};
+  return { enabled: meta.refunds_enabled !== false }; // Default true unless explicitly disabled
 }

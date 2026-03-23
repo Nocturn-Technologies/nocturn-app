@@ -83,29 +83,38 @@ export async function sendCampaignEmail(input: {
         You're receiving this because you attended ${event.title} via Nocturn.
         <br/>
         <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}" style="color: #7B2FF7;">Powered by Nocturn</a>
+        <br/>
+        <span style="font-size: 11px;">Don't want these emails? Reply with "unsubscribe" to opt out.</span>
       </p>
     </div>
   `;
 
-  // Send to each attendee (non-blocking, don't fail on individual errors)
+  // Send in batches of 10 to respect Resend rate limits (~100 req/sec)
   let sent = 0;
   let failed = 0;
+  const emailList = Array.from(emails);
+  const BATCH_SIZE = 10;
 
-  const sendPromises = Array.from(emails).map(async (email) => {
-    try {
-      const result = await sendEmail({
-        to: email,
-        subject: input.subject,
-        html,
-      });
-      if (!result.error) sent++;
-      else failed++;
-    } catch {
-      failed++;
+  for (let i = 0; i < emailList.length; i += BATCH_SIZE) {
+    const batch = emailList.slice(i, i + BATCH_SIZE);
+
+    const results = await Promise.allSettled(
+      batch.map(async (email) => {
+        const result = await sendEmail({
+          to: email,
+          subject: input.subject,
+          html,
+        });
+        if (!result.error) sent++;
+        else failed++;
+      })
+    );
+
+    // Small delay between batches to avoid rate limits
+    if (i + BATCH_SIZE < emailList.length) {
+      await new Promise((r) => setTimeout(r, 200));
     }
-  });
-
-  await Promise.allSettled(sendPromises);
+  }
 
   // Track the send
   try {

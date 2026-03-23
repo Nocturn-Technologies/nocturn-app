@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, RotateCcw, AlertTriangle, Check, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { getRefundableTickets, refundTicket } from "@/app/actions/refunds";
+import { getRefundableTickets, refundTicket, getRefundPolicy, toggleRefundPolicy } from "@/app/actions/refunds";
 
 interface RefundableTicket {
   id: string;
@@ -26,10 +26,16 @@ export default function RefundsPage() {
   const [refunding, setRefunding] = useState<string | null>(null);
   const [refunded, setRefunded] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [refundsEnabled, setRefundsEnabled] = useState(true);
+  const [togglingPolicy, setTogglingPolicy] = useState(false);
 
   const loadTickets = useCallback(async () => {
-    const result = await getRefundableTickets(eventId);
-    if (result.tickets) setTickets(result.tickets);
+    const [ticketResult, policyResult] = await Promise.all([
+      getRefundableTickets(eventId),
+      getRefundPolicy(eventId),
+    ]);
+    if (ticketResult.tickets) setTickets(ticketResult.tickets);
+    setRefundsEnabled(policyResult.enabled);
     setLoading(false);
   }, [eventId]);
 
@@ -83,6 +89,34 @@ export default function RefundsPage() {
         </div>
       </div>
 
+      {/* Refund policy toggle */}
+      <div className="flex items-center justify-between rounded-lg border border-border p-3">
+        <div>
+          <p className="text-sm font-medium">Refund policy</p>
+          <p className="text-xs text-muted-foreground">
+            {refundsEnabled ? "Attendees can request refunds" : "No refunds — all sales are final"}
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            setTogglingPolicy(true);
+            const result = await toggleRefundPolicy(eventId, !refundsEnabled);
+            if (!result.error) setRefundsEnabled(!refundsEnabled);
+            setTogglingPolicy(false);
+          }}
+          disabled={togglingPolicy}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ${
+            refundsEnabled ? "bg-nocturn" : "bg-muted"
+          } ${togglingPolicy ? "opacity-50" : ""}`}
+        >
+          <span
+            className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition-transform duration-200 ${
+              refundsEnabled ? "translate-x-5" : "translate-x-0"
+            }`}
+          />
+        </button>
+      </div>
+
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
@@ -126,10 +160,9 @@ export default function RefundsPage() {
                 ) : (
                   <Button
                     variant="outline"
-                    size="sm"
                     onClick={() => handleRefund(ticket.id)}
                     disabled={isRefunding}
-                    className="shrink-0 text-red-400 border-red-500/30 hover:bg-red-500/10"
+                    className="shrink-0 h-10 px-4 text-red-400 border-red-500/30 hover:bg-red-500/10"
                   >
                     {isRefunding ? (
                       <Loader2 className="h-3 w-3 animate-spin" />

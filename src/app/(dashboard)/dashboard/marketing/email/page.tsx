@@ -40,6 +40,7 @@ export default function EmailComposerPage() {
   async function handleGenerate() {
     if (!eventId) return;
     setGenerating(true);
+    setSendResult(null);
 
     const result =
       emailType === "recap"
