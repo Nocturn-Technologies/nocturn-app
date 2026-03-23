@@ -30,7 +30,7 @@ interface StripeCheckoutProps {
   onCancel: () => void;
 }
 
-// 🎉 Post-purchase celebration + share to story
+// 🎟️ Beautiful ticket card — designed to be screenshot bait
 function TicketSuccess({
   eventTitle,
   eventDate,
@@ -45,114 +45,97 @@ function TicketSuccess({
   quantity?: number;
 }) {
   const fireConfetti = useConfetti();
-  const [shareCardUrl, setShareCardUrl] = useState<string | null>(null);
-  const [generating, setGenerating] = useState(false);
 
-  // Fire confetti on mount
   useEffect(() => {
     fireConfetti({ duration: 4000 });
   }, [fireConfetti]);
 
-  async function handleGenerateShareCard() {
-    setGenerating(true);
-    try {
-      const url = await generateTicketShareCard({
-        title: eventTitle || "Event",
-        date: eventDate || "",
-        venue: eventVenue || "",
-        tierName: tierName || "General Admission",
-        quantity: quantity || 1,
-      });
-      setShareCardUrl(url);
-    } catch {
-      // Silently fail — share is optional
-    }
-    setGenerating(false);
-  }
-
-  async function handleShare() {
-    if (!shareCardUrl) return;
-
-    // Convert data URL to blob for native share
-    const res = await fetch(shareCardUrl);
-    const blob = await res.blob();
-    const file = new File([blob], "ticket.png", { type: "image/png" });
-
-    if (navigator.share && navigator.canShare?.({ files: [file] })) {
-      await navigator.share({
-        title: `I'm going to ${eventTitle}!`,
-        text: `Just got tickets to ${eventTitle} 🎟️🔥`,
-        files: [file],
-      });
-    } else {
-      // Fallback: download the image
-      const a = document.createElement("a");
-      a.href = shareCardUrl;
-      a.download = `${eventTitle || "ticket"}-story.png`;
-      a.click();
-    }
-  }
+  const ticketCount = quantity || 1;
 
   return (
-    <div className="flex flex-col items-center gap-4 py-6 animate-fade-in-up">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
-        <CheckCircle className="h-10 w-10 text-green-500" />
-      </div>
+    <div className="flex flex-col items-center gap-5 py-4 animate-fade-in-up">
+      {/* Header */}
       <div className="text-center">
         <p className="text-xl font-bold">You're in! 🎉</p>
-        <p className="text-sm text-muted-foreground mt-1">
-          {quantity && quantity > 1 ? `${quantity} tickets` : "Your ticket"} for{" "}
-          <span className="text-white font-medium">{eventTitle || "the event"}</span>
-          {" "}confirmed.
-        </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Check your email for details + QR code.
+          Screenshot your ticket and share it on your story
         </p>
       </div>
 
-      {/* Share to Story CTA */}
-      {!shareCardUrl ? (
-        <Button
-          onClick={handleGenerateShareCard}
-          disabled={generating}
-          className="w-full bg-gradient-to-r from-[#7B2FF7] to-[#E040FB] hover:opacity-90 text-white font-semibold py-5"
-          size="lg"
-        >
-          {generating ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Share2 className="mr-2 h-4 w-4" />
-          )}
-          {generating ? "Creating your story..." : "Share to Story 📸"}
-        </Button>
-      ) : (
-        <div className="w-full space-y-3">
-          {/* Preview */}
-          <div className="mx-auto w-40 rounded-xl overflow-hidden border border-white/10 shadow-lg shadow-nocturn/20">
-            <img src={shareCardUrl} alt="Share card" className="w-full" />
+      {/* ── The Ticket — screenshot bait ── */}
+      <div className="w-full max-w-sm mx-auto">
+        <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-[#7B2FF7] via-[#6B1FE7] to-[#4A0EAF] shadow-xl shadow-[#7B2FF7]/20">
+          {/* Top section */}
+          <div className="px-6 pt-6 pb-4">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[10px] font-bold uppercase tracking-[3px] text-white/50">
+                🌙 nocturn.
+              </span>
+              <span className="text-[10px] font-bold uppercase tracking-[3px] text-white/50">
+                {ticketCount > 1 ? `${ticketCount} tickets` : "admit one"}
+              </span>
+            </div>
+
+            <h2 className="text-2xl font-black text-white leading-tight tracking-tight">
+              {eventTitle || "Event"}
+            </h2>
+
+            <div className="mt-4 space-y-2">
+              {eventDate && (
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
+                    <span className="text-[10px]">📅</span>
+                  </div>
+                  <span className="text-sm text-white/80 font-medium">{eventDate}</span>
+                </div>
+              )}
+              {eventVenue && (
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
+                    <span className="text-[10px]">📍</span>
+                  </div>
+                  <span className="text-sm text-white/80 font-medium">{eventVenue}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
+                  <span className="text-[10px]">🎟️</span>
+                </div>
+                <span className="text-sm text-white/80 font-medium">
+                  {tierName || "General Admission"}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button
-              onClick={handleShare}
-              className="flex-1 bg-gradient-to-r from-[#7B2FF7] to-[#E040FB] hover:opacity-90"
-            >
-              <Share2 className="mr-2 h-4 w-4" />
-              Share
-            </Button>
-            <Button
-              onClick={() => {
-                const a = document.createElement("a");
-                a.href = shareCardUrl;
-                a.download = `${eventTitle || "ticket"}-story.png`;
-                a.click();
-              }}
-              variant="outline"
-            >
-              <Download className="h-4 w-4" />
-            </Button>
+
+          {/* Tear line */}
+          <div className="relative h-6 flex items-center">
+            <div className="absolute -left-3 w-6 h-6 rounded-full bg-[#09090B]" />
+            <div className="flex-1 border-t-2 border-dashed border-white/20 mx-5" />
+            <div className="absolute -right-3 w-6 h-6 rounded-full bg-[#09090B]" />
+          </div>
+
+          {/* Bottom section */}
+          <div className="px-6 pb-6 pt-2 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium">Status</p>
+              <p className="text-sm font-bold text-green-300 flex items-center gap-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                Confirmed
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium">Check email for</p>
+              <p className="text-sm font-bold text-white/80">QR Code</p>
+            </div>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Subtle share hint */}
+      <p className="text-[11px] text-muted-foreground/50 text-center">
+        📸 Screenshot and post to your story
+      </p>
     </div>
   );
 }
