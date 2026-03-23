@@ -13,6 +13,7 @@ import { CollectiveProfile } from "@/components/public-event/collective-profile"
 import { PastEvents } from "@/components/public-event/past-events";
 import { StickyTicketBar } from "@/components/public-event/sticky-ticket-bar";
 import type { Metadata } from "next";
+import Image from "next/image";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import Link from "next/link";
 
@@ -229,11 +230,13 @@ export default async function PublicEventPage({ params }: Props) {
       <div className="relative">
         {event.flyer_url ? (
           <div className="relative aspect-[4/5] max-h-[520px] w-full sm:aspect-[16/9] sm:max-h-[480px]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={event.flyer_url}
               alt={event.title}
-              className="h-full w-full object-cover"
+              fill
+              className="object-cover"
+              priority
+              sizes="(max-width: 640px) 100vw, 640px"
             />
             {/* Bottom gradient fade */}
             <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/40 to-transparent" />
