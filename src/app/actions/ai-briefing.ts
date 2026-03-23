@@ -14,8 +14,9 @@ interface BriefingItem {
 
 // ─── System Prompt ──────────────────────────────────────────────────────────
 
-const BRIEFING_SYSTEM_PROMPT =
-  "You are Nocturn AI briefing assistant. Generate a concise morning briefing for a nightlife promoter. Return EXACTLY a JSON array of 3-5 objects with {emoji, text, priority, link} where link is the relative URL path they should go to. Priority is 'urgent', 'high', or 'normal'. Use real numbers from the data. Be specific and actionable. No fluff.";
+import { SYSTEM_PROMPTS } from "@/lib/ai-prompts";
+
+const BRIEFING_SYSTEM_PROMPT = SYSTEM_PROMPTS.briefing;
 
 // ─── Fallback (no AI) ──────────────────────────────────────────────────────
 

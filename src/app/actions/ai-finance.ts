@@ -214,7 +214,10 @@ export async function generateEventForecast(eventId: string): Promise<{
     ? ticketsSoldSoFar / daysSinceSalesStarted
     : 0;
 
-  const forecastPrompt = `You are a concise financial advisor for a nightlife event promoter. Given this event forecast data, write a 2-3 sentence plain English explanation of where ticket sales stand and the financial outlook, followed by exactly 2 tactical recommendations. Be specific with numbers. No headers, no bullet points — just a short paragraph.
+  const { SYSTEM_PROMPTS } = await import("@/lib/ai-prompts");
+  const forecastPrompt = `${SYSTEM_PROMPTS.forecast}
+
+Given this event forecast data, write a 2-3 sentence plain English explanation of where ticket sales stand and the financial outlook, followed by exactly 2 tactical recommendations. No headers, no bullet points — just a short paragraph.
 
 Event: "${event.title}"
 Days until event: ${daysUntilEvent}

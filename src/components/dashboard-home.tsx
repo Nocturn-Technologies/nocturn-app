@@ -120,25 +120,39 @@ function getSmartActions(props: DashboardHomeProps) {
     });
   }
 
-  actions.push({
-    title: "Promo",
-    description: "Flyers, social posts, and email blasts",
-    href: "/dashboard/marketing",
-    icon: <Sparkles className="h-5 w-5" />,
-    color: "text-nocturn-light",
-    iconBg: "bg-nocturn-light/15",
-    priority: "secondary",
-  });
+  // Only show Promo + Money when user has at least 1 event
+  if (props.upcomingCount > 0 || props.totalRevenue > 0 || props.hasDraftEvent) {
+    actions.push({
+      title: "Promo",
+      description: "Flyers, social posts, and email blasts",
+      href: "/dashboard/marketing",
+      icon: <Sparkles className="h-5 w-5" />,
+      color: "text-nocturn-light",
+      iconBg: "bg-nocturn-light/15",
+      priority: "secondary",
+    });
 
-  actions.push({
-    title: "Money",
-    description: "Splits, settlements, and P&L",
-    href: "/dashboard/finance",
-    icon: <DollarSign className="h-5 w-5" />,
-    color: "text-nocturn-teal",
-    iconBg: "bg-nocturn-teal/15",
-    priority: "secondary",
-  });
+    actions.push({
+      title: "Money",
+      description: "Splits, settlements, and P&L",
+      href: "/dashboard/finance",
+      icon: <DollarSign className="h-5 w-5" />,
+      color: "text-nocturn-teal",
+      iconBg: "bg-nocturn-teal/15",
+      priority: "secondary",
+    });
+  } else {
+    // Zero-event state: show venue discovery instead
+    actions.push({
+      title: "Find a Venue",
+      description: "Browse Toronto venues for your first event",
+      href: "/dashboard/venues",
+      icon: <MapPin className="h-5 w-5" />,
+      color: "text-nocturn-teal",
+      iconBg: "bg-nocturn-teal/15",
+      priority: "secondary",
+    });
+  }
 
   return actions;
 }

@@ -11,8 +11,9 @@ function admin() {
   });
 }
 
-const SYSTEM_PROMPT_BASE =
-  "You are Nocturn AI, an operations copilot for nightlife promoters. You have access to real event data shown below. Answer questions using SPECIFIC numbers from the data. Be concise (2-3 sentences max), confident, and actionable. If asked something you don't have data for, say so honestly. Never make up numbers.";
+import { SYSTEM_PROMPTS } from "@/lib/ai-prompts";
+
+const SYSTEM_PROMPT_BASE = SYSTEM_PROMPTS.ops;
 
 export async function generateChatResponse(
   channelId: string,

@@ -9,6 +9,8 @@ interface Tier {
   name: string;
   price: number;
   capacity: number;
+  sold?: number;
+  remaining?: number;
 }
 
 export function TicketSection({
@@ -28,8 +30,12 @@ export function TicketSection({
   const [buying, setBuying] = useState(false);
 
   const selected = tiers.find((t) => t.id === selectedTier);
-  const total = selected ? Number(selected.price) * quantity : 0;
-  const isFree = selected ? Number(selected.price) === 0 : false;
+  const ticketPrice = selected ? Number(selected.price) : 0;
+  const isFree = ticketPrice === 0;
+  const serviceFeePerTicket = isFree ? 0 : Math.round((ticketPrice * 0.07 + 0.50) * 100) / 100;
+  const subtotal = ticketPrice * quantity;
+  const totalFees = serviceFeePerTicket * quantity;
+  const total = subtotal + totalFees;
 
   const emailValid = useMemo(() => {
     if (!email) return null;
@@ -85,25 +91,31 @@ export function TicketSection({
         {tiers.map((tier) => {
           const isSelected = selectedTier === tier.id;
           const price = Number(tier.price);
+          const remaining = tier.remaining ?? tier.capacity;
+          const isSoldOut = remaining <= 0;
 
           return (
             <button
               key={tier.id}
               onClick={() => {
+                if (isSoldOut) return;
                 setSelectedTier(tier.id);
                 setQuantity(1);
                 setShowCheckout(false);
               }}
-              className={`w-full rounded-2xl border p-4 text-left transition-all duration-200 active:scale-[0.98] ${
-                isSelected
-                  ? "border-2 bg-white/5 scale-[1.01]"
-                  : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]"
+              disabled={isSoldOut}
+              className={`w-full rounded-2xl border p-4 text-left transition-all duration-200 ${
+                isSoldOut
+                  ? "border-white/5 bg-white/[0.01] opacity-50 cursor-not-allowed"
+                  : isSelected
+                    ? "border-2 bg-white/5 scale-[1.01] active:scale-[0.98]"
+                    : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04] active:scale-[0.98]"
               }`}
-              style={isSelected ? { borderColor: accentColor } : undefined}
+              style={isSelected && !isSoldOut ? { borderColor: accentColor } : undefined}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  {isSelected && (
+                  {isSelected && !isSoldOut && (
                     <div
                       className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full animate-scale-in"
                       style={{ backgroundColor: accentColor }}
@@ -112,20 +124,30 @@ export function TicketSection({
                     </div>
                   )}
                   <div className="space-y-0.5">
-                    <p className="font-heading text-base font-semibold text-white">
+                    <p className={`font-heading text-base font-semibold ${isSoldOut ? "text-white/40" : "text-white"}`}>
                       {tier.name}
                     </p>
                     <p className="text-sm text-white/40">
-                      {tier.capacity} remaining
+                      {isSoldOut
+                        ? "Sold out"
+                        : remaining <= 10
+                          ? `Only ${remaining} left`
+                          : `${remaining} remaining`}
                     </p>
                   </div>
                 </div>
-                <p
-                  className="font-heading text-xl font-bold"
-                  style={{ color: accentColor }}
-                >
-                  {price === 0 ? "Free" : `$${price.toFixed(2)}`}
-                </p>
+                {isSoldOut ? (
+                  <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white/30">
+                    Sold Out
+                  </span>
+                ) : (
+                  <p
+                    className="font-heading text-xl font-bold"
+                    style={{ color: accentColor }}
+                  >
+                    {price === 0 ? "Free" : `$${price.toFixed(2)}`}
+                  </p>
+                )}
               </div>
             </button>
           );
@@ -217,6 +239,11 @@ export function TicketSection({
                   ? "RSVP — Free"
                   : `Get Tickets — $${total.toFixed(2)}`}
             </button>
+            {totalFees > 0 && (
+              <p className="mt-2 text-center text-[11px] text-white/25">
+                ${subtotal.toFixed(2)} + ${totalFees.toFixed(2)} service fee
+              </p>
+            )}
           </div>
         </div>
       )}

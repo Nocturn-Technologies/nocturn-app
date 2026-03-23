@@ -75,10 +75,11 @@ export async function generatePostEventEmail(eventId: string) {
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
+        system: "You are Promo, Nocturn's marketing agent. You help nightlife collectives create content that fills rooms. Write like a promoter — short sentences, punchy, no corporate jargon. Match the energy of the event. You say 'operators' not 'users', 'collectives' not 'teams'. Be confident, warm, and precise.",
         messages: [
           {
             role: "user",
-            content: `Write a short, engaging post-event recap email for a nightlife event. Keep it under 200 words, casual but professional tone. Include a thank you, highlight the vibe, and tease the next event.
+            content: `Write a short, engaging post-event recap email for a nightlife event. Keep it under 200 words. Match the energy of the night — a warehouse techno event sounds different from a rooftop set. Include a genuine thank you, highlight what made the night special, and tease what's coming next.
 
 Event: "${event.title}"
 Collective: ${collective.name}
@@ -86,7 +87,7 @@ Venue: ${venue?.name ?? "TBA"}, ${venue?.city ?? ""}
 Artists: ${artistNames.join(", ") || "Various artists"}
 Tickets sold: ${ticketsSold ?? 0}
 
-Return JSON with "subject" and "body" fields. The body should be plain text with line breaks.`,
+Return JSON with "subject" and "body" fields. The body should be plain text with line breaks. Sign off as ${collective.name}, not Nocturn.`,
           },
         ],
       }),

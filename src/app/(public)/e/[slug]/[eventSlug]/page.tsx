@@ -130,6 +130,20 @@ export default async function PublicEventPage({ params }: Props) {
     supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).order("starts_at", { ascending: false }).limit(6),
   ]);
 
+  // Compute per-tier sold counts for accurate "remaining" display
+  const tierSoldCounts: Record<string, number> = {};
+  if (tiers && tiers.length > 0) {
+    const { data: tierTickets } = await supabase
+      .from("tickets")
+      .select("ticket_tier_id")
+      .eq("event_id", event.id)
+      .in("status", ["paid", "checked_in", "reserved"]);
+
+    for (const t of tierTickets || []) {
+      tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
+    }
+  }
+
   const totalCapacity = (tiers || []).reduce((s, t) => s + (t.capacity || 0), 0);
   const soldPercent = totalCapacity > 0 ? Math.round(((ticketsSold ?? 0) / totalCapacity) * 100) : 0;
 
@@ -479,6 +493,8 @@ export default async function PublicEventPage({ params }: Props) {
                   name: t.name,
                   price: Number(t.price),
                   capacity: t.capacity,
+                  sold: tierSoldCounts[t.id] || 0,
+                  remaining: t.capacity - (tierSoldCounts[t.id] || 0),
                 }))}
                 eventId={event.id}
                 accentColor={accentColor}
