@@ -26,7 +26,7 @@ export async function refundTicket(ticketId: string) {
   // Get ticket with event info for ownership check
   const { data: ticket } = await sb
     .from("tickets")
-    .select("id, event_id, status, price_paid, stripe_payment_intent_id, metadata, events(collective_id, metadata)")
+    .select("id, event_id, ticket_tier_id, status, price_paid, stripe_payment_intent_id, metadata, events(collective_id, metadata)")
     .eq("id", ticketId)
     .maybeSingle();
 
@@ -88,6 +88,17 @@ export async function refundTicket(ticketId: string) {
 
   if (updateError) {
     return { error: `Ticket status update failed: ${updateError.message}` };
+  }
+
+  // Notify next person on waitlist (non-blocking)
+  try {
+    const tierId = ticket.ticket_tier_id;
+    if (tierId) {
+      const { notifyNextOnWaitlist } = await import("@/app/actions/ticket-waitlist");
+      await notifyNextOnWaitlist(ticket.event_id, tierId);
+    }
+  } catch {
+    // Waitlist notification failure is non-blocking
   }
 
   // Track refund

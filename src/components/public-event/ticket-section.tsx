@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Minus, Plus, Ticket, Check, AlertCircle } from "lucide-react";
+import { Minus, Plus, Ticket, Check, AlertCircle, Bell, Loader2 } from "lucide-react";
 import { StripeCheckout } from "@/components/stripe-checkout";
+import { joinWaitlist } from "@/app/actions/ticket-waitlist";
 
 interface Tier {
   id: string;
@@ -28,6 +29,10 @@ export function TicketSection({
   const [showCheckout, setShowCheckout] = useState(false);
 
   const [buying, setBuying] = useState(false);
+  const [waitlistEmail, setWaitlistEmail] = useState("");
+  const [joiningWaitlist, setJoiningWaitlist] = useState(false);
+  const [waitlistJoined, setWaitlistJoined] = useState(false);
+  const [waitlistTierId, setWaitlistTierId] = useState<string | null>(null);
 
   const selected = tiers.find((t) => t.id === selectedTier);
   const ticketPrice = selected ? Number(selected.price) : 0;
@@ -95,61 +100,108 @@ export function TicketSection({
           const isSoldOut = remaining <= 0;
 
           return (
-            <button
-              key={tier.id}
-              onClick={() => {
-                if (isSoldOut) return;
-                setSelectedTier(tier.id);
-                setQuantity(1);
-                setShowCheckout(false);
-              }}
-              disabled={isSoldOut}
-              className={`w-full rounded-2xl border p-4 text-left transition-all duration-200 ${
-                isSoldOut
-                  ? "border-white/5 bg-white/[0.01] opacity-50 cursor-not-allowed"
-                  : isSelected
-                    ? "border-2 bg-white/5 scale-[1.01] active:scale-[0.98]"
-                    : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04] active:scale-[0.98]"
-              }`}
-              style={isSelected && !isSoldOut ? { borderColor: accentColor } : undefined}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {isSelected && !isSoldOut && (
-                    <div
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full animate-scale-in"
-                      style={{ backgroundColor: accentColor }}
-                    >
-                      <Check className="h-3.5 w-3.5 text-white" />
+            <div key={tier.id}>
+              <button
+                onClick={() => {
+                  if (isSoldOut) {
+                    // Toggle waitlist form for this tier
+                    setWaitlistTierId(waitlistTierId === tier.id ? null : tier.id);
+                    setWaitlistJoined(false);
+                    return;
+                  }
+                  setSelectedTier(tier.id);
+                  setQuantity(1);
+                  setShowCheckout(false);
+                  setWaitlistTierId(null);
+                }}
+                className={`w-full rounded-2xl border p-4 text-left transition-all duration-200 ${
+                  isSoldOut
+                    ? "border-white/5 bg-white/[0.01] hover:border-amber-500/20 cursor-pointer"
+                    : isSelected
+                      ? "border-2 bg-white/5 scale-[1.01] active:scale-[0.98]"
+                      : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04] active:scale-[0.98]"
+                }`}
+                style={isSelected && !isSoldOut ? { borderColor: accentColor } : undefined}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {isSelected && !isSoldOut && (
+                      <div
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full animate-scale-in"
+                        style={{ backgroundColor: accentColor }}
+                      >
+                        <Check className="h-3.5 w-3.5 text-white" />
+                      </div>
+                    )}
+                    <div className="space-y-0.5">
+                      <p className={`font-heading text-base font-semibold ${isSoldOut ? "text-white/50" : "text-white"}`}>
+                        {tier.name}
+                      </p>
+                      <p className="text-sm text-white/40">
+                        {isSoldOut
+                          ? "Sold out — tap to join waitlist"
+                          : remaining <= 10
+                            ? `Only ${remaining} left`
+                            : `${remaining} remaining`}
+                      </p>
                     </div>
-                  )}
-                  <div className="space-y-0.5">
-                    <p className={`font-heading text-base font-semibold ${isSoldOut ? "text-white/40" : "text-white"}`}>
-                      {tier.name}
-                    </p>
-                    <p className="text-sm text-white/40">
-                      {isSoldOut
-                        ? "Sold out"
-                        : remaining <= 10
-                          ? `Only ${remaining} left`
-                          : `${remaining} remaining`}
-                    </p>
                   </div>
+                  {isSoldOut ? (
+                    <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-400 flex items-center gap-1">
+                      <Bell className="h-3 w-3" />
+                      Waitlist
+                    </span>
+                  ) : (
+                    <p
+                      className="font-heading text-xl font-bold"
+                      style={{ color: accentColor }}
+                    >
+                      {price === 0 ? "Free" : `$${price.toFixed(2)}`}
+                    </p>
+                  )}
                 </div>
-                {isSoldOut ? (
-                  <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-semibold text-white/30">
-                    Sold Out
-                  </span>
-                ) : (
-                  <p
-                    className="font-heading text-xl font-bold"
-                    style={{ color: accentColor }}
-                  >
-                    {price === 0 ? "Free" : `$${price.toFixed(2)}`}
-                  </p>
-                )}
-              </div>
-            </button>
+              </button>
+
+              {/* Waitlist form — shows when sold-out tier is tapped */}
+              {isSoldOut && waitlistTierId === tier.id && (
+                <div className="mt-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3 animate-fade-in-up">
+                  {waitlistJoined ? (
+                    <div className="flex items-center gap-2 text-amber-400">
+                      <Check className="h-4 w-4" />
+                      <p className="text-sm font-medium">You&apos;re on the waitlist! We&apos;ll email you if a spot opens.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-sm text-white/60">Get notified if a spot opens up:</p>
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          placeholder="your@email.com"
+                          value={waitlistEmail}
+                          onChange={(e) => setWaitlistEmail(e.target.value)}
+                          className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-amber-500/50"
+                        />
+                        <button
+                          onClick={async () => {
+                            if (!waitlistEmail || joiningWaitlist) return;
+                            setJoiningWaitlist(true);
+                            const result = await joinWaitlist(eventId, tier.id, waitlistEmail);
+                            if (!result.error) {
+                              setWaitlistJoined(true);
+                            }
+                            setJoiningWaitlist(false);
+                          }}
+                          disabled={!waitlistEmail || joiningWaitlist}
+                          className="shrink-0 rounded-xl bg-amber-500 px-5 py-3 font-semibold text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
+                        >
+                          {joiningWaitlist ? <Loader2 className="h-4 w-4 animate-spin" /> : "Notify Me"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
