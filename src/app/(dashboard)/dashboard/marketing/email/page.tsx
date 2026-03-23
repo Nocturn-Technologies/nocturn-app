@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Sparkles, Mail, ArrowLeft, Copy, Check } from "lucide-react";
+import { Sparkles, Mail, ArrowLeft, Copy, Check, Send, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { generatePostEventEmail, generatePromoEmail } from "@/app/actions/ai-email";
+import { sendCampaignEmail } from "@/app/actions/send-campaign";
 
 export default function EmailComposerPage() {
   const [eventId, setEventId] = useState("");
@@ -17,6 +18,8 @@ export default function EmailComposerPage() {
   const [generating, setGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [events, setEvents] = useState<Array<{ id: string; title: string; status: string }>>([]);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState<{ sent: number; total: number } | null>(null);
 
   // Load events on mount
   useEffect(() => {
@@ -54,6 +57,25 @@ export default function EmailComposerPage() {
     navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  async function handleSend() {
+    if (!eventId || !subject || !body) return;
+    setSending(true);
+    setSendResult(null);
+
+    const result = await sendCampaignEmail({
+      eventId,
+      subject,
+      body,
+    });
+
+    if (result.error) {
+      alert(result.error);
+    } else {
+      setSendResult({ sent: result.sent ?? 0, total: result.total ?? 0 });
+    }
+    setSending(false);
   }
 
   return (
@@ -124,19 +146,39 @@ export default function EmailComposerPage() {
               <Mail className="h-4 w-4 text-nocturn" />
               Email Preview
             </CardTitle>
-            <Button variant="outline" size="sm" onClick={handleCopy}>
-              {copied ? (
-                <>
-                  <Check className="mr-1 h-3 w-3" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="mr-1 h-3 w-3" />
-                  Copy
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={handleCopy}>
+                {copied ? (
+                  <>
+                    <Check className="mr-1 h-3 w-3" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="mr-1 h-3 w-3" />
+                    Copy
+                  </>
+                )}
+              </Button>
+              <Button
+                size="sm"
+                className="bg-nocturn hover:bg-nocturn-light"
+                onClick={handleSend}
+                disabled={sending || !subject || !body}
+              >
+                {sending ? (
+                  <>
+                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Send className="mr-1 h-3 w-3" />
+                    Send to Attendees
+                  </>
+                )}
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
@@ -157,6 +199,20 @@ export default function EmailComposerPage() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Send result */}
+      {sendResult && (
+        <div className="rounded-lg border border-green-500/30 bg-green-500/10 p-4 text-center">
+          <p className="font-semibold text-green-400">
+            ✅ Email sent to {sendResult.sent} of {sendResult.total} attendees
+          </p>
+          {sendResult.sent < sendResult.total && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {sendResult.total - sendResult.sent} failed — check Resend dashboard for details
+            </p>
+          )}
+        </div>
       )}
 
       {!subject && !body && (

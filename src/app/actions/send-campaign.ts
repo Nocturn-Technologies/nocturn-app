@@ -1,0 +1,127 @@
+"use server";
+
+import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
+import { sendEmail } from "@/lib/email/send";
+import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+
+function admin() {
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
+
+/**
+ * Send an email campaign to all attendees of an event.
+ * Uses the generated subject + body from the email composer.
+ */
+export async function sendCampaignEmail(input: {
+  eventId: string;
+  subject: string;
+  body: string;
+}) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", sent: 0 };
+
+  const sb = admin();
+
+  // Get event to verify ownership
+  const { data: event } = await sb
+    .from("events")
+    .select("id, title, collective_id")
+    .eq("id", input.eventId)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found", sent: 0 };
+
+  // Verify user is a member of this collective
+  const { data: membership } = await sb
+    .from("collective_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("collective_id", event.collective_id)
+    .maybeSingle();
+
+  if (!membership) return { error: "Not a member of this collective", sent: 0 };
+
+  // Get all attendee emails for this event
+  const { data: tickets } = await sb
+    .from("tickets")
+    .select("metadata")
+    .eq("event_id", input.eventId)
+    .in("status", ["paid", "checked_in"]);
+
+  // Deduplicate emails
+  const emails = new Set<string>();
+  for (const ticket of tickets ?? []) {
+    const meta = ticket.metadata as Record<string, unknown> | null;
+    const email = (meta?.customer_email as string) || (meta?.buyer_email as string);
+    if (email) emails.add(email.toLowerCase().trim());
+  }
+
+  if (emails.size === 0) {
+    return { error: "No attendees found for this event", sent: 0 };
+  }
+
+  // Build HTML email from plain text body
+  const htmlBody = input.body
+    .split("\n")
+    .map((line) => (line.trim() === "" ? "<br>" : `<p>${line}</p>`))
+    .join("");
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
+      <div style="margin-bottom: 24px;">
+        <span style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</span>
+      </div>
+      <div style="line-height: 1.7; font-size: 15px; color: #E4E4E7;">
+        ${htmlBody}
+      </div>
+      <hr style="border: none; border-top: 1px solid #27272A; margin: 32px 0;" />
+      <p style="font-size: 12px; color: #71717A;">
+        You're receiving this because you attended ${event.title} via Nocturn.
+        <br/>
+        <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}" style="color: #7B2FF7;">Powered by Nocturn</a>
+      </p>
+    </div>
+  `;
+
+  // Send to each attendee (non-blocking, don't fail on individual errors)
+  let sent = 0;
+  let failed = 0;
+
+  const sendPromises = Array.from(emails).map(async (email) => {
+    try {
+      const result = await sendEmail({
+        to: email,
+        subject: input.subject,
+        html,
+      });
+      if (!result.error) sent++;
+      else failed++;
+    } catch {
+      failed++;
+    }
+  });
+
+  await Promise.allSettled(sendPromises);
+
+  // Track the send
+  try {
+    const { trackServerEvent } = await import("@/lib/track-server");
+    await trackServerEvent("email_campaign_sent", {
+      eventId: input.eventId,
+      recipients: emails.size,
+      sent,
+      failed,
+    });
+  } catch {}
+
+  return {
+    error: null,
+    sent,
+    failed,
+    total: emails.size,
+  };
+}

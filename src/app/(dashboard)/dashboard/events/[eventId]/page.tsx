@@ -24,6 +24,7 @@ import {
   FileText,
   Palette,
   Coffee,
+  RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
@@ -233,6 +234,12 @@ export default async function EventDetailPage({ params }: Props) {
           <Button variant="outline" size="sm">
             <ClipboardList className="mr-2 h-3 w-3" />
             Guest List
+          </Button>
+        </Link>
+        <Link href={`/dashboard/events/${event.id}/refunds`}>
+          <Button variant="outline" size="sm">
+            <RotateCcw className="mr-2 h-3 w-3" />
+            Refunds
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/forecast`}>
