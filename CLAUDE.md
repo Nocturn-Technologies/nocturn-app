@@ -24,10 +24,19 @@ Mobile-first web app for nightlife promoters and collectives. Manage events, sel
 - **Light**: #9D5CFF
 - **Glow**: #E9DEFF
 - **Background**: #09090B
-- **Font headings**: Space Grotesk
-- **Font body**: Inter
+- **Font headings**: Outfit
+- **Font body**: DM Sans
 - **Voice**: Confident, warm, precise. Say "operators" not "users". Say "collectives" not "teams".
 - **Tagline**: "You run the night. Nocturn runs the business."
+- **Agent names**: Money, Promo, Reach, Ops
+
+## Pricing
+- **Model**: 7% + $0.50 per ticket (buyer pays service fee, organizer keeps 100%)
+- **Comparison**: Posh charges 10% + $0.99, FourVenues is enterprise pricing
+- **Free tickets**: Bypass Stripe entirely, no fee
+- **Subscription**: $49/mo for premium features (not yet implemented)
+- **Payouts**: All payments go to Nocturn platform account, manual payout to collectives
+- **No Stripe Connect KYC required**: Collectives can start selling immediately
 
 ## Architecture
 ```
