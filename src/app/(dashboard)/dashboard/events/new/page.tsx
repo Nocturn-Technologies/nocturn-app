@@ -515,7 +515,7 @@ export default function NewEventPage() {
       setMessages([
         {
           role: "ai",
-          content: "What\u2019s the event called?",
+          content: "Tell me about your event — name, date, venue, whatever you know. I'll figure out the rest. 🌙",
         },
       ]);
       setTimeout(() => inputRef.current?.focus(), 500);
@@ -562,7 +562,7 @@ export default function NewEventPage() {
     setTimeout(() => inputRef.current?.focus(), 100);
   }
 
-  // ── Handle text input send ───────────────────────────────────────────────
+  // ── Handle text input send — AI parses everything ───────────────────────
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault();
@@ -572,155 +572,78 @@ export default function NewEventPage() {
     setInput("");
     setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
 
-    // Brief thinking delay
     setThinking(true);
-    await new Promise((r) => setTimeout(r, 400));
-    setThinking(false);
 
-    switch (step) {
-      case "name": {
-        setEventData((prev) => ({ ...prev, title: userMsg }));
-        advanceToStep("venue");
-        break;
+    try {
+      // Let Claude parse whatever the user said — no rigid steps
+      const { parseEventDetails } = await import("@/app/actions/ai-parse-event");
+      const { parsed, reply } = await parseEventDetails(userMsg, eventData);
+
+      // Merge new data with existing
+      const merged = { ...eventData, ...parsed };
+      setEventData(merged);
+
+      // Handle ticket tiers from parsed data
+      if (parsed.tiers && parsed.tiers.length > 0) {
+        setTiers(parsed.tiers);
+      } else if (parsed.ticketPrice !== undefined && tiers.length === 0) {
+        setTiers([{
+          name: parsed.ticketTierName || "General Admission",
+          price: parsed.ticketPrice,
+          capacity: parsed.ticketQuantity || 100,
+        }]);
       }
 
-      case "venue-custom": {
-        const parts = userMsg.split(",").map((s) => s.trim());
-        const updated: ParsedEventDetails = {
-          ...eventData,
-          venueName: parts[0] || userMsg,
-          venueAddress: parts[1] || "",
-          venueCity: parts[2] || "Toronto",
-        };
-        setEventData(updated);
-        advanceToStep("datetime");
-        break;
+      setThinking(false);
+
+      // Check what's still missing
+      const missing: string[] = [];
+      if (!merged.title) missing.push("event name");
+      if (!merged.date) missing.push("date");
+      if (!merged.startTime) missing.push("time");
+      if (!merged.venueName) missing.push("venue");
+
+      if (missing.length === 0) {
+        // Everything we need — go to review
+        setMessages((prev) => [
+          ...prev,
+          { role: "ai", content: reply || "Got it all — here's what I've set up:" },
+        ]);
+        setStep("review");
+        setPhase("review");
+      } else if (missing.length <= 2) {
+        // Almost there — ask for what's missing naturally
+        const needStr = missing.join(" and ");
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "ai",
+            content: `${reply || "Got it!"}\n\nJust need the ${needStr} and we're good to go.`,
+          },
+        ]);
+      } else {
+        // Got some info, need more
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "ai",
+            content: reply || `Nice! I still need: ${missing.join(", ")}. Tell me more.`,
+          },
+        ]);
       }
-
-      case "datetime": {
-        const dt = parseDateTimeFromMessage(userMsg);
-        const updated = { ...eventData };
-        if (dt.date) updated.date = dt.date;
-        if (dt.startTime) updated.startTime = dt.startTime;
-
-        if (!dt.date && !dt.startTime) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "ai",
-              content:
-                'I didn\'t catch that. Try something like "April 25 10pm" or "2026-04-25 at 22:00".',
-            },
-          ]);
-          setTimeout(() => inputRef.current?.focus(), 100);
-          return;
-        }
-
-        if (!dt.date) {
-          setEventData(updated);
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "ai",
-              content:
-                'Got the time! What date? E.g. "April 25" or "2026-04-25".',
-            },
-          ]);
-          setTimeout(() => inputRef.current?.focus(), 100);
-          return;
-        }
-
-        if (!dt.startTime) {
-          setEventData(updated);
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "ai",
-              content: 'Got the date! What time? E.g. "10pm" or "22:00".',
-            },
-          ]);
-          setTimeout(() => inputRef.current?.focus(), 100);
-          return;
-        }
-
-        setEventData(updated);
-        advanceToStep("tickets");
-        break;
-      }
-
-      case "tickets": {
-        const lower = userMsg.toLowerCase().trim();
-
-        // Skip tickets entirely
-        if (lower === "skip" || lower === "no" || lower === "none") {
-          advanceToStep("review");
-          return;
-        }
-
-        const tier = parseTicketTier(userMsg);
-        if (tier) {
-          if (tier.name === "General Admission" || tier.name === "Ga") {
-            tier.name = "General Admission";
-          }
-          setTiers([tier]);
-          setEventData((prev) => ({
-            ...prev,
-            ticketPrice: tier.price,
-            ticketQuantity: tier.capacity,
-            ticketTierName: tier.name,
-          }));
-          advanceToStep("vip");
-        } else {
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "ai",
-              content:
-                'I didn\'t catch that. Try "$25, 200 tickets" or "free".',
-            },
-          ]);
-          setTimeout(() => inputRef.current?.focus(), 100);
-        }
-        break;
-      }
-
-      case "vip": {
-        const lower = userMsg.toLowerCase().trim();
-        if (
-          lower === "skip" ||
-          lower === "no" ||
-          lower === "nah" ||
-          lower === "none" ||
-          lower === "no thanks" ||
-          lower === "done"
-        ) {
-          advanceToStep("review");
-        } else {
-          const tier = parseTicketTier(userMsg);
-          if (tier) {
-            if (tier.name === "General Admission") {
-              tier.name = "VIP";
-            }
-            setTiers((prev) => [...prev, tier]);
-            advanceToStep("review");
-          } else {
-            setMessages((prev) => [
-              ...prev,
-              {
-                role: "ai",
-                content:
-                  'Try something like "$50 VIP, 50 tickets" \u2014 or type "skip" to finish.',
-              },
-            ]);
-            setTimeout(() => inputRef.current?.focus(), 100);
-          }
-        }
-        break;
-      }
-
-      default:
-        break;
+    } catch (err) {
+      console.error("Parse error:", err);
+      setThinking(false);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "ai",
+          content: "I didn't catch that — try telling me the event name, date, time, and venue.",
+        },
+      ]);
     }
+
+    setTimeout(() => inputRef.current?.focus(), 100);
   }
 
   // ── Venue picker handlers ────────────────────────────────────────────────
@@ -846,26 +769,16 @@ export default function NewEventPage() {
   }
 
   // ── Should show text input? ──────────────────────────────────────────────
-  // Hide during venue picker step (uses the picker instead) and during review/creating/done
-  const showInput =
-    phase === "chat" && step !== "venue" && step !== "review";
+  const showInput = phase === "chat" && step !== "venue";
 
-  // ── Placeholder text based on current step ───────────────────────────────
+  // ── Placeholder — contextual based on what's missing ───────────────────
   function getPlaceholder(): string {
-    switch (step) {
-      case "name":
-        return 'E.g. "Midnight Sessions"';
-      case "venue-custom":
-        return "CODA, 794 Bathurst St, Toronto";
-      case "datetime":
-        return 'E.g. "April 25 10pm"';
-      case "tickets":
-        return '$25 for 200 tickets, or "free"...';
-      case "vip":
-        return '$50 VIP, 50 tickets, or "skip"...';
-      default:
-        return "Type your answer...";
-    }
+    const d = eventData;
+    if (!d.title) return '"Midnight Sessions at Coda, April 25 10pm, $25"';
+    if (!d.venueName) return 'Where? e.g. "Coda, Toronto"';
+    if (!d.date) return 'When? e.g. "next Saturday 10pm"';
+    if (!d.startTime) return 'What time? e.g. "10pm"';
+    return 'Add more details or say "looks good"...';
   }
 
   return (
