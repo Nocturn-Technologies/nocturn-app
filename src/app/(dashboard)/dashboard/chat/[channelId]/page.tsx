@@ -454,15 +454,19 @@ function MessageBubble({
   if (msg.type === "ai") {
     // Parse content into formatted blocks
     const renderAIContent = (text: string) => {
+      // Sanitize: strip all HTML tags first, then apply our own formatting
+      const sanitize = (s: string) => s.replace(/<[^>]*>/g, "");
+
       return text.split("\n").map((line, i) => {
+        const clean = sanitize(line);
         // Bold text: **text**
-        const boldParsed = line.replace(
+        const boldParsed = clean.replace(
           /\*\*(.*?)\*\*/g,
           '<strong class="text-white font-semibold">$1</strong>'
         );
 
         // Bullet points
-        if (line.startsWith("- ") || line.startsWith("• ")) {
+        if (clean.startsWith("- ") || clean.startsWith("• ")) {
           return (
             <div key={i} className="flex gap-2 items-start ml-1">
               <span className="text-nocturn mt-1 text-xs">●</span>
@@ -475,7 +479,7 @@ function MessageBubble({
         }
 
         // Numbered items
-        const numMatch = line.match(/^(\d+)[.)]\s*(.*)/);
+        const numMatch = clean.match(/^(\d+)[.)]\s*(.*)/);
         if (numMatch) {
           return (
             <div key={i} className="flex gap-2 items-start ml-1">
@@ -489,7 +493,7 @@ function MessageBubble({
         }
 
         // Empty line = spacer
-        if (line.trim() === "") return <div key={i} className="h-2" />;
+        if (clean.trim() === "") return <div key={i} className="h-2" />;
 
         // Regular text
         return (

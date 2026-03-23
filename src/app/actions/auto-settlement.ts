@@ -29,10 +29,21 @@ export async function generateAutoSettlement(eventId: string) {
       return { error: eventError?.message ?? "Event not found." };
     }
 
+    // Check for existing settlement (prevent duplicates)
+    const { data: existingSettlement } = await admin
+      .from("settlements")
+      .select("id")
+      .eq("event_id", eventId)
+      .maybeSingle();
+
+    if (existingSettlement) {
+      return { error: null }; // Already exists, silently skip
+    }
+
     // 2. Calculate gross revenue from paid/checked-in tickets
     const { data: tickets, error: ticketsError } = await admin
       .from("tickets")
-      .select("id, price")
+      .select("id, price_paid")
       .eq("event_id", eventId)
       .in("status", ["paid", "checked_in"]);
 
@@ -42,14 +53,14 @@ export async function generateAutoSettlement(eventId: string) {
 
     const ticketCount = tickets?.length ?? 0;
     const grossRevenue = (tickets ?? []).reduce(
-      (sum, t) => sum + (Number(t.price) || 0),
+      (sum, t) => sum + (Number(t.price_paid) || 0),
       0
     );
 
     // 3. Calculate refunds total
     const { data: refundedTickets, error: refundsError } = await admin
       .from("tickets")
-      .select("price")
+      .select("price_paid")
       .eq("event_id", eventId)
       .eq("status", "refunded");
 
@@ -58,7 +69,7 @@ export async function generateAutoSettlement(eventId: string) {
     }
 
     const refundsTotal = (refundedTickets ?? []).reduce(
-      (sum, t) => sum + (Number(t.price) || 0),
+      (sum, t) => sum + (Number(t.price_paid) || 0),
       0
     );
 

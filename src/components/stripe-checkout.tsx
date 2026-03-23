@@ -9,8 +9,8 @@ import {
   useElements,
 } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle, AlertCircle, Share2, Download } from "lucide-react";
-import { useConfetti, generateTicketShareCard } from "@/components/celebrations";
+import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { useConfetti } from "@/components/celebrations";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""

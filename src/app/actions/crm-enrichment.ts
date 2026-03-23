@@ -19,7 +19,7 @@ export async function enrichAttendeeCRM(eventId: string) {
     // 1. Get all paid/checked-in tickets for this event
     const { data: tickets, error: ticketsError } = await admin
       .from("tickets")
-      .select("id, user_id, email, price")
+      .select("id, user_id, price_paid, metadata")
       .eq("event_id", eventId)
       .in("status", ["paid", "checked_in"]);
 
@@ -37,10 +37,11 @@ export async function enrichAttendeeCRM(eventId: string) {
     // 2. Process each ticket holder
     for (const ticket of tickets) {
       const userId = ticket.user_id;
-      const email = ticket.email;
-      const ticketPrice = Number(ticket.price) || 0;
+      const meta = (ticket.metadata || {}) as Record<string, string>;
+      const email = meta.customer_email || null;
+      const ticketPrice = Number(ticket.price_paid) || 0;
 
-      if (!userId && !email) continue; // Skip tickets with no identity
+      if (!userId) continue; // user_id is NOT NULL in schema
 
       try {
         // Check if profile already exists
