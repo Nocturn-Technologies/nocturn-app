@@ -60,7 +60,7 @@ const mobileTabItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/events", label: "Events", icon: Calendar },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard/venues", label: "Discover", icon: Search },
+  { href: "/dashboard/venues", label: "Venues", icon: MapPin },
 ];
 
 /* ── More drawer items (desktop sidebar items not in mobile tabs) ── */

@@ -1,7 +1,15 @@
 "use server";
 
+import { createClient } from "@supabase/supabase-js";
 import { generateWithClaude } from "@/lib/claude";
 import { getDashboardBriefingData } from "@/lib/ai-context";
+import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+
+function admin() {
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -85,7 +93,34 @@ function generateFallbackBriefing(data: Awaited<ReturnType<typeof getDashboardBr
 
 // ─── Main Action ────────────────────────────────────────────────────────────
 
+const BRIEFING_CACHE_HOURS = 4; // Only regenerate every 4 hours
+
 export async function generateMorningBriefing(collectiveId: string): Promise<BriefingItem[]> {
+  const sb = admin();
+
+  // Check cache — avoid burning API calls on every dashboard load
+  try {
+    const { data: cached } = await sb
+      .from("audit_logs")
+      .select("new_data, created_at")
+      .eq("table_name", "briefing_cache")
+      .eq("record_id", collectiveId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (cached?.created_at) {
+      const ageMs = Date.now() - new Date(cached.created_at).getTime();
+      const ageHours = ageMs / (1000 * 60 * 60);
+
+      if (ageHours < BRIEFING_CACHE_HOURS && cached.new_data?.items) {
+        return cached.new_data.items as BriefingItem[];
+      }
+    }
+  } catch {
+    // Cache check failed — proceed to generate fresh
+  }
+
   let data: Awaited<ReturnType<typeof getDashboardBriefingData>>;
 
   try {
@@ -106,6 +141,8 @@ export async function generateMorningBriefing(collectiveId: string): Promise<Bri
 
 Generate the morning briefing JSON array.`;
 
+  let briefingItems: BriefingItem[];
+
   try {
     const result = await generateWithClaude(prompt, BRIEFING_SYSTEM_PROMPT);
 
@@ -114,12 +151,29 @@ Generate the morning briefing JSON array.`;
       const parsed: BriefingItem[] = JSON.parse(cleaned);
 
       if (Array.isArray(parsed) && parsed.length >= 1) {
-        return parsed.slice(0, 5);
+        briefingItems = parsed.slice(0, 5);
+      } else {
+        briefingItems = generateFallbackBriefing(data);
       }
+    } else {
+      briefingItems = generateFallbackBriefing(data);
     }
   } catch {
     console.error("Failed to parse briefing JSON, using fallback");
+    briefingItems = generateFallbackBriefing(data);
   }
 
-  return generateFallbackBriefing(data);
+  // Cache the result (non-blocking)
+  try {
+    await sb.from("audit_logs").insert({
+      table_name: "briefing_cache",
+      record_id: collectiveId,
+      action: "briefing_generated",
+      new_data: { items: briefingItems },
+    });
+  } catch {
+    // Cache write failed — non-critical
+  }
+
+  return briefingItems;
 }

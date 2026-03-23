@@ -160,6 +160,56 @@ function ThinkingDots() {
 
 // ─── Editable Field Row ──────────────────────────────────────────────────────
 
+function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  if (editing) {
+    return (
+      <input
+        ref={inputRef}
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && editValue.trim()) {
+            onSave(editValue.trim());
+            setEditing(false);
+          }
+          if (e.key === "Escape") {
+            setEditValue(value);
+            setEditing(false);
+          }
+        }}
+        onBlur={() => {
+          if (editValue.trim()) onSave(editValue.trim());
+          setEditing(false);
+        }}
+        className="w-full text-lg font-bold text-white bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-[#7B2FF7]/50"
+      />
+    );
+  }
+
+  return (
+    <div className="group/title">
+      <button
+        onClick={() => {
+          setEditValue(value);
+          setEditing(true);
+        }}
+        className="text-lg font-bold text-white flex items-center gap-1.5 text-left"
+      >
+        {value}
+        <Pencil className="h-3 w-3 text-zinc-600 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0" />
+      </button>
+    </div>
+  );
+}
+
 function EditableRow({
   label,
   value,
@@ -283,19 +333,11 @@ function EventConfirmationCard({
           </span>
         </div>
 
-        {/* Title */}
-        <div className="group/title">
-          <button
-            onClick={() => {
-              const newTitle = prompt("Event name:", data.title || "");
-              if (newTitle) onUpdate("title", newTitle);
-            }}
-            className="text-lg font-bold text-white flex items-center gap-1.5"
-          >
-            {data.title || "Untitled Event"}
-            <Pencil className="h-3 w-3 text-zinc-600 opacity-0 group-hover/title:opacity-100 transition-opacity" />
-          </button>
-        </div>
+        {/* Title — inline editable */}
+        <EditableTitle
+          value={data.title || "Untitled Event"}
+          onSave={(v) => onUpdate("title", v)}
+        />
 
         {data.description && (
           <p className="text-sm text-zinc-400">{data.description}</p>
