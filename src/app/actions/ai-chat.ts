@@ -19,6 +19,8 @@ export async function generateChatResponse(
   userMessage: string,
   recentMessages?: { role: string; content: string }[]
 ): Promise<string> {
+  let aiContent: string;
+
   try {
     // 1. Fetch channel to determine context type
     const sb = admin();
@@ -30,46 +32,55 @@ export async function generateChatResponse(
 
     if (channelError || !channel) {
       console.error("Failed to fetch channel:", channelError);
-      return fallbackResponse(userMessage);
-    }
-
-    // 2. Fetch the appropriate context
-    let contextData: string;
-    if (channel.event_id) {
-      contextData = await getEventContext(channel.event_id);
-    } else if (channel.collective_id) {
-      contextData = await getCollectiveContext(channel.collective_id);
+      aiContent = fallbackResponse(userMessage);
     } else {
-      contextData = "No event or collective data available for this channel.";
+      // 2. Fetch the appropriate context
+      let contextData: string;
+      if (channel.event_id) {
+        contextData = await getEventContext(channel.event_id);
+      } else if (channel.collective_id) {
+        contextData = await getCollectiveContext(channel.collective_id);
+      } else {
+        contextData = "No event or collective data available for this channel.";
+      }
+
+      // 3. Build system prompt with real data
+      const systemPrompt = `${SYSTEM_PROMPT_BASE}\n\n--- DATA ---\n${contextData}`;
+
+      // 4. Build the full prompt including conversation history
+      let prompt = "";
+      if (recentMessages && recentMessages.length > 0) {
+        const history = recentMessages
+          .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+          .join("\n");
+        prompt = `Recent conversation:\n${history}\n\nUser: ${userMessage}`;
+      } else {
+        prompt = userMessage;
+      }
+
+      // 5. Call Claude
+      const aiResponse = await generateWithClaude(prompt, systemPrompt);
+      aiContent = aiResponse || fallbackResponse(userMessage);
     }
-
-    // 3. Build system prompt with real data
-    const systemPrompt = `${SYSTEM_PROMPT_BASE}\n\n--- DATA ---\n${contextData}`;
-
-    // 4. Build the full prompt including conversation history
-    let prompt = "";
-    if (recentMessages && recentMessages.length > 0) {
-      const history = recentMessages
-        .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-        .join("\n");
-      prompt = `Recent conversation:\n${history}\n\nUser: ${userMessage}`;
-    } else {
-      prompt = userMessage;
-    }
-
-    // 5. Call Claude
-    const aiResponse = await generateWithClaude(prompt, systemPrompt);
-
-    if (aiResponse) {
-      return aiResponse;
-    }
-
-    // 6. Fallback if Claude returns null
-    return fallbackResponse(userMessage);
   } catch (error) {
-    console.error("AI chat error:", error);
-    return fallbackResponse(userMessage);
+    console.error("[ai-chat] Error:", error);
+    aiContent = fallbackResponse(userMessage);
   }
+
+  // 6. Insert AI response server-side using admin client (bypasses RLS)
+  try {
+    const sb = admin();
+    await sb.from("messages").insert({
+      channel_id: channelId,
+      user_id: null,
+      content: aiContent,
+      type: "ai",
+    });
+  } catch (insertErr) {
+    console.error("[ai-chat] Failed to insert AI message:", insertErr);
+  }
+
+  return aiContent;
 }
 
 function fallbackResponse(message: string): string {

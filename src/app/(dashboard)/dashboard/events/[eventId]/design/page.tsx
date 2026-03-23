@@ -96,6 +96,11 @@ export default function EventDesignPage() {
   // Style reference upload
   const [styleRefUrl, setStyleRefUrl] = useState<string | null>(null);
 
+  // Extra event details for poster
+  const [posterTime, setPosterTime] = useState("");
+  const [posterAddress, setPosterAddress] = useState("");
+  const [posterAge, setPosterAge] = useState("");
+
   useEffect(() => {
     async function load() {
       const result = await getEventDesign(eventId);
@@ -122,6 +127,9 @@ export default function EventDesignPage() {
       if (e.artistNames?.length > 0) setPosterDJs(e.artistNames.join(", "));
       if (e.dateDisplay) setPosterDate(e.dateDisplay);
       if (e.venueName) setPosterVenue([e.venueName, e.venueCity].filter(Boolean).join(", "));
+      if (e.timeDisplay) setPosterTime(e.timeDisplay);
+      if (e.venueAddress) setPosterAddress(e.venueAddress);
+      if (e.min_age) setPosterAge(`${e.min_age}+`);
 
       setLoading(false);
     }
@@ -154,7 +162,10 @@ export default function EventDesignPage() {
       setError(result.error);
     } else {
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      // Redirect back to event page after save
+      setTimeout(() => {
+        router.push(`/dashboard/events/${eventId}`);
+      }, 600);
     }
   }
 
@@ -194,6 +205,9 @@ export default function EventDesignPage() {
         date: posterDate,
         venue: posterVenue,
         accentColor: themeColor,
+        time: posterTime,
+        address: posterAddress,
+        age: posterAge,
       });
 
       setGeneratedUrl(composited);
@@ -208,7 +222,7 @@ export default function EventDesignPage() {
   // Composite clean typography over AI-generated background
   async function compositeTextOnPoster(
     bgUrl: string,
-    details: { title: string; djs: string; date: string; venue: string; accentColor: string }
+    details: { title: string; djs: string; date: string; venue: string; accentColor: string; time?: string; address?: string; age?: string }
   ): Promise<string> {
     const canvas = document.createElement("canvas");
     const W = 1080;
@@ -275,29 +289,53 @@ export default function EventDesignPage() {
       });
     }
 
-    // Date — bottom area
-    if (details.date) {
-      ctx.fillStyle = details.accentColor;
-      ctx.font = "bold 36px 'Helvetica Neue', Arial, sans-serif";
-      ctx.letterSpacing = "6px";
-      ctx.fillText(details.date.toUpperCase(), W / 2, H - 160, W - 120);
-    }
-
-    // Venue — below date
-    if (details.venue) {
-      ctx.fillStyle = "rgba(255,255,255,0.7)";
-      ctx.font = "500 26px 'Helvetica Neue', Arial, sans-serif";
-      ctx.letterSpacing = "3px";
-      ctx.fillText(details.venue.toUpperCase(), W / 2, H - 110, W - 120);
-    }
-
     // Thin accent line separator
     ctx.strokeStyle = details.accentColor;
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(W * 0.3, H - 180);
-    ctx.lineTo(W * 0.7, H - 180);
+    ctx.moveTo(W * 0.3, H - 260);
+    ctx.lineTo(W * 0.7, H - 260);
     ctx.stroke();
+
+    // Date + Time — bottom area
+    let bottomY = H - 230;
+
+    if (details.date) {
+      const dateText = details.time
+        ? `${details.date} — ${details.time}`.toUpperCase()
+        : details.date.toUpperCase();
+      ctx.fillStyle = details.accentColor;
+      ctx.font = "bold 32px 'Helvetica Neue', Arial, sans-serif";
+      ctx.letterSpacing = "4px";
+      ctx.fillText(dateText, W / 2, bottomY, W - 100);
+      bottomY += 44;
+    }
+
+    // Venue name
+    if (details.venue) {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "600 28px 'Helvetica Neue', Arial, sans-serif";
+      ctx.letterSpacing = "3px";
+      ctx.fillText(details.venue.toUpperCase(), W / 2, bottomY, W - 100);
+      bottomY += 36;
+    }
+
+    // Venue address
+    if (details.address) {
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.font = "400 22px 'Helvetica Neue', Arial, sans-serif";
+      ctx.letterSpacing = "1px";
+      ctx.fillText(details.address, W / 2, bottomY, W - 100);
+      bottomY += 36;
+    }
+
+    // Age restriction
+    if (details.age) {
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.font = "bold 24px 'Helvetica Neue', Arial, sans-serif";
+      ctx.letterSpacing = "2px";
+      ctx.fillText(details.age.toUpperCase(), W / 2, bottomY, W - 120);
+    }
 
     return canvas.toDataURL("image/png", 0.95);
   }
@@ -345,6 +383,9 @@ export default function EventDesignPage() {
         date: posterDate,
         venue: posterVenue,
         accentColor: themeColor,
+        time: posterTime,
+        address: posterAddress,
+        age: posterAge,
       });
       setGeneratedUrl(composited);
       setShowUnsplash(false);

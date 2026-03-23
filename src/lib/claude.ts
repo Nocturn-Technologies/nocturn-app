@@ -5,7 +5,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 let _client: Anthropic | null = null;
 
 function getClient(): Anthropic | null {
-  if (!ANTHROPIC_API_KEY) return null;
+  if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === "your_anthropic_api_key") return null;
   if (!_client) {
     _client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
   }
@@ -14,7 +14,10 @@ function getClient(): Anthropic | null {
 
 export async function generateWithClaude(prompt: string, systemPrompt?: string): Promise<string | null> {
   const client = getClient();
-  if (!client) return null; // Graceful fallback when no API key
+  if (!client) {
+    console.warn("[claude] No valid API key configured");
+    return null;
+  }
 
   try {
     const response = await client.messages.create({
@@ -25,7 +28,7 @@ export async function generateWithClaude(prompt: string, systemPrompt?: string):
     });
     return response.content[0].type === 'text' ? response.content[0].text : null;
   } catch (error) {
-    console.error("Claude API error:", error);
+    console.error("[claude] API error:", error);
     return null;
   }
 }

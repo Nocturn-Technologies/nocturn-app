@@ -525,7 +525,7 @@ export async function getEventDesign(eventId: string) {
   const [eventRes, artistsRes] = await Promise.all([
     admin
       .from("events")
-      .select("id, title, slug, description, flyer_url, vibe_tags, min_age, metadata, collective_id, starts_at, venues(name, city)")
+      .select("id, title, slug, description, flyer_url, vibe_tags, min_age, metadata, collective_id, starts_at, doors_at, venues(name, city, address)")
       .eq("id", eventId)
       .maybeSingle(),
     admin
@@ -545,13 +545,21 @@ export async function getEventDesign(eventId: string) {
     .maybeSingle();
 
   // Extract artist names and venue for poster pre-fill
-  const venue = event.venues as unknown as { name: string; city: string } | null;
+  const venue = event.venues as unknown as { name: string; city: string; address: string | null } | null;
   const artistNames = (artistsRes.data || [])
     .map((a) => (a.artists as unknown as { name: string })?.name)
     .filter(Boolean);
 
   const dateDisplay = event.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })
+    : null;
+
+  const timeDisplay = event.starts_at
+    ? new Date(event.starts_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })
+    : null;
+
+  const doorsDisplay = event.doors_at
+    ? new Date(event.doors_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })
     : null;
 
   return {
@@ -561,8 +569,11 @@ export async function getEventDesign(eventId: string) {
       collectiveSlug: collective?.slug ?? null,
       venueName: venue?.name ?? null,
       venueCity: venue?.city ?? null,
+      venueAddress: venue?.address ?? null,
       artistNames,
       dateDisplay,
+      timeDisplay,
+      doorsDisplay,
     },
   };
 }

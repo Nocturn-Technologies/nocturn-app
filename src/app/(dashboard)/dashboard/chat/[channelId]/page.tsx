@@ -180,10 +180,9 @@ export default function ChatRoomPage() {
   };
 
   // Generate AI response using real Claude API + event data
+  // Server action inserts the AI message directly — realtime subscription picks it up
   const generateAIResponse = async (userMessage: string) => {
     if (!channelId) return;
-
-    let aiContent: string;
 
     try {
       const { generateChatResponse } = await import("@/app/actions/ai-chat");
@@ -194,29 +193,20 @@ export default function ChatRoomPage() {
         content: m.content,
       }));
 
-      aiContent = await generateChatResponse(channelId, userMessage, recentMsgs);
+      // Server action generates response AND inserts it into DB
+      // Realtime subscription will push the new message to the client
+      await generateChatResponse(channelId, userMessage, recentMsgs);
     } catch (err) {
       console.error("[chat] AI response error:", err);
-      aiContent = "I'm having trouble connecting right now. Try asking again in a moment.";
-    }
-
-    const { data } = await supabase
-      .from("messages")
-      .insert({
-        channel_id: channelId,
-        user_id: "00000000-0000-0000-0000-000000000000",
-        content: aiContent,
-        type: "ai",
-      })
-      .select()
-      .single();
-
-    if (data) {
-      setMessages((prev) => {
-        const exists = prev.find((m) => m.id === data.id);
-        if (exists) return prev;
-        return [...prev, data as Message];
-      });
+      // If server action completely fails, insert fallback client-side
+      await supabase
+        .from("messages")
+        .insert({
+          channel_id: channelId,
+          user_id: null,
+          content: "I'm having trouble connecting right now. Try asking again in a moment.",
+          type: "ai",
+        });
     }
   };
 
