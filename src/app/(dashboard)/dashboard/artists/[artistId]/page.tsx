@@ -214,7 +214,7 @@ export default function ArtistDetailPage() {
       </Card>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-nocturn">{bookings.length}</p>

@@ -106,7 +106,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
           {/* QR Code Section */}
           <div className="px-6 py-8 flex flex-col items-center">
             {isCheckedIn ? (
-              <div className="w-[280px] h-[280px] rounded-xl bg-muted flex flex-col items-center justify-center space-y-3">
+              <div className="w-[240px] h-[240px] sm:w-[280px] sm:h-[280px] rounded-xl bg-muted flex flex-col items-center justify-center space-y-3">
                 <div className="text-4xl">&#x2705;</div>
                 <p className="text-sm font-medium text-muted-foreground">
                   Already checked in
@@ -123,11 +123,11 @@ export default async function TicketPage({ params }: TicketPageProps) {
                   alt="Ticket QR Code"
                   width={280}
                   height={280}
-                  className="w-[280px] h-[280px]"
+                  className="w-[240px] h-[240px] sm:w-[280px] sm:h-[280px]"
                 />
               </div>
             ) : (
-              <div className="w-[280px] h-[280px] rounded-xl bg-muted flex items-center justify-center">
+              <div className="w-[240px] h-[240px] sm:w-[280px] sm:h-[280px] rounded-xl bg-muted flex items-center justify-center">
                 <p className="text-sm text-muted-foreground">
                   QR code unavailable
                 </p>

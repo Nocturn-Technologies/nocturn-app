@@ -154,7 +154,7 @@ export default function PromosPage() {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card>
           <CardContent className="pt-4 pb-4 text-center">
             <p className="text-2xl font-bold text-nocturn">{codes.length}</p>
