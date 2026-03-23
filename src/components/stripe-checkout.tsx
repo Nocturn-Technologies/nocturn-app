@@ -9,7 +9,8 @@ import {
   useElements,
 } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle, AlertCircle, Share2, Download } from "lucide-react";
+import { useConfetti, generateTicketShareCard } from "@/components/celebrations";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
@@ -22,16 +23,156 @@ interface StripeCheckoutProps {
   quantity: number;
   buyerEmail: string;
   totalAmount: number; // in dollars
+  eventTitle?: string;
+  eventDate?: string;
+  eventVenue?: string;
   onSuccess: () => void;
   onCancel: () => void;
 }
 
+// 🎉 Post-purchase celebration + share to story
+function TicketSuccess({
+  eventTitle,
+  eventDate,
+  eventVenue,
+  tierName,
+  quantity,
+}: {
+  eventTitle?: string;
+  eventDate?: string;
+  eventVenue?: string;
+  tierName?: string;
+  quantity?: number;
+}) {
+  const fireConfetti = useConfetti();
+  const [shareCardUrl, setShareCardUrl] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+
+  // Fire confetti on mount
+  useEffect(() => {
+    fireConfetti({ duration: 4000 });
+  }, [fireConfetti]);
+
+  async function handleGenerateShareCard() {
+    setGenerating(true);
+    try {
+      const url = await generateTicketShareCard({
+        title: eventTitle || "Event",
+        date: eventDate || "",
+        venue: eventVenue || "",
+        tierName: tierName || "General Admission",
+        quantity: quantity || 1,
+      });
+      setShareCardUrl(url);
+    } catch {
+      // Silently fail — share is optional
+    }
+    setGenerating(false);
+  }
+
+  async function handleShare() {
+    if (!shareCardUrl) return;
+
+    // Convert data URL to blob for native share
+    const res = await fetch(shareCardUrl);
+    const blob = await res.blob();
+    const file = new File([blob], "ticket.png", { type: "image/png" });
+
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      await navigator.share({
+        title: `I'm going to ${eventTitle}!`,
+        text: `Just got tickets to ${eventTitle} 🎟️🔥`,
+        files: [file],
+      });
+    } else {
+      // Fallback: download the image
+      const a = document.createElement("a");
+      a.href = shareCardUrl;
+      a.download = `${eventTitle || "ticket"}-story.png`;
+      a.click();
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-4 py-6 animate-fade-in-up">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
+        <CheckCircle className="h-10 w-10 text-green-500" />
+      </div>
+      <div className="text-center">
+        <p className="text-xl font-bold">You're in! 🎉</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {quantity && quantity > 1 ? `${quantity} tickets` : "Your ticket"} for{" "}
+          <span className="text-white font-medium">{eventTitle || "the event"}</span>
+          {" "}confirmed.
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Check your email for details + QR code.
+        </p>
+      </div>
+
+      {/* Share to Story CTA */}
+      {!shareCardUrl ? (
+        <Button
+          onClick={handleGenerateShareCard}
+          disabled={generating}
+          className="w-full bg-gradient-to-r from-[#7B2FF7] to-[#E040FB] hover:opacity-90 text-white font-semibold py-5"
+          size="lg"
+        >
+          {generating ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Share2 className="mr-2 h-4 w-4" />
+          )}
+          {generating ? "Creating your story..." : "Share to Story 📸"}
+        </Button>
+      ) : (
+        <div className="w-full space-y-3">
+          {/* Preview */}
+          <div className="mx-auto w-40 rounded-xl overflow-hidden border border-white/10 shadow-lg shadow-nocturn/20">
+            <img src={shareCardUrl} alt="Share card" className="w-full" />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleShare}
+              className="flex-1 bg-gradient-to-r from-[#7B2FF7] to-[#E040FB] hover:opacity-90"
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Share
+            </Button>
+            <Button
+              onClick={() => {
+                const a = document.createElement("a");
+                a.href = shareCardUrl;
+                a.download = `${eventTitle || "ticket"}-story.png`;
+                a.click();
+              }}
+              variant="outline"
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CheckoutForm({
   totalAmount,
+  eventTitle,
+  eventDate,
+  eventVenue,
+  tierName,
+  quantity,
   onSuccess,
   onCancel,
 }: {
   totalAmount: number;
+  eventTitle?: string;
+  eventDate?: string;
+  eventVenue?: string;
+  tierName?: string;
+  quantity?: number;
   onSuccess: () => void;
   onCancel: () => void;
 }) {
@@ -68,13 +209,13 @@ function CheckoutForm({
 
   if (succeeded) {
     return (
-      <div className="flex flex-col items-center gap-3 py-8">
-        <CheckCircle className="h-12 w-12 text-green-500" />
-        <p className="text-lg font-semibold">Payment Successful!</p>
-        <p className="text-sm text-muted-foreground">
-          Your tickets have been confirmed. Check your email for details.
-        </p>
-      </div>
+      <TicketSuccess
+        eventTitle={eventTitle}
+        eventDate={eventDate}
+        eventVenue={eventVenue}
+        tierName={tierName}
+        quantity={quantity}
+      />
     );
   }
 
@@ -125,9 +266,13 @@ function CheckoutForm({
 export function StripeCheckout({
   eventId,
   tierId,
+  tierName,
   quantity,
   buyerEmail,
   totalAmount,
+  eventTitle,
+  eventDate,
+  eventVenue,
   onSuccess,
   onCancel,
 }: StripeCheckoutProps) {
@@ -208,6 +353,11 @@ export function StripeCheckout({
     >
       <CheckoutForm
         totalAmount={totalAmount}
+        eventTitle={eventTitle}
+        eventDate={eventDate}
+        eventVenue={eventVenue}
+        tierName={tierName}
+        quantity={quantity}
         onSuccess={onSuccess}
         onCancel={onCancel}
       />
