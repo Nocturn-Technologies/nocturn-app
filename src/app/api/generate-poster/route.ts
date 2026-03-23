@@ -41,11 +41,29 @@ export async function POST(request: NextRequest) {
       imageUrl,
       prompt,
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.error("[generate-poster] Error:", message);
+  } catch (error: unknown) {
+    // Extract detailed OpenAI error
+    const err = error as { status?: number; message?: string; error?: { message?: string } };
+    const detail = err?.error?.message || err?.message || "Unknown error";
+    console.error("[generate-poster] Error:", JSON.stringify({ status: err?.status, detail }));
+
+    // Return the actual error so we can debug
+    if (detail.includes("billing") || detail.includes("quota") || detail.includes("insufficient")) {
+      return NextResponse.json(
+        { error: "OpenAI billing issue — add credits at platform.openai.com/settings/billing" },
+        { status: 402 }
+      );
+    }
+
+    if (detail.includes("content_policy") || detail.includes("safety")) {
+      return NextResponse.json(
+        { error: "The prompt was flagged by content policy. Try a different style direction." },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Failed to generate poster. Please try again." },
+      { error: `Poster generation failed: ${detail}` },
       { status: 500 }
     );
   }
