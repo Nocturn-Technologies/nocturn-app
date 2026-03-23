@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/stripe";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 
 function createAdminClient() {
@@ -84,9 +84,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const totalCents = unitAmountCents * quantity;
+    // Add buyer service fee: 7% + $0.50 per ticket
+    const serviceFeePerTicketCents = Math.round(unitAmountCents * (PLATFORM_FEE_PERCENT / 100)) + PLATFORM_FEE_FLAT_CENTS;
+    const totalPerTicketCents = unitAmountCents + serviceFeePerTicketCents;
+    const totalCents = totalPerTicketCents * quantity;
 
-    // Create PaymentIntent
+    // Create PaymentIntent (includes ticket price + service fee)
     const paymentIntent = await getStripe().paymentIntents.create({
       amount: totalCents,
       currency: "usd",

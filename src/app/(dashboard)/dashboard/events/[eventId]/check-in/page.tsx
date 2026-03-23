@@ -97,7 +97,13 @@ export default function CheckInScannerPage() {
         });
         // Refresh stats immediately
         getCheckInStats(eventId).then(setStats);
+
+        // Track check-in (client-side)
+        import("@/lib/track").then(({ trackEvent }) =>
+          trackEvent("checkin_scanned", { eventId })
+        ).catch(() => {});
       } else {
+        haptic('heavy');
         setScanResult({
           type: "error",
           message: result.error ?? "Check-in failed",
@@ -172,33 +178,33 @@ export default function CheckInScannerPage() {
         <QrScanner onScan={handleScan} paused={processing} />
       </div>
 
-      {/* Scan Feedback Overlay */}
+      {/* Scan Feedback — large and visible in dark venues */}
       {scanResult && (
         <div
-          className={`rounded-xl border p-4 transition-all ${
+          className={`rounded-2xl border-2 p-5 transition-all animate-fade-in-up ${
             scanResult.type === "success"
-              ? "border-green-500/30 bg-green-500/10"
-              : "border-red-500/30 bg-red-500/10"
+              ? "border-green-500/50 bg-green-500/15"
+              : "border-red-500/50 bg-red-500/15"
           }`}
         >
-          <div className="flex items-start gap-3">
+          <div className="flex items-center gap-4">
             {scanResult.type === "success" ? (
-              <CheckCircle2 className="mt-0.5 h-6 w-6 shrink-0 text-green-500" />
+              <CheckCircle2 className="h-10 w-10 shrink-0 text-green-400" />
             ) : (
-              <XCircle className="mt-0.5 h-6 w-6 shrink-0 text-red-500" />
+              <XCircle className="h-10 w-10 shrink-0 text-red-400" />
             )}
-            <div>
+            <div className="min-w-0">
               <p
-                className={`font-semibold ${
+                className={`text-xl font-bold ${
                   scanResult.type === "success"
-                    ? "text-green-500"
-                    : "text-red-500"
+                    ? "text-green-400"
+                    : "text-red-400"
                 }`}
               >
                 {scanResult.message}
               </p>
               {scanResult.guestName && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-base text-muted-foreground truncate">
                   {scanResult.guestName}
                   {scanResult.tierName ? ` — ${scanResult.tierName}` : ""}
                 </p>
