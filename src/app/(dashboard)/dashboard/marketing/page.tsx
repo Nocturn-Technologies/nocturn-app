@@ -7,9 +7,9 @@ export default function MarketingPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Marketing Agent</h1>
+        <h1 className="text-2xl font-bold">Promo</h1>
         <p className="text-sm text-muted-foreground">
-          AI-powered content generation for your events
+          Flyers, social, email — your brand, always on
         </p>
       </div>
 
@@ -21,10 +21,10 @@ export default function MarketingPage() {
               <Sparkles className="h-6 w-6 text-nocturn" />
             </div>
             <div className="flex-1">
-              <h2 className="text-lg font-semibold">Nocturn Marketing AI</h2>
+              <h2 className="text-lg font-semibold">Nocturn Promo</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                Generate platform-specific content for Instagram, Twitter, email campaigns, and more.
-                Just select an event and describe your vibe.
+                Generate flyers, social posts, and email blasts for your events.
+                Pick an event and describe the vibe — Nocturn handles the rest.
               </p>
               <Link href="/dashboard/events" className="mt-4 inline-block">
                 <Button className="bg-nocturn hover:bg-nocturn-light">

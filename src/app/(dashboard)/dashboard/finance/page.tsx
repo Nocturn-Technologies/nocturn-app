@@ -85,9 +85,9 @@ export default async function FinancePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Finance</h1>
+        <h1 className="text-2xl font-bold">Money</h1>
         <p className="text-sm text-muted-foreground">
-          Settlements, expenses, and P&amp;L for your events
+          Splits, settlements, and P&amp;L — know where every dollar went
         </p>
       </div>
 

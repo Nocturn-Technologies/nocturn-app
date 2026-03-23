@@ -49,8 +49,8 @@ const sidebarNavItems = [
   { href: "/dashboard/record", label: "Record", icon: Mic },
   { href: "/dashboard/artists", label: "Artists", icon: Music },
   { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
-  { href: "/dashboard/marketing", label: "Marketing", icon: Sparkles },
-  { href: "/dashboard/finance", label: "Finance", icon: DollarSign },
+  { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
+  { href: "/dashboard/finance", label: "Money", icon: DollarSign },
   { href: "/dashboard/members", label: "Members", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
@@ -68,8 +68,8 @@ const moreDrawerItems = [
   { href: "/dashboard/record", label: "Record", icon: Mic },
   { href: "/dashboard/artists", label: "Artists", icon: Music },
   { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
-  { href: "/dashboard/marketing", label: "Marketing", icon: Sparkles },
-  { href: "/dashboard/finance", label: "Finance", icon: DollarSign },
+  { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
+  { href: "/dashboard/finance", label: "Money", icon: DollarSign },
   { href: "/dashboard/members", label: "Members", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

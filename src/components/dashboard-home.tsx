@@ -121,8 +121,8 @@ function getSmartActions(props: DashboardHomeProps) {
   }
 
   actions.push({
-    title: "AI Marketing",
-    description: "Generate posts, emails, and promos",
+    title: "Promo",
+    description: "Flyers, social posts, and email blasts",
     href: "/dashboard/marketing",
     icon: <Sparkles className="h-5 w-5" />,
     color: "text-nocturn-light",
@@ -131,8 +131,8 @@ function getSmartActions(props: DashboardHomeProps) {
   });
 
   actions.push({
-    title: "Finance",
-    description: "View settlements and P&L",
+    title: "Money",
+    description: "Splits, settlements, and P&L",
     href: "/dashboard/finance",
     icon: <DollarSign className="h-5 w-5" />,
     color: "text-nocturn-teal",
