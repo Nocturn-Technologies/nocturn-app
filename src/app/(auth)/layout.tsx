@@ -11,7 +11,7 @@ export default function AuthLayout({
         <div className="flex flex-col items-center">
           <NocturnLogo size="lg" />
           <p className="mt-1 text-sm text-muted-foreground">
-            The Agentic Work OS for Nightlife
+            AI for music collectives and promoters
           </p>
         </div>
         {children}

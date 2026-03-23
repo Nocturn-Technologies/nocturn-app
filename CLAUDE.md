@@ -1,4 +1,4 @@
-# Nocturn — The Agentic Work OS for Nightlife
+# Nocturn — AI for Music Collectives and Promoters
 
 > ⚠️ This is the ONLY active codebase. The mobile repo (nocturn-mobile) is archived — all features were merged here.
 
@@ -14,7 +14,7 @@ Mobile-first web app for nightlife promoters and collectives. Manage events, sel
 - **Deploy**: Vercel (auto-deploys from main branch)
 
 ## URLs
-- **Production**: https://nocturn-app-navy.vercel.app
+- **Production**: https://app.trynocturn.com (Vercel: nocturn-app-navy.vercel.app)
 - **GitHub**: https://github.com/Nocturn-Technologies/nocturn-app
 - **Supabase project**: bpzwbqtpyorppijdblhy
 - **Supabase URL**: https://bpzwbqtpyorppijdblhy.supabase.co

@@ -23,12 +23,12 @@ function baseTemplate(content: string): string {
 </head>
 <body>
   <div class="container">
-    <a href="https://nocturn-app-navy.vercel.app" class="logo">nocturn.</a>
+    <a href="https://app.trynocturn.com" class="logo">nocturn.</a>
     <div class="content">
       ${content}
     </div>
     <div class="footer">
-      <p>Powered by <a href="https://nocturn-app-navy.vercel.app">nocturn.</a> — The Agentic Work OS for Nightlife</p>
+      <p>Powered by <a href="https://app.trynocturn.com">nocturn.</a> — AI for music collectives and promoters</p>
     </div>
   </div>
 </body>
@@ -56,12 +56,12 @@ export function passwordResetEmail(link: string): string {
 export function welcomeEmail(name: string, collectiveName: string): string {
   return baseTemplate(`
     <h2>Welcome to Nocturn, ${name}! 🎵</h2>
-    <p>You've just set up <span class="highlight">${collectiveName}</span> on Nocturn — the agentic work OS for nightlife.</p>
+    <p>You've just set up <span class="highlight">${collectiveName}</span> on Nocturn — AI that runs the business while you run the night.</p>
     <div class="card">
       <p style="color: #FAFAFA; margin: 0 0 8px 0; font-weight: 600;">What's next?</p>
       <p style="margin: 0;">→ Create your first event<br>→ Add your team members<br>→ Connect Stripe for payments</p>
     </div>
-    <a href="https://nocturn-app-navy.vercel.app/dashboard" class="btn">Open Dashboard →</a>
+    <a href="https://app.trynocturn.com/dashboard" class="btn">Open Dashboard →</a>
     <p>Need help? Just reply to this email.</p>
   `);
 }
@@ -142,6 +142,6 @@ export function postEventRecapEmail(
       <p style="color: #FAFAFA; margin: 0;">🎉 ${attendeeCount} people came through</p>
     </div>
     <p>Follow <span class="highlight">${collectiveName}</span> for the next one.</p>
-    <a href="https://nocturn-app-navy.vercel.app" class="btn">See What's Next →</a>
+    <a href="https://app.trynocturn.com" class="btn">See What's Next →</a>
   `);
 }

@@ -1,7 +1,7 @@
 {
   "name": "Nocturn",
   "short_name": "🌙 Nocturn",
-  "description": "The Agentic Work OS for Nightlife",
+  "description": "AI for music collectives and promoters",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#09090B",

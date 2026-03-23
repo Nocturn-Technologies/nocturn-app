@@ -17,7 +17,7 @@ export async function GET() {
           </span>
         </div>
         <div style={{ fontSize: 28, color: '#a1a1aa' }}>
-          The Agentic Work OS for Nightlife
+          AI for Music Collectives and Promoters
         </div>
       </div>
     ),
