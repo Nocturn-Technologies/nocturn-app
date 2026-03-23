@@ -40,6 +40,7 @@ export default function ChatRoomPage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [aiTyping, setAiTyping] = useState(false);
+  const [userNames, setUserNames] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -112,20 +113,35 @@ export default function ChatRoomPage() {
     };
   }, [channelId, scrollToBottom, supabase]);
 
+  // Fetch real user names for message authors
+  useEffect(() => {
+    const unknownIds = [...new Set(messages.map((m) => m.user_id))]
+      .filter((id) => id && id !== "00000000-0000-0000-0000-000000000000" && !userNames[id]);
+
+    if (unknownIds.length === 0) return;
+
+    supabase
+      .from("users")
+      .select("id, full_name")
+      .in("id", unknownIds)
+      .then(({ data }) => {
+        if (!data) return;
+        setUserNames((prev) => {
+          const next = { ...prev };
+          for (const u of data) {
+            if (u.full_name) next[u.id] = u.full_name.split(" ")[0];
+          }
+          return next;
+        });
+      });
+  }, [messages, supabase, userNames]);
+
   // Scroll on new messages
   useEffect(() => {
     scrollToBottom();
   }, [messages.length, scrollToBottom]);
 
-  // Detect if a message looks like a question
-  const looksLikeQuestion = (text: string): boolean => {
-    const trimmed = text.trim();
-    if (trimmed.includes("?")) return true;
-    const questionStarters = /^(who|what|when|where|why|how|can|should|is|are|do|does|will)\b/i;
-    return questionStarters.test(trimmed);
-  };
-
-  // Send text message
+  // Send text message — AI responds to everything
   const sendMessage = async () => {
     if (!input.trim() || !userId || !channelId) return;
 
@@ -151,11 +167,8 @@ export default function ChatRoomPage() {
       });
     }
 
-    // Auto-respond: explicit @nocturn OR question detection
-    const shouldRespond =
-      content.toLowerCase().includes("@nocturn") || looksLikeQuestion(content);
-
-    if (shouldRespond && !aiTyping) {
+    // AI always responds — this is a copilot, not a dumb chatroom
+    if (!aiTyping) {
       setAiTyping(true);
       scrollToBottom();
       try {
@@ -243,8 +256,17 @@ export default function ChatRoomPage() {
   const getUserName = (msg: Message) => {
     if (msg.type === "ai") return "Nocturn AI";
     if (msg.user_id === userId) return "You";
-    return `User ${msg.user_id?.slice(0, 6) ?? "unknown"}`;
+    return userNames[msg.user_id] || "Team member";
   };
+
+  // Suggested prompts for empty state
+  const suggestedPrompts = [
+    "How are ticket sales looking?",
+    "Give me a revenue breakdown",
+    "Who's on the lineup?",
+    "Draft a promo caption",
+    "What should I focus on today?",
+  ];
 
   const isOwnMessage = (msg: Message) => msg.user_id === userId;
 
@@ -295,17 +317,29 @@ export default function ChatRoomPage() {
             <div className="w-6 h-6 border-2 border-nocturn border-t-transparent rounded-full animate-spin" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="text-center py-12">
-            <Sparkles
-              size={32}
-              className="text-nocturn/40 mx-auto mb-2"
-            />
-            <p className="text-sm text-muted-foreground/50">
-              Start the conversation
-            </p>
-            <p className="text-xs text-muted-foreground/30 mt-1">
-              Ask a question and Nocturn AI will help
-            </p>
+          <div className="flex flex-col items-center justify-center py-8 px-4 space-y-6">
+            <div className="text-center space-y-2">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-nocturn/10">
+                <Sparkles size={28} className="text-nocturn" />
+              </div>
+              <p className="text-base font-semibold">Nocturn AI</p>
+              <p className="text-sm text-muted-foreground max-w-[280px]">
+                Your event ops copilot. Ask me anything about your events, sales, lineup, or marketing.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2 max-w-sm">
+              {suggestedPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  onClick={() => {
+                    setInput(prompt);
+                  }}
+                  className="rounded-full border border-nocturn/20 bg-nocturn/5 px-3 py-1.5 text-xs font-medium text-nocturn hover:bg-nocturn/10 transition-colors"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           messages.map((msg) => (
@@ -359,7 +393,7 @@ export default function ChatRoomPage() {
                   sendMessage();
                 }
               }}
-              placeholder="Message... ask a question for AI help"
+              placeholder="Ask Nocturn anything..."
               className="w-full bg-transparent text-[16px] placeholder:text-muted-foreground/50 resize-none outline-none max-h-[120px] leading-5"
               rows={1}
               style={{ fontSize: "16px" }}
