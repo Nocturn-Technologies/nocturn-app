@@ -3,6 +3,40 @@ import Replicate from "replicate";
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
+// Extract URL from whatever Replicate returns (string, array, FileOutput, etc.)
+function extractUrl(output: unknown): string | null {
+  if (!output) return null;
+
+  // Direct string URL
+  if (typeof output === "string" && output.startsWith("http")) return output;
+
+  // Array of URLs (flux-schnell format)
+  if (Array.isArray(output)) {
+    for (const item of output) {
+      const url = extractUrl(item);
+      if (url) return url;
+    }
+    return null;
+  }
+
+  // FileOutput object with .url() method or url property
+  if (typeof output === "object") {
+    const obj = output as Record<string, unknown>;
+    if (typeof obj.url === "function") {
+      const result = (obj.url as () => string)();
+      if (typeof result === "string") return result;
+    }
+    if (typeof obj.url === "string") return obj.url;
+    if (typeof obj.href === "string") return obj.href;
+
+    // Try toString
+    const str = String(output);
+    if (str.startsWith("http")) return str;
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   if (!REPLICATE_API_TOKEN) {
     return NextResponse.json(
@@ -18,36 +52,57 @@ export async function POST(request: NextRequest) {
     }
 
     const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+    let imageUrl: string | null = null;
 
-    // Flux 1.1 Pro — higher quality than schnell, better for poster art
-    const output = await replicate.run("black-forest-labs/flux-1.1-pro", {
-      input: {
-        prompt,
-        aspect_ratio: "4:5",
-        output_format: "webp",
-        output_quality: 95,
-        safety_tolerance: 5,
-        prompt_upsampling: true, // Flux enhances the prompt internally
-      },
-    });
+    // Try Flux Pro first
+    try {
+      const output = await replicate.run("black-forest-labs/flux-1.1-pro", {
+        input: {
+          prompt,
+          aspect_ratio: "4:5",
+          output_format: "webp",
+          output_quality: 95,
+          safety_tolerance: 5,
+          prompt_upsampling: true,
+        },
+      });
 
-    // Flux Pro returns a single URL string (not array)
-    const imageUrl = typeof output === "string"
-      ? output
-      : Array.isArray(output) && output[0]
-        ? String(output[0])
-        : null;
+      console.log("[generate-poster] Flux Pro output type:", typeof output, JSON.stringify(output).slice(0, 200));
+      imageUrl = extractUrl(output);
+    } catch (proErr) {
+      console.error("[generate-poster] Flux Pro failed, trying schnell:", proErr);
+    }
+
+    // Fallback to Flux Schnell (faster, more reliable)
+    if (!imageUrl) {
+      try {
+        const output = await replicate.run("black-forest-labs/flux-schnell", {
+          input: {
+            prompt,
+            num_outputs: 1,
+            aspect_ratio: "4:5",
+            output_format: "webp",
+            output_quality: 90,
+          },
+        });
+
+        console.log("[generate-poster] Flux Schnell output type:", typeof output, JSON.stringify(output).slice(0, 200));
+        imageUrl = extractUrl(output);
+      } catch (schnellErr) {
+        console.error("[generate-poster] Flux Schnell also failed:", schnellErr);
+      }
+    }
 
     if (!imageUrl) {
       return NextResponse.json(
-        { error: "No image generated. Try a different style direction." },
+        { error: "Image generation failed. Check your Replicate API token and billing." },
         { status: 500 }
       );
     }
 
     return NextResponse.json({ imageUrl, prompt });
   } catch (error: unknown) {
-    const err = error as { status?: number; message?: string; error?: { message?: string } };
+    const err = error as { message?: string; error?: { message?: string } };
     const detail = err?.error?.message || err?.message || "Unknown error";
     console.error("[generate-poster] Error:", detail);
 
