@@ -11,6 +11,7 @@ import { HostMessage } from "@/components/public-event/host-message";
 import { EventReactions } from "@/components/public-event/event-reactions";
 import { CollectiveProfile } from "@/components/public-event/collective-profile";
 import { PastEvents } from "@/components/public-event/past-events";
+import { StickyTicketBar } from "@/components/public-event/sticky-ticket-bar";
 import type { Metadata } from "next";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import Link from "next/link";
@@ -395,7 +396,8 @@ export default async function PublicEventPage({ params }: Props) {
               <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
                 Lineup
               </h2>
-              {/* Horizontal scroll on mobile */}
+              {/* Horizontal scroll on mobile with fade indicator */}
+              <div className="relative">
               <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
                 {artists.map((a: { artist_id: string; set_time: string | null; artists: unknown }) => {
                   const artist = a.artists as unknown as { name: string; genre: string | null };
@@ -428,21 +430,26 @@ export default async function PublicEventPage({ params }: Props) {
                   );
                 })}
               </div>
+              {/* Right fade indicator */}
+              <div className="pointer-events-none absolute right-0 top-0 bottom-2 w-12 bg-gradient-to-l from-[#09090B] to-transparent" />
+              </div>
             </div>
           )}
 
           {/* ─── Tickets ─── */}
           {isUpcoming && tiers && tiers.length > 0 && (
-            <TicketSection
-              tiers={tiers.map((t) => ({
-                id: t.id,
-                name: t.name,
-                price: Number(t.price),
-                capacity: t.capacity,
-              }))}
-              eventId={event.id}
-              accentColor={accentColor}
-            />
+            <div id="ticket-section">
+              <TicketSection
+                tiers={tiers.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  price: Number(t.price),
+                  capacity: t.capacity,
+                }))}
+                eventId={event.id}
+                accentColor={accentColor}
+              />
+            </div>
           )}
 
           {/* ─── Guest Reactions ─── */}
@@ -521,6 +528,15 @@ export default async function PublicEventPage({ params }: Props) {
           </div>
         </div>
       </div>
+
+      {/* Sticky ticket CTA — appears when scrolled past tickets */}
+      {isUpcoming && tiers && tiers.length > 0 && (
+        <StickyTicketBar
+          lowestPrice={lowestTierPrice}
+          accentColor={accentColor}
+          ticketSectionId="ticket-section"
+        />
+      )}
     </div>
   );
 }

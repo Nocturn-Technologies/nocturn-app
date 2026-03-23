@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Users, UserCheck, DollarSign, Download, Search } from "lucide-react";
+import Link from "next/link";
 import {
   getAttendees,
   exportAttendeesCSV,
@@ -237,13 +238,18 @@ export default function AttendeesPage() {
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
               <Users className="h-8 w-8 text-nocturn" />
             </div>
-            <div className="text-center">
-              <p className="font-medium">No attendees yet</p>
-              <p className="text-sm text-muted-foreground">
+            <div className="text-center space-y-1">
+              <p className="font-semibold text-lg">No attendees yet</p>
+              <p className="text-sm text-muted-foreground max-w-[260px]">
                 When people buy tickets to your events, they&apos;ll appear
-                here.
+                here automatically.
               </p>
             </div>
+            <Link href="/dashboard/events">
+              <Button className="bg-nocturn hover:bg-nocturn-light rounded-xl mt-2">
+                View Your Events
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       ) : (

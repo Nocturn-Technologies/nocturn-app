@@ -177,7 +177,13 @@
 .animate-slide-in-right { animation: slideInRight 0.5s ease-out both; }
 .animate-slide-down { animation: slideDown 0.4s ease-out both; }
 .animate-slide-in-up { animation: slideInUp 0.3s ease-out both; }
+@keyframes shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+
 .animate-text-glow { animation: textGlow 2s ease-in-out infinite; }
+.animate-shimmer { animation: shimmer 1s ease-in-out infinite; }
 
 .delay-50 { animation-delay: 50ms; }
 .delay-75 { animation-delay: 75ms; }
@@ -196,6 +202,28 @@
 }
 .thinking-dot:nth-child(2) { animation-delay: 0.2s; }
 .thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Global button press feedback */
+button:not(:disabled):active,
+a[role="button"]:active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}
+
+/* Card hover lift */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(123, 47, 247, 0.08);
+}
+
+/* Scroll fade indicators */
+.scroll-fade-right {
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
