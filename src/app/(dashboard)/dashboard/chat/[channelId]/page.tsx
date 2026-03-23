@@ -349,6 +349,7 @@ export default function ChatRoomPage() {
               isOwn={isOwnMessage(msg)}
               userName={getUserName(msg)}
               formatTime={formatTime}
+              onFollowUp={(text) => setInput(text)}
             />
           ))
         )}
@@ -430,11 +431,13 @@ function MessageBubble({
   isOwn,
   userName,
   formatTime,
+  onFollowUp,
 }: {
   msg: Message;
   isOwn: boolean;
   userName: string;
   formatTime: (d: string) => string;
+  onFollowUp?: (text: string) => void;
 }) {
   // System messages
   if (msg.type === "system") {
@@ -447,23 +450,109 @@ function MessageBubble({
     );
   }
 
-  // AI messages
+  // AI messages — rich formatting with markdown-like rendering
   if (msg.type === "ai") {
+    // Parse content into formatted blocks
+    const renderAIContent = (text: string) => {
+      return text.split("\n").map((line, i) => {
+        // Bold text: **text**
+        const boldParsed = line.replace(
+          /\*\*(.*?)\*\*/g,
+          '<strong class="text-white font-semibold">$1</strong>'
+        );
+
+        // Bullet points
+        if (line.startsWith("- ") || line.startsWith("• ")) {
+          return (
+            <div key={i} className="flex gap-2 items-start ml-1">
+              <span className="text-nocturn mt-1 text-xs">●</span>
+              <span
+                className="flex-1"
+                dangerouslySetInnerHTML={{ __html: boldParsed.replace(/^[-•]\s*/, "") }}
+              />
+            </div>
+          );
+        }
+
+        // Numbered items
+        const numMatch = line.match(/^(\d+)[.)]\s*(.*)/);
+        if (numMatch) {
+          return (
+            <div key={i} className="flex gap-2 items-start ml-1">
+              <span className="text-nocturn text-xs font-bold min-w-[16px]">{numMatch[1]}.</span>
+              <span
+                className="flex-1"
+                dangerouslySetInnerHTML={{ __html: boldParsed.replace(/^\d+[.)]\s*/, "") }}
+              />
+            </div>
+          );
+        }
+
+        // Empty line = spacer
+        if (line.trim() === "") return <div key={i} className="h-2" />;
+
+        // Regular text
+        return (
+          <span
+            key={i}
+            className="block"
+            dangerouslySetInnerHTML={{ __html: boldParsed }}
+          />
+        );
+      });
+    };
+
+    // Generate contextual follow-up suggestions
+    const getFollowUps = (content: string): string[] => {
+      const lower = content.toLowerCase();
+      if (lower.includes("ticket") || lower.includes("sold") || lower.includes("revenue")) {
+        return ["Show me a full breakdown", "Draft a promo to push sales"];
+      }
+      if (lower.includes("lineup") || lower.includes("artist") || lower.includes("dj")) {
+        return ["What are the total artist fees?", "Draft a booking email"];
+      }
+      if (lower.includes("forecast") || lower.includes("profit") || lower.includes("break-even")) {
+        return ["How do I improve these numbers?", "Compare to my last event"];
+      }
+      if (lower.includes("promo") || lower.includes("caption") || lower.includes("marketing")) {
+        return ["Make it shorter", "Write an Instagram story version"];
+      }
+      return ["What should I focus on today?", "Give me a status update"];
+    };
+
+    const followUps = getFollowUps(msg.content);
+
     return (
       <div className="flex justify-start">
-        <div className="max-w-[85%]">
+        <div className="max-w-[88%] space-y-2">
           <div className="flex items-center gap-1.5 mb-1 ml-1">
             <Sparkles size={12} className="text-nocturn" />
             <span className="text-[11px] text-nocturn font-medium">
               Nocturn AI
             </span>
           </div>
-          <div className="rounded-2xl rounded-tl-md px-3.5 py-2.5 bg-nocturn/10">
-            <p className="text-[14px] leading-relaxed whitespace-pre-wrap">
-              {msg.content}
-            </p>
+          <div className="rounded-2xl rounded-tl-md px-4 py-3 bg-nocturn/10 space-y-1">
+            <div className="text-[14px] leading-relaxed text-white/90">
+              {renderAIContent(msg.content)}
+            </div>
           </div>
-          <span className="text-[11px] text-muted-foreground/40 ml-1 mt-0.5 block">
+
+          {/* Follow-up suggestions */}
+          {followUps.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 ml-1">
+              {followUps.map((q) => (
+                <button
+                  key={q}
+                  onClick={() => onFollowUp?.(q)}
+                  className="text-[11px] rounded-full border border-nocturn/20 bg-nocturn/5 px-2.5 py-1 text-nocturn hover:bg-nocturn/10 transition-colors"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <span className="text-[11px] text-muted-foreground/40 ml-1 block">
             {formatTime(msg.created_at)}
           </span>
         </div>
