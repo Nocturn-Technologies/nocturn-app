@@ -42,7 +42,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const { data: event } = await supabase
     .from("events")
-    .select("title, description, flyer_url")
+    .select("title, description, flyer_url, starts_at, venues(name, city)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
     .maybeSingle();
@@ -51,7 +51,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = `${event.title} | ${collective.name} — Nocturn`;
   const description = event.description || `Event by ${collective.name}`;
-  const canonicalUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://nocturn.app"}/e/${slug}/${eventSlug}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+  const canonicalUrl = `${appUrl}/e/${slug}/${eventSlug}`;
+
+  // Use flyer if available, otherwise generate dynamic OG image
+  const venue = event.venues as unknown as { name: string; city: string } | null;
+  const dateStr = event.starts_at
+    ? new Date(event.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })
+    : "";
+  const ogImageUrl = event.flyer_url
+    || `${appUrl}/og-image/event?${new URLSearchParams({
+      title: event.title,
+      collective: collective.name,
+      date: dateStr,
+      venue: venue ? `${venue.name}, ${venue.city}` : "",
+    }).toString()}`;
 
   return {
     title,
@@ -61,13 +75,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       description,
       type: "website",
       url: canonicalUrl,
-      ...(event.flyer_url && { images: [{ url: event.flyer_url, width: 1200, height: 630, alt: event.title }] }),
+      images: [{ url: ogImageUrl, width: 1200, height: 630, alt: event.title }],
     },
     twitter: {
       card: "summary_large_image",
       title: event.title,
       description,
-      ...(event.flyer_url && { images: [event.flyer_url] }),
+      images: [ogImageUrl],
     },
     alternates: {
       canonical: canonicalUrl,

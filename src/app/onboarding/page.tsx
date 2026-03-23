@@ -118,10 +118,6 @@ export default function OnboardingPage() {
     }
 
     setStep("done");
-    setTimeout(() => {
-      router.push("/dashboard");
-      router.refresh();
-    }, 2000);
   }
 
   function handleNameChange(value: string) {
@@ -155,7 +151,7 @@ export default function OnboardingPage() {
               <AiBubble>
                 <p className="text-sm">What&apos;s your collective called?</p>
               </AiBubble>
-              <div className="ml-11 animate-fade-in-up delay-200 space-y-3">
+              <div className="ml-8 sm:ml-11 animate-fade-in-up delay-200 space-y-3">
                 <Input
                   placeholder="e.g. Midnight Society"
                   value={name}
@@ -192,7 +188,7 @@ export default function OnboardingPage() {
                   Nice — <span className="font-medium text-nocturn">{name}</span>! Where are you based?
                 </p>
               </AiBubble>
-              <div className="ml-11 animate-fade-in-up delay-200 space-y-3">
+              <div className="ml-8 sm:ml-11 animate-fade-in-up delay-200 space-y-3">
                 <Input
                   placeholder="e.g. Toronto"
                   value={city}
@@ -241,7 +237,7 @@ export default function OnboardingPage() {
                 <p className="text-sm text-muted-foreground mb-1">Here&apos;s a bio I wrote for you:</p>
               </AiBubble>
 
-              <div className="ml-11 animate-scale-in delay-300">
+              <div className="ml-8 sm:ml-11 animate-scale-in delay-300">
                 <textarea
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
@@ -304,15 +300,31 @@ export default function OnboardingPage() {
 
           {/* Step: Done */}
           {step === "done" && (
-            <div className="flex flex-col items-center gap-4 py-12 animate-scale-in">
+            <div className="flex flex-col items-center gap-5 py-12 animate-scale-in">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 animate-pulse-glow" style={{ animationDuration: "1.5s" }}>
                 <Check className="h-8 w-8 text-green-500" />
               </div>
               <div className="text-center">
-                <h2 className="text-xl font-bold">You&apos;re all set!</h2>
+                <h2 className="text-xl font-bold">{name} is live!</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Taking you to your dashboard...
+                  Your collective is ready. What&apos;s next?
                 </p>
+              </div>
+              <div className="flex flex-col gap-2 w-full max-w-xs">
+                <Button
+                  onClick={() => { router.push("/dashboard/events/new"); router.refresh(); }}
+                  className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base"
+                >
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  Create your first event
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => { router.push("/dashboard"); router.refresh(); }}
+                  className="w-full text-sm text-muted-foreground"
+                >
+                  Go to dashboard
+                </Button>
               </div>
             </div>
           )}
