@@ -6,13 +6,15 @@ import "./globals.css";
 const outfit = Outfit({
   variable: "--font-heading",
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  weight: ["500", "600", "700", "800"],
+  display: "swap",
 });
 
 const dmSans = DM_Sans({
   variable: "--font-body",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+  display: "swap",
 });
 
 export const viewport: Viewport = {
@@ -60,6 +62,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
+        {/* Preconnect to critical third-party origins */}
+        <link rel="preconnect" href="https://bpzwbqtpyorppijdblhy.supabase.co" />
+        <link rel="preconnect" href="https://js.stripe.com" />
+        <link rel="dns-prefetch" href="https://bpzwbqtpyorppijdblhy.supabase.co" />
+        <link rel="dns-prefetch" href="https://js.stripe.com" />
+
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#7B2FF7" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

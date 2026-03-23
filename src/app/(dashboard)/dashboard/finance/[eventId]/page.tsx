@@ -379,6 +379,29 @@ export default function SettlementDetailPage() {
               )}
             </Button>
           )}
+          {/* Payout info */}
+          <div className="rounded-xl border border-border bg-card/50 p-4 space-y-2">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-nocturn" />
+              How payouts work
+            </h3>
+            <div className="text-xs text-muted-foreground space-y-1.5">
+              <p>All ticket revenue is collected by Nocturn. After settlement is approved, payouts are processed within <span className="text-foreground font-medium">7-14 business days</span>.</p>
+              <p>Your collective keeps <span className="text-green-400 font-medium">100% of the ticket price</span>. The 7% + $0.50 service fee is paid by the buyer, not you.</p>
+              {settlement.status === "draft" && (
+                <p className="text-nocturn">Approve this settlement to start the payout process.</p>
+              )}
+              {settlement.status === "approved" && (
+                <p className="text-amber-400">Payout is being prepared. You'll receive funds via e-transfer or direct deposit.</p>
+              )}
+              {settlement.status === "paid" && (
+                <p className="text-green-400">Payout has been sent. Check your bank account.</p>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground/60">
+              Questions? <a href="mailto:shawn@trynocturn.com" className="underline hover:text-muted-foreground">shawn@trynocturn.com</a>
+            </p>
+          </div>
         </>
       )}
     </div>

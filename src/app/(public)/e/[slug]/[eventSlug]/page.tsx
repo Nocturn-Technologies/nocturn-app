@@ -12,6 +12,7 @@ import { EventReactions } from "@/components/public-event/event-reactions";
 import { CollectiveProfile } from "@/components/public-event/collective-profile";
 import { PastEvents } from "@/components/public-event/past-events";
 import { StickyTicketBar } from "@/components/public-event/sticky-ticket-bar";
+import { AlsoThisWeek } from "@/components/public-event/also-this-week";
 import type { Metadata } from "next";
 import Image from "next/image";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
@@ -113,7 +114,10 @@ export default async function PublicEventPage({ params }: Props) {
 
   if (!event || event.status === "draft") notFound();
 
-  // Fetch all supplementary data in parallel (6 queries → 1 round-trip)
+  // Fetch all supplementary data in parallel (7 queries → 1 round-trip)
+  const now = new Date();
+  const weekFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
+
   const [
     { data: tiers },
     { count: ticketsSold },
@@ -121,6 +125,7 @@ export default async function PublicEventPage({ params }: Props) {
     { data: reactionRows },
     { count: collectiveEventCount },
     { data: pastEvents },
+    { data: nearbyEvents },
   ] = await Promise.all([
     supabase.from("ticket_tiers").select("*").eq("event_id", event.id).order("sort_order"),
     supabase.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
@@ -128,6 +133,16 @@ export default async function PublicEventPage({ params }: Props) {
     supabase.from("event_reactions").select("emoji").eq("event_id", event.id),
     supabase.from("events").select("*", { count: "exact", head: true }).eq("collective_id", collective.id).in("status", ["published", "completed"]),
     supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).order("starts_at", { ascending: false }).limit(6),
+    // Cross-promotion: other events happening soon (different collectives)
+    supabase.from("events")
+      .select("title, slug, flyer_url, starts_at, collective_id, collectives(name, slug), venues(name, city)")
+      .eq("status", "published")
+      .neq("id", event.id)
+      .neq("collective_id", collective.id)
+      .gte("starts_at", now.toISOString())
+      .lte("starts_at", weekFromNow)
+      .order("starts_at", { ascending: true })
+      .limit(6),
   ]);
 
   // Compute per-tier sold counts for accurate "remaining" display
@@ -587,6 +602,24 @@ export default async function PublicEventPage({ params }: Props) {
           ticketSectionId="ticket-section"
         />
       )}
+
+      {/* Cross-promotion: other events happening soon */}
+      <AlsoThisWeek
+        events={(nearbyEvents || []).map((e) => {
+          const c = e.collectives as unknown as { name: string; slug: string };
+          const v = e.venues as unknown as { name: string; city: string } | null;
+          return {
+            title: e.title,
+            slug: e.slug,
+            collectiveSlug: c?.slug || "",
+            collectiveName: c?.name || "",
+            startsAt: e.starts_at,
+            flyerUrl: e.flyer_url,
+            venueName: v?.name || null,
+            venueCity: v?.city || null,
+          };
+        })}
+      />
 
       {/* Footer */}
       <footer className="border-t border-white/5 bg-[#09090B] px-6 py-8">
