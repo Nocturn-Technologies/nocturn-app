@@ -24,6 +24,9 @@ import {
   Loader2,
   Pencil,
   Mic,
+  TrendingUp,
+  DollarSign,
+  Target,
 } from "lucide-react";
 import Link from "next/link";
 import { haptic } from "@/lib/haptics";
@@ -370,6 +373,108 @@ function EventConfirmationCard({
             }}
           />
         )}
+
+        {/* ── Live Finance Forecast ── */}
+        {tiers.length > 0 && (() => {
+          const PLATFORM_FEE = 0.05;
+          const STRIPE_FEE_RATE = 0.029;
+          const STRIPE_FEE_FLAT = 0.30;
+
+          const totalCapacity = tiers.reduce((s, t) => s + t.capacity, 0);
+          const maxRevenue = tiers.reduce((s, t) => s + t.price * t.capacity, 0);
+          const avgPrice = totalCapacity > 0 ? maxRevenue / totalCapacity : 0;
+
+          // Scenario projections
+          const scenarios = [
+            { label: "Conservative (50%)", rate: 0.5 },
+            { label: "Target (75%)", rate: 0.75 },
+            { label: "Sell-out (100%)", rate: 1.0 },
+          ];
+
+          const projections = scenarios.map(({ label, rate }) => {
+            const ticketsSold = Math.round(totalCapacity * rate);
+            const gross = tiers.reduce((s, t) => s + t.price * Math.round(t.capacity * rate), 0);
+            const stripeFees = ticketsSold * STRIPE_FEE_FLAT + gross * STRIPE_FEE_RATE;
+            const platformFee = gross * PLATFORM_FEE;
+            const net = gross - stripeFees - platformFee;
+            return { label, rate, ticketsSold, gross, net };
+          });
+
+          // Break-even (how many tickets to cover $0 — just fees)
+          const netPerTicket = avgPrice > 0
+            ? avgPrice * (1 - PLATFORM_FEE - STRIPE_FEE_RATE) - STRIPE_FEE_FLAT
+            : 0;
+          const breakEven = netPerTicket > 0 ? Math.ceil(0 / netPerTicket) : 0; // With no expenses, break-even is 1
+
+          return (
+            <div className="border-t border-white/5 pt-3 mt-3">
+              <div className="flex items-center gap-1.5 mb-3">
+                <TrendingUp className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                  Revenue Forecast
+                </span>
+              </div>
+
+              {/* Headline number */}
+              <div className="flex items-baseline gap-2 mb-3">
+                <span className="text-2xl font-bold text-white">
+                  ${maxRevenue.toLocaleString()}
+                </span>
+                <span className="text-xs text-zinc-500">potential revenue</span>
+              </div>
+
+              {/* Scenario bars */}
+              <div className="space-y-2">
+                {projections.map((p) => (
+                  <div key={p.label} className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-zinc-500">{p.label}</span>
+                      <span className="font-medium text-white">
+                        ${p.net.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        <span className="text-zinc-500 ml-1">net</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${p.rate * 100}%`,
+                          backgroundColor: p.rate >= 0.75 ? "#22c55e" : p.rate >= 0.5 ? "#eab308" : "#ef4444",
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Key metrics row */}
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+                  <DollarSign className="h-3 w-3 text-[#7B2FF7] mx-auto mb-0.5" />
+                  <p className="text-xs font-bold text-white">${avgPrice.toFixed(0)}</p>
+                  <p className="text-[10px] text-zinc-500">avg ticket</p>
+                </div>
+                <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+                  <Target className="h-3 w-3 text-[#7B2FF7] mx-auto mb-0.5" />
+                  <p className="text-xs font-bold text-white">{totalCapacity}</p>
+                  <p className="text-[10px] text-zinc-500">total tickets</p>
+                </div>
+                <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+                  <TrendingUp className="h-3 w-3 text-green-500 mx-auto mb-0.5" />
+                  <p className="text-xs font-bold text-green-400">
+                    ${projections[1].net.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-[10px] text-zinc-500">@ 75% sold</p>
+                </div>
+              </div>
+
+              {/* Fees breakdown (collapsed) */}
+              <p className="text-[10px] text-zinc-600 mt-2 text-center">
+                After Stripe fees (2.9% + $0.30) + Nocturn platform fee (5%)
+              </p>
+            </div>
+          );
+        })()}
       </div>
 
       {error && (
