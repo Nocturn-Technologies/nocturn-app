@@ -141,26 +141,15 @@ export default function EventDesignPage() {
     setGeneratedUrl(null);
 
     try {
-      // Build a rich style direction from all the conversational inputs
-      const details: string[] = [];
-      if (posterDJs) details.push(`DJs/Artists: ${posterDJs}`);
-      if (posterDate) details.push(`Date: ${posterDate}`);
-      if (posterVenue) details.push(`Venue: ${posterVenue}`);
-      if (posterStyle) details.push(`Style: ${posterStyle}`);
-
-      const fullStyleDirection = details.length > 0
-        ? details.join(". ") + ". Include the artist names and event details as bold typography in the poster design."
-        : undefined;
-
-      // Step 1: Claude crafts the perfect prompt
+      // Step 1: Claude crafts prompt for BACKGROUND ART ONLY (no text)
       const { prompt } = await generatePosterPrompt({
         title: eventTitle,
         genre: vibeTags,
         venueName: posterVenue || undefined,
-        styleDirection: fullStyleDirection,
+        styleDirection: posterStyle || undefined,
       });
 
-      // Step 2: OpenAI generates the image
+      // Step 2: Replicate generates the background art
       const res = await fetch("/api/generate-poster", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -175,12 +164,119 @@ export default function EventDesignPage() {
         return;
       }
 
-      setGeneratedUrl(data.imageUrl);
+      // Step 3: Composite text on top using canvas
+      const composited = await compositeTextOnPoster(data.imageUrl, {
+        title: eventTitle,
+        djs: posterDJs,
+        date: posterDate,
+        venue: posterVenue,
+        accentColor: themeColor,
+      });
+
+      setGeneratedUrl(composited);
       setGenerating(false);
-    } catch {
+    } catch (err) {
+      console.error("Poster generation error:", err);
       setGenError("Failed to generate poster. Please try again.");
       setGenerating(false);
     }
+  }
+
+  // Composite clean typography over AI-generated background
+  async function compositeTextOnPoster(
+    bgUrl: string,
+    details: { title: string; djs: string; date: string; venue: string; accentColor: string }
+  ): Promise<string> {
+    const canvas = document.createElement("canvas");
+    const W = 1080;
+    const H = 1350; // 4:5 Instagram
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d")!;
+
+    // Draw background image
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("Failed to load background image"));
+      img.src = bgUrl;
+    });
+
+    // Cover-fit the image
+    const scale = Math.max(W / img.width, H / img.height);
+    const sw = W / scale;
+    const sh = H / scale;
+    const sx = (img.width - sw) / 2;
+    const sy = (img.height - sh) / 2;
+    ctx.drawImage(img, sx, sy, sw, sh, 0, 0, W, H);
+
+    // Dark gradient overlay for text readability
+    const grad = ctx.createLinearGradient(0, H * 0.3, 0, H);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(0.5, "rgba(0,0,0,0.4)");
+    grad.addColorStop(1, "rgba(0,0,0,0.85)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Top gradient for branding area
+    const topGrad = ctx.createLinearGradient(0, 0, 0, H * 0.25);
+    topGrad.addColorStop(0, "rgba(0,0,0,0.6)");
+    topGrad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = topGrad;
+    ctx.fillRect(0, 0, W, H * 0.25);
+
+    ctx.textAlign = "center";
+
+    // Event title — top area, uppercase, tracked out
+    if (details.title) {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.font = "bold 42px 'Arial Black', 'Helvetica Neue', sans-serif";
+      ctx.letterSpacing = "8px";
+      const titleUpper = details.title.toUpperCase();
+      ctx.fillText(titleUpper, W / 2, 100, W - 120);
+    }
+
+    // DJ names — main headline, large and bold
+    if (details.djs) {
+      const djNames = details.djs.split(/[,&]/).map((s) => s.trim()).filter(Boolean);
+      const startY = H * 0.55;
+      const lineHeight = djNames.length > 3 ? 72 : djNames.length > 2 ? 80 : 90;
+      const fontSize = djNames.length > 3 ? 52 : djNames.length > 2 ? 58 : 68;
+
+      djNames.forEach((name, i) => {
+        ctx.fillStyle = i === 0 ? details.accentColor : "#FFFFFF";
+        ctx.font = `900 ${fontSize}px 'Arial Black', 'Helvetica Neue', sans-serif`;
+        ctx.letterSpacing = "4px";
+        ctx.fillText(name.toUpperCase(), W / 2, startY + i * lineHeight, W - 100);
+      });
+    }
+
+    // Date — bottom area
+    if (details.date) {
+      ctx.fillStyle = details.accentColor;
+      ctx.font = "bold 36px 'Helvetica Neue', Arial, sans-serif";
+      ctx.letterSpacing = "6px";
+      ctx.fillText(details.date.toUpperCase(), W / 2, H - 160, W - 120);
+    }
+
+    // Venue — below date
+    if (details.venue) {
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.font = "500 26px 'Helvetica Neue', Arial, sans-serif";
+      ctx.letterSpacing = "3px";
+      ctx.fillText(details.venue.toUpperCase(), W / 2, H - 110, W - 120);
+    }
+
+    // Thin accent line separator
+    ctx.strokeStyle = details.accentColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(W * 0.3, H - 180);
+    ctx.lineTo(W * 0.7, H - 180);
+    ctx.stroke();
+
+    return canvas.toDataURL("image/png", 0.95);
   }
 
   function acceptGeneratedPoster() {
