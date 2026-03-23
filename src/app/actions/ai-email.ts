@@ -169,7 +169,7 @@ export async function generatePromoEmail(eventId: string) {
     .map((t) => `${t.name}: $${Number(t.price).toFixed(2)}`)
     .join(", ");
 
-  const ticketUrl = `https://nocturn-app-navy.vercel.app/e/${collective.slug}/${event.slug}`;
+  const ticketUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${collective.slug}/${event.slug}`;
 
   return {
     error: null,

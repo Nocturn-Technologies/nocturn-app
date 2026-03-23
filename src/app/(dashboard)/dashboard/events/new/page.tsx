@@ -595,7 +595,7 @@ function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
       </div>
 
       <p className="text-[9px] text-zinc-600 text-center">
-        Net after Stripe (2.9% + $0.30) + Nocturn (5%) • Slide to explore pricing
+        Net after Stripe fees (2.9% + $0.30) • You keep 100% of ticket price
       </p>
     </div>
   );

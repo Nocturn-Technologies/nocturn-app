@@ -192,7 +192,7 @@ export default function ForecastPage() {
             <span className="text-red-400">-${f.stripeFees.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Platform fee (5%)</span>
+            <span className="text-muted-foreground">Platform fee (paid by buyer)</span>
             <span className="text-red-400">-${f.platformFee.toFixed(2)}</span>
           </div>
           <div className="flex justify-between border-t pt-2 font-bold">

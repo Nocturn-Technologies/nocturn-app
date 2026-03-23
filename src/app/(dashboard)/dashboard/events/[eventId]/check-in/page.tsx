@@ -55,7 +55,7 @@ export default function CheckInScannerPage() {
       setScanResult(null);
 
       // Extract ticket_token from the URL
-      // Expected format: https://nocturn-app-navy.vercel.app/check-in/{ticket_token}
+      // Expected format: https://app.trynocturn.com/check-in/{ticket_token}
       let ticketToken: string | null = null;
 
       try {

@@ -157,7 +157,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   // Generate QR codes for each ticket
   if (insertedTickets && insertedTickets.length > 0) {
-    const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://nocturn-app-navy.vercel.app";
+    const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
     await Promise.allSettled(
       insertedTickets.map(async (ticket) => {
@@ -217,7 +217,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           tierName: tierInfo?.name || "General Admission",
           quantity,
           totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
-          ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://nocturn-app-navy.vercel.app"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+          ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
         });
         console.log(`[stripe-webhook] Sent confirmation email to ${customerEmail}`);
       }

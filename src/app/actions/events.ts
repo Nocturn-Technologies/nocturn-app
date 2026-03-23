@@ -130,6 +130,14 @@ export async function createEvent(input: CreateEventInput) {
     ? new Date(`${input.date}T${input.doorsOpen}:00`).toISOString()
     : null;
 
+  // Validate event is not in the past (allow same-day events)
+  const eventDate = new Date(startsAt);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0); // Compare dates, not times
+  if (eventDate < now) {
+    return { error: "Event date can't be in the past. Pick a future date." };
+  }
+
   // Create event
   const { data: event, error: eventError } = await admin
     .from("events")
@@ -373,6 +381,17 @@ export async function publishEvent(eventId: string) {
   }
 
   const admin = createAdminClient();
+
+  // Verify event has at least 1 ticket tier
+  const { count: tierCount } = await admin
+    .from("ticket_tiers")
+    .select("*", { count: "exact", head: true })
+    .eq("event_id", eventId);
+
+  if (!tierCount || tierCount === 0) {
+    return { error: "Add at least one ticket tier before publishing. Your event needs a way for people to get in." };
+  }
+
   const { error } = await admin
     .from("events")
     .update({ status: "published" })

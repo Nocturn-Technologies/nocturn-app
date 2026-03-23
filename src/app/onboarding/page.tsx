@@ -88,13 +88,21 @@ export default function OnboardingPage() {
   // Call AI when entering thinking step
   useEffect(() => {
     if (step === "thinking") {
-      generateOnboardingSuggestions(name, city).then((result) => {
-        setBio(result.bio);
-        setInstagramCaption(result.instagramCaption);
-        setWelcomeMessage(result.welcomeMessage);
-        // Minimum 2s for the thinking feel
-        setTimeout(() => setStep("suggestions"), 2000);
-      });
+      generateOnboardingSuggestions(name, city)
+        .then((result) => {
+          setBio(result.bio);
+          setInstagramCaption(result.instagramCaption);
+          setWelcomeMessage(result.welcomeMessage);
+          // Minimum 2s for the thinking feel
+          setTimeout(() => setStep("suggestions"), 2000);
+        })
+        .catch(() => {
+          // AI failed — use sensible defaults so user isn't stuck
+          setBio(`${name} is a music collective based in ${city}.`);
+          setInstagramCaption(`Something new is coming to ${city}. Stay tuned. 🌙`);
+          setWelcomeMessage(`Let's get ${name} set up!`);
+          setTimeout(() => setStep("suggestions"), 1000);
+        });
     }
   }, [step, name, city]);
 

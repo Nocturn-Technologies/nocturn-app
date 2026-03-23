@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import QRCode from "qrcode";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 
-const BASE_URL = "https://nocturn-app-navy.vercel.app";
+const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
 function createAdminClient() {
   return createClient(
@@ -16,7 +16,7 @@ function createAdminClient() {
 
 /**
  * Generate a QR code data URL for a ticket and persist it.
- * The QR encodes the check-in URL: https://nocturn-app-navy.vercel.app/check-in/{ticket_token}
+ * The QR encodes the check-in URL: {APP_URL}/check-in/{ticket_token}
  */
 export async function generateTicketQRCode(ticketToken: string) {
   const supabase = createAdminClient();

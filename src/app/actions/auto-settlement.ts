@@ -12,7 +12,8 @@ function createAdminClient() {
 
 const STRIPE_RATE = 0.029; // 2.9%
 const STRIPE_FIXED = 0.3; // $0.30 per ticket
-const PLATFORM_RATE = 0.05; // 5%
+// Platform fee: 7% + $0.50 per ticket — paid by BUYER, not deducted from organizer
+const PLATFORM_RATE = 0; // Organizer keeps 100% of ticket revenue
 
 export async function generateAutoSettlement(eventId: string) {
   const admin = createAdminClient();
