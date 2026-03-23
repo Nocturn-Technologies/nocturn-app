@@ -284,7 +284,7 @@ export default function ChatRoomPage() {
             <p className="text-[11px] text-nocturn">Event Channel</p>
           )}
         </div>
-        <Button variant="ghost" size="icon" className="-mr-2">
+        <Button variant="ghost" size="icon" className="-mr-2" aria-label="Channel settings">
           <Info size={20} className="text-muted-foreground" />
         </Button>
       </header>

@@ -129,7 +129,7 @@ export default function SettlementDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/dashboard/finance">
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Go back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
