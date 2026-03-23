@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/stripe";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { randomUUID } from "crypto";
+import QRCode from "qrcode";
 
 function createAdminClient() {
   return createClient(
@@ -11,7 +13,7 @@ function createAdminClient() {
   );
 }
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://nocturn-app-navy.vercel.app";
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
 interface CheckoutBody {
   eventId: string;
@@ -116,19 +118,104 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid ticket price" }, { status: 400 });
     }
 
-    // Free tickets — bypass Stripe
+    // Free tickets — bypass Stripe, create directly
     if (unitAmountCents === 0) {
-      // TODO: Create tickets directly for free events
-      return NextResponse.json(
-        { error: "Free ticket registration coming soon" },
-        { status: 400 }
-      );
+      const supabaseAdmin = createAdminClient();
+
+      // Build ticket records
+      const freeTickets = Array.from({ length: quantity }, () => ({
+        event_id: eventId,
+        ticket_tier_id: tierId,
+        user_id: null,
+        status: "paid" as const,
+        price_paid: 0,
+        currency: "usd",
+        stripe_payment_intent_id: null,
+        ticket_token: randomUUID(),
+        metadata: {
+          registration_type: "free",
+          customer_email: buyerEmail,
+        },
+      }));
+
+      const { data: insertedTickets, error: insertError } = await supabaseAdmin
+        .from("tickets")
+        .insert(freeTickets)
+        .select("id, ticket_token");
+
+      if (insertError) {
+        console.error("[checkout] Free ticket insert failed:", insertError);
+        return NextResponse.json(
+          { error: "Failed to register tickets" },
+          { status: 500 }
+        );
+      }
+
+      // Generate QR codes
+      if (insertedTickets && insertedTickets.length > 0) {
+        await Promise.allSettled(
+          insertedTickets.map(async (ticket) => {
+            try {
+              const checkInUrl = `${APP_URL}/check-in/${ticket.ticket_token}`;
+              const qrDataUrl = await QRCode.toDataURL(checkInUrl, {
+                width: 400,
+                margin: 2,
+                color: { dark: "#000000", light: "#ffffff" },
+                errorCorrectionLevel: "H",
+              });
+              await supabaseAdmin
+                .from("tickets")
+                .update({ qr_code: qrDataUrl })
+                .eq("id", ticket.id);
+            } catch (qrErr) {
+              console.error(`[checkout] QR failed for free ticket ${ticket.id}:`, qrErr);
+            }
+          })
+        );
+      }
+
+      // Send confirmation email
+      try {
+        const { sendTicketConfirmation } = await import("@/app/actions/email");
+        const { data: eventData } = await supabaseAdmin
+          .from("events")
+          .select("title, starts_at, venues(name)")
+          .eq("id", eventId)
+          .maybeSingle();
+
+        if (eventData) {
+          const venue = eventData.venues as unknown as { name: string } | null;
+          await sendTicketConfirmation({
+            to: buyerEmail,
+            eventTitle: eventData.title || "Event",
+            eventDate: new Date(eventData.starts_at).toLocaleDateString("en", {
+              weekday: "long", month: "long", day: "numeric", year: "numeric",
+            }),
+            venueName: venue?.name || "TBA",
+            tierName: tier.name || "Free",
+            quantity,
+            totalPrice: "Free",
+            ticketLink: `${APP_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+          });
+        }
+      } catch (emailErr) {
+        console.error("[checkout] Free ticket email failed (non-blocking):", emailErr);
+      }
+
+      // Redirect to success page
+      return NextResponse.json({
+        url: `${APP_URL}/e/success?free=true&tickets=${quantity}`,
+      });
     }
 
+    // Calculate buyer service fee: 7% + $0.50 per ticket
+    const serviceFeePerTicketCents = Math.round(unitAmountCents * (PLATFORM_FEE_PERCENT / 100)) + PLATFORM_FEE_FLAT_CENTS;
+    const totalPerTicketCents = unitAmountCents + serviceFeePerTicketCents;
+
     // Stripe minimum is $0.50 USD
-    if (unitAmountCents < 50) {
+    if (totalPerTicketCents < 50) {
       return NextResponse.json(
-        { error: "Ticket price must be at least $0.50" },
+        { error: "Ticket price too low to process" },
         { status: 400 }
       );
     }
@@ -137,6 +224,7 @@ export async function POST(request: NextRequest) {
     const cancelUrl = referer && referer.startsWith("http") ? referer : APP_URL;
 
     // All payments go to Nocturn platform account — payouts handled manually
+    // Buyer pays ticket price + service fee (7% + $0.50)
     const session = await getStripe().checkout.sessions.create({
       mode: "payment",
       customer_email: buyerEmail,
@@ -151,11 +239,23 @@ export async function POST(request: NextRequest) {
           },
           quantity,
         },
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: "Service fee",
+            },
+            unit_amount: serviceFeePerTicketCents,
+          },
+          quantity,
+        },
       ],
       metadata: {
         eventId,
         tierId,
         quantity: String(quantity),
+        ticketPriceCents: String(unitAmountCents),
+        serviceFeeCents: String(serviceFeePerTicketCents),
       },
       success_url: `${APP_URL}/e/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl,

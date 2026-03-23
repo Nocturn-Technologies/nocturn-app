@@ -23,5 +23,6 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
-// Platform fee percentage (Nocturn's cut)
-export const PLATFORM_FEE_PERCENT = 5;
+// Platform fee: 7% + $0.50 per ticket (buyer pays, organizer keeps 100%)
+export const PLATFORM_FEE_PERCENT = 7;
+export const PLATFORM_FEE_FLAT_CENTS = 50; // $0.50 per ticket

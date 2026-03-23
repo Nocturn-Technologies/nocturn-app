@@ -230,6 +230,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   const tierId = metadata.tierId;
   const quantity = parseInt(metadata.quantity, 10);
   const buyerEmail = metadata.buyerEmail || paymentIntent.receipt_email;
+  const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
   const supabase = createAdminClient();
 
@@ -285,7 +286,6 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   // Generate QR codes
   if (insertedTickets && insertedTickets.length > 0) {
-    const BASE_URL = "https://nocturn-app-navy.vercel.app";
     await Promise.allSettled(
       insertedTickets.map(async (ticket) => {
         try {
@@ -329,7 +329,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
           tierName: tierInfo?.name || "General Admission",
           quantity,
           totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
-          ticketLink: `https://nocturn-app-navy.vercel.app/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+          ticketLink: `${BASE_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
         });
       }
     }

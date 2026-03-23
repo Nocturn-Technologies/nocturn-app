@@ -52,12 +52,15 @@ export async function generateSettlement(eventId: string) {
     0
   );
 
-  // Stripe fees (~2.9% + $0.30 per transaction, approximate)
+  // Stripe processing fees (~2.9% + $0.30 per transaction, estimated)
   const ticketCount = tickets?.length ?? 0;
   const stripeFees = Math.round((grossRevenue * 0.029 + ticketCount * 0.30) * 100) / 100;
 
-  // Platform fee (5%)
-  const platformFee = Math.round(grossRevenue * (PLATFORM_FEE_PERCENT / 100) * 100) / 100;
+  // Platform fee: 7% + $0.50/ticket — BUT buyer pays this as a surcharge
+  // So the platform fee does NOT reduce the collective's revenue
+  // We track it for reporting but it comes from the service fee, not ticket revenue
+  const platformFee = 0; // Collective keeps 100% of ticket price
+  const nocturnRevenue = Math.round((grossRevenue * (PLATFORM_FEE_PERCENT / 100) + ticketCount * 0.50) * 100) / 100;
 
   // Get artist fees
   const { data: bookings } = await admin
@@ -125,12 +128,12 @@ export async function generateSettlement(eventId: string) {
     recipient_type: "platform",
   });
 
-  // Platform fee line
+  // Nocturn service fee (paid by buyer, not deducted from collective)
   lines.push({
     settlement_id: settlement.id,
     type: "platform_fee",
-    label: `Nocturn platform fee (${PLATFORM_FEE_PERCENT}%)`,
-    amount: platformFee,
+    label: `Nocturn service fee (${PLATFORM_FEE_PERCENT}% + $0.50/ticket — paid by buyer)`,
+    amount: nocturnRevenue,
     recipient_type: "platform",
   });
 
