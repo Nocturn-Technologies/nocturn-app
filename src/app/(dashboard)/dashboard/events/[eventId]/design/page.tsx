@@ -73,11 +73,14 @@ export default function EventDesignPage() {
   const [collectiveSlug, setCollectiveSlug] = useState("");
   const [eventSlug, setEventSlug] = useState("");
 
-  // AI poster generation
+  // AI poster generation — conversational flow
   const [generating, setGenerating] = useState(false);
-  const [styleDirection, setStyleDirection] = useState("");
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
   const [genError, setGenError] = useState<string | null>(null);
+  const [posterDJs, setPosterDJs] = useState("");
+  const [posterDate, setPosterDate] = useState("");
+  const [posterVenue, setPosterVenue] = useState("");
+  const [posterStyle, setPosterStyle] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -138,18 +141,30 @@ export default function EventDesignPage() {
     setGeneratedUrl(null);
 
     try {
+      // Build a rich style direction from all the conversational inputs
+      const details: string[] = [];
+      if (posterDJs) details.push(`DJs/Artists: ${posterDJs}`);
+      if (posterDate) details.push(`Date: ${posterDate}`);
+      if (posterVenue) details.push(`Venue: ${posterVenue}`);
+      if (posterStyle) details.push(`Style: ${posterStyle}`);
+
+      const fullStyleDirection = details.length > 0
+        ? details.join(". ") + ". Include the artist names and event details as bold typography in the poster design."
+        : undefined;
+
       // Step 1: Claude crafts the perfect prompt
       const { prompt } = await generatePosterPrompt({
         title: eventTitle,
         genre: vibeTags,
-        styleDirection: styleDirection || undefined,
+        venueName: posterVenue || undefined,
+        styleDirection: fullStyleDirection,
       });
 
-      // Step 2: Replicate generates the image
+      // Step 2: OpenAI generates the image
       const res = await fetch("/api/generate-poster", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, aspectRatio: "3:4" }),
+        body: JSON.stringify({ prompt }),
       });
 
       const data = await res.json();
@@ -266,25 +281,62 @@ export default function EventDesignPage() {
               </div>
             )}
 
-            {/* AI Generation controls */}
+            {/* AI Generation — conversational flow */}
             {!flyerUrl && !generatedUrl && (
-              <div className="rounded-2xl border-2 border-dashed border-nocturn/30 bg-nocturn/5 p-6 space-y-4">
-                <div className="text-center space-y-2">
-                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10">
-                    <Sparkles className="h-6 w-6 text-nocturn" />
+              <div className="rounded-2xl border border-nocturn/20 bg-nocturn/5 p-5 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-nocturn/10">
+                    <Sparkles className="h-5 w-5 text-nocturn" />
                   </div>
-                  <p className="text-sm font-medium">Generate with AI</p>
-                  <p className="text-xs text-muted-foreground">
-                    Describe the vibe and AI will create a poster
-                  </p>
+                  <div>
+                    <p className="text-sm font-semibold">AI Poster Generator</p>
+                    <p className="text-xs text-muted-foreground">Tell me about your event and I'll design the flyer</p>
+                  </div>
                 </div>
 
-                <Input
-                  placeholder="e.g. dark and moody, neon lights, futuristic..."
-                  value={styleDirection}
-                  onChange={(e) => setStyleDirection(e.target.value)}
-                  className="bg-card"
-                />
+                {/* DJ / Artist names */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Who's performing?</label>
+                  <Input
+                    placeholder="e.g. Marco Carola, Loco Dice, Jamie Jones"
+                    value={posterDJs}
+                    onChange={(e) => setPosterDJs(e.target.value)}
+                    className="bg-card"
+                  />
+                </div>
+
+                {/* Date */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Event date</label>
+                  <Input
+                    placeholder="e.g. Saturday March 29"
+                    value={posterDate}
+                    onChange={(e) => setPosterDate(e.target.value)}
+                    className="bg-card"
+                  />
+                </div>
+
+                {/* Venue */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Venue</label>
+                  <Input
+                    placeholder="e.g. Coda, Toronto"
+                    value={posterVenue}
+                    onChange={(e) => setPosterVenue(e.target.value)}
+                    className="bg-card"
+                  />
+                </div>
+
+                {/* Style direction */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Visual style</label>
+                  <Input
+                    placeholder="e.g. Circoloco DC-10 vibes, dark minimal, neon underground"
+                    value={posterStyle}
+                    onChange={(e) => setPosterStyle(e.target.value)}
+                    className="bg-card"
+                  />
+                </div>
 
                 {genError && (
                   <p className="text-sm text-red-400">{genError}</p>
@@ -293,12 +345,13 @@ export default function EventDesignPage() {
                 <Button
                   onClick={handleGeneratePoster}
                   disabled={generating}
-                  className="w-full bg-nocturn hover:bg-nocturn-light"
+                  className="w-full bg-nocturn hover:bg-nocturn-light py-5"
+                  size="lg"
                 >
                   {generating ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Generating poster...
+                      Designing your poster...
                     </>
                   ) : (
                     <>

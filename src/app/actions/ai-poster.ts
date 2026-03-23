@@ -23,15 +23,24 @@ GENRE-SPECIFIC AESTHETICS:
 - DNB/Jungle: chaotic energy, torn paper collage, rave flyer aesthetic, acidic greens and yellows, distortion
 - Disco/Funk: retro 70s, chrome, mirror balls, gradient sunsets, Studio 54 energy, bold geometric shapes
 
+TEXT & TYPOGRAPHY RULES:
+- If DJ/artist names are provided, INCLUDE them as bold stylized typography in the poster — this is the HEADLINE
+- If a date is provided, include it as a design element
+- If a venue is provided, include it smaller below the headline
+- The event title should be prominent
+- Typography should match the genre: brutalist sans-serif for techno, elegant serif for deep house, distressed/grungy for DNB, clean modern for house
+- Text should be INTEGRATED into the design, not floating — think real poster layout
+- Use creative text treatments: knockout text, gradient fills, distortion, layering with imagery
+
 CRITICAL RULES:
-- Do NOT include ANY text, words, letters, numbers, or typography in the image — the promoter adds their own branding
 - Do NOT make generic "DJ with headphones" or "crowd with hands up" images — that's amateur
 - Do NOT make it look like a stock photo or corporate event
-- Make it feel like a REAL underground event poster, not a template
+- Make it feel like a REAL underground event poster from a top-tier collective
+- The poster should look like something Circoloco, Afterlife, or Paradise would actually post
 - Keep the prompt under 250 words
 - Every poster should make someone stop scrolling
 
-Return ONLY the DALL-E image prompt. No explanation, no quotes, no preamble.`;
+Return ONLY the image generation prompt. No explanation, no quotes, no preamble.`;
 
 // Genre-to-visual style mapping for fallback prompts
 const GENRE_FALLBACKS: Record<string, string> = {
