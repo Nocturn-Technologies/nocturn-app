@@ -123,6 +123,10 @@ export async function generateAutoSettlement(eventId: string) {
       .single();
 
     if (settlementError) {
+      // Handle unique constraint violation (race — another process created it)
+      if (settlementError.code === "23505") {
+        return { error: null }; // Already exists, that's fine
+      }
       return { error: `Settlement insert failed: ${settlementError.message}` };
     }
 

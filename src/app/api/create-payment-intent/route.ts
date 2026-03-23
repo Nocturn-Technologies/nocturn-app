@@ -61,12 +61,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Ticket sales have ended" }, { status: 400 });
     }
 
-    // Check capacity
+    // Atomic capacity check with advisory lock
+    await supabase.rpc("acquire_ticket_lock", { p_tier_id: tierId });
+
     const { count: soldCount } = await supabase
       .from("tickets")
       .select("id", { count: "exact", head: true })
       .eq("ticket_tier_id", tierId)
-      .in("status", ["reserved", "paid", "checked_in"]);
+      .in("status", ["paid", "checked_in"]);
 
     const remaining = tier.capacity - (soldCount ?? 0);
     if (remaining < quantity) {

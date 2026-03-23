@@ -137,7 +137,7 @@ export default async function PublicEventPage({ params }: Props) {
       .from("tickets")
       .select("ticket_tier_id")
       .eq("event_id", event.id)
-      .in("status", ["paid", "checked_in", "reserved"]);
+      .in("status", ["paid", "checked_in"]);
 
     for (const t of tierTickets || []) {
       tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;

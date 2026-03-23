@@ -107,7 +107,18 @@ export async function generateSettlement(eventId: string) {
     .select("id")
     .single();
 
-  if (settlementError) return { error: settlementError.message };
+  if (settlementError) {
+    // Handle unique constraint violation (race condition — another process created it first)
+    if (settlementError.code === "23505") {
+      const { data: raceSettlement } = await admin
+        .from("settlements")
+        .select("id")
+        .eq("event_id", eventId)
+        .maybeSingle();
+      return { error: "Settlement already exists", settlementId: raceSettlement?.id };
+    }
+    return { error: settlementError.message };
+  }
 
   // Create line items
   const lines: Array<{

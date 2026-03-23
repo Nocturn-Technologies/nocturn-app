@@ -89,12 +89,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check remaining capacity
-    const { count: soldCount, error: countError } = await supabase
+    // Atomic capacity check — acquire advisory lock to prevent race conditions
+    // Two users buying the last ticket simultaneously will be serialized
+    const supabaseAdmin = createAdminClient();
+    await supabaseAdmin.rpc("acquire_ticket_lock", { p_tier_id: tierId });
+
+    const { count: soldCount, error: countError } = await supabaseAdmin
       .from("tickets")
       .select("id", { count: "exact", head: true })
       .eq("ticket_tier_id", tierId)
-      .in("status", ["reserved", "paid", "checked_in"]);
+      .in("status", ["paid", "checked_in"]);
 
     if (countError) {
       console.error("[checkout] Capacity check failed:", countError.message);
