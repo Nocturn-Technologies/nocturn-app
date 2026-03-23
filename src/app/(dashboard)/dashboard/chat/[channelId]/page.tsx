@@ -156,121 +156,32 @@ export default function ChatRoomPage() {
       content.toLowerCase().includes("@nocturn") || looksLikeQuestion(content);
 
     if (shouldRespond) {
-      // Show typing indicator after a short delay
-      setTimeout(() => {
-        setAiTyping(true);
-        scrollToBottom();
-      }, 500);
-
-      // Generate response after 1.5s
-      setTimeout(() => {
-        setAiTyping(false);
-        generateAIResponse(content);
-      }, 1500);
+      setAiTyping(true);
+      scrollToBottom();
+      await generateAIResponse(content);
+      setAiTyping(false);
     }
   };
 
-  // Generate smart AI response based on keywords
+  // Generate AI response using real Claude API + event data
   const generateAIResponse = async (userMessage: string) => {
     if (!channelId) return;
 
-    const lower = userMessage.toLowerCase();
     let aiContent: string;
 
-    // Financial questions
-    if (
-      lower.includes("money") || lower.includes("revenue") || lower.includes("cost") ||
-      lower.includes("p&l") || lower.includes("profit") || lower.includes("numbers") ||
-      lower.includes("budget") || lower.includes("spend") || lower.includes("price")
-    ) {
-      aiContent =
-        "Here's your financial summary:\n\n" +
-        "Projected Revenue: $12,400\n" +
-        "Total Costs: $7,850\n" +
-        " - Venue: $3,000\n" +
-        " - Artist Fees: $3,500\n" +
-        " - Production: $1,350\n\n" +
-        "Estimated Profit: $4,550 (36.7% margin)\n\n" +
-        "You're trending above your target. Keep pushing ticket sales this week.";
-    }
-    // Lineup / artist / DJ questions
-    else if (
-      lower.includes("who") || lower.includes("artist") || lower.includes("dj") ||
-      lower.includes("lineup") || lower.includes("performer") || lower.includes("talent")
-    ) {
-      aiContent =
-        "Here's the current lineup:\n\n" +
-        "1. DJ Mara — Headliner (confirmed)\n" +
-        "2. KVSH — Support (confirmed)\n" +
-        "3. Local opener — TBD (2 candidates)\n\n" +
-        "Headliner fee: $3,500 | Support: $1,200\n" +
-        "All riders submitted. Sound check at 4pm day-of.\n\n" +
-        "Want me to draft an offer to one of the local opener candidates?";
-    }
-    // Schedule / time questions
-    else if (
-      lower.includes("when") || lower.includes("time") || lower.includes("date") ||
-      lower.includes("schedule") || lower.includes("doors")
-    ) {
-      aiContent =
-        "Here's the event timeline:\n\n" +
-        "Doors: 10:00 PM\n" +
-        "Local Opener: 10:30 PM - 11:30 PM\n" +
-        "Support (KVSH): 11:45 PM - 1:00 AM\n" +
-        "Headliner (DJ Mara): 1:15 AM - 3:00 AM\n\n" +
-        "Sound check: 4:00 PM\n" +
-        "Load-in: 6:00 PM\n\n" +
-        "Should I share this with the team?";
-    }
-    // Venue / location questions
-    else if (
-      lower.includes("where") || lower.includes("venue") || lower.includes("location") ||
-      lower.includes("address") || lower.includes("club")
-    ) {
-      aiContent =
-        "Venue: Elsewhere (Zone One)\n" +
-        "Address: 599 Johnson Ave, Brooklyn, NY 11237\n\n" +
-        "Capacity: 300 (standing)\n" +
-        "Sound: L-Acoustics K2 system\n" +
-        "Deposit: $3,000 (paid)\n" +
-        "Curfew: 4:00 AM\n\n" +
-        "Green room and backstage confirmed. Want me to send load-in details to the artists?";
-    }
-    // Tickets / capacity / sales
-    else if (
-      lower.includes("ticket") || lower.includes("capacity") || lower.includes("sold") ||
-      lower.includes("sales") || lower.includes("ga") || lower.includes("vip")
-    ) {
-      aiContent =
-        "Ticket sales breakdown:\n\n" +
-        "GA ($25): 97/200 sold\n" +
-        "VIP ($60): 30/50 sold\n" +
-        "Total: 127/300 (42%)\n\n" +
-        "Revenue so far: $4,225\n" +
-        "Projected at current pace: $8,900\n\n" +
-        "Tip: Last push with an IG story countdown usually drives 15-20% more sales in the final week.";
-    }
-    // Promo / marketing
-    else if (
-      lower.includes("draft") || lower.includes("promo") || lower.includes("caption") ||
-      lower.includes("marketing") || lower.includes("post") || lower.includes("flyer")
-    ) {
-      aiContent =
-        "Here's a promo draft:\n\n" +
-        "The night you've been waiting for is almost here. " +
-        "Join us for an unforgettable lineup, immersive vibes, and a crowd that gets it. " +
-        "Limited tickets remaining — don't sleep on this one.\n\n" +
-        "Early bird pricing ends Friday. Link in bio.\n\n" +
-        "Want me to create variations for IG stories and Twitter?";
-    }
-    // Default helpful response
-    else {
-      aiContent =
-        "I'm on it! Based on your event details, here are my recommendations:\n\n" +
-        "1. Focus on ticket sales — you're at 42% with 2 weeks to go\n" +
-        "2. The venue confirmed sound and lighting specs\n" +
-        "3. Consider adding a VIP tier to boost revenue\n\n" +
-        "What would you like me to dig into?";
+    try {
+      const { generateChatResponse } = await import("@/app/actions/ai-chat");
+
+      // Build recent messages for context
+      const recentMsgs = messages.slice(-10).map((m) => ({
+        role: m.type === "ai" ? "assistant" : "user",
+        content: m.content,
+      }));
+
+      aiContent = await generateChatResponse(channelId, userMessage, recentMsgs);
+    } catch (err) {
+      console.error("[chat] AI response error:", err);
+      aiContent = "I'm having trouble connecting right now. Try asking again in a moment.";
     }
 
     const { data } = await supabase

@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { PLATFORM_FEE_PERCENT } from "@/lib/stripe";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { generateWithClaude } from "@/lib/claude";
 
 function createAdminClient() {
   return createClient(
@@ -44,6 +45,7 @@ export interface ForecastData {
 
   // AI insights
   insights: string[];
+  aiNarrative: string;
 }
 
 // Pre-event financial forecast
@@ -193,6 +195,26 @@ export async function generateEventForecast(eventId: string): Promise<{
     insights.push("💡 No expenses logged yet. Add costs for a more accurate profit forecast.");
   }
 
+  // AI narrative — send computed data to Claude for a plain-English summary
+  const ticketsPerDay = daysUntilEvent > 0 && ticketsSoldSoFar > 0
+    ? ticketsSoldSoFar / Math.max(1, Math.ceil((Date.now() - new Date(event.starts_at).getTime() + daysUntilEvent * 86400000) / 86400000 - daysUntilEvent))
+    : 0;
+
+  const forecastPrompt = `You are a concise financial advisor for a nightlife event promoter. Given this event forecast data, write a 2-3 sentence plain English explanation of where ticket sales stand and the financial outlook, followed by exactly 2 tactical recommendations. Be specific with numbers. No headers, no bullet points — just a short paragraph.
+
+Event: "${event.title}"
+Days until event: ${daysUntilEvent}
+Tickets sold: ${ticketsSoldSoFar} of ${totalCapacity} (${Math.round(sellThroughRate * 100)}% sell-through)
+Ticket velocity: ~${Math.round(ticketsPerDay)} tickets/day
+Projected revenue: $${projectedRevenue.toFixed(2)}
+Projected profit: $${projectedProfit.toFixed(2)}
+Break-even: ${breakEvenTickets} tickets (${breakEvenTickets <= ticketsSoldSoFar ? "ALREADY HIT" : `${breakEvenTickets - ticketsSoldSoFar} more needed`})
+Artist fees: $${artistFees.toFixed(2)}
+Other expenses: $${estimatedExpenses.toFixed(2)}
+Tier breakdown: ${tierData.map(t => `${t.name}: ${t.sold}/${t.capacity} @ $${t.price}`).join(", ")}`;
+
+  const aiNarrative = await generateWithClaude(forecastPrompt) ?? "";
+
   return {
     error: null,
     forecast: {
@@ -211,6 +233,7 @@ export async function generateEventForecast(eventId: string): Promise<{
       breakEvenTickets,
       tiers: tierData,
       insights,
+      aiNarrative,
     },
   };
 }
@@ -418,6 +441,62 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   }
   if (pastEvents && pastEvents.length > 0 && ticketsSold > avgPastSellThrough) {
     highlights.push("📈 Outperformed your average event");
+  }
+
+  // AI enhancement — send gathered data to Claude for deeper insights
+  const recapPrompt = `You are a concise post-event analyst for a nightlife promoter. Analyze this event data and respond in EXACTLY this JSON format (no markdown, no code fences):
+{"worked":["thing1","thing2","thing3"],"improve":["thing1","thing2","thing3"],"actions":[{"title":"...","description":"...","priority":"high|medium|low","category":"finance|marketing|operations|growth"},{"title":"...","description":"...","priority":"...","category":"..."},{"title":"...","description":"...","priority":"...","category":"..."},{"title":"...","description":"...","priority":"...","category":"..."},{"title":"...","description":"...","priority":"...","category":"..."}]}
+
+Event: "${event.title}" at ${venue ? `${venue.name}, ${venue.city}` : "N/A"}
+Date: ${new Date(event.starts_at).toLocaleDateString()}
+Tickets sold: ${ticketsSold} of ${capacity} (${Math.round(sellThrough * 100)}% sell-through)
+Gross revenue: $${grossRevenue.toFixed(2)}
+Net profit: $${netProfit.toFixed(2)}
+Avg ticket price: $${avgTicketPrice.toFixed(2)}
+Check-in rate: ${Math.round(checkInRate * 100)}% (${checkedIn} checked in, ${noShows} no-shows)
+Past events by this collective: ${pastEvents?.length ?? 0}
+${pastEvents && pastEvents.length > 0 ? `Avg past attendance: ${Math.round(avgPastSellThrough)}` : "First event for this collective"}
+
+Give specific, actionable advice. Reference the actual numbers.`;
+
+  const aiRecapRaw = await generateWithClaude(recapPrompt);
+
+  if (aiRecapRaw) {
+    try {
+      const aiRecap = JSON.parse(aiRecapRaw) as {
+        worked?: string[];
+        improve?: string[];
+        actions?: Array<{ title: string; description: string; priority: string; category: string }>;
+      };
+
+      // Merge AI highlights with existing ones
+      if (aiRecap.worked) {
+        for (const item of aiRecap.worked) {
+          highlights.push(`✨ ${item}`);
+        }
+      }
+      if (aiRecap.improve) {
+        for (const item of aiRecap.improve) {
+          highlights.push(`🔧 ${item}`);
+        }
+      }
+
+      // Merge AI action items with existing ones
+      if (aiRecap.actions) {
+        for (const action of aiRecap.actions) {
+          const priority = (["high", "medium", "low"].includes(action.priority) ? action.priority : "medium") as "high" | "medium" | "low";
+          actionItems.push({
+            title: action.title,
+            description: action.description,
+            priority,
+            category: action.category || "growth",
+          });
+        }
+      }
+    } catch {
+      // JSON parse failed — keep rule-based insights only
+      console.error("Failed to parse AI recap response");
+    }
   }
 
   return {

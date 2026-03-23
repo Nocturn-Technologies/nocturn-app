@@ -26,6 +26,13 @@ interface FinancialPulseData {
   recentEvents: Array<{ title: string; profit: number }>;
 }
 
+interface BriefingItem {
+  emoji: string;
+  text: string;
+  priority: "urgent" | "high" | "normal";
+  link: string;
+}
+
 interface DashboardHomeProps {
   firstName: string;
   collectiveName: string;
@@ -37,6 +44,7 @@ interface DashboardHomeProps {
   totalRevenue: number;
   totalAttendees: number;
   financialPulse: FinancialPulseData;
+  briefing?: BriefingItem[];
 }
 
 function getGreeting(): string {
@@ -192,6 +200,36 @@ export function DashboardHome(props: DashboardHomeProps) {
         </div>
         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{message}</p>
       </div>
+
+      {/* AI Briefing */}
+      {props.briefing && props.briefing.length > 0 && (
+        <Card className="border-nocturn/30 bg-nocturn/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="h-4 w-4 text-nocturn" />
+              <span className="text-xs font-semibold uppercase tracking-wider text-nocturn">AI Briefing</span>
+            </div>
+            <div className="space-y-2">
+              {props.briefing.map((item, i) => (
+                <Link
+                  key={i}
+                  href={item.link}
+                  className={`flex items-start gap-2.5 rounded-lg p-2 -mx-2 transition-colors hover:bg-white/5 ${
+                    item.priority === "urgent"
+                      ? "text-red-400"
+                      : item.priority === "high"
+                        ? "text-yellow-400"
+                        : "text-muted-foreground"
+                  }`}
+                >
+                  <span className="text-base shrink-0 mt-0.5">{item.emoji}</span>
+                  <span className="text-sm leading-snug">{item.text}</span>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Quick Actions — horizontal scroll on mobile */}
       <div className="delay-50">

@@ -3,6 +3,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { DashboardHome } from "@/components/dashboard-home";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { getFinancialPulse } from "@/app/actions/finance-pulse";
+import { generateMorningBriefing } from "@/app/actions/ai-briefing";
 
 function createAdminClient() {
   return createClient(
@@ -110,8 +111,12 @@ export default async function DashboardPage() {
     );
   }
 
-  // Financial Pulse
-  const financialPulse = await getFinancialPulse();
+  // Financial Pulse + AI Briefing (parallel)
+  const collectiveId = collectiveIds[0] || "";
+  const [financialPulse, briefing] = await Promise.all([
+    getFinancialPulse(),
+    collectiveId ? generateMorningBriefing(collectiveId).catch(() => []) : Promise.resolve([]),
+  ]);
 
   // Attendee count
   let totalAttendees = 0;
@@ -145,6 +150,7 @@ export default async function DashboardPage() {
       totalRevenue={totalRevenue}
       totalAttendees={totalAttendees}
       financialPulse={financialPulse}
+      briefing={briefing}
     />
   );
 }
