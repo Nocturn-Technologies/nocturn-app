@@ -63,7 +63,7 @@ interface SavedVenue {
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
-const FILTERS: FilterChip[] = ["All", "Club", "Bar", "Warehouse", "Gallery", "Rooftop"];
+const FILTERS: FilterChip[] = ["All", "Club", "Bar", "Warehouse", "Gallery", "Rooftop", "Live Music", "Underground"];
 
 const TYPE_COLORS: Record<string, string> = {
   Club: "bg-purple-500/20 text-purple-300",
@@ -71,6 +71,8 @@ const TYPE_COLORS: Record<string, string> = {
   Warehouse: "bg-emerald-500/20 text-emerald-300",
   Gallery: "bg-pink-500/20 text-pink-300",
   Rooftop: "bg-sky-500/20 text-sky-300",
+  "Live Music": "bg-orange-500/20 text-orange-300",
+  Underground: "bg-red-500/20 text-red-300",
 };
 
 const GRADIENT_COLORS = [
@@ -443,117 +445,38 @@ export default function VenuesPage() {
         </div>
       )}
 
-      {/* ── Detail sheet ─────────────────────────────────────────────────── */}
+      {/* ── Detail sheet — bottom on mobile, right on desktop ──────────── */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        {/* Mobile: bottom sheet */}
+        <SheetContent
+          side="bottom"
+          className="max-h-[85vh] overflow-y-auto rounded-t-2xl md:hidden"
+        >
           {selectedVenue && (
-            <>
-              <SheetHeader>
-                <SheetTitle className="text-lg font-bold">
-                  {selectedVenue.name}
-                </SheetTitle>
-                <SheetDescription className="flex items-center gap-2">
-                  <TypeBadge type={selectedVenue.venue_type} />
-                  <span>{selectedVenue.neighbourhood}</span>
-                </SheetDescription>
-              </SheetHeader>
-
-              <div className="space-y-5 px-4 pb-6">
-                {/* Rating bar */}
-                <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
-                  <div className="flex items-center gap-1.5">
-                    <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
-                    <span className="text-lg font-bold text-amber-500">
-                      {selectedVenue.rating.toFixed(1)}
-                    </span>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {selectedVenue.review_count.toLocaleString()} reviews
-                  </span>
-                  {selectedVenue.capacity && (
-                    <div className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground">
-                      <Users className="h-4 w-4" />
-                      <span>{selectedVenue.capacity.toLocaleString()} cap</span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Details list */}
-                <div className="space-y-3">
-                  <DetailRow icon={MapPin} label={selectedVenue.address} />
-                  {selectedVenue.phone && (
-                    <DetailRow icon={Phone} label={selectedVenue.phone} />
-                  )}
-                  {selectedVenue.website && (
-                    <DetailRow
-                      icon={Globe}
-                      label={selectedVenue.website.replace(/^https?:\/\//, "")}
-                      href={selectedVenue.website}
-                    />
-                  )}
-                  {selectedVenue.hours && selectedVenue.hours.length > 0 && (
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2.5 text-sm">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">Hours</span>
-                      </div>
-                      <div className="ml-[26px] space-y-0.5">
-                        {selectedVenue.hours.map((h) => (
-                          <div
-                            key={h.day}
-                            className="flex justify-between text-xs text-muted-foreground"
-                          >
-                            <span>{h.day}</span>
-                            <span>
-                              {h.open} - {h.close}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Action buttons */}
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    onClick={() =>
-                      savedIds.has(selectedVenue.place_id)
-                        ? handleRemove(selectedVenue.place_id)
-                        : handleSave(selectedVenue)
-                    }
-                    disabled={savingId === selectedVenue.place_id}
-                    className={`flex-1 ${
-                      savedIds.has(selectedVenue.place_id)
-                        ? "bg-destructive/15 text-destructive hover:bg-destructive/25"
-                        : "bg-nocturn hover:bg-nocturn-light text-white"
-                    }`}
-                    variant={savedIds.has(selectedVenue.place_id) ? "outline" : "default"}
-                  >
-                    {savingId === selectedVenue.place_id ? (
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    ) : savedIds.has(selectedVenue.place_id) ? (
-                      <>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Remove
-                      </>
-                    ) : (
-                      <>
-                        <Heart className="mr-2 h-4 w-4" />
-                        Save to My Venues
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => openDirections(selectedVenue)}
-                  >
-                    <Navigation className="mr-2 h-4 w-4" />
-                    Directions
-                  </Button>
-                </div>
-              </div>
-            </>
+            <VenueDetailContent
+              venue={selectedVenue}
+              savedIds={savedIds}
+              savingId={savingId}
+              onSave={() => handleSave(selectedVenue)}
+              onRemove={() => handleRemove(selectedVenue.place_id)}
+              onDirections={() => openDirections(selectedVenue)}
+            />
+          )}
+        </SheetContent>
+        {/* Desktop: right panel */}
+        <SheetContent
+          side="right"
+          className="hidden w-full sm:max-w-md overflow-y-auto md:flex md:flex-col"
+        >
+          {selectedVenue && (
+            <VenueDetailContent
+              venue={selectedVenue}
+              savedIds={savedIds}
+              savingId={savingId}
+              onSave={() => handleSave(selectedVenue)}
+              onRemove={() => handleRemove(selectedVenue.place_id)}
+              onDirections={() => openDirections(selectedVenue)}
+            />
           )}
         </SheetContent>
       </Sheet>
@@ -571,6 +494,128 @@ export default function VenuesPage() {
 }
 
 // ─── Sub-components ─────────────────────────────────────────────────────────
+
+function VenueDetailContent({
+  venue,
+  savedIds,
+  savingId,
+  onSave,
+  onRemove,
+  onDirections,
+}: {
+  venue: VenueResult;
+  savedIds: Set<string>;
+  savingId: string | null;
+  onSave: () => void;
+  onRemove: () => void;
+  onDirections: () => void;
+}) {
+  const isSaved = savedIds.has(venue.place_id);
+  const isSaving = savingId === venue.place_id;
+
+  return (
+    <>
+      <SheetHeader>
+        <SheetTitle className="text-lg font-bold truncate pr-8">
+          {venue.name}
+        </SheetTitle>
+        <SheetDescription className="flex items-center gap-2">
+          <TypeBadge type={venue.venue_type} />
+          <span className="truncate">{venue.neighbourhood}</span>
+        </SheetDescription>
+      </SheetHeader>
+
+      <div className="space-y-5 px-4 pb-6">
+        {/* Rating bar */}
+        <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
+          <div className="flex items-center gap-1.5">
+            <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
+            <span className="text-lg font-bold text-amber-500">
+              {venue.rating.toFixed(1)}
+            </span>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {venue.review_count.toLocaleString()} reviews
+          </span>
+          {venue.capacity && (
+            <div className="ml-auto flex items-center gap-1.5 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              <span>{venue.capacity.toLocaleString()} cap</span>
+            </div>
+          )}
+        </div>
+
+        {/* Details list */}
+        <div className="space-y-3">
+          <DetailRow icon={MapPin} label={venue.address} />
+          {venue.phone && (
+            <DetailRow icon={Phone} label={venue.phone} />
+          )}
+          {venue.website && (
+            <DetailRow
+              icon={Globe}
+              label={venue.website.replace(/^https?:\/\//, "")}
+              href={venue.website}
+            />
+          )}
+          {venue.hours && venue.hours.length > 0 && (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2.5 text-sm">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">Hours</span>
+              </div>
+              <div className="ml-[26px] space-y-0.5">
+                {venue.hours.map((h) => (
+                  <div
+                    key={h.day}
+                    className="flex justify-between text-xs text-muted-foreground"
+                  >
+                    <span>{h.day}</span>
+                    <span>
+                      {h.open} - {h.close}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-3 pt-2">
+          <Button
+            onClick={() => (isSaved ? onRemove() : onSave())}
+            disabled={isSaving}
+            className={`flex-1 ${
+              isSaved
+                ? "bg-destructive/15 text-destructive hover:bg-destructive/25"
+                : "bg-nocturn hover:bg-nocturn-light text-white"
+            }`}
+            variant={isSaved ? "outline" : "default"}
+          >
+            {isSaving ? (
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            ) : isSaved ? (
+              <>
+                <Trash2 className="mr-2 h-4 w-4" />
+                Remove
+              </>
+            ) : (
+              <>
+                <Heart className="mr-2 h-4 w-4" />
+                Save to My Venues
+              </>
+            )}
+          </Button>
+          <Button variant="secondary" onClick={onDirections}>
+            <Navigation className="mr-2 h-4 w-4" />
+            Directions
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+}
 
 function TabButton({
   active,
@@ -671,18 +716,18 @@ function VenueCard({
       </div>
 
       {/* Info */}
-      <CardContent className="space-y-1.5 p-3">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="text-base font-semibold leading-tight">{venue.name}</h3>
+      <CardContent className="space-y-1.5 p-3 min-w-0">
+        <div className="flex items-start justify-between gap-2 min-w-0">
+          <h3 className="text-base font-semibold leading-tight truncate">{venue.name}</h3>
           <RatingStars rating={venue.rating} />
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
           <MapPin className="h-3 w-3 shrink-0" />
           <span className="truncate">{venue.neighbourhood}</span>
           {venue.review_count > 0 && (
             <>
-              <span className="text-muted-foreground/30">|</span>
-              <span>{venue.review_count.toLocaleString()} reviews</span>
+              <span className="shrink-0 text-muted-foreground/30">|</span>
+              <span className="shrink-0">{venue.review_count.toLocaleString()} reviews</span>
             </>
           )}
         </div>
@@ -803,9 +848,9 @@ function DetailRow({
   href?: string;
 }) {
   const content = (
-    <div className="flex items-start gap-2.5 text-sm">
+    <div className="flex items-start gap-2.5 text-sm min-w-0">
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className={href ? "text-nocturn" : "text-foreground"}>{label}</span>
+      <span className={`truncate ${href ? "text-nocturn" : "text-foreground"}`}>{label}</span>
     </div>
   );
 

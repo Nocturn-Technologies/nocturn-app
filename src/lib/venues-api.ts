@@ -4,10 +4,10 @@
 
 import { MOCK_VENUES, type VenueResult } from "./mock-venues";
 
-export type VenueType = "Club" | "Bar" | "Warehouse" | "Gallery" | "Rooftop";
+export type VenueType = "Club" | "Bar" | "Warehouse" | "Gallery" | "Rooftop" | "Live Music" | "Underground";
 export type { VenueResult } from "./mock-venues";
 
-const ALL_TYPES: VenueType[] = ["Club", "Bar", "Warehouse", "Gallery", "Rooftop"];
+const ALL_TYPES: VenueType[] = ["Club", "Bar", "Warehouse", "Gallery", "Rooftop", "Live Music", "Underground"];
 
 /**
  * Search venues by query string and optional type filter.
