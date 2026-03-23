@@ -1,40 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
-import Replicate from "replicate";
+import OpenAI from "openai";
 
-const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 export async function POST(request: NextRequest) {
-  if (!REPLICATE_API_TOKEN) {
+  if (!OPENAI_API_KEY) {
     return NextResponse.json(
-      { error: "Image generation is not configured. Add REPLICATE_API_TOKEN to environment variables." },
+      { error: "Image generation is not configured. Add OPENAI_API_KEY to environment variables." },
       { status: 503 }
     );
   }
 
   try {
-    const { prompt, aspectRatio } = await request.json();
+    const { prompt } = await request.json();
 
     if (!prompt) {
       return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
     }
 
-    const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
+    const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
-    // Use Flux Schnell for fast generation (~2-4 seconds)
-    const output = await replicate.run("black-forest-labs/flux-schnell", {
-      input: {
-        prompt,
-        num_outputs: 1,
-        aspect_ratio: aspectRatio || "3:4", // Portrait for posters
-        output_format: "webp",
-        output_quality: 90,
-      },
+    const response = await openai.images.generate({
+      model: "dall-e-3",
+      prompt,
+      n: 1,
+      size: "1024x1792", // Portrait for posters
+      quality: "standard",
     });
 
-    // Flux returns an array of URLs
-    const images = output as string[];
+    const imageUrl = response.data?.[0]?.url;
 
-    if (!images || images.length === 0) {
+    if (!imageUrl) {
       return NextResponse.json(
         { error: "No image generated. Try a different prompt." },
         { status: 500 }
@@ -42,7 +38,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      imageUrl: images[0],
+      imageUrl,
       prompt,
     });
   } catch (error) {
