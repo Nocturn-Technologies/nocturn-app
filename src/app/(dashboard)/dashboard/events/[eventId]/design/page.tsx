@@ -101,6 +101,12 @@ export default function EventDesignPage() {
       const meta = (e.metadata ?? {}) as Record<string, string>;
       setDressCode(meta.dressCode ?? "");
       setThemeColor(meta.themeColor ?? "#7B2FF7");
+
+      // Auto-fill poster fields from event data
+      if (e.artistNames?.length > 0) setPosterDJs(e.artistNames.join(", "));
+      if (e.dateDisplay) setPosterDate(e.dateDisplay);
+      if (e.venueName) setPosterVenue([e.venueName, e.venueCity].filter(Boolean).join(", "));
+
       setLoading(false);
     }
     load();

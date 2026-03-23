@@ -509,12 +509,19 @@ export async function getEventDesign(eventId: string) {
   if (ownership.error) return { error: ownership.error, event: null };
 
   const admin = createAdminClient();
-  const { data: event } = await admin
-    .from("events")
-    .select("id, title, slug, description, flyer_url, vibe_tags, min_age, metadata, collective_id")
-    .eq("id", eventId)
-    .maybeSingle();
+  const [eventRes, artistsRes] = await Promise.all([
+    admin
+      .from("events")
+      .select("id, title, slug, description, flyer_url, vibe_tags, min_age, metadata, collective_id, starts_at, venues(name, city)")
+      .eq("id", eventId)
+      .maybeSingle(),
+    admin
+      .from("event_artists")
+      .select("artists(name)")
+      .eq("event_id", eventId),
+  ]);
 
+  const event = eventRes.data;
   if (!event) return { error: "Event not found.", event: null };
 
   // Get collective slug for preview link
@@ -524,11 +531,25 @@ export async function getEventDesign(eventId: string) {
     .eq("id", event.collective_id)
     .maybeSingle();
 
+  // Extract artist names and venue for poster pre-fill
+  const venue = event.venues as unknown as { name: string; city: string } | null;
+  const artistNames = (artistsRes.data || [])
+    .map((a) => (a.artists as unknown as { name: string })?.name)
+    .filter(Boolean);
+
+  const dateDisplay = event.starts_at
+    ? new Date(event.starts_at).toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })
+    : null;
+
   return {
     error: null,
     event: {
       ...event,
       collectiveSlug: collective?.slug ?? null,
+      venueName: venue?.name ?? null,
+      venueCity: venue?.city ?? null,
+      artistNames,
+      dateDisplay,
     },
   };
 }
