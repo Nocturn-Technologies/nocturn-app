@@ -3,7 +3,10 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Sparkles, Hash, Pin, Mic, Calendar, MessageSquare } from "lucide-react";
+import { Sparkles, Hash, Pin, Mic, Calendar, MessageSquare, Users, Plus, Search, Loader2, X } from "lucide-react";
+import { getCollabChannels, searchCollectives, startCollabChat } from "@/app/actions/collab";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface Channel {
   id: string;
@@ -26,7 +29,14 @@ export default function ChatPage() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelWithMeta[]>([]);
+  const [collabChannels, setCollabChannels] = useState<ChannelWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCollabSearch, setShowCollabSearch] = useState(false);
+  const [collabQuery, setCollabQuery] = useState("");
+  const [collabResults, setCollabResults] = useState<Array<{ id: string; name: string; slug: string; city: string | null; logo_url: string | null }>>([]);
+  const [collabSearching, setCollabSearching] = useState(false);
+  const [startingCollab, setStartingCollab] = useState<string | null>(null);
+  const [myCollectiveId, setMyCollectiveId] = useState<string | null>(null);
 
   // Get current user
   useEffect(() => {
@@ -51,6 +61,7 @@ export default function ChatPage() {
     }
 
     const collectiveId = collectiveIds[0];
+    setMyCollectiveId(collectiveId);
 
     // Check if general channel exists, create if not
     const { data: existingGeneral } = await supabase
@@ -149,6 +160,34 @@ export default function ChatPage() {
     );
 
     setChannels(channelsWithMeta);
+
+    // Load collab channels
+    try {
+      const collabs = await getCollabChannels(collectiveId);
+      const collabsWithMeta: ChannelWithMeta[] = await Promise.all(
+        (collabs ?? []).map(async (ch) => {
+          const { data: msgs } = await supabase
+            .from("messages")
+            .select("content, created_at, type")
+            .eq("channel_id", ch.id)
+            .order("created_at", { ascending: false })
+            .limit(1);
+
+          const lastMsg = msgs?.[0];
+          return {
+            ...ch,
+            last_message: lastMsg?.content,
+            last_message_at: lastMsg?.created_at,
+            unread: false,
+            unread_count: 0,
+          };
+        })
+      );
+      setCollabChannels(collabsWithMeta);
+    } catch {
+      // Collab channels failed — non-critical
+    }
+
     setLoading(false);
   }, [userId, supabase]);
 
@@ -327,6 +366,138 @@ export default function ChatPage() {
                 ))}
               </div>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Collab channels — cross-collective chats */}
+      {!loading && (
+        <div className="mt-6">
+          <div className="flex items-center justify-between mb-3 px-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+              <Users size={12} />
+              Collabs
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowCollabSearch(!showCollabSearch)}
+              className="text-nocturn text-xs h-7"
+            >
+              {showCollabSearch ? <X className="h-3 w-3 mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+              {showCollabSearch ? "Cancel" : "New Collab"}
+            </Button>
+          </div>
+
+          {/* Search for collectives to collab with */}
+          {showCollabSearch && (
+            <div className="mb-4 space-y-3 animate-fade-in-up">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search collectives to collab with..."
+                  value={collabQuery}
+                  onChange={async (e) => {
+                    setCollabQuery(e.target.value);
+                    if (e.target.value.length >= 2 && myCollectiveId) {
+                      setCollabSearching(true);
+                      const results = await searchCollectives(e.target.value, myCollectiveId);
+                      setCollabResults(results);
+                      setCollabSearching(false);
+                    } else {
+                      setCollabResults([]);
+                    }
+                  }}
+                  className="pl-9"
+                  autoFocus
+                />
+              </div>
+              {collabSearching && (
+                <div className="flex justify-center py-3">
+                  <Loader2 className="h-4 w-4 animate-spin text-nocturn" />
+                </div>
+              )}
+              {collabResults.length > 0 && (
+                <div className="space-y-1">
+                  {collabResults.map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={async () => {
+                        if (!myCollectiveId || startingCollab) return;
+                        setStartingCollab(c.id);
+                        const result = await startCollabChat(myCollectiveId, c.id);
+                        if (result.channelId) {
+                          setShowCollabSearch(false);
+                          setCollabQuery("");
+                          setCollabResults([]);
+                          // Navigate to the new channel
+                          window.location.href = `/dashboard/chat/${result.channelId}`;
+                        }
+                        setStartingCollab(null);
+                      }}
+                      disabled={startingCollab === c.id}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-border hover:border-nocturn/30 hover:bg-accent/50 transition-all text-left"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-nocturn/10 flex items-center justify-center shrink-0 text-sm font-bold text-nocturn">
+                        {c.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{c.name}</p>
+                        {c.city && <p className="text-xs text-muted-foreground">{c.city}</p>}
+                      </div>
+                      {startingCollab === c.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-nocturn shrink-0" />
+                      ) : (
+                        <span className="text-xs text-nocturn font-medium shrink-0">Chat →</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {collabQuery.length >= 2 && !collabSearching && collabResults.length === 0 && (
+                <p className="text-center text-sm text-muted-foreground py-3">
+                  No collectives found matching &quot;{collabQuery}&quot;
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Existing collab channels */}
+          {collabChannels.length > 0 ? (
+            <div className="space-y-2">
+              {collabChannels.map((ch) => (
+                <Link
+                  key={ch.id}
+                  href={`/dashboard/chat/${ch.id}`}
+                  className="flex items-center gap-3 p-4 rounded-2xl bg-card border border-border hover:border-nocturn/30 hover:bg-accent/50 transition-all min-h-[72px] active:scale-[0.98]"
+                >
+                  <div className="w-12 h-12 rounded-full bg-nocturn/10 flex items-center justify-center shrink-0">
+                    <Users size={20} className="text-nocturn" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate text-[15px] leading-tight">{ch.name}</p>
+                    {ch.last_message ? (
+                      <p className="text-[13px] text-muted-foreground truncate mt-0.5">{ch.last_message}</p>
+                    ) : (
+                      <p className="text-[13px] text-muted-foreground/40 mt-0.5">Start the conversation</p>
+                    )}
+                  </div>
+                  {ch.last_message_at && (
+                    <span className="text-[11px] text-muted-foreground shrink-0">
+                      {formatTime(ch.last_message_at)}
+                    </span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          ) : !showCollabSearch && (
+            <button
+              onClick={() => setShowCollabSearch(true)}
+              className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl border border-dashed border-border hover:border-nocturn/30 text-muted-foreground hover:text-nocturn transition-all"
+            >
+              <Users size={18} />
+              <span className="text-sm">Find collectives to collab with</span>
+            </button>
           )}
         </div>
       )}
