@@ -166,13 +166,6 @@ export async function POST(request: NextRequest) {
     const errMsg = error instanceof Error ? error.message : "Unknown error";
     console.error("[checkout] Error:", errMsg);
 
-    if (errMsg.includes("STRIPE_SECRET_KEY") || errMsg.includes("not configured")) {
-      return NextResponse.json(
-        { error: "Payments are not yet configured." },
-        { status: 503 }
-      );
-    }
-
     return NextResponse.json(
       { error: "Something went wrong processing your payment. Please try again." },
       { status: 500 }

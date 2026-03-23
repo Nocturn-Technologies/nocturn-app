@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, STRIPE_WEBHOOK_SECRET } from "@/lib/stripe";
 import Stripe from "stripe";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     event = getStripe().webhooks.constructEvent(
       body,
       signature,
-      process.env.STRIPE_WEBHOOK_SECRET!
+      STRIPE_WEBHOOK_SECRET
     );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
@@ -50,8 +50,13 @@ export async function POST(request: NextRequest) {
         );
         break;
       }
+      case "payment_intent.succeeded": {
+        await handlePaymentIntentSucceeded(
+          event.data.object as Stripe.PaymentIntent
+        );
+        break;
+      }
       default:
-        // Acknowledge unhandled event types without error
         console.log(`[stripe-webhook] Unhandled event type: ${event.type}`);
     }
   } catch (err) {
@@ -209,5 +214,126 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     }
   } catch (emailErr) {
     console.error("[stripe-webhook] Email send failed (non-blocking):", emailErr);
+  }
+}
+
+// Handle embedded checkout (PaymentIntent) — same ticket creation logic
+async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
+  const metadata = paymentIntent.metadata;
+
+  if (!metadata?.eventId || !metadata?.tierId || !metadata?.quantity) {
+    // Not a ticket purchase PaymentIntent (could be from Checkout Session which is handled above)
+    return;
+  }
+
+  const eventId = metadata.eventId;
+  const tierId = metadata.tierId;
+  const quantity = parseInt(metadata.quantity, 10);
+  const buyerEmail = metadata.buyerEmail || paymentIntent.receipt_email;
+
+  const supabase = createAdminClient();
+
+  // Idempotency check
+  const { count: existingCount } = await supabase
+    .from("tickets")
+    .select("*", { count: "exact", head: true })
+    .eq("event_id", eventId)
+    .eq("stripe_payment_intent_id", paymentIntent.id);
+
+  if (existingCount && existingCount > 0) {
+    console.log(`[stripe-webhook] Tickets already exist for PI ${paymentIntent.id}, skipping`);
+    return;
+  }
+
+  const { data: tier } = await supabase
+    .from("ticket_tiers")
+    .select("price")
+    .eq("id", tierId)
+    .maybeSingle();
+
+  if (!tier) {
+    console.error("[stripe-webhook] Tier not found for PI:", tierId);
+    return;
+  }
+
+  const tickets = Array.from({ length: quantity }, () => ({
+    event_id: eventId,
+    ticket_tier_id: tierId,
+    user_id: null,
+    status: "paid" as const,
+    price_paid: tier.price,
+    currency: "usd",
+    stripe_payment_intent_id: paymentIntent.id,
+    ticket_token: randomUUID(),
+    metadata: {
+      payment_intent_id: paymentIntent.id,
+      customer_email: buyerEmail,
+    },
+  }));
+
+  const { data: insertedTickets, error: insertError } = await supabase
+    .from("tickets")
+    .insert(tickets)
+    .select("id, ticket_token");
+
+  if (insertError) {
+    console.error("[stripe-webhook] Failed to insert tickets:", insertError);
+    throw insertError;
+  }
+
+  console.log(`[stripe-webhook] Created ${quantity} ticket(s) for PI ${paymentIntent.id}`);
+
+  // Generate QR codes
+  if (insertedTickets && insertedTickets.length > 0) {
+    const BASE_URL = "https://nocturn-app-navy.vercel.app";
+    await Promise.allSettled(
+      insertedTickets.map(async (ticket) => {
+        try {
+          const qrDataUrl = await QRCode.toDataURL(
+            `${BASE_URL}/check-in/${ticket.ticket_token}`,
+            { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
+          );
+          await supabase.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
+        } catch (qrErr) {
+          console.error(`[stripe-webhook] QR failed for ${ticket.id}:`, qrErr);
+        }
+      })
+    );
+  }
+
+  // Send confirmation email
+  try {
+    if (buyerEmail) {
+      const { data: event } = await supabase
+        .from("events")
+        .select("title, starts_at, venues(name)")
+        .eq("id", eventId)
+        .maybeSingle();
+
+      const { data: tierInfo } = await supabase
+        .from("ticket_tiers")
+        .select("name")
+        .eq("id", tierId)
+        .maybeSingle();
+
+      if (event) {
+        const venue = event.venues as unknown as { name: string } | null;
+        const { sendTicketConfirmation } = await import("@/app/actions/email");
+        await sendTicketConfirmation({
+          to: buyerEmail,
+          eventTitle: event.title || "Event",
+          eventDate: new Date(event.starts_at).toLocaleDateString("en", {
+            weekday: "long", month: "long", day: "numeric", year: "numeric",
+          }),
+          venueName: venue?.name || "TBA",
+          tierName: tierInfo?.name || "General Admission",
+          quantity,
+          totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
+          ticketLink: `https://nocturn-app-navy.vercel.app/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+        });
+      }
+    }
+  } catch (emailErr) {
+    console.error("[stripe-webhook] Email failed (non-blocking):", emailErr);
   }
 }

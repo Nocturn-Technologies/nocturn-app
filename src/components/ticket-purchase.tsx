@@ -4,8 +4,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Ticket, Minus, Plus, Loader2 } from "lucide-react";
+import { Ticket, Minus, Plus } from "lucide-react";
 import { haptic } from "@/lib/haptics";
+import { StripeCheckout } from "@/components/stripe-checkout";
 
 interface Tier {
   id: string;
@@ -24,41 +25,47 @@ export function TicketPurchase({
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [showCheckout, setShowCheckout] = useState(false);
 
-  async function handleCheckout() {
+  const selectedTierData = tiers.find((t) => t.id === selectedTier);
+  const totalAmount = Number(selectedTierData?.price ?? 0) * quantity;
+
+  function handleProceed() {
     if (!selectedTier || !email) return;
-    haptic('medium');
-    setError(null);
-    setLoading(true);
+    haptic("medium");
+    setShowCheckout(true);
+  }
 
-    try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId,
-          tierId: selectedTier,
-          quantity,
-          buyerEmail: email,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Something went wrong");
-        setLoading(false);
-        return;
-      }
-
-      // Redirect to Stripe Checkout
-      window.location.href = data.url;
-    } catch {
-      setError("Failed to start checkout. Please try again.");
-      setLoading(false);
-    }
+  // Show embedded Stripe checkout
+  if (showCheckout && selectedTier && selectedTierData) {
+    return (
+      <div className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+          Complete Payment
+        </h2>
+        <div className="rounded-lg border border-border p-3 text-sm">
+          <div className="flex justify-between">
+            <span>
+              {quantity}x {selectedTierData.name}
+            </span>
+            <span className="font-medium">${totalAmount.toFixed(2)}</span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">{email}</p>
+        </div>
+        <StripeCheckout
+          eventId={eventId}
+          tierId={selectedTier}
+          tierName={selectedTierData.name}
+          quantity={quantity}
+          buyerEmail={email}
+          totalAmount={totalAmount}
+          onSuccess={() => {
+            haptic("heavy");
+          }}
+          onCancel={() => setShowCheckout(false)}
+        />
+      </div>
+    );
   }
 
   return (
@@ -82,6 +89,7 @@ export function TicketPurchase({
             onClick={() => {
               setSelectedTier(tier.id);
               setQuantity(1);
+              setShowCheckout(false);
             }}
           >
             <CardContent className="flex items-center justify-between p-4">
@@ -143,29 +151,15 @@ export function TicketPurchase({
             />
           </div>
 
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
-
-          {/* Total + CTA */}
+          {/* CTA */}
           <Button
             className="w-full bg-nocturn py-6 text-lg hover:bg-nocturn-light"
             size="lg"
-            onClick={handleCheckout}
-            disabled={loading || !email}
+            onClick={handleProceed}
+            disabled={!email}
           >
-            {loading ? (
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            ) : (
-              <Ticket className="mr-2 h-5 w-5" />
-            )}
-            {loading
-              ? "Redirecting to checkout..."
-              : `Get Tickets — $${(
-                  Number(
-                    tiers.find((t) => t.id === selectedTier)?.price ?? 0
-                  ) * quantity
-                ).toFixed(2)}`}
+            <Ticket className="mr-2 h-5 w-5" />
+            {`Get Tickets — $${totalAmount.toFixed(2)}`}
           </Button>
         </div>
       )}
