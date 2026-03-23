@@ -571,6 +571,21 @@ export default async function PublicEventPage({ params }: Props) {
           ticketSectionId="ticket-section"
         />
       )}
+
+      {/* Footer */}
+      <footer className="border-t border-white/5 bg-[#09090B] px-6 py-8">
+        <div className="mx-auto max-w-[640px] flex flex-col items-center gap-3">
+          <div className="flex items-center gap-2 text-white/30">
+            <span className="text-sm">🌙</span>
+            <span className="text-xs font-semibold tracking-wide">nocturn.</span>
+          </div>
+          <div className="flex gap-4 text-[11px] text-white/25">
+            <Link href="/legal/terms" className="hover:text-white/40 transition-colors">Terms</Link>
+            <Link href="/legal/privacy" className="hover:text-white/40 transition-colors">Privacy</Link>
+            <a href="https://trynocturn.com" target="_blank" rel="noopener" className="hover:text-white/40 transition-colors">About</a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

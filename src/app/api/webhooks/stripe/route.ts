@@ -145,6 +145,16 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     `[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`
   );
 
+  // Track ticket purchase
+  import("@/lib/track-server").then(({ trackServerEvent }) =>
+    trackServerEvent("ticket_purchased", {
+      eventId,
+      quantity,
+      revenue: Number(tier.price) * quantity,
+      sessionId: session.id,
+    })
+  ).catch(() => {});
+
   // Generate QR codes for each ticket
   if (insertedTickets && insertedTickets.length > 0) {
     const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://nocturn-app-navy.vercel.app";

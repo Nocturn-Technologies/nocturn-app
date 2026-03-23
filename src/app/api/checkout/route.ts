@@ -202,6 +202,11 @@ export async function POST(request: NextRequest) {
         console.error("[checkout] Free ticket email failed (non-blocking):", emailErr);
       }
 
+      // Track free registration
+      import("@/lib/track-server").then(({ trackServerEvent }) =>
+        trackServerEvent("ticket_free_registered", { eventId, quantity, buyerEmail })
+      ).catch(() => {});
+
       // Redirect to success page
       return NextResponse.json({
         url: `${APP_URL}/e/success?free=true&tickets=${quantity}`,

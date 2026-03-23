@@ -169,6 +169,11 @@ export async function createEvent(input: CreateEventInput) {
     }
   }
 
+  // Track event creation
+  import("@/lib/track-server").then(({ trackServerEvent }) =>
+    trackServerEvent("event_created", { eventId: event.id, title: input.title, collectiveId: memberships[0].collective_id })
+  ).catch(() => {});
+
   return { error: null, eventId: event.id };
 }
 
@@ -374,6 +379,11 @@ export async function publishEvent(eventId: string) {
     .eq("id", eventId);
 
   if (error) return { error: `Failed to publish: ${error.message}` };
+
+  import("@/lib/track-server").then(({ trackServerEvent }) =>
+    trackServerEvent("event_published", { eventId })
+  ).catch(() => {});
+
   return { error: null };
 }
 

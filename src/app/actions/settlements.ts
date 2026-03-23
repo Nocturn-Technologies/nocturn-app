@@ -169,6 +169,16 @@ export async function generateSettlement(eventId: string) {
     }
   }
 
+  import("@/lib/track-server").then(({ trackServerEvent }) =>
+    trackServerEvent("settlement_generated", {
+      eventId,
+      settlementId: settlement.id,
+      grossRevenue,
+      profit,
+      ticketCount,
+    })
+  ).catch(() => {});
+
   return { error: null, settlementId: settlement.id };
 }
 
