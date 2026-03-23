@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Minus, Plus, Loader2, Ticket } from "lucide-react";
+import { Minus, Plus, Ticket } from "lucide-react";
+import { StripeCheckout } from "@/components/stripe-checkout";
 
 interface Tier {
   id: string;
@@ -22,43 +23,49 @@ export function TicketSection({
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [showCheckout, setShowCheckout] = useState(false);
 
   const selected = tiers.find((t) => t.id === selectedTier);
   const total = selected ? Number(selected.price) * quantity : 0;
   const isFree = selected ? Number(selected.price) === 0 : false;
 
-  async function handleCheckout() {
-    if (!selectedTier || !email) return;
-    setError(null);
-    setLoading(true);
-
-    try {
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId,
-          tierId: selectedTier,
-          quantity,
-          buyerEmail: email,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Something went wrong");
-        setLoading(false);
-        return;
-      }
-
-      window.location.href = data.url;
-    } catch {
-      setError("Failed to start checkout. Please try again.");
-      setLoading(false);
-    }
+  // Show embedded Stripe checkout
+  if (showCheckout && selectedTier && selected) {
+    return (
+      <div className="space-y-4">
+        <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+          Complete Payment
+        </h2>
+        <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="font-heading text-base font-semibold text-white">
+                {quantity}x {selected.name}
+              </p>
+              <p className="text-sm text-white/40">{email}</p>
+            </div>
+            <p
+              className="font-heading text-xl font-bold"
+              style={{ color: accentColor }}
+            >
+              ${total.toFixed(2)}
+            </p>
+          </div>
+          <StripeCheckout
+            eventId={eventId}
+            tierId={selectedTier}
+            tierName={selected.name}
+            quantity={quantity}
+            buyerEmail={email}
+            totalAmount={total}
+            onSuccess={() => {
+              // Success handled inside StripeCheckout component
+            }}
+            onCancel={() => setShowCheckout(false)}
+          />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -78,6 +85,7 @@ export function TicketSection({
               onClick={() => {
                 setSelectedTier(tier.id);
                 setQuantity(1);
+                setShowCheckout(false);
               }}
               className={`w-full rounded-2xl border p-4 text-left transition-all ${
                 isSelected
@@ -149,33 +157,26 @@ export function TicketSection({
               style={{ focusRingColor: accentColor } as React.CSSProperties}
             />
           </div>
-
-          {error && (
-            <p className="text-sm text-red-400">{error}</p>
-          )}
         </div>
       )}
 
       {/* Sticky CTA */}
-      {selectedTier && (
+      {selectedTier && !showCheckout && (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/5 bg-[#09090B]/95 backdrop-blur-lg p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
           <div className="mx-auto max-w-[640px]">
             <button
-              onClick={handleCheckout}
-              disabled={loading || !email}
+              onClick={() => {
+                if (!email) return;
+                setShowCheckout(true);
+              }}
+              disabled={!email}
               className="flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-4 text-lg font-bold text-white transition-all hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor: accentColor }}
             >
-              {loading ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Ticket className="h-5 w-5" />
-              )}
-              {loading
-                ? "Redirecting..."
-                : isFree
-                  ? "RSVP — Free"
-                  : `Get Tickets — $${total.toFixed(2)}`}
+              <Ticket className="h-5 w-5" />
+              {isFree
+                ? "RSVP — Free"
+                : `Get Tickets — $${total.toFixed(2)}`}
             </button>
           </div>
         </div>
