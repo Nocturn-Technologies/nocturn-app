@@ -143,8 +143,8 @@ export default async function FinancePage() {
                 key={event.id}
                 className="flex items-center justify-between rounded-lg border p-3"
               >
-                <div>
-                  <p className="font-medium">{event.title}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium line-clamp-1">{event.title}</p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(event.starts_at).toLocaleDateString("en", {
                       month: "short",
@@ -153,9 +153,9 @@ export default async function FinancePage() {
                     })}
                   </p>
                 </div>
-                <Link href={`/dashboard/finance/${event.id}`}>
-                  <Button size="sm" className="bg-nocturn hover:bg-nocturn-light">
-                    Generate Settlement
+                <Link href={`/dashboard/finance/${event.id}`} className="shrink-0">
+                  <Button size="default" className="bg-nocturn hover:bg-nocturn-light text-sm">
+                    Settle
                   </Button>
                 </Link>
               </div>

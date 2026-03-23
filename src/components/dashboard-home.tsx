@@ -363,7 +363,7 @@ export function DashboardHome(props: DashboardHomeProps) {
       </div>
 
       {/* ── Smart Actions — enhanced cards ── */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in-up delay-200 relative z-10">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in-up delay-200 relative z-10">
         {actions.map((action, i) => (
           <Link key={action.href + i} href={action.href}>
             <Card className={`h-full transition-all duration-300 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98] ${

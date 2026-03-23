@@ -315,7 +315,7 @@ export default function SettlementDetailPage() {
 
           {/* Actions */}
           {settlement.status === "draft" && (
-            <div className="flex gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <Button
                 className="flex-1 bg-nocturn hover:bg-nocturn-light"
                 onClick={handleApprove}

@@ -27,12 +27,15 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
     const scanner = new Html5Qrcode(elementId);
     scannerRef.current = scanner;
 
+    // Responsive QR box — smaller on narrow screens
+    const boxSize = typeof window !== "undefined" && window.innerWidth < 400 ? 200 : 250;
+
     scanner
       .start(
         { facingMode: "environment" },
         {
           fps: 10,
-          qrbox: { width: 250, height: 250 },
+          qrbox: { width: boxSize, height: boxSize },
           aspectRatio: 1,
         },
         (decodedText: string) => {
@@ -70,7 +73,7 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
         className="overflow-hidden rounded-xl"
       />
       {!started && !error && (
-        <div className="flex h-[300px] items-center justify-center rounded-xl border border-border bg-muted">
+        <div className="flex h-[250px] sm:h-[300px] items-center justify-center rounded-xl border border-border bg-muted">
           <div className="flex flex-col items-center gap-2">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
             <p className="text-sm text-muted-foreground">Starting camera...</p>
@@ -78,8 +81,8 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
         </div>
       )}
       {error && (
-        <div className="flex h-[300px] items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
-          <p className="px-4 text-center text-sm text-destructive">{error}</p>
+        <div className="flex h-[250px] sm:h-[300px] items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
+          <p className="max-w-xs px-4 text-center text-sm text-destructive">{error}</p>
         </div>
       )}
       {paused && started && (

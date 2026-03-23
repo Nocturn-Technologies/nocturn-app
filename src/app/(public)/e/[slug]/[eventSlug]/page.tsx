@@ -164,8 +164,53 @@ export default async function PublicEventPage({ params }: Props) {
     ? `$${Math.min(...tiers.map((t) => Number(t.price)))}+`
     : "Free";
 
+  // JSON-LD structured data for search engines
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Event",
+    name: event.title,
+    description: event.description || `Event by ${collective.name}`,
+    startDate: event.starts_at,
+    ...(event.ends_at && { endDate: event.ends_at }),
+    ...(event.doors_at && { doorTime: event.doors_at }),
+    eventStatus: "https://schema.org/EventScheduled",
+    eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+    ...(event.flyer_url && { image: event.flyer_url }),
+    url: publicUrl,
+    organizer: {
+      "@type": "Organization",
+      name: collective.name,
+      url: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${slug}`,
+    },
+    ...(venue && {
+      location: {
+        "@type": "Place",
+        name: venue.name,
+        address: {
+          "@type": "PostalAddress",
+          streetAddress: venue.address,
+          addressLocality: venue.city,
+        },
+      },
+    }),
+    ...(tiers && tiers.length > 0 && {
+      offers: tiers.map((t) => ({
+        "@type": "Offer",
+        name: t.name,
+        price: Number(t.price).toFixed(2),
+        priceCurrency: "USD",
+        availability: "https://schema.org/InStock",
+        url: publicUrl,
+      })),
+    }),
+  };
+
   return (
     <div className="min-h-screen bg-[#09090B]" style={{ scrollBehavior: "smooth" }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* ─── Hero Section ─── */}
       <div className="relative">
         {event.flyer_url ? (
@@ -226,7 +271,7 @@ export default async function PublicEventPage({ params }: Props) {
               </span>
             </div>
 
-            <h1 className="font-heading text-4xl font-bold tracking-tight text-white sm:text-5xl">
+            <h1 className="font-heading text-3xl font-bold tracking-tight text-white sm:text-5xl line-clamp-3">
               {event.title}
             </h1>
 
@@ -235,7 +280,7 @@ export default async function PublicEventPage({ params }: Props) {
               {vibeTags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/60"
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60"
                 >
                   {tag}
                 </span>
