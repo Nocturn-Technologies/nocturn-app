@@ -196,14 +196,14 @@ export function TicketSection({
           <div className="mx-auto max-w-[640px]">
             <button
               onClick={() => {
-                if (!email || emailValid !== true) return;
+                if (!email || emailValid !== true || buying) return;
                 setBuying(true);
                 setTimeout(() => {
                   setShowCheckout(true);
                   setBuying(false);
                 }, 400);
               }}
-              disabled={!email || emailValid !== true}
+              disabled={!email || emailValid !== true || buying}
               className="flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-4 text-lg font-bold text-white transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
               style={{ backgroundColor: accentColor }}
             >

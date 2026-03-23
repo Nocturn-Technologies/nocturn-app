@@ -19,11 +19,11 @@ export async function generateChatResponse(
   userMessage: string,
   recentMessages?: { role: string; content: string }[]
 ): Promise<string> {
+  const sb = admin();
   let aiContent: string;
 
   try {
     // 1. Fetch channel to determine context type
-    const sb = admin();
     const { data: channel, error: channelError } = await sb
       .from("channels")
       .select("id, event_id, collective_id")
@@ -69,7 +69,6 @@ export async function generateChatResponse(
 
   // 6. Insert AI response server-side using admin client (bypasses RLS)
   try {
-    const sb = admin();
     await sb.from("messages").insert({
       channel_id: channelId,
       user_id: null,

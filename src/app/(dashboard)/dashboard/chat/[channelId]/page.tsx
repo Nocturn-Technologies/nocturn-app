@@ -444,26 +444,27 @@ function MessageBubble({
   if (msg.type === "ai") {
     // Parse content into formatted blocks
     const renderAIContent = (text: string) => {
-      // Sanitize: strip all HTML tags first, then apply our own formatting
-      const sanitize = (s: string) => s.replace(/<[^>]*>/g, "");
+      // Parse bold markers into React elements (no dangerouslySetInnerHTML)
+      const parseBold = (s: string) => {
+        const parts = s.split(/\*\*(.*?)\*\*/g);
+        return parts.map((part, j) =>
+          j % 2 === 1 ? (
+            <strong key={j} className="text-white font-semibold">{part}</strong>
+          ) : (
+            <span key={j}>{part}</span>
+          )
+        );
+      };
 
       return text.split("\n").map((line, i) => {
-        const clean = sanitize(line);
-        // Bold text: **text**
-        const boldParsed = clean.replace(
-          /\*\*(.*?)\*\*/g,
-          '<strong class="text-white font-semibold">$1</strong>'
-        );
+        const clean = line.replace(/<[^>]*?>/g, "");
 
         // Bullet points
         if (clean.startsWith("- ") || clean.startsWith("• ")) {
           return (
             <div key={i} className="flex gap-2 items-start ml-1">
               <span className="text-nocturn mt-1 text-xs">●</span>
-              <span
-                className="flex-1"
-                dangerouslySetInnerHTML={{ __html: boldParsed.replace(/^[-•]\s*/, "") }}
-              />
+              <span className="flex-1">{parseBold(clean.replace(/^[-•]\s*/, ""))}</span>
             </div>
           );
         }
@@ -474,10 +475,7 @@ function MessageBubble({
           return (
             <div key={i} className="flex gap-2 items-start ml-1">
               <span className="text-nocturn text-xs font-bold min-w-[16px]">{numMatch[1]}.</span>
-              <span
-                className="flex-1"
-                dangerouslySetInnerHTML={{ __html: boldParsed.replace(/^\d+[.)]\s*/, "") }}
-              />
+              <span className="flex-1">{parseBold(numMatch[2])}</span>
             </div>
           );
         }
@@ -487,11 +485,7 @@ function MessageBubble({
 
         // Regular text
         return (
-          <span
-            key={i}
-            className="block"
-            dangerouslySetInnerHTML={{ __html: boldParsed }}
-          />
+          <span key={i} className="block">{parseBold(clean)}</span>
         );
       });
     };

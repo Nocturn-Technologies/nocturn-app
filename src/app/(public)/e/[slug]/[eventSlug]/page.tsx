@@ -98,58 +98,30 @@ export default async function PublicEventPage({ params }: Props) {
 
   if (!event || event.status === "draft") notFound();
 
-  // Fetch ticket tiers
-  const { data: tiers } = await supabase
-    .from("ticket_tiers")
-    .select("*")
-    .eq("event_id", event.id)
-    .order("sort_order");
-
-  // Fetch ticket sold count for social proof
-  const { count: ticketsSold } = await supabase
-    .from("tickets")
-    .select("*", { count: "exact", head: true })
-    .eq("event_id", event.id)
-    .in("status", ["paid", "checked_in"]);
+  // Fetch all supplementary data in parallel (6 queries → 1 round-trip)
+  const [
+    { data: tiers },
+    { count: ticketsSold },
+    { data: artists },
+    { data: reactionRows },
+    { count: collectiveEventCount },
+    { data: pastEvents },
+  ] = await Promise.all([
+    supabase.from("ticket_tiers").select("*").eq("event_id", event.id).order("sort_order"),
+    supabase.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
+    supabase.from("event_artists").select("artist_id, set_time, artists(name, genre)").eq("event_id", event.id).eq("status", "confirmed").order("set_time"),
+    supabase.from("event_reactions").select("emoji").eq("event_id", event.id),
+    supabase.from("events").select("*", { count: "exact", head: true }).eq("collective_id", collective.id).in("status", ["published", "completed"]),
+    supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).order("starts_at", { ascending: false }).limit(6),
+  ]);
 
   const totalCapacity = (tiers || []).reduce((s, t) => s + (t.capacity || 0), 0);
   const soldPercent = totalCapacity > 0 ? Math.round(((ticketsSold ?? 0) / totalCapacity) * 100) : 0;
-
-  // Fetch lineup
-  const { data: artists } = await supabase
-    .from("event_artists")
-    .select("artist_id, set_time, artists(name, genre)")
-    .eq("event_id", event.id)
-    .eq("status", "confirmed")
-    .order("set_time");
-
-  // Fetch reaction counts (aggregated)
-  const { data: reactionRows } = await supabase
-    .from("event_reactions")
-    .select("emoji")
-    .eq("event_id", event.id);
 
   const reactionCounts: Record<string, number> = {};
   for (const r of reactionRows || []) {
     reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
   }
-
-  // Count total events by this collective (for profile section)
-  const { count: collectiveEventCount } = await supabase
-    .from("events")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", collective.id)
-    .in("status", ["published", "completed"]);
-
-  // Fetch past events by this collective (up to 6, exclude current)
-  const { data: pastEvents } = await supabase
-    .from("events")
-    .select("title, slug, flyer_url, starts_at")
-    .eq("collective_id", collective.id)
-    .eq("status", "completed")
-    .neq("id", event.id)
-    .order("starts_at", { ascending: false })
-    .limit(6);
 
   const venue = event.venues as unknown as {
     name: string;

@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
   }
 
   const query = req.nextUrl.searchParams.get("q") || "";
-  const page = req.nextUrl.searchParams.get("page") || "1";
+  const page = parseInt(req.nextUrl.searchParams.get("page") || "1", 10) || 1;
 
   // If no custom query, use curated nightlife terms
   const searchQuery = query.trim()
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
 
   const data = await res.json();
 
-  const photos = data.results.map(
+  const photos = (data.results || []).map(
     (p: {
       id: string;
       urls: { regular: string; small: string };
@@ -77,8 +77,8 @@ export async function POST(req: NextRequest) {
   }
 
   const { downloadUrl } = await req.json();
-  if (!downloadUrl) {
-    return NextResponse.json({ error: "Missing downloadUrl" }, { status: 400 });
+  if (!downloadUrl || typeof downloadUrl !== "string" || !downloadUrl.startsWith("https://api.unsplash.com/")) {
+    return NextResponse.json({ error: "Invalid downloadUrl" }, { status: 400 });
   }
 
   // Trigger download tracking (Unsplash requirement)
