@@ -87,11 +87,26 @@ export async function createEvent(input: CreateEventInput) {
   if (existingVenue) {
     venueId = existingVenue.id;
   } else {
+    // Include city in slug to avoid collisions (e.g. "story-miami" vs "story-toronto")
+    const baseSlug = slugify(`${input.venueName} ${input.venueCity || ""}`);
+    let venueSlug = baseSlug;
+
+    // Check if slug already exists, add random suffix if so
+    const { data: slugCheck } = await admin
+      .from("venues")
+      .select("id")
+      .eq("slug", venueSlug)
+      .maybeSingle();
+
+    if (slugCheck) {
+      venueSlug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
+    }
+
     const { data: newVenue, error: venueError } = await admin
       .from("venues")
       .insert({
         name: input.venueName,
-        slug: slugify(input.venueName),
+        slug: venueSlug,
         address: input.venueAddress,
         city: input.venueCity,
         capacity: input.venueCapacity,
@@ -196,11 +211,22 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
       })
       .eq("id", venueId);
   } else {
+    const baseSlug = slugify(`${input.venueName} ${input.venueCity || ""}`);
+    let venueSlug = baseSlug;
+    const { data: slugCheck } = await admin
+      .from("venues")
+      .select("id")
+      .eq("slug", venueSlug)
+      .maybeSingle();
+    if (slugCheck) {
+      venueSlug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
+    }
+
     const { data: newVenue, error: venueError } = await admin
       .from("venues")
       .insert({
         name: input.venueName,
-        slug: slugify(input.venueName),
+        slug: venueSlug,
         address: input.venueAddress,
         city: input.venueCity,
         capacity: input.venueCapacity,
