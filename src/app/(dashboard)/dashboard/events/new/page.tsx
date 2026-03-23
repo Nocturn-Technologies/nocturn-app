@@ -943,7 +943,7 @@ export default function NewEventPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <h1 className="text-lg font-bold font-[family-name:var(--font-space-grotesk)]">
+        <h1 className="text-lg font-bold font-heading">
           New Event
         </h1>
         <div className="ml-auto flex items-center gap-1.5 rounded-full bg-[#7B2FF7]/10 px-3 py-1">
@@ -1012,7 +1012,7 @@ export default function NewEventPage() {
               <Check className="h-8 w-8 text-green-500" />
             </div>
             <div className="text-center">
-              <h2 className="text-xl font-bold font-[family-name:var(--font-space-grotesk)]">
+              <h2 className="text-xl font-bold font-heading">
                 {eventData.title} is live!
               </h2>
               <p className="text-sm text-zinc-400 mt-1">

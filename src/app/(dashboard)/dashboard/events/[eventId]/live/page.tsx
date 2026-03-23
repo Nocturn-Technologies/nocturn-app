@@ -285,7 +285,7 @@ export default function LiveEventPage() {
         </Link>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2.5">
-            <h1 className="text-lg font-bold truncate font-[family-name:var(--font-space-grotesk)]">
+            <h1 className="text-lg font-bold truncate font-heading">
               {event.title}
             </h1>
             <LiveBadge />
@@ -308,7 +308,7 @@ export default function LiveEventPage() {
             <Users className="h-4 w-4 text-[#7B2FF7]" />
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold font-[family-name:var(--font-space-grotesk)] text-white tabular-nums">
+            <span className="text-3xl font-bold font-heading text-white tabular-nums">
               {checkedInCount}
             </span>
             <span className="text-lg text-zinc-500">/ {totalCapacity}</span>
@@ -332,7 +332,7 @@ export default function LiveEventPage() {
               </span>
               <DollarSign className="h-4 w-4 text-green-400" />
             </div>
-            <span className="text-3xl font-bold font-[family-name:var(--font-space-grotesk)] text-white tabular-nums">
+            <span className="text-3xl font-bold font-heading text-white tabular-nums">
               ${revenue.toLocaleString()}
             </span>
           </div>
@@ -348,7 +348,7 @@ export default function LiveEventPage() {
               />
             </div>
             <span
-              className={`text-3xl font-bold font-[family-name:var(--font-space-grotesk)] tabular-nums ${getCapacityColor(capacityPct)}`}
+              className={`text-3xl font-bold font-heading tabular-nums ${getCapacityColor(capacityPct)}`}
             >
               {capacityPct}%
             </span>

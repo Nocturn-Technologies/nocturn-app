@@ -271,7 +271,7 @@ export default function ChatPage() {
       <div className="flex items-center gap-2.5 mb-6">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-6 w-6 text-[#7B2FF7]" />
-          <h1 className="text-2xl font-bold tracking-tight font-[family-name:var(--font-space-grotesk)]">
+          <h1 className="text-2xl font-bold tracking-tight font-heading">
             Team Sync
           </h1>
           <Sparkles size={18} className="text-[#7B2FF7] animate-pulse" />

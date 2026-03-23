@@ -881,7 +881,7 @@ export default function EventDesignPage() {
                 <div className="space-y-4 px-4 pb-6 -mt-8 relative">
                   <h2
                     className="text-xl font-bold text-white"
-                    style={{ fontFamily: "var(--font-space-grotesk), sans-serif" }}
+                    style={{ fontFamily: "var(--font-heading), sans-serif" }}
                   >
                     {eventTitle}
                   </h2>

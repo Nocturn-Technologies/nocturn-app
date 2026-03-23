@@ -161,21 +161,24 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
       <NotificationToast notifications={notifications} onDismiss={dismissNotification} />
 
       {/* ── Desktop sidebar (hidden on mobile) ── */}
-      <aside className="hidden w-64 shrink-0 border-r border-border bg-card md:flex md:flex-col">
-        <div className="flex h-14 items-center border-b border-border px-4">
+      <aside className="hidden w-64 shrink-0 border-r border-white/[0.06] bg-gradient-to-b from-[#12111a] to-[#0d0c14] md:flex md:flex-col relative overflow-hidden">
+        {/* Ambient glow at top of sidebar */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-40 bg-nocturn/8 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex h-14 items-center border-b border-white/[0.06] px-4 relative z-10">
           <Link href="/dashboard">
             <NocturnLogo size="md" />
           </Link>
         </div>
 
         {activeColl && (
-          <div className="border-b border-border px-4 py-3">
-            <p className="text-sm font-medium">{activeColl.name}</p>
+          <div className="border-b border-white/[0.06] px-4 py-3 relative z-10">
+            <p className="text-sm font-semibold">{activeColl.name}</p>
             <p className="text-xs text-muted-foreground capitalize">{activeColl.role}</p>
           </div>
         )}
 
-        <nav className="flex-1 space-y-1 p-3">
+        <nav className="flex-1 space-y-0.5 p-3 relative z-10">
           {sidebarNavItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -183,24 +186,24 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                   active
-                    ? "bg-nocturn/10 text-nocturn"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "bg-nocturn/15 text-white shadow-[0_0_12px_rgba(123,47,247,0.15)]"
+                    : "text-muted-foreground hover:bg-white/[0.04] hover:text-foreground"
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                {item.label}
+                <Icon className={`h-4 w-4 ${active ? "text-nocturn-light" : ""}`} />
+                <span className={active ? "font-medium" : ""}>{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
-        <div className="border-t border-border p-3">
+        <div className="border-t border-white/[0.06] p-3 relative z-10">
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-accent">
+            <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-white/[0.04] transition-colors">
               <Avatar className="h-7 w-7">
-                <AvatarFallback className="bg-nocturn text-xs text-white">
+                <AvatarFallback className="bg-gradient-to-br from-nocturn to-nocturn-light text-xs text-white">
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -219,14 +222,14 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
       {/* ── Main content area ── */}
       <div className="flex flex-1 flex-col">
         {/* Mobile header */}
-        <header className="flex h-14 items-center justify-between border-b border-border px-4 md:hidden">
+        <header className="flex h-14 items-center justify-between border-b border-white/[0.06] px-4 md:hidden bg-background/80 backdrop-blur-md">
           <Link href="/dashboard">
             <NocturnLogo size="sm" />
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center">
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-nocturn text-xs text-white">
+                <AvatarFallback className="bg-gradient-to-br from-nocturn to-nocturn-light text-xs text-white">
                   {initials}
                 </AvatarFallback>
               </Avatar>
@@ -249,7 +252,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
         <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
 
         {/* ── Mobile bottom tab bar (hidden on desktop) ── */}
-        <nav className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-around border-t border-border bg-card/95 backdrop-blur-sm px-2 pt-2 pb-[max(env(safe-area-inset-bottom),8px)] md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-around border-t border-white/[0.06] bg-background/90 backdrop-blur-xl px-2 pt-2 pb-[max(env(safe-area-inset-bottom),8px)] md:hidden">
           {mobileTabItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
@@ -258,9 +261,9 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
                 key={item.href}
                 href={item.href}
                 onClick={() => haptic('light')}
-                className={`flex items-center justify-center gap-1.5 rounded-full px-4 min-h-[48px] min-w-[48px] transition-all ${
+                className={`flex items-center justify-center gap-1.5 rounded-full px-4 min-h-[48px] min-w-[48px] transition-all duration-300 ${
                   active
-                    ? "bg-[#7B2FF7] text-white shadow-lg shadow-[#7B2FF7]/25"
+                    ? "bg-nocturn text-white shadow-lg shadow-nocturn/30"
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
@@ -289,23 +292,23 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
         </nav>
       </div>
 
-      {/* ── More Drawer (mobile) ── */}
+      {/* ── More Drawer (mobile) — frosted glass ── */}
       {moreOpen && (
         <div className="fixed inset-0 z-[60] md:hidden">
           {/* Backdrop */}
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-black/70 backdrop-blur-md"
             onClick={() => setMoreOpen(false)}
           />
           {/* Drawer */}
           <div className="absolute inset-x-0 bottom-0 animate-slide-in-up">
-            <div className="bg-card rounded-t-3xl border-t border-border px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)]">
+            <div className="bg-[#12111a]/95 backdrop-blur-2xl rounded-t-3xl border-t border-white/[0.08] px-4 pt-3 pb-[max(env(safe-area-inset-bottom),16px)]">
               {/* Drag handle */}
               <div className="flex justify-center mb-4">
-                <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+                <div className="w-10 h-1 rounded-full bg-white/20" />
               </div>
               {/* Nav items */}
-              <nav className="space-y-1 mb-4">
+              <nav className="space-y-0.5 mb-4">
                 {moreDrawerItems.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(item.href);
@@ -314,13 +317,13 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
                       key={item.href}
                       href={item.href}
                       onClick={() => { haptic('light'); setMoreOpen(false); }}
-                      className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition-colors ${
+                      className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition-all duration-200 ${
                         active
-                          ? "bg-nocturn/10 text-nocturn"
-                          : "text-foreground hover:bg-accent"
+                          ? "bg-nocturn/15 text-white shadow-[0_0_12px_rgba(123,47,247,0.15)]"
+                          : "text-foreground hover:bg-white/[0.04]"
                       }`}
                     >
-                      <Icon className="h-5 w-5" />
+                      <Icon className={`h-5 w-5 ${active ? "text-nocturn-light" : ""}`} />
                       {item.label}
                     </Link>
                   );
@@ -334,7 +337,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
       {/* Shake-to-Record toast */}
       {shakeToast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[60] animate-fade-in-up md:hidden">
-          <div className="flex items-center gap-2 rounded-full bg-nocturn px-4 py-2 shadow-lg shadow-nocturn/30">
+          <div className="flex items-center gap-2 rounded-full bg-gradient-to-r from-nocturn to-nocturn-light px-4 py-2 shadow-lg shadow-nocturn/30">
             <span className="text-sm">🎤</span>
             <span className="text-sm font-medium text-white">Recording...</span>
           </div>
