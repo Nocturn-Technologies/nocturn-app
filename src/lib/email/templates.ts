@@ -103,8 +103,8 @@ export function ticketConfirmationEmail(
       <p style="margin: 4px 0;">🎫 ${quantity}× ${tierName}</p>
       <p style="margin: 8px 0 0 0; color: #7B2FF7; font-weight: 600; font-size: 18px;">${totalPrice}</p>
     </div>
-    <a href="${ticketLink}" class="btn">View Your Tickets →</a>
-    <p>Show the QR code at the door for entry. See you there!</p>
+    <a href="${ticketLink}" class="btn">View Your Ticket & QR Code →</a>
+    <p>Tap the button above to see your QR code. Show it at the door for entry. See you there! 🌙</p>
   `);
 }
 

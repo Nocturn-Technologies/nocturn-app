@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { NocturnLogo } from "@/components/nocturn-logo";
+
+export const metadata: Metadata = {
+  title: "Nocturn — You run the night. Nocturn runs the business.",
+  description: "AI-powered operations platform for music collectives and independent promoters. Events, ticketing, settlements, and marketing — all in one place.",
+};
 import {
   Calendar,
   DollarSign,

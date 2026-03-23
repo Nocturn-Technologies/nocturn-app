@@ -1,6 +1,12 @@
+import type { Metadata } from "next";
 import { getTicketByToken, generateTicketQRCode } from "@/app/actions/tickets";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Your Ticket — Nocturn",
+  robots: "noindex",
+};
 
 interface TicketPageProps {
   params: Promise<{ token: string }>;

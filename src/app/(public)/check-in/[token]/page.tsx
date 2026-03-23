@@ -1,9 +1,15 @@
+import type { Metadata } from "next";
 import { getTicketByToken } from "@/app/actions/tickets";
 import { checkInTicket } from "@/app/actions/check-in";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PublicCheckInButton } from "./check-in-button";
+
+export const metadata: Metadata = {
+  title: "Check In — Nocturn",
+  robots: "noindex",
+};
 
 interface Props {
   params: Promise<{ token: string }>;

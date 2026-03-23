@@ -1,8 +1,8 @@
 {
   "name": "Nocturn",
   "short_name": "🌙 Nocturn",
-  "description": "AI for music collectives and promoters",
-  "start_url": "/dashboard",
+  "description": "You run the night. Nocturn runs the business.",
+  "start_url": "/",
   "display": "standalone",
   "background_color": "#09090B",
   "theme_color": "#7B2FF7",

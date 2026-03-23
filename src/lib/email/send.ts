@@ -14,7 +14,7 @@ export async function sendEmail({
   html: string;
 }) {
   if (!process.env.RESEND_API_KEY) {
-    console.log(`[email] Would send to ${to}: ${subject}`);
+    console.log(`[email] Dev mode — skipped sending: ${subject}`);
     return { error: null, messageId: "dev-mode" };
   }
 

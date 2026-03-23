@@ -219,7 +219,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
           ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
         });
-        console.log(`[stripe-webhook] Sent confirmation email to ${customerEmail}`);
+        console.log("[stripe-webhook] Confirmation email sent");
       }
     }
   } catch (emailErr) {

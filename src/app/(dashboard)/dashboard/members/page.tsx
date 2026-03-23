@@ -200,6 +200,16 @@ export default function MembersPage() {
   }
 
   async function handleRemove(memberId: string) {
+    // Prevent removing the last admin
+    const member = members.find((m) => m.id === memberId);
+    if (member?.role === "admin") {
+      const adminCount = members.filter((m) => m.role === "admin").length;
+      if (adminCount <= 1) {
+        setError("Can't remove the last admin. Promote another member first.");
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from("collective_members")
       .delete()
