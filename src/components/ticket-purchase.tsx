@@ -4,15 +4,23 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Ticket, Minus, Plus } from "lucide-react";
+import { Ticket, Minus, Plus, Tag, Check, X, Loader2 } from "lucide-react";
 import { haptic } from "@/lib/haptics";
 import { StripeCheckout } from "@/components/stripe-checkout";
+import { validatePromoCode } from "@/app/actions/promo-codes";
 
 interface Tier {
   id: string;
   name: string;
   price: number;
   capacity: number;
+}
+
+interface AppliedDiscount {
+  id: string;
+  code: string;
+  discountType: string;
+  discountValue: number;
 }
 
 export function TicketPurchase({
@@ -27,13 +35,55 @@ export function TicketPurchase({
   const [email, setEmail] = useState("");
   const [showCheckout, setShowCheckout] = useState(false);
 
+  // Promo code state
+  const [promoInput, setPromoInput] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [appliedDiscount, setAppliedDiscount] = useState<AppliedDiscount | null>(null);
+
   const selectedTierData = tiers.find((t) => t.id === selectedTier);
   const ticketPrice = Number(selectedTierData?.price ?? 0);
-  const isFree = ticketPrice === 0;
-  const serviceFeePerTicket = isFree ? 0 : Math.round((ticketPrice * 0.07 + 0.50) * 100) / 100;
-  const subtotal = ticketPrice * quantity;
+
+  // Apply discount to ticket price BEFORE calculating service fee
+  let discountedPrice = ticketPrice;
+  let discountAmount = 0;
+  if (appliedDiscount && ticketPrice > 0) {
+    if (appliedDiscount.discountType === "percentage") {
+      discountAmount = Math.round(ticketPrice * (appliedDiscount.discountValue / 100) * 100) / 100;
+    } else {
+      discountAmount = Math.min(appliedDiscount.discountValue, ticketPrice);
+    }
+    discountedPrice = Math.max(0, ticketPrice - discountAmount);
+  }
+
+  const isFree = discountedPrice === 0;
+  const serviceFeePerTicket = isFree ? 0 : Math.round((discountedPrice * 0.07 + 0.50) * 100) / 100;
+  const subtotal = discountedPrice * quantity;
+  const totalDiscount = discountAmount * quantity;
   const totalFees = serviceFeePerTicket * quantity;
   const totalAmount = subtotal + totalFees;
+
+  async function handleApplyPromo() {
+    if (!promoInput.trim() || !eventId) return;
+    setPromoLoading(true);
+    setPromoError(null);
+
+    const result = await validatePromoCode(eventId, promoInput.trim());
+
+    if (result.valid && result.discount) {
+      setAppliedDiscount(result.discount as AppliedDiscount);
+      haptic("light");
+    } else {
+      setPromoError(result.error || "Invalid code");
+    }
+    setPromoLoading(false);
+  }
+
+  function handleRemovePromo() {
+    setAppliedDiscount(null);
+    setPromoInput("");
+    setPromoError(null);
+  }
 
   function handleProceed() {
     if (!selectedTier || !email) return;
@@ -51,8 +101,16 @@ export function TicketPurchase({
         <div className="rounded-lg border border-border p-3 text-sm space-y-1">
           <div className="flex justify-between">
             <span>{quantity}x {selectedTierData.name}</span>
-            <span className="font-medium">${subtotal.toFixed(2)}</span>
+            <span className={`font-medium ${totalDiscount > 0 ? "line-through text-muted-foreground" : ""}`}>
+              ${(ticketPrice * quantity).toFixed(2)}
+            </span>
           </div>
+          {totalDiscount > 0 && (
+            <div className="flex justify-between text-green-400">
+              <span>Discount ({appliedDiscount?.code})</span>
+              <span>-${totalDiscount.toFixed(2)}</span>
+            </div>
+          )}
           {totalFees > 0 && (
             <div className="flex justify-between text-muted-foreground">
               <span>Service fee</span>
@@ -163,6 +221,55 @@ export function TicketPurchase({
               onChange={(e) => setEmail(e.target.value)}
             />
           </div>
+
+          {/* Promo code */}
+          {!isFree && (
+            <div className="space-y-1">
+              {appliedDiscount ? (
+                <div className="flex items-center justify-between rounded-md border border-green-500/30 bg-green-500/5 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-green-400" />
+                    <span className="text-sm font-medium text-green-400">{appliedDiscount.code}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {appliedDiscount.discountType === "percentage"
+                        ? `${appliedDiscount.discountValue}% off`
+                        : `$${appliedDiscount.discountValue} off`}
+                    </span>
+                  </div>
+                  <button onClick={handleRemovePromo} className="p-1 text-muted-foreground hover:text-foreground">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Tag className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Promo code"
+                      value={promoInput}
+                      onChange={(e) => {
+                        setPromoInput(e.target.value.toUpperCase());
+                        setPromoError(null);
+                      }}
+                      onKeyDown={(e) => e.key === "Enter" && handleApplyPromo()}
+                      className="pl-9 text-sm uppercase"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={handleApplyPromo}
+                    disabled={!promoInput.trim() || promoLoading}
+                    className="shrink-0"
+                  >
+                    {promoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Apply"}
+                  </Button>
+                </div>
+              )}
+              {promoError && (
+                <p className="text-xs text-destructive">{promoError}</p>
+              )}
+            </div>
+          )}
 
           {/* CTA */}
           <Button
