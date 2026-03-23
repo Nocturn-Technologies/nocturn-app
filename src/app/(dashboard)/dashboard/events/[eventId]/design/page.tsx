@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ import {
   Image as ImageIcon,
   Sparkles,
   RefreshCw,
+  Camera,
+  Search,
 } from "lucide-react";
 import Link from "next/link";
 import { updateEventDesign, getEventDesign } from "@/app/actions/events";
@@ -73,6 +75,9 @@ export default function EventDesignPage() {
   const [collectiveSlug, setCollectiveSlug] = useState("");
   const [eventSlug, setEventSlug] = useState("");
 
+  // Host message
+  const [hostMessage, setHostMessage] = useState("");
+
   // AI poster generation — conversational flow
   const [generating, setGenerating] = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
@@ -81,6 +86,15 @@ export default function EventDesignPage() {
   const [posterDate, setPosterDate] = useState("");
   const [posterVenue, setPosterVenue] = useState("");
   const [posterStyle, setPosterStyle] = useState("");
+
+  // Unsplash photo backgrounds
+  const [unsplashQuery, setUnsplashQuery] = useState("");
+  const [unsplashResults, setUnsplashResults] = useState<Array<{ id: string; url: string; thumbUrl: string; photographer: string }>>([]);
+  const [unsplashLoading, setUnsplashLoading] = useState(false);
+  const [showUnsplash, setShowUnsplash] = useState(false);
+
+  // Style reference upload
+  const [styleRefUrl, setStyleRefUrl] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -101,6 +115,8 @@ export default function EventDesignPage() {
       const meta = (e.metadata ?? {}) as Record<string, string>;
       setDressCode(meta.dressCode ?? "");
       setThemeColor(meta.themeColor ?? "#7B2FF7");
+      setHostMessage(meta.hostMessage ?? "");
+      if (meta.styleRefUrl) setStyleRefUrl(meta.styleRefUrl as string);
 
       // Auto-fill poster fields from event data
       if (e.artistNames?.length > 0) setPosterDJs(e.artistNames.join(", "));
@@ -130,6 +146,7 @@ export default function EventDesignPage() {
       minAge: minAge ? parseInt(minAge) : null,
       dressCode: dressCode || null,
       themeColor,
+      hostMessage: hostMessage || null,
     });
 
     setSaving(false);
@@ -292,6 +309,68 @@ export default function EventDesignPage() {
     }
   }
 
+  // Unsplash photo search
+  const searchUnsplash = useCallback(async (query?: string) => {
+    setUnsplashLoading(true);
+    try {
+      const q = query ?? unsplashQuery;
+      const res = await fetch(`/api/unsplash?q=${encodeURIComponent(q)}`);
+      const data = await res.json();
+      if (data.photos) {
+        setUnsplashResults(data.photos);
+        setShowUnsplash(true);
+      }
+    } catch {
+      // Silently fail — user can retry
+    } finally {
+      setUnsplashLoading(false);
+    }
+  }, [unsplashQuery]);
+
+  async function selectUnsplashPhoto(photo: { id: string; url: string; downloadUrl?: string }) {
+    // Track download per Unsplash guidelines
+    if (photo.downloadUrl) {
+      fetch("/api/unsplash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ downloadUrl: photo.downloadUrl }),
+      }).catch(() => {});
+    }
+
+    // Composite text on the photo
+    try {
+      const composited = await compositeTextOnPoster(photo.url, {
+        title: eventTitle,
+        djs: posterDJs,
+        date: posterDate,
+        venue: posterVenue,
+        accentColor: themeColor,
+      });
+      setGeneratedUrl(composited);
+      setShowUnsplash(false);
+    } catch {
+      // Fallback: use the photo directly
+      setFlyerUrl(photo.url);
+      setShowUnsplash(false);
+    }
+  }
+
+  // Style reference upload handler
+  function handleStyleRefUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setStyleRefUrl(reader.result as string);
+      // Auto-fill the style direction with a hint
+      if (!posterStyle) {
+        setPosterStyle("Match the visual style of the uploaded reference image");
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+
   const publicUrl = collectiveSlug && eventSlug ? `/e/${collectiveSlug}/${eventSlug}` : null;
 
   if (loading) {
@@ -440,28 +519,125 @@ export default function EventDesignPage() {
                   />
                 </div>
 
+                {/* Style reference upload */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Style reference (optional)</label>
+                  <p className="text-[11px] text-muted-foreground/60">Upload a poster you like as inspiration</p>
+                  <div className="flex items-center gap-3">
+                    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                      <Upload className="h-4 w-4" />
+                      {styleRefUrl ? "Change reference" : "Upload reference"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleStyleRefUpload}
+                      />
+                    </label>
+                    {styleRefUrl && (
+                      <div className="relative h-12 w-12 shrink-0 rounded-lg overflow-hidden border border-border">
+                        <img src={styleRefUrl} alt="Style reference" className="h-full w-full object-cover" />
+                        <button
+                          onClick={() => setStyleRefUrl(null)}
+                          className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity text-white text-xs"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {genError && (
                   <p className="text-sm text-red-400">{genError}</p>
                 )}
 
-                <Button
-                  onClick={handleGeneratePoster}
-                  disabled={generating}
-                  className="w-full bg-nocturn hover:bg-nocturn-light py-5"
-                  size="lg"
-                >
-                  {generating ? (
-                    <>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={handleGeneratePoster}
+                    disabled={generating}
+                    className="flex-1 bg-nocturn hover:bg-nocturn-light py-5"
+                    size="lg"
+                  >
+                    {generating ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Designing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="mr-2 h-4 w-4" />
+                        AI Generate
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    onClick={() => searchUnsplash()}
+                    disabled={unsplashLoading}
+                    variant="outline"
+                    className="py-5"
+                    size="lg"
+                  >
+                    {unsplashLoading ? (
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Designing your poster...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-4 w-4" />
-                      Generate Poster
-                    </>
-                  )}
-                </Button>
+                    ) : (
+                      <Camera className="mr-2 h-4 w-4" />
+                    )}
+                    Photos
+                  </Button>
+                </div>
+
+                {/* Unsplash photo picker */}
+                {showUnsplash && (
+                  <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+                    <div className="flex items-center gap-2">
+                      <Search className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search nightlife photos..."
+                        value={unsplashQuery}
+                        onChange={(e) => setUnsplashQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && searchUnsplash()}
+                        className="flex-1 bg-background"
+                      />
+                      <Button size="sm" variant="outline" onClick={() => searchUnsplash()}>
+                        Search
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {unsplashResults.map((photo) => (
+                        <button
+                          key={photo.id}
+                          onClick={() => selectUnsplashPhoto(photo)}
+                          className="group relative aspect-[4/5] overflow-hidden rounded-lg border border-border"
+                        >
+                          <img
+                            src={photo.thumbUrl}
+                            alt={`Photo by ${photo.photographer}`}
+                            className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-center pb-1">
+                            <span className="text-[9px] text-white/0 group-hover:text-white/70 transition-colors truncate px-1">
+                              {photo.photographer}
+                            </span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                    {unsplashResults.length > 0 && (
+                      <p className="text-[10px] text-muted-foreground/50 text-center">
+                        Photos by Unsplash
+                      </p>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full text-xs"
+                      onClick={() => setShowUnsplash(false)}
+                    >
+                      Close
+                    </Button>
+                  </div>
+                )}
 
                 <div className="relative">
                   <div className="absolute inset-0 flex items-center">
@@ -491,6 +667,24 @@ export default function EventDesignPage() {
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+
+          {/* Host Message */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Host Message</label>
+            <p className="text-xs text-muted-foreground">
+              A personal note displayed on the public event page
+            </p>
+            <textarea
+              className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm leading-relaxed outline-none focus:ring-1 focus:ring-ring resize-y min-h-[80px]"
+              placeholder="e.g. Can't wait to see you all tonight — bring the energy!"
+              value={hostMessage}
+              onChange={(e) => setHostMessage(e.target.value)}
+              maxLength={280}
+            />
+            <p className="text-right text-xs text-muted-foreground">
+              {hostMessage.length}/280
+            </p>
           </div>
 
           {/* Vibe Tags */}

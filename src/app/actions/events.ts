@@ -447,6 +447,7 @@ interface EventDesignInput {
   minAge?: number | null;
   dressCode?: string | null;
   themeColor?: string | null;
+  hostMessage?: string | null;
 }
 
 export async function updateEventDesign(eventId: string, input: EventDesignInput) {
@@ -494,6 +495,9 @@ export async function updateEventDesign(eventId: string, input: EventDesignInput
   }
   if (input.themeColor !== undefined) {
     newMetadata.themeColor = input.themeColor;
+  }
+  if (input.hostMessage !== undefined) {
+    newMetadata.hostMessage = input.hostMessage;
   }
   updatePayload.metadata = newMetadata;
 

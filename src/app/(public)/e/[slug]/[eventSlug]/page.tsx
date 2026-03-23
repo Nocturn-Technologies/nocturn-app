@@ -6,6 +6,11 @@ import { ShareButton } from "@/components/public-event/share-button";
 import { PublicEventShareCard } from "@/components/public-event/public-event-share-card";
 import { ExpandableText } from "@/components/public-event/expandable-text";
 import { EventCountdown, SellingFastBadge } from "@/components/public-event/event-countdown";
+import { GoingCounter } from "@/components/public-event/going-counter";
+import { HostMessage } from "@/components/public-event/host-message";
+import { EventReactions } from "@/components/public-event/event-reactions";
+import { CollectiveProfile } from "@/components/public-event/collective-profile";
+import { PastEvents } from "@/components/public-event/past-events";
 import type { Metadata } from "next";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import Link from "next/link";
@@ -73,10 +78,10 @@ export default async function PublicEventPage({ params }: Props) {
   const { slug, eventSlug } = await params;
   const supabase = createAdminClient();
 
-  // Fetch collective
+  // Fetch collective (include description for profile section)
   const { data: collective } = await supabase
     .from("collectives")
-    .select("id, name, slug, logo_url, instagram")
+    .select("id, name, slug, logo_url, instagram, description")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -117,6 +122,34 @@ export default async function PublicEventPage({ params }: Props) {
     .eq("status", "confirmed")
     .order("set_time");
 
+  // Fetch reaction counts (aggregated)
+  const { data: reactionRows } = await supabase
+    .from("event_reactions")
+    .select("emoji")
+    .eq("event_id", event.id);
+
+  const reactionCounts: Record<string, number> = {};
+  for (const r of reactionRows || []) {
+    reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
+  }
+
+  // Count total events by this collective (for profile section)
+  const { count: collectiveEventCount } = await supabase
+    .from("events")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collective.id)
+    .in("status", ["published", "completed"]);
+
+  // Fetch past events by this collective (up to 6, exclude current)
+  const { data: pastEvents } = await supabase
+    .from("events")
+    .select("title, slug, flyer_url, starts_at")
+    .eq("collective_id", collective.id)
+    .eq("status", "completed")
+    .neq("id", event.id)
+    .order("starts_at", { ascending: false })
+    .limit(6);
+
   const venue = event.venues as unknown as {
     name: string;
     address: string;
@@ -145,8 +178,9 @@ export default async function PublicEventPage({ params }: Props) {
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://nocturn.app"}/e/${slug}/${eventSlug}`;
   const mapsUrl = venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}` : null;
 
-  // Dress code / min age from metadata
+  // Dress code / min age / host message from metadata
   const dressCode = metadata.dressCode || null;
+  const hostMessage = metadata.hostMessage || null;
   const minAge = event.min_age as number | null;
   const vibeTags = (event.vibe_tags ?? []) as string[];
 
@@ -235,6 +269,9 @@ export default async function PublicEventPage({ params }: Props) {
               ))}
               <SellingFastBadge soldPercent={soldPercent} />
             </div>
+
+            {/* Going counter */}
+            <GoingCounter count={ticketsSold ?? 0} accentColor={accentColor} />
           </div>
 
           {/* ─── Live Countdown ─── */}
@@ -342,6 +379,16 @@ export default async function PublicEventPage({ params }: Props) {
             </div>
           )}
 
+          {/* ─── Host Message ─── */}
+          {hostMessage && (
+            <HostMessage
+              message={hostMessage}
+              hostName={collective.name}
+              hostAvatarUrl={collective.logo_url}
+              accentColor={accentColor}
+            />
+          )}
+
           {/* ─── Lineup ─── */}
           {artists && artists.length > 0 && (
             <div className="space-y-3">
@@ -398,6 +445,9 @@ export default async function PublicEventPage({ params }: Props) {
             />
           )}
 
+          {/* ─── Guest Reactions ─── */}
+          <EventReactions eventId={event.id} initialCounts={reactionCounts} />
+
           {/* Status banners */}
           {event.status === "cancelled" && (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-center">
@@ -429,6 +479,29 @@ export default async function PublicEventPage({ params }: Props) {
               publicUrl,
             }}
             accentColor={accentColor}
+          />
+
+          {/* ─── Collective Profile ─── */}
+          <CollectiveProfile
+            name={collective.name}
+            slug={collective.slug}
+            description={collective.description ?? null}
+            logoUrl={collective.logo_url}
+            instagram={collective.instagram}
+            eventCount={collectiveEventCount ?? 0}
+            accentColor={accentColor}
+          />
+
+          {/* ─── Past Events ─── */}
+          <PastEvents
+            events={(pastEvents || []).map((e) => ({
+              title: e.title,
+              slug: e.slug,
+              flyerUrl: e.flyer_url,
+              startsAt: e.starts_at,
+            }))}
+            collectiveSlug={collective.slug}
+            collectiveName={collective.name}
           />
 
           {/* ─── Footer ─── */}

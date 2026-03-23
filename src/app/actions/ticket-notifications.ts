@@ -54,30 +54,28 @@ export async function getRecentSales(collectiveId: string, limit = 10): Promise<
 
   if (!tickets || tickets.length === 0) return [];
 
-  // Get running totals per event
+  // Get running totals per event — batched (was N+1: 3 queries per event)
+  const [{ data: allPaidTickets }, { data: allTiers }] = await Promise.all([
+    sb
+      .from("tickets")
+      .select("event_id, price_paid")
+      .in("event_id", eventIds)
+      .in("status", ["paid", "checked_in"]),
+    sb
+      .from("ticket_tiers")
+      .select("event_id, capacity")
+      .in("event_id", eventIds),
+  ]);
+
   const totals: Record<string, { sold: number; capacity: number; revenue: number }> = {};
   for (const eid of eventIds) {
-    const { count } = await sb
-      .from("tickets")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", eid)
-      .in("status", ["paid", "checked_in"]);
-
-    const { data: tiers } = await sb
-      .from("ticket_tiers")
-      .select("capacity")
-      .eq("event_id", eid);
-
-    const { data: revData } = await sb
-      .from("tickets")
-      .select("price_paid")
-      .eq("event_id", eid)
-      .in("status", ["paid", "checked_in"]);
-
-    const cap = (tiers || []).reduce((s, t) => s + (t.capacity || 0), 0);
-    const rev = (revData || []).reduce((s, t) => s + Number(t.price_paid || 0), 0);
-
-    totals[eid] = { sold: count ?? 0, capacity: cap, revenue: rev };
+    const eventTickets = (allPaidTickets || []).filter((t) => t.event_id === eid);
+    const eventTiers = (allTiers || []).filter((t) => t.event_id === eid);
+    totals[eid] = {
+      sold: eventTickets.length,
+      capacity: eventTiers.reduce((s, t) => s + (t.capacity || 0), 0),
+      revenue: eventTickets.reduce((s, t) => s + Number(t.price_paid || 0), 0),
+    };
   }
 
   return tickets.map((t) => {
