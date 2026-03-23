@@ -14,6 +14,8 @@ interface TicketStub {
 function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
+  const isFree = searchParams.get("free") === "true";
+  const freeCount = searchParams.get("tickets");
   const [tickets, setTickets] = useState<TicketStub[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -42,14 +44,15 @@ function SuccessContent() {
         </h1>
 
         <p className="text-muted-foreground text-lg">
-          Your tickets have been confirmed. Check your email for the receipt and
-          ticket details.
+          {isFree
+            ? `You're registered${freeCount && Number(freeCount) > 1 ? ` (${freeCount} spots)` : ""}! Check your email for your QR code.`
+            : "Your tickets have been confirmed. Check your email for the receipt and ticket details."}
         </p>
 
         <div className="rounded-xl border border-border bg-card p-6 space-y-3">
           <div className="inline-flex items-center gap-2 rounded-full bg-nocturn/10 px-4 py-1.5 text-sm font-medium text-nocturn-light">
             <span className="h-2 w-2 rounded-full bg-nocturn animate-pulse" />
-            Payment confirmed
+            {isFree ? "Registration confirmed" : "Payment confirmed"}
           </div>
           {sessionId && (
             <p className="text-xs text-muted-foreground break-all">
@@ -114,10 +117,10 @@ function SuccessContent() {
         <p className="text-xs text-muted-foreground">
           Questions? Reach out to the event organizer or contact us at{" "}
           <a
-            href="mailto:support@nocturn.app"
+            href="mailto:shawn@trynocturn.com"
             className="underline hover:text-foreground"
           >
-            support@nocturn.app
+            shawn@trynocturn.com
           </a>
         </p>
       </div>

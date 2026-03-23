@@ -76,7 +76,7 @@ export default function TermsPage() {
 
           <section>
             <h2 className="mb-3 text-lg font-semibold text-foreground">13. Contact</h2>
-            <p>Questions about these Terms? Contact us at <a href="mailto:shawnqanun@gmail.com" className="text-nocturn hover:underline">shawnqanun@gmail.com</a>.</p>
+            <p>Questions about these Terms? Contact us at <a href="mailto:shawn@trynocturn.com" className="text-nocturn hover:underline">shawn@trynocturn.com</a>.</p>
           </section>
 
           <p className="pt-4 text-xs text-muted-foreground italic">

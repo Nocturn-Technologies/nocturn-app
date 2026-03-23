@@ -90,7 +90,7 @@ export default function PrivacyPage() {
 
           <section>
             <h2 className="mb-3 text-lg font-semibold text-foreground">11. Contact</h2>
-            <p>Questions about your privacy? Contact us at <a href="mailto:shawnqanun@gmail.com" className="text-nocturn hover:underline">shawnqanun@gmail.com</a>.</p>
+            <p>Questions about your privacy? Contact us at <a href="mailto:shawn@trynocturn.com" className="text-nocturn hover:underline">shawn@trynocturn.com</a>.</p>
           </section>
 
           <p className="pt-4 text-xs text-muted-foreground italic">
