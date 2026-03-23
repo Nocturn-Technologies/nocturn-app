@@ -181,20 +181,20 @@ export function DashboardHome(props: DashboardHomeProps) {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in-up">
       {/* Greeting */}
-      <div className="animate-fade-in-up">
+      <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold truncate">
             {greeting}, {props.firstName}
           </h1>
-          <Sparkles className="h-5 w-5 text-nocturn animate-text-glow" />
+          <Sparkles className="h-5 w-5 shrink-0 text-nocturn animate-text-glow" />
         </div>
-        <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">{message}</p>
+        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{message}</p>
       </div>
 
       {/* Quick Actions — horizontal scroll on mobile */}
-      <div className="animate-fade-in-up delay-50">
+      <div className="delay-50">
         <div className="flex gap-2.5 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
           {quickActions.map((action) => {
             const Icon = action.icon;
@@ -202,9 +202,9 @@ export function DashboardHome(props: DashboardHomeProps) {
               <Link
                 key={action.href}
                 href={action.href}
-                className="flex items-center gap-2 shrink-0 rounded-full border border-[#7B2FF7]/20 bg-[#7B2FF7]/5 px-4 py-2.5 min-h-[44px] hover:bg-[#7B2FF7]/10 hover:border-[#7B2FF7]/40 active:scale-95 transition-all"
+                className="flex items-center gap-2 shrink-0 rounded-full border border-nocturn/20 bg-nocturn/5 px-4 py-2.5 min-h-[44px] hover:bg-nocturn/10 hover:border-nocturn/40 active:scale-95 active:bg-nocturn/15 transition-all duration-200"
               >
-                <Icon className="h-4 w-4 text-[#7B2FF7]" />
+                <Icon className="h-4 w-4 text-nocturn" />
                 <span className="text-sm font-medium text-white whitespace-nowrap">
                   {action.label}
                 </span>
@@ -215,8 +215,8 @@ export function DashboardHome(props: DashboardHomeProps) {
       </div>
 
       {/* Financial Pulse */}
-      <Link href="/dashboard/finance" className="block animate-fade-in-up delay-75">
-        <Card className="border-nocturn/20 transition-all hover:border-nocturn/40 hover:shadow-lg hover:shadow-nocturn/5">
+      <Link href="/dashboard/finance" className="block delay-75">
+        <Card className="border-nocturn/20 transition-all duration-200 hover:border-nocturn/40 hover:shadow-lg hover:shadow-nocturn/5 active:scale-[0.98]">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -272,35 +272,35 @@ export function DashboardHome(props: DashboardHomeProps) {
       </Link>
 
       {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card className="animate-fade-in-up delay-100">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-nocturn/10">
+      <div className="grid gap-4 grid-cols-3 delay-100">
+        <Card className="transition-all duration-200 hover:border-nocturn/30 hover:shadow-md hover:shadow-nocturn/5">
+          <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-nocturn/10">
               <Calendar className="h-5 w-5 text-nocturn" />
             </div>
-            <div>
+            <div className="text-center md:text-left">
               <p className="text-xs text-muted-foreground">Upcoming</p>
               <p className="text-xl font-bold text-nocturn">{props.upcomingCount}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="animate-fade-in-up delay-200">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-nocturn-teal/10">
+        <Card className="transition-all duration-200 hover:border-nocturn/30 hover:shadow-md hover:shadow-nocturn/5">
+          <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-nocturn-teal/10">
               <DollarSign className="h-5 w-5 text-nocturn-teal" />
             </div>
-            <div>
+            <div className="text-center md:text-left min-w-0">
               <p className="text-xs text-muted-foreground">Revenue</p>
-              <p className="text-xl font-bold">${props.totalRevenue.toFixed(2)}</p>
+              <p className="text-xl font-bold truncate">${props.totalRevenue.toFixed(2)}</p>
             </div>
           </CardContent>
         </Card>
-        <Card className="animate-fade-in-up delay-300">
-          <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-nocturn-coral/10">
+        <Card className="transition-all duration-200 hover:border-nocturn/30 hover:shadow-md hover:shadow-nocturn/5">
+          <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-nocturn-coral/10">
               <Users className="h-5 w-5 text-nocturn-coral" />
             </div>
-            <div>
+            <div className="text-center md:text-left">
               <p className="text-xs text-muted-foreground">Attendees</p>
               <p className="text-xl font-bold">{props.totalAttendees}</p>
             </div>
@@ -309,17 +309,17 @@ export function DashboardHome(props: DashboardHomeProps) {
       </div>
 
       {/* Smart Actions */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in-up delay-300">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 delay-300">
         {actions.map((action, i) => (
           <Link key={action.href + i} href={action.href}>
-            <Card className={`h-full transition-all hover:border-nocturn/30 hover:shadow-lg hover:shadow-nocturn/5 ${action.priority === "primary" ? "border-nocturn/20" : ""}`}>
+            <Card className={`h-full transition-all duration-200 hover:border-nocturn/30 hover:shadow-lg hover:shadow-nocturn/5 active:scale-[0.98] ${action.priority === "primary" ? "border-nocturn/20" : ""}`}>
               <CardContent className="flex items-start gap-3 p-4">
-                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${action.color}`}>
+                <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${action.color}`}>
                   {action.icon}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">{action.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
+                  <p className="font-medium text-sm truncate">{action.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                     {action.description}
                   </p>
                 </div>
@@ -331,9 +331,9 @@ export function DashboardHome(props: DashboardHomeProps) {
       </div>
 
       {/* AI Insights */}
-      <Card className="border-l-4 border-l-nocturn animate-fade-in-up delay-400">
+      <Card className="border-l-4 border-l-nocturn delay-400">
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
+          <CardTitle className="flex items-center gap-2 text-sm font-bold">
             <Sparkles className="h-4 w-4 text-nocturn animate-text-glow" />
             Nocturn Insights
           </CardTitle>
@@ -343,10 +343,10 @@ export function DashboardHome(props: DashboardHomeProps) {
             <Link
               key={i}
               href={insight.href}
-              className="flex items-start gap-2 group"
+              className="flex items-start gap-2 group rounded-lg px-2 py-1.5 -mx-2 transition-colors duration-200 hover:bg-accent active:bg-accent/80"
             >
-              <ArrowRight className="h-3.5 w-3.5 shrink-0 mt-0.5 text-nocturn opacity-50 group-hover:opacity-100 transition-opacity" />
-              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors">
+              <ArrowRight className="h-3.5 w-3.5 shrink-0 mt-0.5 text-nocturn opacity-50 group-hover:opacity-100 transition-opacity duration-200" />
+              <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-200 line-clamp-2">
                 {insight.text}
               </p>
             </Link>
