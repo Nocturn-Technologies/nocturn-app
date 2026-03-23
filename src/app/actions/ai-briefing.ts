@@ -85,7 +85,14 @@ function generateFallbackBriefing(data: Awaited<ReturnType<typeof getDashboardBr
 // ─── Main Action ────────────────────────────────────────────────────────────
 
 export async function generateMorningBriefing(collectiveId: string): Promise<BriefingItem[]> {
-  const data = await getDashboardBriefingData(collectiveId);
+  let data: Awaited<ReturnType<typeof getDashboardBriefingData>>;
+
+  try {
+    data = await getDashboardBriefingData(collectiveId);
+  } catch (err) {
+    console.error("Failed to fetch briefing data:", err);
+    return []; // Safe fallback — dashboard renders without briefing
+  }
 
   const prompt = `Here is today's data for this collective:
 
@@ -98,20 +105,19 @@ export async function generateMorningBriefing(collectiveId: string): Promise<Bri
 
 Generate the morning briefing JSON array.`;
 
-  const result = await generateWithClaude(prompt, BRIEFING_SYSTEM_PROMPT);
+  try {
+    const result = await generateWithClaude(prompt, BRIEFING_SYSTEM_PROMPT);
 
-  if (result) {
-    try {
-      // Handle Claude wrapping JSON in markdown code blocks
+    if (result) {
       const cleaned = result.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
       const parsed: BriefingItem[] = JSON.parse(cleaned);
 
       if (Array.isArray(parsed) && parsed.length >= 1) {
         return parsed.slice(0, 5);
       }
-    } catch {
-      console.error("Failed to parse briefing JSON, using fallback");
     }
+  } catch {
+    console.error("Failed to parse briefing JSON, using fallback");
   }
 
   return generateFallbackBriefing(data);

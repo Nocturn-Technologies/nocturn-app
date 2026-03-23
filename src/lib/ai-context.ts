@@ -15,8 +15,8 @@ export async function getEventContext(eventId: string): Promise<string> {
 
   const [eventRes, tiersRes, ticketsRes, artistsRes, tasksRes] = await Promise.all([
     sb.from("events").select("title, description, status, starts_at, ends_at, doors_at, flyer_url, collective_id, venues(name, city, capacity)").eq("id", eventId).maybeSingle(),
-    sb.from("ticket_tiers").select("name, price, capacity").eq("event_id", eventId),
-    sb.from("tickets").select("status, price_paid, created_at").eq("event_id", eventId),
+    sb.from("ticket_tiers").select("id, name, price, capacity").eq("event_id", eventId),
+    sb.from("tickets").select("ticket_tier_id, status, price_paid, created_at").eq("event_id", eventId),
     sb.from("event_artists").select("artists(name), fee, set_time, booking_status").eq("event_id", eventId),
     sb.from("event_tasks").select("title, completed").eq("event_id", eventId),
   ]);
@@ -48,7 +48,7 @@ export async function getEventContext(eventId: string): Promise<string> {
     "",
     "TICKET TIERS:",
     ...tiers.map((t) => {
-      const sold = tickets.filter((tk) => ["paid", "checked_in"].includes(tk.status)).length;
+      const sold = tickets.filter((tk) => tk.ticket_tier_id === t.id && ["paid", "checked_in"].includes(tk.status)).length;
       return `  ${t.name}: $${Number(t.price).toFixed(2)} — ${sold}/${t.capacity} sold`;
     }),
     "",

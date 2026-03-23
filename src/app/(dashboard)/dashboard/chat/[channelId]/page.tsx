@@ -155,11 +155,14 @@ export default function ChatRoomPage() {
     const shouldRespond =
       content.toLowerCase().includes("@nocturn") || looksLikeQuestion(content);
 
-    if (shouldRespond) {
+    if (shouldRespond && !aiTyping) {
       setAiTyping(true);
       scrollToBottom();
-      await generateAIResponse(content);
-      setAiTyping(false);
+      try {
+        await generateAIResponse(content);
+      } finally {
+        setAiTyping(false);
+      }
     }
   };
 

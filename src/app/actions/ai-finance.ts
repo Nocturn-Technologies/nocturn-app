@@ -158,9 +158,10 @@ export async function generateEventForecast(eventId: string): Promise<{
   const costPerTicket = avgTicketPrice > 0
     ? (artistFees + estimatedExpenses) / avgTicketPrice
     : 0;
-  const breakEvenTickets = Math.ceil(
-    (artistFees + estimatedExpenses) / (avgTicketPrice * (1 - PLATFORM_FEE_PERCENT / 100 - 0.029))
-  );
+  const netPerTicket = avgTicketPrice * (1 - PLATFORM_FEE_PERCENT / 100 - 0.029);
+  const breakEvenTickets = netPerTicket > 0
+    ? Math.ceil((artistFees + estimatedExpenses) / netPerTicket)
+    : 0;
 
   // Generate insights
   const insights: string[] = [];
@@ -196,8 +197,21 @@ export async function generateEventForecast(eventId: string): Promise<{
   }
 
   // AI narrative — send computed data to Claude for a plain-English summary
-  const ticketsPerDay = daysUntilEvent > 0 && ticketsSoldSoFar > 0
-    ? ticketsSoldSoFar / Math.max(1, Math.ceil((Date.now() - new Date(event.starts_at).getTime() + daysUntilEvent * 86400000) / 86400000 - daysUntilEvent))
+  // Calculate ticket velocity: tickets sold / days since first ticket sale
+  const { data: firstTicket } = await admin
+    .from("tickets")
+    .select("created_at")
+    .eq("event_id", eventId)
+    .in("status", ["paid", "checked_in"])
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const daysSinceSalesStarted = firstTicket?.created_at
+    ? Math.max(1, Math.ceil((Date.now() - new Date(firstTicket.created_at).getTime()) / 86400000))
+    : 1;
+  const ticketsPerDay = ticketsSoldSoFar > 0
+    ? ticketsSoldSoFar / daysSinceSalesStarted
     : 0;
 
   const forecastPrompt = `You are a concise financial advisor for a nightlife event promoter. Given this event forecast data, write a 2-3 sentence plain English explanation of where ticket sales stand and the financial outlook, followed by exactly 2 tactical recommendations. Be specific with numbers. No headers, no bullet points — just a short paragraph.
