@@ -11,9 +11,12 @@ import {
   ExternalLink,
   Check,
   Image as ImageIcon,
+  Sparkles,
+  RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 import { updateEventDesign, getEventDesign } from "@/app/actions/events";
+import { generatePosterPrompt } from "@/app/actions/ai-poster";
 
 const VIBE_OPTIONS = [
   "House",
@@ -70,6 +73,12 @@ export default function EventDesignPage() {
   const [collectiveSlug, setCollectiveSlug] = useState("");
   const [eventSlug, setEventSlug] = useState("");
 
+  // AI poster generation
+  const [generating, setGenerating] = useState(false);
+  const [styleDirection, setStyleDirection] = useState("");
+  const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
+
   useEffect(() => {
     async function load() {
       const result = await getEventDesign(eventId);
@@ -123,6 +132,49 @@ export default function EventDesignPage() {
     }
   }
 
+  async function handleGeneratePoster() {
+    setGenerating(true);
+    setGenError(null);
+    setGeneratedUrl(null);
+
+    try {
+      // Step 1: Claude crafts the perfect prompt
+      const { prompt } = await generatePosterPrompt({
+        title: eventTitle,
+        genre: vibeTags,
+        styleDirection: styleDirection || undefined,
+      });
+
+      // Step 2: Replicate generates the image
+      const res = await fetch("/api/generate-poster", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt, aspectRatio: "3:4" }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setGenError(data.error || "Failed to generate poster");
+        setGenerating(false);
+        return;
+      }
+
+      setGeneratedUrl(data.imageUrl);
+      setGenerating(false);
+    } catch {
+      setGenError("Failed to generate poster. Please try again.");
+      setGenerating(false);
+    }
+  }
+
+  function acceptGeneratedPoster() {
+    if (generatedUrl) {
+      setFlyerUrl(generatedUrl);
+      setGeneratedUrl(null);
+    }
+  }
+
   const publicUrl = collectiveSlug && eventSlug ? `/e/${collectiveSlug}/${eventSlug}` : null;
 
   if (loading) {
@@ -161,41 +213,118 @@ export default function EventDesignPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         {/* ─── Controls ─── */}
         <div className="space-y-6">
-          {/* Flyer Upload Area */}
+          {/* Flyer — AI Generate or URL */}
           <div className="space-y-3">
             <label className="text-sm font-medium">Event Flyer</label>
-            <div className="rounded-2xl border-2 border-dashed border-border bg-card/50 p-8 text-center transition-colors hover:border-muted-foreground/30">
-              {flyerUrl ? (
-                <div className="space-y-3">
-                  <div
-                    className="mx-auto h-48 w-full max-w-sm rounded-xl bg-cover bg-center"
-                    style={{ backgroundImage: `url(${flyerUrl})` }}
+
+            {/* Current flyer preview */}
+            {flyerUrl && (
+              <div className="space-y-3">
+                <div
+                  className="mx-auto h-64 w-full max-w-sm rounded-xl bg-cover bg-center border border-border"
+                  style={{ backgroundImage: `url(${flyerUrl})` }}
+                />
+                <button
+                  onClick={() => setFlyerUrl("")}
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Remove flyer
+                </button>
+              </div>
+            )}
+
+            {/* AI Generated poster preview */}
+            {generatedUrl && !flyerUrl && (
+              <div className="space-y-3">
+                <div className="relative">
+                  <img
+                    src={generatedUrl}
+                    alt="AI Generated Poster"
+                    className="mx-auto h-64 w-full max-w-sm rounded-xl object-cover border-2 border-nocturn"
                   />
-                  <button
-                    onClick={() => setFlyerUrl("")}
-                    className="text-sm text-muted-foreground hover:text-foreground"
+                  <div className="absolute top-2 right-2 rounded-full bg-nocturn px-2 py-1 text-[10px] font-bold text-white">
+                    AI Generated
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={acceptGeneratedPoster}
+                    className="flex-1 bg-nocturn hover:bg-nocturn-light"
                   >
-                    Remove flyer
-                  </button>
+                    <Check className="mr-2 h-4 w-4" />
+                    Use This Poster
+                  </Button>
+                  <Button
+                    onClick={handleGeneratePoster}
+                    variant="outline"
+                    disabled={generating}
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${generating ? "animate-spin" : ""}`} />
+                    Regenerate
+                  </Button>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Drop your flyer or click to upload
-                  </p>
-                  <p className="text-xs text-muted-foreground/60">
-                    Upload coming soon — paste URL below for now
+              </div>
+            )}
+
+            {/* AI Generation controls */}
+            {!flyerUrl && !generatedUrl && (
+              <div className="rounded-2xl border-2 border-dashed border-nocturn/30 bg-nocturn/5 p-6 space-y-4">
+                <div className="text-center space-y-2">
+                  <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10">
+                    <Sparkles className="h-6 w-6 text-nocturn" />
+                  </div>
+                  <p className="text-sm font-medium">Generate with AI</p>
+                  <p className="text-xs text-muted-foreground">
+                    Describe the vibe and AI will create a poster
                   </p>
                 </div>
-              )}
-            </div>
-            <Input
-              placeholder="Paste flyer image URL..."
-              value={flyerUrl}
-              onChange={(e) => setFlyerUrl(e.target.value)}
-              className="bg-card"
-            />
+
+                <Input
+                  placeholder="e.g. dark and moody, neon lights, futuristic..."
+                  value={styleDirection}
+                  onChange={(e) => setStyleDirection(e.target.value)}
+                  className="bg-card"
+                />
+
+                {genError && (
+                  <p className="text-sm text-red-400">{genError}</p>
+                )}
+
+                <Button
+                  onClick={handleGeneratePoster}
+                  disabled={generating}
+                  className="w-full bg-nocturn hover:bg-nocturn-light"
+                >
+                  {generating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Generating poster...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-4 w-4" />
+                      Generate Poster
+                    </>
+                  )}
+                </Button>
+
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-background px-2 text-muted-foreground">or paste URL</span>
+                  </div>
+                </div>
+
+                <Input
+                  placeholder="Paste flyer image URL..."
+                  value={flyerUrl}
+                  onChange={(e) => setFlyerUrl(e.target.value)}
+                  className="bg-card"
+                />
+              </div>
+            )}
           </div>
 
           {/* Description */}
