@@ -5,6 +5,7 @@ import { TicketSection } from "@/components/public-event/ticket-section";
 import { ShareButton } from "@/components/public-event/share-button";
 import { PublicEventShareCard } from "@/components/public-event/public-event-share-card";
 import { ExpandableText } from "@/components/public-event/expandable-text";
+import { EventCountdown, SellingFastBadge } from "@/components/public-event/event-countdown";
 import type { Metadata } from "next";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import Link from "next/link";
@@ -97,6 +98,16 @@ export default async function PublicEventPage({ params }: Props) {
     .select("*")
     .eq("event_id", event.id)
     .order("sort_order");
+
+  // Fetch ticket sold count for social proof
+  const { count: ticketsSold } = await supabase
+    .from("tickets")
+    .select("*", { count: "exact", head: true })
+    .eq("event_id", event.id)
+    .in("status", ["paid", "checked_in"]);
+
+  const totalCapacity = (tiers || []).reduce((s, t) => s + (t.capacity || 0), 0);
+  const soldPercent = totalCapacity > 0 ? Math.round(((ticketsSold ?? 0) / totalCapacity) * 100) : 0;
 
   // Fetch lineup
   const { data: artists } = await supabase
@@ -212,20 +223,24 @@ export default async function PublicEventPage({ params }: Props) {
               {event.title}
             </h1>
 
-            {/* Vibe tags */}
-            {vibeTags.length > 0 && (
-              <div className="flex flex-wrap gap-2">
-                {vibeTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/60"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
+            {/* Vibe tags + selling fast badge */}
+            <div className="flex flex-wrap items-center gap-2">
+              {vibeTags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-white/60"
+                >
+                  {tag}
+                </span>
+              ))}
+              <SellingFastBadge soldPercent={soldPercent} />
+            </div>
           </div>
+
+          {/* ─── Live Countdown ─── */}
+          {isUpcoming && (
+            <EventCountdown targetDate={event.doors_at || event.starts_at} />
+          )}
 
           {/* ─── Date & Time Card ─── */}
           <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
