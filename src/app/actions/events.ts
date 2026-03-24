@@ -48,6 +48,10 @@ interface UpdateEventInput {
   venueCapacity: number;
   tiers: { id?: string; name: string; price: number; quantity: number }[];
   removedTierIds: string[];
+  barMinimum?: number | null;
+  venueDeposit?: number | null;
+  venueCost?: number | null;
+  estimatedBarRevenue?: number | null;
 }
 
 export async function createEvent(input: CreateEventInput) {
@@ -274,6 +278,10 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
       starts_at: startsAt,
       ends_at: endsAt,
       doors_at: doorsAt,
+      bar_minimum: input.barMinimum ?? null,
+      venue_deposit: input.venueDeposit ?? null,
+      venue_cost: input.venueCost ?? null,
+      estimated_bar_revenue: input.estimatedBarRevenue ?? null,
     })
     .eq("id", eventId);
 

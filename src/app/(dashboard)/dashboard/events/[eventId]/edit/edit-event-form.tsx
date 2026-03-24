@@ -16,6 +16,7 @@ import {
   Plus,
   Trash2,
   Save,
+  DollarSign,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -39,6 +40,10 @@ interface EventData {
   venueCity: string;
   venueCapacity: number;
   tiers: TierData[];
+  barMinimum: number | null;
+  venueDeposit: number | null;
+  venueCost: number | null;
+  estimatedBarRevenue: number | null;
 }
 
 export function EditEventForm({ event }: { event: EventData }) {
@@ -58,6 +63,10 @@ export function EditEventForm({ event }: { event: EventData }) {
   const [venueCapacity, setVenueCapacity] = useState(event.venueCapacity);
   const [tiers, setTiers] = useState<TierData[]>(event.tiers);
   const [removedTierIds, setRemovedTierIds] = useState<string[]>([]);
+  const [barMinimum, setBarMinimum] = useState(event.barMinimum ?? "");
+  const [venueDeposit, setVenueDeposit] = useState(event.venueDeposit ?? "");
+  const [venueCostVal, setVenueCostVal] = useState(event.venueCost ?? "");
+  const [estimatedBarRevenue, setEstimatedBarRevenue] = useState(event.estimatedBarRevenue ?? "");
 
   function addTier() {
     setTiers([...tiers, { name: "", price: 0, quantity: 0 }]);
@@ -108,6 +117,10 @@ export function EditEventForm({ event }: { event: EventData }) {
         quantity: Number(t.quantity),
       })),
       removedTierIds,
+      barMinimum: barMinimum ? Number(barMinimum) : null,
+      venueDeposit: venueDeposit ? Number(venueDeposit) : null,
+      venueCost: venueCostVal ? Number(venueCostVal) : null,
+      estimatedBarRevenue: estimatedBarRevenue ? Number(estimatedBarRevenue) : null,
     });
 
     if (result.error) {
@@ -263,6 +276,78 @@ export function EditEventForm({ event }: { event: EventData }) {
               placeholder="e.g. 500"
             />
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Venue Financials */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-nocturn" />
+            Venue Financials
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="venueCost">Venue Cost ($)</Label>
+              <Input
+                id="venueCost"
+                type="number"
+                min="0"
+                step="0.01"
+                value={venueCostVal}
+                onChange={(e) => setVenueCostVal(e.target.value ? Number(e.target.value) : "")}
+                placeholder="e.g. 2500"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="venueDeposit">Venue Deposit ($)</Label>
+              <Input
+                id="venueDeposit"
+                type="number"
+                min="0"
+                step="0.01"
+                value={venueDeposit}
+                onChange={(e) => setVenueDeposit(e.target.value ? Number(e.target.value) : "")}
+                placeholder="e.g. 1000"
+              />
+              <p className="text-[10px] text-muted-foreground">Amount at risk if bar minimum not met</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="barMinimum">Bar Minimum ($)</Label>
+              <Input
+                id="barMinimum"
+                type="number"
+                min="0"
+                step="0.01"
+                value={barMinimum}
+                onChange={(e) => setBarMinimum(e.target.value ? Number(e.target.value) : "")}
+                placeholder="e.g. 3000"
+              />
+              <p className="text-[10px] text-muted-foreground">Minimum bar sales required by venue</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="estimatedBarRevenue">Estimated Bar Revenue ($)</Label>
+              <Input
+                id="estimatedBarRevenue"
+                type="number"
+                min="0"
+                step="0.01"
+                value={estimatedBarRevenue}
+                onChange={(e) => setEstimatedBarRevenue(e.target.value ? Number(e.target.value) : "")}
+                placeholder="e.g. 4000"
+              />
+              <p className="text-[10px] text-muted-foreground">Your estimate of total bar sales for the night</p>
+            </div>
+          </div>
+          {barMinimum && estimatedBarRevenue && Number(estimatedBarRevenue) < Number(barMinimum) && (
+            <div className="rounded-md bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-400">
+              Your estimated bar revenue is below the bar minimum. You risk losing your ${venueDeposit || "deposit"}.
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -26,9 +26,18 @@ export interface ForecastData {
 
   // Cost breakdown
   artistFees: number;
+  talentTravelCosts: number;
+  venueCost: number;
   estimatedExpenses: number;
   stripeFees: number;
   platformFee: number;
+
+  // Bar minimum
+  barMinimum: number;
+  venueDeposit: number;
+  estimatedBarRevenue: number;
+  barMinimumMet: boolean;
+  depositAtRisk: boolean;
 
   // Bottom line
   projectedProfit: number;
@@ -62,7 +71,7 @@ export async function generateEventForecast(eventId: string): Promise<{
   // Get event
   const { data: event } = await admin
     .from("events")
-    .select("id, title, starts_at, collective_id")
+    .select("id, title, starts_at, collective_id, bar_minimum, venue_deposit, venue_cost, estimated_bar_revenue")
     .eq("id", eventId)
     .maybeSingle();
 
@@ -131,14 +140,26 @@ export async function generateEventForecast(eventId: string): Promise<{
   const bestCase = totalCapacity * avgTicketPrice; // sell out
   const worstCase = currentRevenue; // no more sales
 
-  // Get artist fees
+  // Get artist fees + travel costs
   const { data: bookings } = await admin
     .from("event_artists")
-    .select("fee")
+    .select("fee, flight_cost, hotel_cost, transport_cost")
     .eq("event_id", eventId)
     .eq("status", "confirmed");
 
   const artistFees = (bookings ?? []).reduce((s, b) => s + (Number(b.fee) || 0), 0);
+  const talentTravelCosts = (bookings ?? []).reduce(
+    (s, b) => s + (Number(b.flight_cost) || 0) + (Number(b.hotel_cost) || 0) + (Number(b.transport_cost) || 0),
+    0
+  );
+
+  // Venue financials
+  const venueCost = Number(event.venue_cost) || 0;
+  const barMinimum = Number(event.bar_minimum) || 0;
+  const venueDeposit = Number(event.venue_deposit) || 0;
+  const estimatedBarRevenue = Number(event.estimated_bar_revenue) || 0;
+  const barMinimumMet = estimatedBarRevenue >= barMinimum || barMinimum === 0;
+  const depositAtRisk = !barMinimumMet && venueDeposit > 0;
 
   // Get known expenses
   const { data: expenses } = await admin
@@ -152,15 +173,15 @@ export async function generateEventForecast(eventId: string): Promise<{
   const stripeFees = Math.round(projectedRevenue * 0.029 * 100 + projectedTickets * 30) / 100;
   const platformFee = Math.round(projectedRevenue * (PLATFORM_FEE_PERCENT / 100) * 100) / 100;
 
-  const projectedProfit = projectedRevenue - stripeFees - platformFee - artistFees - estimatedExpenses;
+  const totalCosts = stripeFees + platformFee + artistFees + talentTravelCosts + venueCost + estimatedExpenses;
+  const totalRevenue = projectedRevenue + estimatedBarRevenue;
+  const projectedProfit = totalRevenue - totalCosts - (depositAtRisk ? venueDeposit : 0);
 
-  // Break-even calculation
-  const costPerTicket = avgTicketPrice > 0
-    ? (artistFees + estimatedExpenses) / avgTicketPrice
-    : 0;
+  // Break-even calculation (includes all fixed costs)
+  const fixedCosts = artistFees + talentTravelCosts + venueCost + estimatedExpenses;
   const netPerTicket = avgTicketPrice * (1 - PLATFORM_FEE_PERCENT / 100 - 0.029);
   const breakEvenTickets = netPerTicket > 0
-    ? Math.ceil((artistFees + estimatedExpenses) / netPerTicket)
+    ? Math.ceil(Math.max(0, fixedCosts - estimatedBarRevenue) / netPerTicket)
     : 0;
 
   // Generate insights
@@ -194,6 +215,16 @@ export async function generateEventForecast(eventId: string): Promise<{
 
   if (estimatedExpenses === 0 && artistFees === 0) {
     insights.push("💡 No expenses logged yet. Add costs for a more accurate profit forecast.");
+  }
+
+  if (depositAtRisk) {
+    insights.push(`🚨 Bar minimum of $${barMinimum.toFixed(0)} may not be met. Your $${venueDeposit.toFixed(0)} deposit is at risk.`);
+  } else if (barMinimum > 0 && barMinimumMet) {
+    insights.push(`✅ Estimated bar revenue ($${estimatedBarRevenue.toFixed(0)}) exceeds bar minimum ($${barMinimum.toFixed(0)}).`);
+  }
+
+  if (talentTravelCosts > 0) {
+    insights.push(`✈️ Talent travel costs: $${talentTravelCosts.toFixed(0)} (flights, hotel, transport).`);
   }
 
   // AI narrative — send computed data to Claude for a plain-English summary
@@ -243,9 +274,16 @@ Tier breakdown: ${tierData.map(t => `${t.name}: ${t.sold}/${t.capacity} @ $${t.p
       sellThroughRate,
       daysUntilEvent,
       artistFees,
+      talentTravelCosts,
+      venueCost,
       estimatedExpenses,
       stripeFees,
       platformFee,
+      barMinimum,
+      venueDeposit,
+      estimatedBarRevenue,
+      barMinimumMet,
+      depositAtRisk,
       projectedProfit,
       breakEvenTickets,
       tiers: tierData,

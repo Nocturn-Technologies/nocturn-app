@@ -35,7 +35,7 @@ export default async function EditEventPage({ params }: Props) {
   const { data: event } = await admin
     .from("events")
     .select(
-      "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_id, venues(id, name, address, city, capacity)"
+      "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_id, bar_minimum, venue_deposit, venue_cost, estimated_bar_revenue, venues(id, name, address, city, capacity)"
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -105,6 +105,10 @@ export default async function EditEventPage({ params }: Props) {
         price: Number(t.price),
         quantity: t.capacity ?? 0,
       })) ?? [],
+    barMinimum: event.bar_minimum ? Number(event.bar_minimum) : null,
+    venueDeposit: event.venue_deposit ? Number(event.venue_deposit) : null,
+    venueCost: event.venue_cost ? Number(event.venue_cost) : null,
+    estimatedBarRevenue: event.estimated_bar_revenue ? Number(event.estimated_bar_revenue) : null,
   };
 
   return <EditEventForm event={eventData} />;

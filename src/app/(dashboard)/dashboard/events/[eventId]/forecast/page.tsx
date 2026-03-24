@@ -173,18 +173,78 @@ export default function ForecastPage() {
         </CardContent>
       </Card>
 
+      {/* Revenue breakdown */}
+      {f.estimatedBarRevenue > 0 && (
+        <Card className="animate-fade-in-up delay-250">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Revenue Breakdown</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Ticket revenue (projected)</span>
+              <span className="text-green-500">${f.projectedRevenue.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Bar revenue (estimated)</span>
+              <span className="text-green-500">${f.estimatedBarRevenue.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between border-t pt-2 font-bold">
+              <span>Total projected revenue</span>
+              <span className="text-green-500">${(f.projectedRevenue + f.estimatedBarRevenue).toFixed(2)}</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Bar minimum warning */}
+      {f.barMinimum > 0 && (
+        <Card className={`animate-fade-in-up delay-275 border-l-4 ${f.depositAtRisk ? "border-l-red-500" : "border-l-green-500"}`}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between text-sm">
+              <span className="font-medium">Bar Minimum</span>
+              <span className={f.barMinimumMet ? "text-green-500" : "text-red-400"}>
+                ${f.estimatedBarRevenue.toFixed(0)} / ${f.barMinimum.toFixed(0)} {f.barMinimumMet ? "✅" : "⚠️"}
+              </span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden mt-2">
+              <div
+                className={`h-full rounded-full transition-all ${f.barMinimumMet ? "bg-green-500" : "bg-red-400"}`}
+                style={{ width: `${Math.min((f.estimatedBarRevenue / f.barMinimum) * 100, 100)}%` }}
+              />
+            </div>
+            {f.depositAtRisk && (
+              <p className="text-xs text-red-400 mt-2">
+                Deposit of ${f.venueDeposit.toFixed(0)} at risk — estimated bar revenue is below minimum
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Cost breakdown */}
       <Card className="animate-fade-in-up delay-300">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">Cost Breakdown</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
+          {f.venueCost > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Venue cost</span>
+              <span className="text-red-400">-${f.venueCost.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Artist fees</span>
             <span className="text-red-400">-${f.artistFees.toFixed(2)}</span>
           </div>
+          {f.talentTravelCosts > 0 && (
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Talent travel (flights, hotel, transport)</span>
+              <span className="text-red-400">-${f.talentTravelCosts.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between">
-            <span className="text-muted-foreground">Estimated expenses</span>
+            <span className="text-muted-foreground">Other expenses</span>
             <span className="text-red-400">-${f.estimatedExpenses.toFixed(2)}</span>
           </div>
           <div className="flex justify-between">
@@ -195,6 +255,12 @@ export default function ForecastPage() {
             <span className="text-muted-foreground">Platform fee (paid by buyer)</span>
             <span className="text-red-400">-${f.platformFee.toFixed(2)}</span>
           </div>
+          {f.depositAtRisk && (
+            <div className="flex justify-between text-red-400">
+              <span>Deposit at risk</span>
+              <span>-${f.venueDeposit.toFixed(2)}</span>
+            </div>
+          )}
           <div className="flex justify-between border-t pt-2 font-bold">
             <span>Projected profit</span>
             <span className={profitColor}>${f.projectedProfit.toFixed(2)}</span>
