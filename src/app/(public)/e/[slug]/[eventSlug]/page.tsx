@@ -61,8 +61,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const dateStr = event.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })
     : "";
-  const ogImageUrl = event.flyer_url
-    || `${appUrl}/og-image/event?${new URLSearchParams({
+  // Only use flyer_url for OG if it's a real URL (not a base64 data URL)
+  const flyerIsValidUrl = event.flyer_url && event.flyer_url.startsWith("http");
+  const ogImageUrl = flyerIsValidUrl
+    ? event.flyer_url
+    : `${appUrl}/og-image/event?${new URLSearchParams({
       title: event.title,
       collective: collective.name,
       date: dateStr,
@@ -107,7 +110,7 @@ export default async function PublicEventPage({ params }: Props) {
   // Fetch event with venue + metadata
   const { data: event } = await supabase
     .from("events")
-    .select("*, venues(name, address, city, capacity)")
+    .select("*, venues(name, address, city, capacity, description, metadata)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
     .maybeSingle();
@@ -381,38 +384,66 @@ export default async function PublicEventPage({ params }: Props) {
               <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
                 Venue
               </h2>
-              <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-4">
-                <div className="flex items-start gap-3">
-                  <MapPin className="mt-0.5 h-5 w-5 shrink-0 text-white/30" />
-                  <div>
-                    <p className="font-heading text-base font-semibold text-white">
-                      {venue.name}
-                    </p>
-                    <p className="text-sm text-white/50">
-                      {venue.address}, {venue.city}
-                    </p>
-                  </div>
+              <div className="rounded-2xl border border-white/5 bg-white/[0.02] overflow-hidden">
+                {/* Google Maps Static Embed */}
+                <div className="relative h-40 w-full bg-white/5">
+                  <iframe
+                    src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}&zoom=15&maptype=roadmap`}
+                    className="h-full w-full border-0 opacity-80 grayscale"
+                    allowFullScreen={false}
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    title={`Map of ${venue.name}`}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-transparent to-transparent pointer-events-none" />
                 </div>
 
-                {/* Map placeholder */}
-                <div className="flex h-28 items-center justify-center rounded-xl bg-white/5 border border-white/5">
-                  <div className="flex flex-col items-center gap-1 text-white/20">
-                    <MapPin className="h-6 w-6" />
-                    <span className="text-xs">Map</span>
+                <div className="p-5 space-y-4">
+                  {/* Venue name + address */}
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-nocturn/20">
+                      <MapPin className="h-5 w-5 text-nocturn" />
+                    </div>
+                    <div>
+                      <p className="font-heading text-lg font-bold text-white">
+                        {venue.name}
+                      </p>
+                      <p className="text-sm text-white/50">
+                        {venue.address}{venue.address && venue.city ? ", " : ""}{venue.city}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                {mapsUrl && (
-                  <a
-                    href={mapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
-                  >
-                    <Navigation className="h-4 w-4" />
-                    Get Directions
-                  </a>
-                )}
+                  {/* Venue details row */}
+                  <div className="flex flex-wrap gap-3">
+                    {venue.capacity && (
+                      <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+                        <span className="text-xs text-white/40">Capacity</span>
+                        <span className="text-xs font-semibold text-white">{venue.capacity}</span>
+                      </div>
+                    )}
+                    {(venue as unknown as { description?: string }).description && (
+                      <div className="w-full">
+                        <p className="text-sm text-white/40 leading-relaxed">
+                          {(venue as unknown as { description: string }).description}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Directions button */}
+                  {mapsUrl && (
+                    <a
+                      href={mapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 rounded-xl border border-nocturn/30 bg-nocturn/10 px-4 py-3 text-sm font-semibold text-nocturn transition-colors hover:bg-nocturn/20"
+                    >
+                      <Navigation className="h-4 w-4" />
+                      Get Directions
+                    </a>
+                  )}
+                </div>
               </div>
             </div>
           )}
