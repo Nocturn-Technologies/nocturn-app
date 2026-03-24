@@ -29,6 +29,7 @@ import {
   Search,
   Menu,
   X,
+  BarChart3,
 } from "lucide-react";
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -51,6 +52,7 @@ const sidebarNavItems = [
   { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
+  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/members", label: "Members", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
@@ -70,6 +72,7 @@ const moreDrawerItems = [
   { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
+  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/members", label: "Members", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];

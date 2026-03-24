@@ -577,7 +577,7 @@ export default function EventDesignPage() {
                     </label>
                     {styleRefUrl && (
                       <div className="relative h-12 w-12 shrink-0 rounded-lg overflow-hidden border border-border">
-                        <img src={styleRefUrl} alt="Style reference" className="h-full w-full object-cover" />
+                        <img src={styleRefUrl} alt="Style reference" className="h-full w-full object-cover" loading="lazy" />
                         <button
                           onClick={() => setStyleRefUrl(null)}
                           className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 hover:opacity-100 transition-opacity text-white text-xs"

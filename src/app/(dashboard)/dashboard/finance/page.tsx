@@ -44,28 +44,25 @@ export default async function FinancePage() {
     events: { title: string; starts_at: string } | null;
   }> = [];
 
-  if (collectiveIds.length > 0) {
-    const { data } = await admin
-      .from("settlements")
-      .select("*, events(title, starts_at)")
-      .in("collective_id", collectiveIds)
-      .order("created_at", { ascending: false });
-    settlements = (data ?? []) as unknown as typeof settlements;
-  }
-
-  // Get completed events without settlements
   let unsettledEvents: Array<{ id: string; title: string; starts_at: string }> = [];
 
   if (collectiveIds.length > 0) {
+    const [{ data: settlementsData }, { data: completedData }] = await Promise.all([
+      admin
+        .from("settlements")
+        .select("*, events(title, starts_at)")
+        .in("collective_id", collectiveIds)
+        .order("created_at", { ascending: false }),
+      admin
+        .from("events")
+        .select("id, title, starts_at")
+        .in("collective_id", collectiveIds)
+        .eq("status", "completed")
+        .order("starts_at", { ascending: false }),
+    ]);
+    settlements = (settlementsData ?? []) as unknown as typeof settlements;
     const settledEventIds = settlements.map((s) => s.event_id);
-    const { data } = await admin
-      .from("events")
-      .select("id, title, starts_at")
-      .in("collective_id", collectiveIds)
-      .eq("status", "completed")
-      .order("starts_at", { ascending: false });
-
-    unsettledEvents = ((data ?? []) as typeof unsettledEvents).filter(
+    unsettledEvents = ((completedData ?? []) as typeof unsettledEvents).filter(
       (e) => !settledEventIds.includes(e.id)
     );
   }
