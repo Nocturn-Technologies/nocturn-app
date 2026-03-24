@@ -43,12 +43,15 @@ export default async function EventsPage() {
     events = (data ?? []) as unknown as typeof events;
   }
 
-  const upcoming = events.filter(
-    (e) => e.status !== "completed" && e.status !== "cancelled" && new Date(e.starts_at) >= new Date()
+  const now = new Date();
+  const drafts = events.filter((e) => e.status === "draft");
+  const published = events.filter(
+    (e) => e.status === "published" && new Date(e.starts_at) >= now
   );
   const past = events.filter(
-    (e) => e.status === "completed" || new Date(e.starts_at) < new Date()
+    (e) => e.status === "completed" || (e.status !== "draft" && e.status !== "cancelled" && new Date(e.starts_at) < now)
   );
+  const cancelled = events.filter((e) => e.status === "cancelled");
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -89,19 +92,51 @@ export default async function EventsPage() {
         </Card>
       ) : (
         <div className="space-y-6">
-          {upcoming.length > 0 && (
+          {published.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-lg font-bold">Upcoming</h2>
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-green-500" />
+                <h2 className="text-lg font-bold">Published</h2>
+                <span className="text-xs text-muted-foreground">({published.length})</span>
+              </div>
               <div className="grid gap-3">
-                <SwipeableEventList events={upcoming} />
+                <SwipeableEventList events={published} />
+              </div>
+            </div>
+          )}
+          {drafts.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-yellow-500" />
+                <h2 className="text-lg font-bold">Drafts</h2>
+                <span className="text-xs text-muted-foreground">({drafts.length})</span>
+              </div>
+              <div className="grid gap-3">
+                <SwipeableEventList events={drafts} />
               </div>
             </div>
           )}
           {past.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-lg font-bold text-muted-foreground">Past</h2>
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-zinc-500" />
+                <h2 className="text-lg font-bold text-muted-foreground">Past</h2>
+                <span className="text-xs text-muted-foreground">({past.length})</span>
+              </div>
               <div className="grid gap-3">
                 <SwipeableEventList events={past} />
+              </div>
+            </div>
+          )}
+          {cancelled.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-red-500" />
+                <h2 className="text-lg font-bold text-muted-foreground">Cancelled</h2>
+                <span className="text-xs text-muted-foreground">({cancelled.length})</span>
+              </div>
+              <div className="grid gap-3">
+                <SwipeableEventList events={cancelled} />
               </div>
             </div>
           )}
