@@ -110,7 +110,7 @@ export default async function PublicEventPage({ params }: Props) {
   // Fetch event with venue + metadata
   const { data: event } = await supabase
     .from("events")
-    .select("*, venues(name, address, city, capacity, description, metadata)")
+    .select("*, venues(name, address, city, capacity)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
     .maybeSingle();
@@ -410,22 +410,15 @@ export default async function PublicEventPage({ params }: Props) {
                     </div>
                   </div>
 
-                  {/* Venue details row */}
-                  <div className="flex flex-wrap gap-3">
-                    {venue.capacity && (
+                  {/* Venue details */}
+                  {venue.capacity && (
+                    <div className="flex flex-wrap gap-3">
                       <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
                         <span className="text-xs text-white/40">Capacity</span>
                         <span className="text-xs font-semibold text-white">{venue.capacity}</span>
                       </div>
-                    )}
-                    {(venue as unknown as { description?: string }).description && (
-                      <div className="w-full">
-                        <p className="text-sm text-white/40 leading-relaxed">
-                          {(venue as unknown as { description: string }).description}
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
 
                   {/* Directions button */}
                   {mapsUrl && (
