@@ -7,6 +7,7 @@ import {
   type ParsedEventDetails,
   type TicketTier,
 } from "@/app/actions/ai-parse-event";
+import { getTicketPricingSuggestion, type PricingSuggestion } from "@/app/actions/pricing-suggestion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import VenuePicker, { type SelectedVenue } from "@/components/venue-picker";
@@ -416,6 +417,11 @@ function EventConfirmationCard({
           />
         )}
 
+        {/* ── Pricing Insight ── */}
+        {tiers.length > 0 && tiers.some(t => t.price > 0) && data.venueCity && data.date && (
+          <PricingInsight city={data.venueCity} date={data.date} venueCapacity={data.venueCapacity} tiers={tiers} />
+        )}
+
         {/* ── Live Finance Forecast with Pricing Scenarios ── */}
         {tiers.length > 0 && <LiveForecast tiers={tiers} />}
       </div>
@@ -450,6 +456,91 @@ function EventConfirmationCard({
           )}
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── Pricing Insight ─────────────────────────────────────────────────────────
+
+function PricingInsight({ city, date, venueCapacity, tiers }: {
+  city: string;
+  date: string;
+  venueCapacity?: number;
+  tiers: TicketTier[];
+}) {
+  const [pricing, setPricing] = useState<PricingSuggestion | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [fetched, setFetched] = useState(false);
+
+  useEffect(() => {
+    if (fetched || !city || !date) return;
+    setLoading(true);
+    setFetched(true);
+    getTicketPricingSuggestion({ city, date, venueCapacity }).then(({ pricing: p }) => {
+      setPricing(p);
+      setLoading(false);
+    });
+  }, [city, date, venueCapacity, fetched]);
+
+  if (loading) {
+    return (
+      <div className="border-t border-white/5 pt-3 mt-3">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Target className="h-3.5 w-3.5 text-[#7B2FF7] animate-pulse" />
+          <span className="text-xs text-zinc-500">Checking market prices...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!pricing) return null;
+
+  // Compare user's GA price to market
+  const userGA = tiers.find(t => t.price > 0 && !t.name.toLowerCase().includes("vip"))?.price ?? 0;
+  const diff = userGA - pricing.avgGA;
+  const diffLabel = diff > 5 ? "above" : diff < -5 ? "below" : "in line with";
+  const diffColor = diff > 5 ? "text-yellow-400" : diff < -5 ? "text-green-400" : "text-green-400";
+
+  return (
+    <div className="border-t border-white/5 pt-3 mt-3">
+      <div className="flex items-center gap-1.5 mb-2">
+        <Target className="h-3.5 w-3.5 text-[#7B2FF7]" />
+        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Market Pricing</span>
+        <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${
+          pricing.confidence === "high" ? "bg-green-500/10 text-green-400" :
+          pricing.confidence === "medium" ? "bg-yellow-500/10 text-yellow-400" :
+          "bg-zinc-500/10 text-zinc-400"
+        }`}>
+          {pricing.confidence} confidence
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-1.5 mb-2">
+        <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+          <p className="text-xs font-bold text-white">${pricing.avgGA}</p>
+          <p className="text-[9px] text-zinc-500">avg GA in {city}</p>
+        </div>
+        <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+          <p className="text-xs font-bold text-white">${pricing.avgVIP}</p>
+          <p className="text-[9px] text-zinc-500">avg VIP in {city}</p>
+        </div>
+      </div>
+
+      {userGA > 0 && (
+        <p className="text-[11px] text-zinc-400 mb-1.5">
+          Your GA (<span className="text-white font-medium">${userGA}</span>) is{" "}
+          <span className={`font-medium ${diffColor}`}>{diffLabel}</span>{" "}
+          the market average.
+        </p>
+      )}
+
+      {pricing.competingEvents > 0 && (
+        <p className="text-[10px] text-zinc-500">
+          {pricing.competingEvents} other event{pricing.competingEvents > 1 ? "s" : ""} this weekend in {city}
+        </p>
+      )}
+
+      <p className="text-[10px] text-zinc-600 mt-1 italic">{pricing.suggestion}</p>
     </div>
   );
 }

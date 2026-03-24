@@ -16,7 +16,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { haptic } from "@/lib/haptics";
-import { transcribeAudio } from "@/app/actions/transcribe";
+import { transcribeAudio, transcribeFromStorage } from "@/app/actions/transcribe";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -342,15 +342,50 @@ export default function RecordPage() {
     await fetchRecordings();
 
     try {
-      // Convert audio chunks to base64
       const audioBlob = new Blob(chunksRef.current, { type: mr.mimeType });
-      const arrayBuffer = await audioBlob.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
-      );
+      const fileSizeMB = audioBlob.size / (1024 * 1024);
 
-      // Send to real transcription API
-      const result = await transcribeAudio(base64, mr.mimeType);
+      let result;
+
+      if (fileSizeMB > 3 || durationSeconds > 180) {
+        // Long recording: upload to Supabase Storage, then transcribe server-side
+        const storagePath = `${userId}/${recordingId ?? Date.now()}.webm`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("recordings")
+          .upload(storagePath, audioBlob, {
+            contentType: mr.mimeType,
+            upsert: true,
+          });
+
+        if (uploadError) {
+          throw new Error(`Upload failed: ${uploadError.message}`);
+        }
+
+        // Update recording with audio URL
+        if (recordingId) {
+          const { data: urlData } = supabase.storage
+            .from("recordings")
+            .getPublicUrl(storagePath);
+          await supabase
+            .from("recordings")
+            .update({ audio_url: urlData.publicUrl })
+            .eq("id", recordingId);
+        }
+
+        // Transcribe from storage (server-side download + Whisper)
+        result = await transcribeFromStorage(storagePath);
+      } else {
+        // Short recording: send as base64 (fast path)
+        const arrayBuffer = await audioBlob.arrayBuffer();
+        const base64 = btoa(
+          new Uint8Array(arrayBuffer).reduce(
+            (data, byte) => data + String.fromCharCode(byte),
+            ""
+          )
+        );
+        result = await transcribeAudio(base64, mr.mimeType);
+      }
 
       if (result.error) {
         throw new Error(result.error);
@@ -368,7 +403,8 @@ export default function RecordPage() {
           })
           .eq("id", recordingId);
       }
-    } catch {
+    } catch (err) {
+      console.error("Recording processing failed:", err);
       if (recordingId) {
         await supabase
           .from("recordings")
