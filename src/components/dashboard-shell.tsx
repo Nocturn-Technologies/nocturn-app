@@ -30,6 +30,7 @@ import {
   Menu,
   X,
   BarChart3,
+  CalendarRange,
 } from "lucide-react";
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -48,6 +49,7 @@ const sidebarNavItems = [
   { href: "/dashboard/events", label: "Events", icon: Calendar },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
   { href: "/dashboard/venues", label: "Venues", icon: MapPin },
+  { href: "/dashboard/calendar", label: "Calendar", icon: CalendarRange },
   { href: "/dashboard/record", label: "Record", icon: Mic },
   { href: "/dashboard/artists", label: "Artists", icon: Music },
   { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
@@ -68,6 +70,7 @@ const mobileTabItems = [
 
 /* ── More drawer items (desktop sidebar items not in mobile tabs) ── */
 const moreDrawerItems = [
+  { href: "/dashboard/calendar", label: "Calendar", icon: CalendarRange },
   { href: "/dashboard/record", label: "Record", icon: Mic },
   { href: "/dashboard/artists", label: "Artists", icon: Music },
   { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
