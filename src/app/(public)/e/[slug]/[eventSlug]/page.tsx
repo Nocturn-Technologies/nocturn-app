@@ -246,219 +246,220 @@ export default async function PublicEventPage({ params }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090B] antialiased" style={{ scrollBehavior: "smooth" }}>
+    <div className="min-h-screen bg-[#09090B] antialiased selection:bg-purple-500/20" style={{ scrollBehavior: "smooth" }}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      {/* ─── Hero Section ─── */}
-      <div className="relative">
+
+      {/* ═══ SCENE 1: THE ARRIVAL — full-screen immersive hero ═══ */}
+      <div className="relative min-h-[85vh] sm:min-h-[90vh] flex flex-col justify-end overflow-hidden">
+        {/* Background layer */}
         {event.flyer_url ? (
-          <div className="relative aspect-[4/5] max-h-[520px] w-full sm:aspect-[16/9] sm:max-h-[480px]">
+          <>
             <Image
               src={event.flyer_url}
               alt={event.title}
               fill
               className="object-cover"
               priority
-              sizes="(max-width: 640px) 100vw, 640px"
+              sizes="100vw"
             />
-            {/* Bottom gradient fade */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/40 to-transparent" />
-          </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/60 to-[#09090B]/20" />
+          </>
         ) : (
-          /* Premium gradient hero — no flyer */
-          <div className="relative h-80 w-full sm:h-[420px] overflow-hidden">
-            {/* Layered gradient mesh */}
-            <div className="absolute inset-0" style={{ background: `linear-gradient(160deg, ${accentColor}25 0%, transparent 50%)` }} />
-            <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 70% 20%, ${accentColor}15 0%, transparent 60%)` }} />
-            <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 30% 80%, ${accentColor}10 0%, transparent 50%)` }} />
-            {/* Grain texture */}
-            <div className="absolute inset-0 opacity-[0.15]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")`, backgroundSize: "128px 128px" }} />
-            {/* Bottom fade */}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/50 to-transparent" />
-            {/* Subtle grid pattern */}
-            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)", backgroundSize: "64px 64px" }} />
-          </div>
+          <>
+            {/* Cinematic gradient — not a placeholder, a mood */}
+            <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 30%, ${accentColor}18 0%, transparent 70%)` }} />
+            <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 80% 70%, ${accentColor}0c 0%, transparent 50%)` }} />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-transparent to-[#09090B]/40" />
+            {/* Grain */}
+            <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")`, backgroundSize: "128px 128px" }} />
+          </>
         )}
+
+        {/* Content overlay — bottom-aligned */}
+        <div className="relative z-10 px-6 pb-10 sm:pb-14 mx-auto max-w-[640px] w-full space-y-5">
+          {/* Collective badge */}
+          <div className="flex items-center gap-2">
+            {collective.logo_url ? (
+              <Image src={collective.logo_url} alt={collective.name} width={24} height={24} className="h-6 w-6 rounded-full object-cover" />
+            ) : (
+              <div className="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold text-white" style={{ backgroundColor: accentColor }}>
+                {collective.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span className="text-[13px] text-white/60 font-medium">{collective.name}</span>
+          </div>
+
+          {/* Title — cinematic scale */}
+          <h1 className="font-heading text-[3.2rem] sm:text-[5rem] font-black tracking-[-0.05em] text-white leading-[0.9]">
+            {event.title}
+          </h1>
+
+          {/* Essential info — date, time, venue — one glance */}
+          <div className="flex flex-wrap items-center gap-x-2 text-[15px] text-white/60 font-medium">
+            <span>{dayName} {monthName} {dayNum}</span>
+            <span className="text-white/20">·</span>
+            <span>{startTime}</span>
+            {venue && (
+              <>
+                <span className="text-white/20">·</span>
+                <span>{venue.name}</span>
+              </>
+            )}
+          </div>
+
+          {/* CTA — the most important button on the page */}
+          {isUpcoming && tiers && tiers.length > 0 && (
+            <a
+              href="#tickets"
+              className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-[15px] font-bold text-white transition-all duration-300 hover:brightness-110 hover:scale-[1.02] active:scale-[0.98]"
+              style={{ backgroundColor: accentColor }}
+            >
+              {lowestTierPrice === "Free" ? "RSVP — Free" : `Get Tickets — ${lowestTierPrice}`}
+            </a>
+          )}
+        </div>
+
+        {/* Scroll indicator */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10">
+          <div className="w-5 h-8 rounded-full border border-white/15 flex items-start justify-center p-1">
+            <div className="w-1 h-2 rounded-full bg-white/30 animate-bounce" />
+          </div>
+        </div>
       </div>
 
-      {/* ─── Content ─── */}
-      <div className="mx-auto max-w-[640px] px-6 pb-32 sm:pb-12">
-        <div className="-mt-24 relative space-y-0">
+      {/* ═══ SCENE 2: THE DETAILS — editorial layout ═══ */}
+      <div className="mx-auto max-w-[640px] px-6">
 
-          {/* ═══ THE INVITATION ═══ */}
-          <div className="space-y-6 pb-12">
-            {/* Collective — who's inviting you */}
-            <div className="flex items-center gap-2.5">
-              {collective.logo_url ? (
-                <Image
-                  src={collective.logo_url}
-                  alt={collective.name}
-                  width={28}
-                  height={28}
-                  className="h-7 w-7 rounded-full object-cover ring-1 ring-white/10"
-                />
-              ) : (
-                <div
-                  className="flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold text-white ring-1 ring-white/10"
-                  style={{ backgroundColor: accentColor }}
-                >
-                  {collective.name.charAt(0).toUpperCase()}
-                </div>
-              )}
-              <span className="text-[13px] text-white/50">
-                {collective.name} presents
-              </span>
-            </div>
-
-            {/* The event name — massive, cinematic */}
-            <h1 className="font-heading text-[2.75rem] font-black tracking-[-0.04em] text-white sm:text-[4rem] leading-[0.95] max-w-[95%]">
-              {event.title}
-            </h1>
-
-            {/* The hook — one line that makes you want to go */}
-            {event.description && (
-              <p className="text-[17px] leading-[1.6] text-white/50 max-w-[90%]">
-                {event.description.split(".")[0]}.
-              </p>
-            )}
-
-            {/* Social proof — feels like your friends are already going */}
-            {(ticketsSold ?? 0) > 0 && (
-              <div className="flex items-center gap-3">
-                <div className="flex -space-x-2">
-                  {[...Array(Math.min(ticketsSold ?? 0, 4))].map((_, i) => (
-                    <div
-                      key={i}
-                      className="h-7 w-7 rounded-full ring-2 ring-[#09090B]"
-                      style={{
-                        background: `linear-gradient(135deg, ${accentColor}${40 + i * 15}, ${accentColor}${20 + i * 10})`,
-                      }}
-                    />
-                  ))}
-                </div>
-                <span className="text-[13px] text-white/40">
-                  <span className="text-white/70 font-medium">{ticketsSold}</span> {ticketsSold === 1 ? "person" : "people"} going
-                </span>
-                <SellingFastBadge soldPercent={soldPercent} />
-              </div>
-            )}
-
-            {/* Vibe tags — whisper quiet */}
-            {vibeTags.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {vibeTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="text-[11px] text-white/25 font-medium"
-                  >
-                    {tag}{vibeTags.indexOf(tag) < vibeTags.length - 1 ? " ·" : ""}
-                  </span>
+        {/* Social proof bar */}
+        {(ticketsSold ?? 0) > 0 && (
+          <div className="py-6 flex items-center justify-between border-b border-white/[0.04]">
+            <div className="flex items-center gap-3">
+              <div className="flex -space-x-1.5">
+                {[...Array(Math.min(ticketsSold ?? 0, 5))].map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-6 w-6 rounded-full ring-[1.5px] ring-[#09090B]"
+                    style={{ background: `linear-gradient(135deg, ${accentColor}${50 + i * 10}, ${accentColor}${25 + i * 8})` }}
+                  />
                 ))}
               </div>
-            )}
+              <span className="text-[13px] text-white/40">
+                <span className="text-white font-semibold">{ticketsSold}</span> going
+              </span>
+            </div>
+            <SellingFastBadge soldPercent={soldPercent} />
           </div>
+        )}
 
-          {/* ═══ WHEN & WHERE — the essential info ═══ */}
-          <div className="py-10 border-t border-white/[0.04] space-y-8">
-            {/* Date — large, scannable */}
-            <div className="flex items-start gap-5">
-              <div className="flex flex-col items-center min-w-[64px]">
-                <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/25">{monthName}</span>
-                <span className="font-heading text-[3rem] font-black text-white leading-none">{dayNum}</span>
-                <span className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/25">{dayName}</span>
+        {/* The hook — first sentence, large */}
+        {event.description && (
+          <div className="py-10">
+            <p className="text-[19px] sm:text-[22px] leading-[1.5] text-white/60 font-light max-w-[95%]">
+              {event.description.split(".")[0]}.
+            </p>
+          </div>
+        )}
+
+        {/* Countdown */}
+        {isUpcoming && (
+          <div className="pb-10">
+            <EventCountdown targetDate={event.doors_at || event.starts_at} />
+          </div>
+        )}
+
+        {/* ═══ WHEN ═══ */}
+        <div className="py-8 border-t border-white/[0.04]">
+          <div className="flex items-center gap-6">
+            {/* Giant date */}
+            <div className="text-center min-w-[72px]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">{monthName}</p>
+              <p className="font-heading text-[3.5rem] font-black text-white leading-[0.85]">{dayNum}</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">{dayName}</p>
+            </div>
+            <div className="h-16 w-px bg-white/[0.06]" />
+            <div className="space-y-1">
+              <p className="text-xl text-white font-heading font-bold">{startTime}{endTime ? ` — ${endTime}` : ""}</p>
+              {doorsTime && <p className="text-[13px] text-white/35">Doors at {doorsTime}</p>}
+              {minAge && <p className="text-[13px] text-white/35">{minAge}+ only</p>}
+            </div>
+          </div>
+        </div>
+
+        {/* ═══ WHERE ═══ */}
+        {venue && (
+          <div className="py-8 border-t border-white/[0.04]">
+            <div className="rounded-2xl overflow-hidden border border-white/[0.04]">
+              <div className="relative h-40 w-full">
+                <iframe
+                  src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}&zoom=15&maptype=roadmap`}
+                  className="h-full w-full border-0 opacity-60 grayscale contrast-[1.15] saturate-0"
+                  allowFullScreen={false}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  title={`Map of ${venue.name}`}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-transparent to-[#09090B]/30 pointer-events-none" />
               </div>
-              <div className="pt-2 space-y-1.5">
-                <p className="text-lg text-white font-heading font-bold tracking-tight">
-                  {startTime}{endTime ? ` — ${endTime}` : ""}
+              <div className="px-5 pb-5 -mt-10 relative z-10">
+                <p className="font-heading text-2xl font-bold text-white">{venue.name}</p>
+                <p className="text-[13px] text-white/35 mt-1">
+                  {venue.address}{venue.address && venue.city ? ", " : ""}{venue.city}
                 </p>
-                {doorsTime && (
-                  <p className="text-[13px] text-white/35">Doors at {doorsTime}</p>
-                )}
-                {minAge && (
-                  <p className="text-[13px] text-white/35">{minAge}+ only</p>
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 mt-3 text-[13px] font-semibold transition-colors hover:text-white"
+                    style={{ color: accentColor }}>
+                    <Navigation className="h-3.5 w-3.5" />
+                    Get directions
+                  </a>
                 )}
               </div>
             </div>
+          </div>
+        )}
 
-            {/* Countdown */}
-            {isUpcoming && (
-              <EventCountdown targetDate={event.doors_at || event.starts_at} />
-            )}
+        {/* ═══ THE STORY ═══ */}
+        {(event.description && event.description.includes(".")) && (
+          <div className="py-8 border-t border-white/[0.04]">
+            <ExpandableText text={event.description} />
+          </div>
+        )}
 
-            {/* Venue — immersive map card */}
-            {venue && (
-              <div className="rounded-2xl overflow-hidden border border-white/[0.04]">
-                <div className="relative h-36 w-full">
-                  <iframe
-                    src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}&zoom=15&maptype=roadmap`}
-                    className="h-full w-full border-0 opacity-70 grayscale contrast-[1.1]"
-                    allowFullScreen={false}
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                    title={`Map of ${venue.name}`}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] to-transparent pointer-events-none" />
-                </div>
-                <div className="px-5 pb-5 -mt-8 relative z-10">
-                  <p className="font-heading text-xl font-bold text-white">{venue.name}</p>
-                  <p className="text-[13px] text-white/40 mt-0.5">
-                    {venue.address}{venue.address && venue.city ? ", " : ""}{venue.city}
-                  </p>
-                  {mapsUrl && (
-                    <a
-                      href={mapsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 mt-3 text-[13px] font-medium transition-colors hover:text-white/70"
-                      style={{ color: accentColor }}
-                    >
-                      <Navigation className="h-3.5 w-3.5" />
-                      Directions
-                    </a>
+        {/* Host message */}
+        {hostMessage && (
+          <div className="py-8 border-t border-white/[0.04]">
+            <div className="flex gap-4">
+              <div className="w-[2px] rounded-full shrink-0" style={{ background: `linear-gradient(180deg, ${accentColor}, transparent)` }} />
+              <div>
+                <p className="text-[16px] text-white/50 leading-[1.7] italic">&ldquo;{hostMessage}&rdquo;</p>
+                <div className="flex items-center gap-2 mt-3">
+                  {collective.logo_url ? (
+                    <Image src={collective.logo_url} alt="" width={20} height={20} className="h-5 w-5 rounded-full" />
+                  ) : (
+                    <div className="h-5 w-5 rounded-full text-[8px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: accentColor }}>
+                      {collective.name.charAt(0)}
+                    </div>
                   )}
+                  <span className="text-[12px] text-white/30 font-medium">{collective.name}</span>
                 </div>
               </div>
-            )}
-          </div>
-
-          {/* ═══ THE STORY — description + host message ═══ */}
-          {(event.description || hostMessage || dressCode) && (
-            <div className="py-10 border-t border-white/[0.04] space-y-8">
-              {/* Full description */}
-              {event.description && event.description.split(".").length > 1 && (
-                <div className="max-w-[95%]">
-                  <ExpandableText text={event.description} />
-                </div>
-              )}
-
-              {/* Host message — personal note */}
-              {hostMessage && (
-                <div className="flex gap-3">
-                  <div className="w-[3px] rounded-full shrink-0" style={{ backgroundColor: `${accentColor}40` }} />
-                  <div>
-                    <p className="text-[15px] text-white/60 leading-[1.7] italic">
-                      &ldquo;{hostMessage}&rdquo;
-                    </p>
-                    <p className="text-[12px] text-white/30 mt-2 font-medium">— {collective.name}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Dress code — casual inline */}
-              {dressCode && (
-                <p className="text-[13px] text-white/30">
-                  <span className="text-white/50 font-medium">Dress code:</span> {dressCode}
-                </p>
-              )}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ═══ THE LINEUP ═══ */}
-          {artists && artists.length > 0 && (
-            <div className="py-10 border-t border-white/[0.04]">
-              <div className="relative">
+        {dressCode && (
+          <div className="py-4 border-t border-white/[0.04]">
+            <p className="text-[13px] text-white/25"><span className="text-white/40">Dress code</span> — {dressCode}</p>
+          </div>
+        )}
+
+        {/* ═══ LINEUP ═══ */}
+        {artists && artists.length > 0 && (
+          <div className="py-8 border-t border-white/[0.04]">
+            <div className="relative">
               <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
                 {artists.map((a: { artist_id: string; set_time: string | null; artists: unknown }) => {
                   const artist = a.artists as unknown as { name: string; genre: string | null };
@@ -502,7 +503,7 @@ export default async function PublicEventPage({ params }: Props) {
 
           {/* ═══ TICKETS ═══ */}
           {isUpcoming && tiers && tiers.length > 0 && (
-            <div id="ticket-section" className="py-10 border-t border-white/[0.04]">
+            <div id="tickets" className="py-10 border-t border-white/[0.04]">
               <TicketSection
                 tiers={tiers.map((t) => ({
                   id: t.id,
@@ -519,7 +520,7 @@ export default async function PublicEventPage({ params }: Props) {
           )}
 
           {/* ═══ REACTIONS ═══ */}
-          <div className="py-6">
+          <div className="py-8 border-t border-white/[0.04]">
             <EventReactions eventId={event.id} initialCounts={reactionCounts} />
           </div>
 
@@ -579,21 +580,6 @@ export default async function PublicEventPage({ params }: Props) {
             collectiveName={collective.name}
           />
 
-          {/* ═══ FOOTER ═══ */}
-          <div className="border-t border-white/[0.04] pt-10 pb-6 text-center space-y-3">
-            <Link
-              href="https://trynocturn.com"
-              className="inline-flex items-center gap-1.5 text-[12px] text-white/20 transition-colors hover:text-white/40"
-            >
-              <span className="text-sm">🌙</span>
-              <span className="font-heading font-bold text-white/30">nocturn.</span>
-            </Link>
-            <div className="flex justify-center gap-4 text-[11px] text-white/15">
-              <Link href="/legal/terms" className="hover:text-white/30 transition-colors">Terms</Link>
-              <Link href="/legal/privacy" className="hover:text-white/30 transition-colors">Privacy</Link>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Sticky ticket CTA — appears when scrolled past tickets */}
@@ -601,7 +587,7 @@ export default async function PublicEventPage({ params }: Props) {
         <StickyTicketBar
           lowestPrice={lowestTierPrice}
           accentColor={accentColor}
-          ticketSectionId="ticket-section"
+          ticketSectionId="tickets"
         />
       )}
 
