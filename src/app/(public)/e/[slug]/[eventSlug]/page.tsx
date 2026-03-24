@@ -53,7 +53,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = `${event.title} | ${collective.name} — Nocturn`;
   const description = event.description || `Event by ${collective.name}`;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+  const appUrl = "https://app.trynocturn.com";
   const canonicalUrl = `${appUrl}/e/${slug}/${eventSlug}`;
 
   // Use flyer if available, otherwise generate dynamic OG image
