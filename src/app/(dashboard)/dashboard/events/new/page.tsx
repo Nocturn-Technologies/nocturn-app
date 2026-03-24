@@ -8,6 +8,7 @@ import {
   type TicketTier,
 } from "@/app/actions/ai-parse-event";
 import { getTicketPricingSuggestion, type PricingSuggestion } from "@/app/actions/pricing-suggestion";
+import { calculateBudget, type BudgetResult, type BudgetInput } from "@/app/actions/budget-planner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import VenuePicker, { type SelectedVenue } from "@/components/venue-picker";
@@ -113,6 +114,11 @@ type ChatStep =
   | "venue"
   | "venue-custom"
   | "datetime"
+  | "headliner-type"
+  | "headliner-origin"
+  | "talent-fee"
+  | "venue-costs"
+  | "budget-calc"
   | "tickets"
   | "vip"
   | "review";
@@ -771,6 +777,8 @@ export default function NewEventPage() {
   );
   const [error, setError] = useState<string | null>(null);
   const [introShown, setIntroShown] = useState(false);
+  const [budgetInput, setBudgetInput] = useState<Partial<BudgetInput>>({});
+  const [budgetResult, setBudgetResult] = useState<BudgetResult | null>(null);
   const [showVenuePicker, setShowVenuePicker] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -835,6 +843,14 @@ export default function NewEventPage() {
           'Type the venue name, address, and city.\n\nE.g. "CODA, 794 Bathurst St, Toronto"',
         datetime:
           'When? Date and time?\n\nTry something like "April 25 10pm" or "2026-04-25 at 22:00"',
+        "headliner-type":
+          "What kind of event is this?\n\n🌍 **International headliner** — flying someone in\n🏠 **Local headliner** — hometown talent\n🎵 **No headliner** — collective showcase or open format\n\nJust say international, local, or no headliner.",
+        "headliner-origin":
+          "Where is your headliner coming from?\n\nE.g. \"London, UK\" or \"New York\" — I'll estimate flights, hotel, and transport.",
+        "talent-fee":
+          "What's the talent fee? And how many nights are they staying?\n\nE.g. \"$2000, staying 2 nights\" or just the fee if it's a day trip.",
+        "venue-costs":
+          "Any venue costs?\n\n💰 **Room rental** — flat fee to book the space\n🍸 **Bar minimum** — spend threshold or lose deposit\n💵 **Deposit** — upfront payment\n🔧 **Other** — sound, lights, security, promo\n\nE.g. \"$500 rental, $3000 bar min, $1000 deposit, $800 other\" or \"no venue costs\"",
         tickets:
           'Ticket price and capacity?\n\nE.g. "$25, 200 tickets" or "free"',
         vip: 'Want to add a VIP tier?\n\nE.g. "$50 VIP, 50 tickets" or type "skip"',
@@ -859,6 +875,116 @@ export default function NewEventPage() {
     setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
 
     setThinking(true);
+
+    // ── Budget planning step handlers ──────────────────────────────────
+    if (step === "headliner-type") {
+      const lower = userMsg.toLowerCase();
+      let headlinerType: "local" | "international" | "none" = "none";
+      if (lower.includes("international") || lower.includes("flying") || lower.includes("abroad")) {
+        headlinerType = "international";
+      } else if (lower.includes("local") || lower.includes("hometown") || lower.includes("home")) {
+        headlinerType = "local";
+      } else if (lower.includes("no") || lower.includes("none") || lower.includes("skip") || lower.includes("showcase") || lower.includes("open")) {
+        headlinerType = "none";
+      }
+
+      setBudgetInput(prev => ({ ...prev, headlinerType, venueCity: eventData.venueCity, venueCapacity: eventData.venueCapacity, date: eventData.date }));
+      setEventData(prev => ({ ...prev, headlinerType }));
+      setThinking(false);
+
+      if (headlinerType === "international") {
+        advanceToStep("headliner-origin");
+      } else if (headlinerType === "local") {
+        advanceToStep("talent-fee");
+      } else {
+        advanceToStep("venue-costs");
+      }
+      return;
+    }
+
+    if (step === "headliner-origin") {
+      setBudgetInput(prev => ({ ...prev, headlinerOrigin: userMsg }));
+      setThinking(false);
+      advanceToStep("talent-fee");
+      return;
+    }
+
+    if (step === "talent-fee") {
+      const feeMatch = userMsg.match(/\$?([\d,]+)/);
+      const fee = feeMatch ? parseInt(feeMatch[1].replace(/,/g, "")) : 0;
+      const nightsMatch = userMsg.match(/(\d+)\s*night/i);
+      const nights = nightsMatch ? parseInt(nightsMatch[1]) : undefined;
+
+      setBudgetInput(prev => ({ ...prev, talentFee: fee, stayNights: nights }));
+      setThinking(false);
+      advanceToStep("venue-costs");
+      return;
+    }
+
+    if (step === "venue-costs") {
+      const lower = userMsg.toLowerCase();
+      if (lower.includes("no") || lower.includes("none") || lower.includes("skip") || lower === "0") {
+        // No venue costs — go calculate budget
+        setThinking(true);
+        const finalBudget = { ...budgetInput, venueCost: 0, barMinimum: 0, deposit: 0, otherExpenses: 0 } as BudgetInput;
+        const result = await calculateBudget(finalBudget);
+        setBudgetResult(result);
+
+        // Auto-populate suggested tiers
+        if (result.suggestedTiers.length > 0) {
+          setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+        }
+
+        setThinking(false);
+        // Show budget summary and go to review
+        const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
+        setMessages(prev => [
+          ...prev,
+          { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel: ~$${result.travelEstimate.total.toLocaleString()} (${result.travelEstimate.breakdown})` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. You can adjust prices in the review, or tell me different amounts.` },
+        ]);
+        setStep("review");
+        setPhase("review");
+        return;
+      }
+
+      // Parse venue costs
+      const rentalMatch = userMsg.match(/\$?([\d,]+)\s*(?:rental|rent|room)/i);
+      const barMinMatch = userMsg.match(/\$?([\d,]+)\s*(?:bar\s*min|minimum)/i);
+      const depositMatch = userMsg.match(/\$?([\d,]+)\s*(?:deposit|down)/i);
+      const otherMatch = userMsg.match(/\$?([\d,]+)\s*(?:other|sound|light|security|promo|misc)/i);
+
+      // If no specific labels, try to parse just numbers
+      const allNumbers = [...userMsg.matchAll(/\$?([\d,]+)/g)].map(m => parseInt(m[1].replace(/,/g, "")));
+
+      const venueCost = rentalMatch ? parseInt(rentalMatch[1].replace(/,/g, "")) : (allNumbers[0] ?? 0);
+      const barMinimum = barMinMatch ? parseInt(barMinMatch[1].replace(/,/g, "")) : 0;
+      const deposit = depositMatch ? parseInt(depositMatch[1].replace(/,/g, "")) : 0;
+      const otherExpenses = otherMatch ? parseInt(otherMatch[1].replace(/,/g, "")) : (allNumbers.length > 1 ? allNumbers[allNumbers.length - 1] : 0);
+
+      setBudgetInput(prev => ({ ...prev, venueCost, barMinimum, deposit, otherExpenses }));
+
+      // Calculate budget
+      setThinking(true);
+      const finalBudget = { ...budgetInput, venueCost, barMinimum, deposit, otherExpenses } as BudgetInput;
+      const result = await calculateBudget(finalBudget);
+      setBudgetResult(result);
+
+      // Auto-populate suggested tiers
+      if (result.suggestedTiers.length > 0) {
+        setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+      }
+
+      setThinking(false);
+
+      const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
+      setMessages(prev => [
+        ...prev,
+        { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel estimate: ~$${result.travelEstimate.total.toLocaleString()}\n${result.travelEstimate.breakdown}` : ""}${barMinimum > 0 ? `\n\n⚠️ Bar minimum: $${barMinimum.toLocaleString()} — if you don't hit it, you lose your $${deposit.toLocaleString()} deposit.` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. Adjust in the review or tell me different prices.` },
+      ]);
+      setStep("review");
+      setPhase("review");
+      return;
+    }
 
     try {
       // Let Claude parse whatever the user said — no rigid steps
@@ -889,7 +1015,17 @@ export default function NewEventPage() {
       if (!merged.startTime) missing.push("time");
       if (!merged.venueName) missing.push("venue");
 
-      if (missing.length === 0) {
+      const currentStep = step as string;
+      if (missing.length === 0 && !["headliner-type", "headliner-origin", "talent-fee", "venue-costs", "budget-calc"].includes(currentStep)) {
+        // All basic info collected — now ask about budget planning
+        if (!eventData.headlinerType && !budgetInput.headlinerType) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: reply || "Got it!" },
+          ]);
+          advanceToStep("headliner-type");
+          return;
+        }
         // Everything we need — go to review
         setMessages((prev) => [
           ...prev,

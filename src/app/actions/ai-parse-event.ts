@@ -21,6 +21,18 @@ export interface ParsedEventDetails {
   ticketQuantity?: number;
   ticketTierName?: string;
   tiers?: TicketTier[];
+  // Budget planning fields
+  headlinerType?: "local" | "international" | "none";
+  headlinerOrigin?: string; // city/country for international
+  talentFee?: number;
+  estimatedFlights?: number;
+  estimatedHotel?: number;
+  estimatedTransport?: number;
+  venueCost?: number;
+  barMinimum?: number;
+  deposit?: number;
+  otherExpenses?: number;
+  totalBudget?: number;
 }
 
 export async function parseEventDetails(
