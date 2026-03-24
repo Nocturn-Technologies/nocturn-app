@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, Plus } from "lucide-react";
+import { Calendar, Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { SwipeableEventList } from "@/components/events/swipeable-event-list";
 
@@ -17,7 +17,6 @@ export default async function EventsPage() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // Get user's collectives
   const { data: memberships } = await admin
     .from("collective_members")
     .select("collective_id")
@@ -25,7 +24,6 @@ export default async function EventsPage() {
 
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
 
-  // Fetch events
   let events: Array<{
     id: string;
     title: string;
@@ -53,16 +51,16 @@ export default async function EventsPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Events</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground truncate">
             Create and manage your events
           </p>
         </div>
-        <Link href="/dashboard/events/new">
-          <Button className="bg-nocturn hover:bg-nocturn-light">
+        <Link href="/dashboard/events/new" className="shrink-0">
+          <Button className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200">
             <Plus className="mr-2 h-4 w-4" />
             New Event
           </Button>
@@ -70,21 +68,21 @@ export default async function EventsPage() {
       </div>
 
       {events.length === 0 ? (
-        <Card>
-          <CardContent className="flex flex-col items-center gap-4 py-12">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
-              <Calendar className="h-8 w-8 text-nocturn" />
+        <Card className="rounded-2xl border-dashed">
+          <CardContent className="flex flex-col items-center gap-4 py-16 px-6">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-nocturn/10">
+              <Sparkles className="h-8 w-8 text-nocturn" />
             </div>
-            <div className="text-center">
-              <p className="font-medium">No events yet</p>
-              <p className="text-sm text-muted-foreground">
-                Create your first event to start selling tickets and generating marketing content.
+            <div className="text-center space-y-1">
+              <p className="text-lg font-bold">No events yet</p>
+              <p className="text-sm text-muted-foreground max-w-[280px]">
+                Tell our AI what you&apos;re planning and it&apos;ll build your event page, ticket tiers, and promo assets.
               </p>
             </div>
             <Link href="/dashboard/events/new">
-              <Button className="bg-nocturn hover:bg-nocturn-light">
+              <Button className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200 mt-2">
                 <Plus className="mr-2 h-4 w-4" />
-                Create Event
+                Create Your First Event
               </Button>
             </Link>
           </CardContent>
@@ -93,7 +91,7 @@ export default async function EventsPage() {
         <div className="space-y-6">
           {upcoming.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-lg font-semibold">Upcoming</h2>
+              <h2 className="text-lg font-bold">Upcoming</h2>
               <div className="grid gap-3">
                 <SwipeableEventList events={upcoming} />
               </div>
@@ -101,7 +99,7 @@ export default async function EventsPage() {
           )}
           {past.length > 0 && (
             <div className="space-y-3">
-              <h2 className="text-lg font-semibold text-muted-foreground">Past</h2>
+              <h2 className="text-lg font-bold text-muted-foreground">Past</h2>
               <div className="grid gap-3">
                 <SwipeableEventList events={past} />
               </div>
