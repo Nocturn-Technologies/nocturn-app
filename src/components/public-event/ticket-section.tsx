@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Minus, Plus, Ticket, Check, AlertCircle, Bell, Loader2 } from "lucide-react";
 import { StripeCheckout } from "@/components/stripe-checkout";
 import { joinWaitlist } from "@/app/actions/ticket-waitlist";
+import { haptic } from "@/lib/haptics";
 
 interface Tier {
   id: string;
@@ -121,7 +122,8 @@ export function TicketSection({
                       setWaitlistJoined(false);
                       return;
                     }
-                    if (isLocked) return; // Can't select locked tiers
+                    if (isLocked) return;
+                    haptic('select');
                     setSelectedTier(tier.id);
                     setQuantity(1);
                     setShowCheckout(false);
@@ -237,7 +239,7 @@ export function TicketSection({
             <span className="text-sm font-medium text-white/60">Quantity</span>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                onClick={() => { haptic('light'); setQuantity(Math.max(1, quantity - 1)); }}
                 disabled={quantity <= 1}
                 className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
               >
@@ -247,7 +249,7 @@ export function TicketSection({
                 {quantity}
               </span>
               <button
-                onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                onClick={() => { haptic('light'); setQuantity(Math.min(10, quantity + 1)); }}
                 disabled={quantity >= 10}
                 className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
               >
@@ -294,6 +296,7 @@ export function TicketSection({
             <button
               onClick={() => {
                 if (!email || emailValid !== true || buying) return;
+                haptic('confirm');
                 setBuying(true);
                 setTimeout(() => {
                   setShowCheckout(true);

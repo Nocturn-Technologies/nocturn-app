@@ -326,6 +326,52 @@ body::before {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Flippable Ticket 3D ── */
+.ticket-perspective { perspective: 1200px; }
+.ticket-inner {
+  position: relative; width: 100%;
+  transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+  transform-style: preserve-3d;
+}
+.ticket-inner.flipped { transform: rotateY(180deg); }
+.ticket-front, .ticket-back {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.ticket-back {
+  transform: rotateY(180deg);
+  position: absolute; inset: 0;
+}
+
+/* Perforated tear edge */
+.ticket-tear { position: relative; }
+.ticket-tear::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 12px; z-index: 10;
+  background: radial-gradient(circle 6px at 12px 0, transparent 6px, #111114 6px);
+  background-size: 24px 12px;
+}
+
+/* Holographic shimmer */
+.holo-shimmer { position: relative; overflow: hidden; }
+.holo-shimmer::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(105deg, transparent 40%, rgba(123,47,247,0.06) 45%, rgba(168,85,247,0.1) 50%, rgba(123,47,247,0.06) 55%, transparent 60%);
+  background-size: 200% 100%;
+  animation: holoShift 3s ease-in-out infinite;
+}
+@keyframes holoShift {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Ticket drop entrance */
+@keyframes ticketDrop {
+  0% { opacity: 0; transform: translateY(-30px) rotateX(8deg); }
+  60% { transform: translateY(3px) rotateX(0); }
+  100% { opacity: 1; transform: translateY(0) rotateX(0); }
+}
+.animate-ticket-drop { animation: ticketDrop 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
 .animate-fade-in-up { animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .animate-pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
 .animate-scale-in { animation: scaleIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
