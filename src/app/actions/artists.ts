@@ -28,6 +28,7 @@ export async function createArtist(formData: {
   spotify: string | null;
   bookingEmail: string | null;
   defaultFee: number | null;
+  location?: string | null;
 }) {
   const supabase = await createServerClient();
   const {
@@ -50,6 +51,7 @@ export async function createArtist(formData: {
       spotify: formData.spotify,
       booking_email: formData.bookingEmail,
       default_fee: formData.defaultFee,
+      metadata: formData.location ? { location: formData.location } : {},
     })
     .select("id, name, slug")
     .single();

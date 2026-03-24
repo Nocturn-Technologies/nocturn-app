@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Music, Plus, Search, Instagram } from "lucide-react";
+import { Music, Plus, Search, Instagram, ExternalLink, MapPin } from "lucide-react";
 import Link from "next/link";
 
 interface Artist {
@@ -23,8 +23,11 @@ interface Artist {
   bio: string | null;
   genre: string[];
   instagram: string | null;
+  soundcloud: string | null;
+  spotify: string | null;
   booking_email: string | null;
   default_fee: number | null;
+  metadata: { location?: string } | null;
 }
 
 export default function ArtistsPage() {
@@ -41,8 +44,11 @@ export default function ArtistsPage() {
   const [bio, setBio] = useState("");
   const [genre, setGenre] = useState("");
   const [instagram, setInstagram] = useState("");
+  const [soundcloud, setSoundcloud] = useState("");
+  const [spotify, setSpotify] = useState("");
   const [bookingEmail, setBookingEmail] = useState("");
   const [defaultFee, setDefaultFee] = useState("");
+  const [location, setLocation] = useState("");
 
   useEffect(() => {
     loadArtists();
@@ -51,7 +57,7 @@ export default function ArtistsPage() {
   async function loadArtists() {
     const { data } = await supabase
       .from("artists")
-      .select("id, name, slug, bio, genre, instagram, booking_email, default_fee")
+      .select("id, name, slug, bio, genre, instagram, soundcloud, spotify, booking_email, default_fee, metadata")
       .is("deleted_at", null)
       .order("name");
     setArtists((data ?? []) as Artist[]);
@@ -73,10 +79,11 @@ export default function ArtistsPage() {
       bio: bio || null,
       genre: genres,
       instagram: instagram || null,
-      soundcloud: null,
-      spotify: null,
+      soundcloud: soundcloud || null,
+      spotify: spotify || null,
       bookingEmail: bookingEmail || null,
       defaultFee: defaultFee ? parseFloat(defaultFee) : null,
+      location: location || null,
     });
 
     if (result.error) {
@@ -85,13 +92,15 @@ export default function ArtistsPage() {
       return;
     }
 
-    // Reset form
     setName("");
     setBio("");
     setGenre("");
     setInstagram("");
+    setSoundcloud("");
+    setSpotify("");
     setBookingEmail("");
     setDefaultFee("");
+    setLocation("");
     setShowAdd(false);
     setSaving(false);
     loadArtists();
@@ -100,7 +109,8 @@ export default function ArtistsPage() {
   const filtered = artists.filter(
     (a) =>
       a.name.toLowerCase().includes(search.toLowerCase()) ||
-      a.genre?.some((g) => g.toLowerCase().includes(search.toLowerCase()))
+      a.genre?.some((g) => g.toLowerCase().includes(search.toLowerCase())) ||
+      (a.metadata as { location?: string })?.location?.toLowerCase().includes(search.toLowerCase())
   );
 
   if (loading) {
@@ -115,9 +125,9 @@ export default function ArtistsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Artists</h1>
+          <h1 className="text-2xl font-bold">Artist Library</h1>
           <p className="text-sm text-muted-foreground">
-            Manage your artist database
+            Shared directory of DJs, producers, and performers across Nocturn
           </p>
         </div>
         <Button
@@ -140,13 +150,13 @@ export default function ArtistsPage() {
         <Card className="border-nocturn/20">
           <CardHeader>
             <CardTitle className="text-base">Add New Artist</CardTitle>
-            <CardDescription>Add an artist to your database for easy booking</CardDescription>
+            <CardDescription>Add to the Nocturn-wide artist directory — visible to all collectives</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleAdd} className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="artistName">Name</Label>
+                  <Label htmlFor="artistName">Name *</Label>
                   <Input
                     id="artistName"
                     placeholder="DJ Shadow"
@@ -165,16 +175,27 @@ export default function ArtistsPage() {
                   />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="artistBio">Bio (optional)</Label>
-                <Input
-                  id="artistBio"
-                  placeholder="Short bio or description"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="artistBio">Bio</Label>
+                  <Input
+                    id="artistBio"
+                    placeholder="Short bio or description"
+                    value={bio}
+                    onChange={(e) => setBio(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="artistLocation">Based in</Label>
+                  <Input
+                    id="artistLocation"
+                    placeholder="Toronto, ON"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-2">
                   <Label htmlFor="artistInstagram">Instagram</Label>
                   <Input
@@ -182,6 +203,24 @@ export default function ArtistsPage() {
                     placeholder="@djshadow"
                     value={instagram}
                     onChange={(e) => setInstagram(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="artistSoundcloud">SoundCloud</Label>
+                  <Input
+                    id="artistSoundcloud"
+                    placeholder="soundcloud.com/djshadow"
+                    value={soundcloud}
+                    onChange={(e) => setSoundcloud(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="artistSpotify">Spotify</Label>
+                  <Input
+                    id="artistSpotify"
+                    placeholder="open.spotify.com/artist/..."
+                    value={spotify}
+                    onChange={(e) => setSpotify(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
@@ -194,18 +233,19 @@ export default function ArtistsPage() {
                     onChange={(e) => setBookingEmail(e.target.value)}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="artistFee">Default fee ($)</Label>
-                  <Input
-                    id="artistFee"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="500"
-                    value={defaultFee}
-                    onChange={(e) => setDefaultFee(e.target.value)}
-                  />
-                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="artistFee">Default fee ($)</Label>
+                <Input
+                  id="artistFee"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="500"
+                  value={defaultFee}
+                  onChange={(e) => setDefaultFee(e.target.value)}
+                  className="max-w-[200px]"
+                />
               </div>
               <div className="flex gap-2">
                 <Button type="submit" className="bg-nocturn hover:bg-nocturn-light" disabled={saving}>
@@ -225,12 +265,17 @@ export default function ArtistsPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by name or genre..."
+            placeholder="Search by name, genre, or city..."
             className="pl-10"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+      )}
+
+      {/* Artist count */}
+      {artists.length > 0 && (
+        <p className="text-xs text-muted-foreground">{filtered.length} artist{filtered.length !== 1 ? "s" : ""}</p>
       )}
 
       {/* Artist list */}
@@ -243,48 +288,65 @@ export default function ArtistsPage() {
             <div className="text-center">
               <p className="font-medium">No artists yet</p>
               <p className="text-sm text-muted-foreground">
-                Build your artist database to quickly book talent for events.
+                Add DJs, producers, and performers to the shared Nocturn library.
               </p>
             </div>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {filtered.map((artist) => (
-            <Link key={artist.id} href={`/dashboard/artists/${artist.id}`}>
-            <Card className="transition-colors hover:border-nocturn/30">
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10">
-                  <Music className="h-5 w-5 text-nocturn" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{artist.name}</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {artist.genre?.slice(0, 3).map((g) => (
-                      <span
-                        key={g}
-                        className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[10px] font-medium text-nocturn"
-                      >
-                        {g}
-                      </span>
-                    ))}
+          {filtered.map((artist) => {
+            const loc = (artist.metadata as { location?: string })?.location;
+            return (
+              <Link key={artist.id} href={`/dashboard/artists/${artist.id}`}>
+              <Card className="transition-colors hover:border-nocturn/30">
+                <CardContent className="flex items-center gap-4 p-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10 shrink-0">
+                    <Music className="h-5 w-5 text-nocturn" />
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                    {artist.instagram && (
-                      <span className="flex items-center gap-1">
-                        <Instagram className="h-3 w-3" />
-                        {artist.instagram}
-                      </span>
-                    )}
-                    {artist.default_fee && (
-                      <span>${artist.default_fee}</span>
-                    )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium truncate">{artist.name}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {artist.genre?.slice(0, 3).map((g) => (
+                        <span
+                          key={g}
+                          className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[10px] font-medium text-nocturn"
+                        >
+                          {g}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      {loc && (
+                        <span className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          {loc}
+                        </span>
+                      )}
+                      {artist.instagram && (
+                        <span className="flex items-center gap-1">
+                          <Instagram className="h-3 w-3" />
+                          {artist.instagram}
+                        </span>
+                      )}
+                      {(artist.soundcloud || artist.spotify) && (
+                        <span className="flex items-center gap-1">
+                          <ExternalLink className="h-3 w-3" />
+                          {artist.soundcloud ? "SC" : ""}
+                          {artist.soundcloud && artist.spotify ? " · " : ""}
+                          {artist.spotify ? "Spotify" : ""}
+                        </span>
+                      )}
+                      {artist.default_fee && (
+                        <span>${artist.default_fee}</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-            </Link>
-          ))}
+                </CardContent>
+              </Card>
+              </Link>
+            );
+          })}
         </div>
       )}
     </div>
