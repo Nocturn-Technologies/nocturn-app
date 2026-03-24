@@ -34,7 +34,7 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -45,7 +45,15 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dashboard");
+    // Check user type for routing
+    const userType = data.user?.user_metadata?.user_type;
+    if (userType === "artist") {
+      router.push("/dashboard/artists/me");
+    } else if (userType === "venue") {
+      router.push("/dashboard/venues/me");
+    } else {
+      router.push("/dashboard");
+    }
     router.refresh();
   }
 

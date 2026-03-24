@@ -17,15 +17,17 @@ export async function signUpUser(formData: {
   email: string;
   password: string;
   fullName: string;
+  userType?: "collective" | "artist" | "venue";
 }) {
   const admin = createAdminClient();
+  const userType = formData.userType ?? "collective";
 
   // Create user with auto-confirm via admin API (no email confirmation needed)
   const { data: newUser, error: createError } = await admin.auth.admin.createUser({
     email: formData.email,
     password: formData.password,
     email_confirm: true,
-    user_metadata: { full_name: formData.fullName },
+    user_metadata: { full_name: formData.fullName, user_type: userType },
   });
 
   if (createError) {
@@ -37,6 +39,7 @@ export async function signUpUser(formData: {
     id: newUser.user.id,
     email: formData.email,
     full_name: formData.fullName,
+    user_type: userType,
   });
 
   // Sign in the user so they get a session cookie
