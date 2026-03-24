@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Outfit, DM_Sans } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Suspense } from "react";
+import { PostHogProvider } from "@/components/posthog-provider";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -81,7 +83,9 @@ export default function RootLayout({
       <body
         className={`${outfit.variable} ${dmSans.variable} antialiased`}
       >
-        {children}
+        <Suspense fallback={null}>
+          <PostHogProvider>{children}</PostHogProvider>
+        </Suspense>
         <Analytics />
         <SpeedInsights />
       </body>

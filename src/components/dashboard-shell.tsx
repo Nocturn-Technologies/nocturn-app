@@ -34,6 +34,7 @@ import {
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
 import { NocturnLogo } from "@/components/nocturn-logo";
+import { posthog } from "@/lib/posthog";
 
 interface DashboardShellProps {
   user: { id: string; email: string; fullName: string };
@@ -85,6 +86,17 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
   const [moreOpen, setMoreOpen] = useState(false);
   const [betaDismissed, setBetaDismissed] = useState(true); // start true to avoid flash
   const { notifications, dismiss: dismissNotification } = useNotifications();
+
+  // Identify user in PostHog
+  useEffect(() => {
+    if (user?.id) {
+      posthog.identify(user.id, {
+        email: user.email,
+        name: user.fullName,
+        collective: collectives?.[0]?.name,
+      });
+    }
+  }, [user, collectives]);
 
   // Check localStorage for beta banner dismissed state
   useEffect(() => {
