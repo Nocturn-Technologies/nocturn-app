@@ -42,6 +42,9 @@ export async function signUpUser(formData: {
     user_type: userType,
   });
 
+  // Send welcome email (non-blocking)
+  sendWelcomeEmail(formData.email, formData.fullName, userType).catch(() => {});
+
   // Sign in the user so they get a session cookie
   const supabase = await createServerClient();
   const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -54,6 +57,51 @@ export async function signUpUser(formData: {
   }
 
   return { error: null };
+}
+
+async function sendWelcomeEmail(email: string, name: string, userType: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+
+  const typeMessages: Record<string, string> = {
+    collective: "You're all set to create events, sell tickets, and grow your collective. Start by creating your first event — our AI will help you set everything up.",
+    artist: "Your profile is live on the Nocturn directory. Collectives in your city can now discover and book you. Fill out your SoundCloud and Spotify to stand out.",
+    venue: "Your venue is listed on Nocturn. Promoters can now find your space and reach out for bookings. Add your capacity and pricing to attract the right events.",
+  };
+
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        from: "Nocturn <nocturn@trynocturn.com>",
+        to: email,
+        subject: `Welcome to Nocturn, ${name.split(" ")[0]}`,
+        html: `
+          <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
+            <div style="margin-bottom: 32px;">
+              <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
+            </div>
+            <h1 style="font-size: 28px; font-weight: 800; margin: 0 0 16px; line-height: 1.2;">
+              Welcome, ${name.split(" ")[0]}.
+            </h1>
+            <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
+              ${typeMessages[userType] || typeMessages.collective}
+            </p>
+            <a href="https://app.trynocturn.com/dashboard" style="display: inline-block; background: #7B2FF7; color: white; padding: 12px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 14px;">
+              Open Nocturn
+            </a>
+            <p style="color: #71717A; font-size: 12px; margin-top: 40px; line-height: 1.5;">
+              You run the night. Nocturn runs the business.<br>
+              <a href="https://trynocturn.com" style="color: #7B2FF7; text-decoration: none;">trynocturn.com</a>
+            </p>
+          </div>
+        `,
+      }),
+    });
+  } catch {
+    // Non-critical — don't block signup
+  }
 }
 
 export async function createCollective(formData: {

@@ -1126,14 +1126,12 @@ export default function NewEventPage() {
 
   function handleBackToChat() {
     setPhase("chat");
-    setStep("name");
-    setEventData({});
-    setTiers([]);
-    setShowVenuePicker(false);
-    setMessages([
+    // Keep existing data — just let them make changes
+    setMessages((prev) => [
+      ...prev,
       {
         role: "ai",
-        content: "No problem \u2014 let\u2019s start over. What\u2019s the event called?",
+        content: "What would you like to change? Tell me and I\u2019ll update it.",
       },
     ]);
     setTimeout(() => inputRef.current?.focus(), 100);
