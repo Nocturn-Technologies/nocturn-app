@@ -142,6 +142,41 @@ export async function createEvent(input: CreateEventInput) {
     return { error: "Event date can't be in the past. Pick a future date." };
   }
 
+  // Enrich event with AI-generated content if no description provided
+  let enrichedDescription = input.description;
+  let vibeTags: string[] = [];
+  let dressCode: string | null = null;
+  let hostMessage: string | null = null;
+
+  if (!input.description || input.description.length < 20) {
+    try {
+      const { enrichEventContent } = await import("./ai-enrich-event");
+      const { data: collective } = await admin
+        .from("collectives")
+        .select("name")
+        .eq("id", collectiveId)
+        .maybeSingle();
+
+      const enriched = await enrichEventContent({
+        title: input.title,
+        date: input.date,
+        startTime: input.startTime,
+        venueName: input.venueName,
+        venueCity: input.venueCity,
+        headlinerType: (input as unknown as Record<string, unknown>).headlinerType as string | undefined,
+        collectiveName: collective?.name ?? undefined,
+        tiers: input.tiers.map(t => ({ name: t.name, price: t.price })),
+      });
+
+      enrichedDescription = enriched.description;
+      vibeTags = enriched.vibeTags;
+      dressCode = enriched.dressCode;
+      hostMessage = enriched.hostMessage;
+    } catch (err) {
+      console.error("AI enrichment failed, continuing without:", err);
+    }
+  }
+
   // Create event
   const { data: event, error: eventError } = await admin
     .from("events")
@@ -150,11 +185,16 @@ export async function createEvent(input: CreateEventInput) {
       venue_id: venueId,
       title: input.title,
       slug: input.slug,
-      description: input.description,
+      description: enrichedDescription,
       starts_at: startsAt,
       ends_at: endsAt,
       doors_at: doorsAt,
       status: "draft",
+      vibe_tags: vibeTags.length > 0 ? vibeTags : undefined,
+      metadata: {
+        ...(dressCode ? { dress_code: dressCode } : {}),
+        ...(hostMessage ? { host_message: hostMessage } : {}),
+      },
     })
     .select("id")
     .single();
