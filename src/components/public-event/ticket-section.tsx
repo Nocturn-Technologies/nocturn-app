@@ -88,7 +88,7 @@ export function TicketSection({
 
   return (
     <div className="space-y-4">
-      <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">
         Tickets
       </h2>
 
@@ -127,14 +127,14 @@ export function TicketSection({
                     setShowCheckout(false);
                     setWaitlistTierId(null);
                   }}
-                  className={`w-full rounded-2xl border p-4 text-left transition-all duration-200 ${
+                  className={`w-full rounded-2xl border p-5 text-left transition-all duration-300 ease-out ${
                     isSoldOut
-                      ? "border-white/5 bg-white/[0.01] hover:border-amber-500/20 cursor-pointer"
+                      ? "border-white/[0.04] bg-white/[0.01] hover:border-amber-500/20 cursor-pointer"
                       : isLocked
-                        ? "border-white/5 bg-white/[0.01] cursor-not-allowed opacity-50"
+                        ? "border-white/[0.04] bg-white/[0.01] cursor-not-allowed opacity-40"
                         : isSelected
-                          ? "border-2 bg-white/5 scale-[1.01] active:scale-[0.98]"
-                          : "border-white/5 bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04] active:scale-[0.98]"
+                          ? "border-2 bg-white/[0.04] backdrop-blur-sm scale-[1.01] shadow-lg shadow-black/20 active:scale-[0.99]"
+                          : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04] active:scale-[0.99]"
                   }`}
                   style={isSelected && !isSoldOut && !isLocked ? { borderColor: accentColor } : undefined}
                   disabled={isLocked}
@@ -231,7 +231,7 @@ export function TicketSection({
 
       {/* Expanded section when tier selected */}
       {selectedTier && (
-        <div className="space-y-4 rounded-2xl border border-white/5 bg-white/[0.02] p-5 animate-fade-in-up">
+        <div className="space-y-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-6 animate-fade-in-up">
           {/* Quantity selector */}
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-white/60">Quantity</span>
@@ -239,17 +239,17 @@ export function TicketSection({
               <button
                 onClick={() => setQuantity(Math.max(1, quantity - 1))}
                 disabled={quantity <= 1}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white transition-colors hover:bg-white/10 disabled:opacity-30"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
               >
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="w-8 text-center font-heading text-lg font-semibold text-white">
+              <span className="w-10 text-center font-heading text-xl font-bold text-white tabular-nums">
                 {quantity}
               </span>
               <button
                 onClick={() => setQuantity(Math.min(10, quantity + 1))}
                 disabled={quantity >= 10}
-                className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/5 text-white transition-colors hover:bg-white/10 disabled:opacity-30"
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
               >
                 <Plus className="h-4 w-4" />
               </button>
@@ -268,12 +268,12 @@ export function TicketSection({
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={`w-full rounded-xl border bg-white/5 px-4 py-3 pr-10 text-white placeholder:text-white/30 outline-none focus:ring-1 transition-colors ${
+                className={`w-full rounded-xl border bg-white/[0.03] px-4 py-3.5 pr-10 text-[16px] text-white placeholder:text-white/25 outline-none focus:ring-1 transition-all duration-200 ${
                   emailValid === true
-                    ? "border-green-500/50 focus:border-green-500"
+                    ? "border-green-500/40 focus:border-green-500/60 focus:ring-green-500/10"
                     : emailValid === false
-                      ? "border-red-500/50 focus:border-red-500"
-                      : "border-white/10 focus:border-white/20"
+                      ? "border-red-500/40 focus:border-red-500/60 focus:ring-red-500/10"
+                      : "border-white/[0.08] focus:border-white/20 focus:ring-white/5"
                 }`}
               />
               {emailValid === true && (
@@ -301,7 +301,7 @@ export function TicketSection({
                 }, 400);
               }}
               disabled={!email || emailValid !== true || buying}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl px-6 py-4 text-lg font-bold text-white transition-all hover:brightness-110 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed relative overflow-hidden"
+              className="flex w-full items-center justify-center gap-2.5 rounded-2xl px-6 py-4 text-lg font-bold text-white transition-all duration-200 hover:brightness-110 hover:shadow-lg hover:shadow-black/30 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed relative overflow-hidden"
               style={{ backgroundColor: accentColor }}
             >
               {buying && (
@@ -315,7 +315,7 @@ export function TicketSection({
                   : `Get Tickets — $${total.toFixed(2)}`}
             </button>
             {totalFees > 0 && (
-              <p className="mt-2 text-center text-[11px] text-white/25">
+              <p className="mt-2.5 text-center text-[11px] text-white/20 tracking-wide">
                 ${subtotal.toFixed(2)} + ${totalFees.toFixed(2)} service fee
               </p>
             )}

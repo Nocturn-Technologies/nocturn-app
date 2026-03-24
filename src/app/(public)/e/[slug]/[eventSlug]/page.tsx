@@ -246,7 +246,7 @@ export default async function PublicEventPage({ params }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090B]" style={{ scrollBehavior: "smooth" }}>
+    <div className="min-h-screen bg-[#09090B] antialiased" style={{ scrollBehavior: "smooth" }}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
@@ -267,29 +267,25 @@ export default async function PublicEventPage({ params }: Props) {
             <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/40 to-transparent" />
           </div>
         ) : (
-          /* Animated gradient fallback with noise */
-          <div
-            className="relative h-72 w-full sm:h-96"
-            style={{
-              background: `linear-gradient(135deg, ${accentColor}40 0%, ${accentColor}15 40%, #09090B 100%)`,
-            }}
-          >
-            {/* CSS noise texture */}
-            <div
-              className="absolute inset-0 opacity-30"
-              style={{
-                backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")`,
-                backgroundSize: "128px 128px",
-              }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/60 to-transparent" />
+          /* Premium gradient hero — no flyer */
+          <div className="relative h-80 w-full sm:h-[420px] overflow-hidden">
+            {/* Layered gradient mesh */}
+            <div className="absolute inset-0" style={{ background: `linear-gradient(160deg, ${accentColor}25 0%, transparent 50%)` }} />
+            <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 70% 20%, ${accentColor}15 0%, transparent 60%)` }} />
+            <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 30% 80%, ${accentColor}10 0%, transparent 50%)` }} />
+            {/* Grain texture */}
+            <div className="absolute inset-0 opacity-[0.15]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")`, backgroundSize: "128px 128px" }} />
+            {/* Bottom fade */}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/50 to-transparent" />
+            {/* Subtle grid pattern */}
+            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)", backgroundSize: "64px 64px" }} />
           </div>
         )}
       </div>
 
       {/* ─── Content ─── */}
       <div className="mx-auto max-w-[640px] px-6 pb-32 sm:pb-12">
-        <div className="-mt-16 relative space-y-8">
+        <div className="-mt-20 relative space-y-10">
           {/* ─── Collective badge + Title ─── */}
           <div className="space-y-4">
             <div className="flex items-center gap-2.5">
@@ -314,7 +310,7 @@ export default async function PublicEventPage({ params }: Props) {
               </span>
             </div>
 
-            <h1 className="font-heading text-3xl font-bold tracking-tight text-white sm:text-5xl line-clamp-3">
+            <h1 className="font-heading text-4xl font-extrabold tracking-[-0.03em] text-white sm:text-6xl line-clamp-3 leading-[1.05]">
               {event.title}
             </h1>
 
@@ -341,10 +337,10 @@ export default async function PublicEventPage({ params }: Props) {
           )}
 
           {/* ─── Date & Time Card ─── */}
-          <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-5">
             <div className="flex items-center gap-5">
               {/* Big date block */}
-              <div className="flex flex-col items-center rounded-xl bg-white/5 px-4 py-3 min-w-[72px]">
+              <div className="flex flex-col items-center rounded-xl bg-white/[0.04] border border-white/[0.06] px-5 py-3 min-w-[76px]">
                 <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
                   {dayName}
                 </span>
@@ -381,12 +377,12 @@ export default async function PublicEventPage({ params }: Props) {
           {/* ─── Venue Section ─── */}
           {venue && (
             <div className="space-y-3">
-              <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+              <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">
                 Venue
               </h2>
-              <div className="rounded-2xl border border-white/5 bg-white/[0.02] overflow-hidden">
-                {/* Google Maps Static Embed */}
-                <div className="relative h-40 w-full bg-white/5">
+              <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm overflow-hidden">
+                {/* Google Maps Embed */}
+                <div className="relative h-44 w-full bg-white/[0.03]">
                   <iframe
                     src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}&zoom=15&maptype=roadmap`}
                     className="h-full w-full border-0 opacity-80 grayscale"
@@ -451,7 +447,7 @@ export default async function PublicEventPage({ params }: Props) {
           {/* ─── About / Description ─── */}
           {event.description && (
             <div className="space-y-3">
-              <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+              <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">
                 About
               </h2>
               <ExpandableText text={event.description} />
@@ -461,7 +457,7 @@ export default async function PublicEventPage({ params }: Props) {
           {/* Dress code */}
           {dressCode && (
             <div className="space-y-2">
-              <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+              <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">
                 Dress Code
               </h2>
               <p className="text-[15px] text-white/70">{dressCode}</p>
@@ -481,7 +477,7 @@ export default async function PublicEventPage({ params }: Props) {
           {/* ─── Lineup ─── */}
           {artists && artists.length > 0 && (
             <div className="space-y-3">
-              <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+              <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">
                 Lineup
               </h2>
               {/* Horizontal scroll on mobile with fade indicator */}

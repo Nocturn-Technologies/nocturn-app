@@ -555,7 +555,8 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
 
 function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
   const [priceMultiplier, setPriceMultiplier] = useState(1.0);
-  const PLATFORM_FEE = 0.05;
+  const PLATFORM_FEE = 0.07; // 7% + $0.50 per ticket (buyer pays)
+  const PLATFORM_FEE_FLAT = 0.50;
   const STRIPE_FEE_RATE = 0.029;
   const STRIPE_FEE_FLAT = 0.30;
 
@@ -571,9 +572,10 @@ function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
   function calcNet(rate: number) {
     const ticketsSold = Math.round(totalCapacity * rate);
     const gross = adjustedTiers.reduce((s, t) => s + t.price * Math.round(t.capacity * rate), 0);
-    const stripeFees = ticketsSold * STRIPE_FEE_FLAT + gross * STRIPE_FEE_RATE;
-    const platformFee = gross * PLATFORM_FEE;
-    return { ticketsSold, gross, net: gross - stripeFees - platformFee };
+    // Buyer pays all fees — organizer keeps 100% of ticket price
+    // Stripe processing still applies to payout (~2.9% + $0.30)
+    const stripeProcessing = ticketsSold * STRIPE_FEE_FLAT + gross * STRIPE_FEE_RATE;
+    return { ticketsSold, gross, net: gross - stripeProcessing };
   }
 
   const scenarios = [
