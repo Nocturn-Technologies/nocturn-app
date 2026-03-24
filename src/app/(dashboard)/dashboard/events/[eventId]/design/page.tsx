@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -58,6 +59,7 @@ export default function EventDesignPage() {
   const params = useParams();
   const router = useRouter();
   const eventId = params.eventId as string;
+  const supabase = createClient();
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -340,11 +342,55 @@ export default function EventDesignPage() {
     return canvas.toDataURL("image/png", 0.95);
   }
 
-  function acceptGeneratedPoster() {
-    if (generatedUrl) {
+  async function acceptGeneratedPoster() {
+    if (!generatedUrl) return;
+
+    // If it's a data URL, upload to Supabase Storage first
+    if (generatedUrl.startsWith("data:")) {
+      try {
+        // Convert data URL to blob
+        const response = await fetch(generatedUrl);
+        const blob = await response.blob();
+        const fileName = `posters/${eventId}-${Date.now()}.png`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("event-assets")
+          .upload(fileName, blob, { contentType: "image/png", upsert: true });
+
+        if (uploadError) {
+          // Try "recordings" bucket as fallback
+          const { error: fallbackError } = await supabase.storage
+            .from("recordings")
+            .upload(fileName, blob, { contentType: "image/png", upsert: true });
+
+          if (fallbackError) {
+            console.error("Upload failed:", fallbackError);
+            // Fall back to data URL (won't work on public page but at least saves)
+            setFlyerUrl(generatedUrl);
+            setGeneratedUrl(null);
+            return;
+          }
+
+          const { data: urlData } = supabase.storage
+            .from("recordings")
+            .getPublicUrl(fileName);
+          setFlyerUrl(urlData.publicUrl);
+        } else {
+          const { data: urlData } = supabase.storage
+            .from("event-assets")
+            .getPublicUrl(fileName);
+          setFlyerUrl(urlData.publicUrl);
+        }
+      } catch (err) {
+        console.error("Poster upload failed:", err);
+        setFlyerUrl(generatedUrl);
+      }
+    } else {
+      // Already a URL (e.g. Unsplash)
       setFlyerUrl(generatedUrl);
-      setGeneratedUrl(null);
     }
+
+    setGeneratedUrl(null);
   }
 
   // Unsplash photo search
