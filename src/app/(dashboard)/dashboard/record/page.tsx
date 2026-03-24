@@ -16,6 +16,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { haptic } from "@/lib/haptics";
+import { transcribeAudio } from "@/app/actions/transcribe";
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -32,39 +33,6 @@ interface Recording {
   audio_url: string | null;
   status: "recording" | "processing" | "done" | "failed";
   created_at: string;
-}
-
-// ─── Mock AI processing ──────────────────────────────────────────────
-
-function mockAIProcess(): Promise<{
-  transcript: string;
-  summary: string;
-  action_items: string[];
-  key_decisions: string[];
-}> {
-  return new Promise((resolve) =>
-    setTimeout(
-      () =>
-        resolve({
-          transcript:
-            "Hey, so I wanted to go over the venue situation. We looked at three spots — the warehouse on 5th, the rooftop downtown, and the gallery space. I think the warehouse gives us the best bang for our buck. We can fit 300 people and they're only charging us $2,500 for the night. For ticket pricing, I'm thinking $25 general admission, $75 VIP with bottle service. That should put us in a good spot profit-wise. Oh, and we need to lock down the sound system — I'll call the rental company tomorrow. Can you send the updated lineup to the designer by Monday? We need the flyers printed by Wednesday.",
-          summary:
-            "Discussed venue options for upcoming event. Agreed on the warehouse on 5th ($2,500/night, 300 capacity). Set ticket pricing at $25 GA / $75 VIP with bottle service. Need to finalize sound system rental and get flyers designed.",
-          action_items: [
-            "Follow up with venue manager — Shawn — by Friday",
-            "Send updated lineup to designer — Team — by Monday",
-            "Confirm sound system rental — Shawn — ASAP",
-            "Get flyers printed — Team — by Wednesday",
-          ],
-          key_decisions: [
-            "Going with warehouse on 5th as venue ($2,500)",
-            "Ticket price: $25 GA, $75 VIP",
-            "VIP section with bottle service",
-          ],
-        }),
-      2000
-    )
-  );
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -349,8 +317,15 @@ export default function RecordPage() {
     const mr = mediaRecorderRef.current;
     if (!mr) return;
 
+    // Wait for final data chunk before processing
+    const audioReady = new Promise<void>((resolve) => {
+      mr.onstop = () => resolve();
+    });
+
     mr.stop();
     mr.stream.getTracks().forEach((t) => t.stop());
+    await audioReady;
+
     setIsRecording(false);
     setIsProcessing(true);
 
@@ -367,7 +342,19 @@ export default function RecordPage() {
     await fetchRecordings();
 
     try {
-      const result = await mockAIProcess();
+      // Convert audio chunks to base64
+      const audioBlob = new Blob(chunksRef.current, { type: mr.mimeType });
+      const arrayBuffer = await audioBlob.arrayBuffer();
+      const base64 = btoa(
+        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), "")
+      );
+
+      // Send to real transcription API
+      const result = await transcribeAudio(base64, mr.mimeType);
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
 
       if (recordingId) {
         await supabase
