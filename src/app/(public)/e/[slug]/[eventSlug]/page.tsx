@@ -287,39 +287,63 @@ export default async function PublicEventPage({ params }: Props) {
       <div className="mx-auto max-w-[640px] px-6 pb-32 sm:pb-12">
         <div className="-mt-20 relative space-y-10">
           {/* ─── Collective badge + Title ─── */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2.5">
+          <div className="space-y-5">
+            {/* Collective pill */}
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/[0.08] bg-white/[0.03] backdrop-blur-sm px-3 py-1.5">
               {collective.logo_url ? (
                 <Image
                   src={collective.logo_url}
                   alt={collective.name}
-                  width={32}
-                  height={32}
-                  className="h-8 w-8 rounded-full object-cover ring-2 ring-white/10"
+                  width={20}
+                  height={20}
+                  className="h-5 w-5 rounded-full object-cover"
                 />
               ) : (
                 <div
-                  className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold text-white ring-2 ring-white/10"
+                  className="flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold text-white"
                   style={{ backgroundColor: accentColor }}
                 >
                   {collective.name.charAt(0).toUpperCase()}
                 </div>
               )}
-              <span className="text-sm font-medium text-white/50">
+              <span className="text-xs font-medium text-white/60">
                 {collective.name}
               </span>
             </div>
 
-            <h1 className="font-heading text-4xl font-extrabold tracking-[-0.03em] text-white sm:text-6xl line-clamp-3 leading-[1.05]">
+            {/* Title */}
+            <h1 className="font-heading text-[2.5rem] font-extrabold tracking-[-0.035em] text-white sm:text-[3.5rem] line-clamp-3 leading-[1.02]">
               {event.title}
             </h1>
 
-            {/* Vibe tags + selling fast badge */}
+            {/* Quick info row — date + venue inline */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/50">
+              {eventDate && (
+                <span className="flex items-center gap-1.5">
+                  <Calendar className="h-3.5 w-3.5 text-white/30" />
+                  {`${dayName}, ${monthName} ${dayNum}`}
+                </span>
+              )}
+              {startTime && (
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5 text-white/30" />
+                  {startTime}
+                </span>
+              )}
+              {venue && (
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-white/30" />
+                  {venue.name}
+                </span>
+              )}
+            </div>
+
+            {/* Vibe tags + selling fast */}
             <div className="flex flex-wrap items-center gap-2">
               {vibeTags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/60"
+                  className="rounded-full border border-white/[0.06] bg-white/[0.03] px-3 py-1 text-[11px] font-medium text-white/40 tracking-wide"
                 >
                   {tag}
                 </span>
@@ -336,40 +360,47 @@ export default async function PublicEventPage({ params }: Props) {
             <EventCountdown targetDate={event.doors_at || event.starts_at} />
           )}
 
-          {/* ─── Date & Time Card ─── */}
-          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-5">
-            <div className="flex items-center gap-5">
-              {/* Big date block */}
-              <div className="flex flex-col items-center rounded-xl bg-white/[0.04] border border-white/[0.06] px-5 py-3 min-w-[76px]">
-                <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
-                  {dayName}
-                </span>
-                <span className="font-heading text-2xl font-bold text-white">
-                  {dayNum}
-                </span>
-                <span className="text-[11px] font-semibold uppercase tracking-widest text-white/40">
-                  {monthName}
-                </span>
-              </div>
-              {/* Time info */}
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-white/30" />
-                  <span className="font-heading text-lg font-semibold text-white">
-                    {startTime}
-                    {endTime && ` — ${endTime}`}
+          {/* ─── Date & Time ─── */}
+          <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm overflow-hidden">
+            {/* Accent bar */}
+            <div className="h-[2px]" style={{ background: `linear-gradient(90deg, ${accentColor}, ${accentColor}60, transparent)` }} />
+            <div className="p-5">
+              <div className="flex items-center gap-5">
+                {/* Date block */}
+                <div className="flex flex-col items-center rounded-xl bg-white/[0.04] border border-white/[0.06] px-5 py-3.5 min-w-[80px]">
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30">
+                    {dayName}
+                  </span>
+                  <span className="font-heading text-3xl font-extrabold text-white leading-none mt-0.5">
+                    {dayNum}
+                  </span>
+                  <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/30 mt-0.5">
+                    {monthName}
                   </span>
                 </div>
-                {doorsTime && (
-                  <p className="text-sm text-white/40">
-                    Doors open at {doorsTime}
-                  </p>
-                )}
-                {minAge && (
-                  <p className="text-sm text-white/40">
-                    {minAge}+ only
-                  </p>
-                )}
+                {/* Time details */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-6 h-6 rounded-md bg-white/[0.06] flex items-center justify-center">
+                      <Clock className="h-3 w-3 text-white/40" />
+                    </div>
+                    <span className="font-heading text-lg font-bold text-white tracking-tight">
+                      {startTime}{endTime && ` — ${endTime}`}
+                    </span>
+                  </div>
+                  {doorsTime && (
+                    <p className="text-[13px] text-white/40 pl-[34px]">
+                      Doors at {doorsTime}
+                    </p>
+                  )}
+                  {minAge && (
+                    <div className="pl-[34px]">
+                      <span className="inline-flex items-center rounded-full border border-white/[0.08] bg-white/[0.03] px-2 py-0.5 text-[10px] font-medium text-white/40">
+                        {minAge}+
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -443,17 +474,17 @@ export default async function PublicEventPage({ params }: Props) {
               <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">
                 About
               </h2>
-              <ExpandableText text={event.description} />
+              <div className="relative pl-4 border-l-2 border-white/[0.06]">
+                <ExpandableText text={event.description} />
+              </div>
             </div>
           )}
 
           {/* Dress code */}
           {dressCode && (
-            <div className="space-y-2">
-              <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">
-                Dress Code
-              </h2>
-              <p className="text-[15px] text-white/70">{dressCode}</p>
+            <div className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">Dress Code</span>
+              <span className="text-sm text-white/70 font-medium">{dressCode}</span>
             </div>
           )}
 
@@ -481,27 +512,30 @@ export default async function PublicEventPage({ params }: Props) {
                   return (
                     <div
                       key={a.artist_id}
-                      className="flex-none rounded-2xl border border-white/5 bg-white/[0.02] p-4 min-w-[140px] space-y-1.5"
+                      className="flex-none rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 min-w-[150px] space-y-2.5 hover:border-white/[0.12] transition-all duration-300"
                     >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/5">
-                        <Music className="h-5 w-5 text-white/30" />
+                      <div
+                        className="flex h-11 w-11 items-center justify-center rounded-xl"
+                        style={{ backgroundColor: `${accentColor}15` }}
+                      >
+                        <Music className="h-5 w-5" style={{ color: accentColor }} />
                       </div>
-                      <p className="font-heading text-sm font-semibold text-white">
+                      <p className="font-heading text-sm font-bold text-white tracking-tight">
                         {artist.name}
                       </p>
                       {artist.genre && (
                         <span
-                          className="inline-block rounded-full px-2 py-0.5 text-[11px] font-medium"
+                          className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-medium tracking-wide"
                           style={{
-                            backgroundColor: `${accentColor}20`,
-                            color: accentColor,
+                            backgroundColor: `${accentColor}12`,
+                            color: `${accentColor}cc`,
                           }}
                         >
                           {artist.genre}
                         </span>
                       )}
                       {a.set_time && (
-                        <p className="text-xs text-white/40">{a.set_time}</p>
+                        <p className="text-[11px] text-white/30 font-medium">{a.set_time}</p>
                       )}
                     </div>
                   );
