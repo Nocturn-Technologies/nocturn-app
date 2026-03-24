@@ -213,6 +213,54 @@ export default function ArtistDetailPage() {
         </CardContent>
       </Card>
 
+      {/* Music Links */}
+      {(artist.soundcloud || artist.spotify) && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Listen</p>
+            <div className="flex flex-col gap-2">
+              {artist.soundcloud && (
+                <a
+                  href={artist.soundcloud.startsWith("http") ? artist.soundcloud : `https://soundcloud.com/${artist.soundcloud}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-lg border border-orange-500/20 bg-orange-500/5 p-3 hover:bg-orange-500/10 transition-colors"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/20">
+                    <svg className="h-5 w-5 text-orange-400" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M11.56 8.87V17h8.76c1.85 0 2.68-1.22 2.68-2.68 0-2.3-1.73-3.38-3.38-3.38-.58 0-.87.08-1.15.17-.38-2.49-2.49-3.24-3.82-3.24-1.3 0-2.42.6-3.09 1z"/>
+                      <path d="M10.5 9.56V17h.5V8.87c-.17.17-.33.4-.5.69zm-1.5 2.4V17h.75V11.12c-.25.23-.5.5-.75.84zm-1.5 1.97V17h.75v-2.37c-.2.17-.45.4-.75.7zM6 15.27V17h.75v-1.73c-.18.12-.42.3-.75.55zM4.5 16.18V17h.75v-.82c-.25.15-.5.37-.75.55zM3 16.73V17h.75v-.27c-.25.1-.5.2-.75.3z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-orange-400">SoundCloud</p>
+                    <p className="text-xs text-muted-foreground">Listen to tracks</p>
+                  </div>
+                </a>
+              )}
+              {artist.spotify && (
+                <a
+                  href={artist.spotify.startsWith("http") ? artist.spotify : `https://open.spotify.com/artist/${artist.spotify}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 rounded-lg border border-green-500/20 bg-green-500/5 p-3 hover:bg-green-500/10 transition-colors"
+                >
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/20">
+                    <svg className="h-5 w-5 text-green-400" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-green-400">Spotify</p>
+                    <p className="text-xs text-muted-foreground">View profile</p>
+                  </div>
+                </a>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card>

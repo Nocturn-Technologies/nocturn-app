@@ -112,7 +112,7 @@ export default function LiveEventPage() {
     // Get event
     const { data: eventData } = await supabase
       .from("events")
-      .select("id, title, starts_at, ends_at, doors_at")
+      .select("id, title, starts_at, ends_at, doors_at, bar_minimum, venue_deposit, estimated_bar_revenue")
       .eq("id", eventId)
       .maybeSingle();
 
@@ -355,6 +355,52 @@ export default function LiveEventPage() {
           </div>
         </div>
       </div>
+
+      {/* Bar Minimum Tracker */}
+      {event && (() => {
+        const ev = event as unknown as Record<string, unknown>;
+        const barMin = Number(ev.bar_minimum ?? 0);
+        if (barMin <= 0) return null;
+        const deposit = Number(ev.venue_deposit ?? 0);
+        const estimatedBar = Number(ev.estimated_bar_revenue ?? 0);
+        const barPct = estimatedBar > 0 ? Math.min(Math.round((estimatedBar / barMin) * 100), 100) : 0;
+        const atRisk = estimatedBar < barMin;
+        return (
+          <div className={`rounded-xl border ${atRisk ? "border-red-500/30 bg-red-500/5" : "border-green-500/30 bg-green-500/5"} p-4`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                Bar Minimum
+              </span>
+              {atRisk ? (
+                <span className="text-[10px] font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
+                  ⚠️ ${deposit.toLocaleString()} deposit at risk
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
+                  ✅ On track
+                </span>
+              )}
+            </div>
+            <div className="flex items-end justify-between mb-2">
+              <span className="text-2xl font-bold font-heading text-white tabular-nums">
+                ${estimatedBar.toLocaleString()}
+              </span>
+              <span className="text-sm text-zinc-400">/ ${barMin.toLocaleString()}</span>
+            </div>
+            <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${atRisk ? "bg-red-500" : "bg-green-500"}`}
+                style={{ width: `${barPct}%` }}
+              />
+            </div>
+            {atRisk && deposit > 0 && (
+              <p className="text-[11px] text-red-400/80 mt-2">
+                You need ${(barMin - estimatedBar).toLocaleString()} more in bar sales to keep your ${deposit.toLocaleString()} deposit.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3">
