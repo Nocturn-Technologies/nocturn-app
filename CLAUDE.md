@@ -10,12 +10,16 @@ Mobile-first web app for nightlife promoters and collectives. Manage events, sel
 - **Styling**: Tailwind CSS v4 + shadcn/ui components
 - **Auth & DB**: Supabase (PostgreSQL + Auth + Realtime + RLS)
 - **Payments**: Stripe (direct checkout + Connect for payouts)
+- **Analytics**: PostHog (user analytics), Vercel Analytics (web vitals), Sentry (errors)
+- **Email**: Resend (transactional email from trynocturn.com)
 - **PWA**: manifest.json + service worker
 - **Deploy**: Vercel (auto-deploys from main branch)
 
 ## URLs
-- **Production**: https://app.trynocturn.com (Vercel: nocturn-app-navy.vercel.app)
-- **GitHub**: https://github.com/Nocturn-Technologies/nocturn-app
+- **App**: https://app.trynocturn.com (Vercel: nocturn-app-navy.vercel.app)
+- **Public site**: https://trynocturn.com (Vercel: nocturn-site)
+- **GitHub (app)**: https://github.com/Nocturn-Technologies/nocturn-app
+- **GitHub (site)**: https://github.com/Nocturn-Technologies/nocturn-site
 - **Supabase project**: bpzwbqtpyorppijdblhy
 - **Supabase URL**: https://bpzwbqtpyorppijdblhy.supabase.co
 
@@ -38,6 +42,12 @@ Mobile-first web app for nightlife promoters and collectives. Manage events, sel
 - **Payouts**: All payments go to Nocturn platform account, manual payout to collectives
 - **No Stripe Connect KYC required**: Collectives can start selling immediately
 
+## Four AI Agents
+- **Money** — Splits, settlements, P&L, financial forecasting, payout docs
+- **Promo** — Flyers, social posts, email campaigns, content generation
+- **Reach** — Growth, audience insights, cross-promo, market pricing intelligence
+- **Ops** — Event day management, set times, door staff, tasks, live mode
+
 ## Architecture
 ```
 src/
@@ -46,22 +56,39 @@ src/
 │   ├── (dashboard)/     — All authenticated pages
 │   │   └── dashboard/
 │   │       ├── page.tsx         — Home/dashboard
-│   │       ├── events/          — Events CRUD + sub-pages (lineup, tasks, promos, guests, check-in, recap, forecast)
+│   │       ├── events/          — Events CRUD + sub-pages (lineup, tasks, promos, guests, check-in, recap, forecast, refunds)
+│   │       ├── calendar/        — Calendar heat map (best nights to throw)
 │   │       ├── artists/         — Artist directory + detail
 │   │       ├── attendees/       — Attendee CRM + CSV export
-│   │       ├── chat/            — Team Sync (channels + real-time messaging)
+│   │       ├── chat/            — Team Sync (channels + real-time messaging + collabs)
 │   │       ├── venues/          — Venue discovery + saved venues
-│   │       ├── record/          — Voice recording + AI transcription
-│   │       ├── marketing/       — AI email composer
-│   │       ├── finance/         — Event P&L + settlements
+│   │       ├── record/          — Voice recording + AI transcription (supports 50+ min calls)
+│   │       ├── marketing/       — AI email composer + send to attendees
+│   │       ├── finance/         — Event P&L + settlements + refunds
+│   │       ├── analytics/       — Founder analytics dashboard
 │   │       ├── members/         — Team management + invitations
 │   │       └── settings/        — Profile + Stripe Connect
 │   ├── (public)/        — Public event pages, ticket view, check-in
-│   ├── api/             — Stripe checkout, webhooks
-│   └── actions/         — Server actions (events, artists, tickets, etc.)
-├── components/          — Shared UI (dashboard-shell, voice-note, event-card-live)
-└── lib/                 — Supabase clients, Stripe, mock data, utilities
+│   ├── api/             — Stripe checkout, webhooks, cron jobs
+│   ├── legal/           — Terms of Service, Privacy Policy
+│   └── actions/         — Server actions (events, artists, tickets, budget-planner, pricing-suggestion, transcribe, etc.)
+├── components/          — Shared UI (dashboard-shell, voice-note, event-card-live, public-event/*)
+└── lib/                 — Supabase clients, Stripe, mock data, utilities, tracking
 ```
+
+## Key Features (Shipped)
+- **Event creation** with AI chat + budget planning (headliner type, travel estimation, break-even pricing)
+- **Ticketing**: Paid (Stripe) + free, QR codes, check-in, promo codes, waitlist for sold-out tiers
+- **Budget planner**: Suggests 4 tiers (Early Bird → Tier 1 → Tier 2 → Tier 3) based on expenses
+- **Market pricing**: Shows avg ticket prices in your city + competing events
+- **Calendar heat map**: Color-coded months showing best nights to throw events
+- **Refunds**: Per-ticket Stripe refund with buyer email notification + waitlist notify
+- **Email campaigns**: Generate + send to attendees via Resend
+- **Event reminders**: Auto-email 24hr before (Vercel cron)
+- **Call recording**: Supports 50+ min calls via Supabase Storage + Whisper transcription
+- **Collab chat**: Search and message other collectives
+- **Legal pages**: Terms + Privacy
+- **Analytics**: PostHog + Vercel Analytics + Sentry + founder dashboard
 
 ## Key Patterns
 
@@ -88,10 +115,11 @@ import { createClient } from "@/lib/supabase/client";
 - Always use `.maybeSingle()` instead of `.single()` where 0 rows is possible
 - Always null-guard results with `?.` and `??`
 - Prices stored in dollars (NUMERIC), NOT cents
+- Use `Promise.all()` for parallel queries wherever possible
 
 ### Responsive Layout
-- Mobile (< 768px): bottom tab bar with 4 tabs (Home, Events, Chat, Discover) — pill-style active state, 48px tap targets. Record is accessible via floating button on Chat page and Quick Actions on Home.
-- Desktop (≥ 768px): left sidebar with full nav (Home, Events, Chat, Venues, Record, Artists, Attendees, Marketing, Finance, Members, Settings)
+- Mobile (< 768px): bottom tab bar with 4 tabs (Home, Events, Chat, Venues) — pill-style active state, 48px tap targets
+- Desktop (≥ 768px): left sidebar with full nav (Home, Events, Chat, Venues, Calendar, Record, Artists, Attendees, Promo, Money, Analytics, Members, Settings)
 - Use Tailwind `md:` prefix for desktop enhancements
 - Min 44px tap targets on all interactive elements
 
@@ -101,7 +129,7 @@ import { createClient } from "@/lib/supabase/client";
 - Never use light theme
 
 ## Database Tables (Supabase)
-collectives, collective_members, users, events, venues, ticket_tiers, tickets, artists, event_artists, channels, messages, event_cards, event_tasks, event_activity, playbook_templates, recordings, saved_venues, invitations, settlements, expenses
+collectives, collective_members, users, events, venues, ticket_tiers, tickets, artists, event_artists, channels, messages, event_cards, event_tasks, event_activity, playbook_templates, recordings, saved_venues, invitations, settlements, expenses, waitlist_entries
 
 ### Key Column Notes
 - `events.starts_at` / `ends_at` / `doors_at` — TIMESTAMPTZ (NOT `date`, `start_time`, etc.)
@@ -110,23 +138,53 @@ collectives, collective_members, users, events, venues, ticket_tiers, tickets, a
 - `ticket_tiers.capacity` (NOT `quantity`)
 - `venues.slug` — NOT NULL, auto-generated via slugify()
 
-## Running Locally
-```bash
-git clone https://github.com/Nocturn-Technologies/nocturn-app.git
-cd nocturn-app
-npm install
-npm run dev
-```
-
 ## Environment Variables
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://bpzwbqtpyorppijdblhy.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
-STRIPE_SECRET_KEY=sk_test_...
+STRIPE_SECRET_KEY=sk_live_... (MUST be live key for real payments)
 STRIPE_WEBHOOK_SECRET=whsec_...
-NEXT_PUBLIC_APP_URL=https://nocturn-app-navy.vercel.app
+NEXT_PUBLIC_APP_URL=https://app.trynocturn.com
+RESEND_API_KEY=re_...
+NEXT_PUBLIC_SENTRY_DSN=https://...@sentry.io/...
+NEXT_PUBLIC_POSTHOG_KEY=phc_...
+OPENAI_API_KEY=sk-... (for Whisper transcription)
+ANTHROPIC_API_KEY=sk-ant-... (for AI event parsing)
 ```
+
+## Roadmap
+
+### Phase 1 — Launch (May 2026) ✅ MOSTLY DONE
+- [x] Core event creation + ticketing + settlements
+- [x] AI budget planning with travel estimation
+- [x] Market pricing suggestions
+- [x] Calendar heat map
+- [x] Refund flow
+- [x] Email campaigns
+- [x] Legal pages
+- [x] Analytics (PostHog + Sentry + Vercel)
+- [ ] Stripe live keys in production
+- [ ] Full lifecycle test (buy ticket → scan → settle → refund)
+- [ ] First 3 collectives onboarded
+
+### Phase 2 — Growth (June-July 2026)
+- [ ] **Ambassador program**: Referral links per attendee, "bring 5 friends = free ticket" rewards
+- [ ] **Artist directory**: Artists sign up, upload SoundCloud/Spotify, build profiles, collectives discover and book
+- [ ] **Social graph**: Map connections between attendees across collectives, cross-promo targeting
+- [ ] **Bar minimum tracking**: Live drink sales progress on event night, deposit risk indicator
+- [ ] **Dynamic ticket pricing**: Auto-adjust prices based on demand velocity
+- [ ] **Shared artist library**: Platform-wide artist directory with contact info, SoundCloud/Spotify links
+- [ ] **Artist FOMO loop**: Prompt artists to share profile on IG story → drives more artist signups
+
+### Phase 3 — Scale (August-September 2026)
+- [ ] **20 collectives on platform** by end of summer
+- [ ] **City-wide event scraping**: Pull from RA, Posh, Eventbrite for competitive intelligence
+- [ ] **Revenue**: $49/mo premium tier + 7% ticket fees
+- [ ] **Push notifications** (event reminders, ticket updates)
+- [ ] **Advanced analytics**: Source attribution, heatmaps, conversion funnels
+- [ ] **Recurring events**
+- [ ] **Multi-city expansion** (Montreal, Vancouver, NYC)
 
 ## Scheduled Agents
 Three cloud agents run daily (weekdays):
@@ -136,3 +194,11 @@ Three cloud agents run daily (weekdays):
 
 ## Techstars Deadline
 NYC accelerator application deadline: June 10, 2026. All demo-ready features should be polished by then.
+
+## Running Locally
+```bash
+git clone https://github.com/Nocturn-Technologies/nocturn-app.git
+cd nocturn-app
+npm install
+npm run dev
+```

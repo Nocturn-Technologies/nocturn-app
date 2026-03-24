@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 interface NearbyEvent {
   title: string;
@@ -35,12 +36,12 @@ export function AlsoThisWeek({ events }: { events: NearbyEvent[] }) {
                 {/* Flyer or placeholder */}
                 <div className="aspect-[4/3] bg-white/[0.03] relative overflow-hidden">
                   {event.flyerUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <Image
                       src={event.flyerUrl}
                       alt={event.title}
-                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
+                      fill
+                      sizes="200px"
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
                     />
                   ) : (
                     <div className="flex h-full items-center justify-center text-3xl text-white/10">🌙</div>

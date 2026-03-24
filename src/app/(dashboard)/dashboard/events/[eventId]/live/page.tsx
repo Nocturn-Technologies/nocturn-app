@@ -122,26 +122,26 @@ export default function LiveEventPage() {
     }
     setEvent(eventData);
 
-    // Get ticket tiers
-    const { data: tierData } = await supabase
-      .from("ticket_tiers")
-      .select("id, name, price, capacity")
-      .eq("event_id", eventId);
+    // Parallel: fetch tiers + checked-in tickets at the same time
+    const [{ data: tierData }, { data: tickets, count }] = await Promise.all([
+      supabase
+        .from("ticket_tiers")
+        .select("id, name, price, capacity")
+        .eq("event_id", eventId),
+      supabase
+        .from("tickets")
+        .select("id, checked_in_at, attendee_name, ticket_tiers(name, price)", {
+          count: "exact",
+        })
+        .eq("event_id", eventId)
+        .not("checked_in_at", "is", null)
+        .order("checked_in_at", { ascending: false })
+        .limit(10),
+    ]);
 
     const tiersArr = tierData ?? [];
     setTiers(tiersArr);
     setTotalCapacity(tiersArr.reduce((sum, t) => sum + (t.capacity ?? 0), 0));
-
-    // Get checked-in tickets
-    const { data: tickets, count } = await supabase
-      .from("tickets")
-      .select("id, checked_in_at, attendee_name, ticket_tiers(name, price)", {
-        count: "exact",
-      })
-      .eq("event_id", eventId)
-      .not("checked_in_at", "is", null)
-      .order("checked_in_at", { ascending: false })
-      .limit(10);
 
     setCheckedInCount(count ?? 0);
 

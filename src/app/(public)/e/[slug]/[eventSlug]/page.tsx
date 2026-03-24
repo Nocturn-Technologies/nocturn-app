@@ -291,10 +291,11 @@ export default async function PublicEventPage({ params }: Props) {
           <div className="space-y-4">
             <div className="flex items-center gap-2.5">
               {collective.logo_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Image
                   src={collective.logo_url}
                   alt={collective.name}
+                  width={32}
+                  height={32}
                   className="h-8 w-8 rounded-full object-cover ring-2 ring-white/10"
                 />
               ) : (
