@@ -26,6 +26,10 @@ function createAdminClient() {
   );
 }
 
+// Revalidate public event pages every 60 seconds (ISR)
+// Visitors get instant cached pages, data refreshes in background
+export const revalidate = 60;
+
 interface Props {
   params: Promise<{ slug: string; eventSlug: string }>;
 }
@@ -111,7 +115,7 @@ export default async function PublicEventPage({ params }: Props) {
   // Fetch event with venue + metadata
   const { data: event } = await supabase
     .from("events")
-    .select("*, venues(name, address, city, capacity)")
+    .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, venues(name, address, city, capacity)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
     .maybeSingle();
