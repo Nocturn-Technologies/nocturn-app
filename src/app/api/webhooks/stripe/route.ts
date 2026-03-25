@@ -220,6 +220,15 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
         });
         console.log("[stripe-webhook] Confirmation email sent");
+
+        // Post-purchase hooks: referral nudge + milestone check (non-blocking)
+        import("@/app/actions/post-purchase-hooks").then(({ runPostPurchaseHooks }) =>
+          runPostPurchaseHooks({
+            eventId,
+            buyerEmail: customerEmail!,
+            ticketToken: insertedTickets?.[0]?.ticket_token || "",
+          })
+        ).catch(() => {});
       }
     }
   } catch (emailErr) {
@@ -342,6 +351,16 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
           ticketLink: `${BASE_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
         });
       }
+    }
+    // Post-purchase hooks (non-blocking)
+    if (buyerEmail) {
+      import("@/app/actions/post-purchase-hooks").then(({ runPostPurchaseHooks }) =>
+        runPostPurchaseHooks({
+          eventId,
+          buyerEmail,
+          ticketToken: insertedTickets?.[0]?.ticket_token || "",
+        })
+      ).catch(() => {});
     }
   } catch (emailErr) {
     console.error("[stripe-webhook] Email failed (non-blocking):", emailErr);
