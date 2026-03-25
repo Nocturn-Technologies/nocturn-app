@@ -70,6 +70,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       collective: collective.name,
       date: dateStr,
       venue: venue ? `${venue.name}, ${venue.city}` : "",
+      price: "Tickets Available",
     }).toString()}`;
 
   return {

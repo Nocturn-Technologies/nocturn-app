@@ -145,3 +145,105 @@ export function postEventRecapEmail(
     <a href="https://app.trynocturn.com" class="btn">See What's Next →</a>
   `);
 }
+
+// ── Day-of hype email to attendees ──
+export function dayOfHypeEmail(
+  eventTitle: string,
+  venueName: string,
+  doorsTime: string,
+  showTime: string,
+  dressCode: string | null,
+  ticketLink: string
+): string {
+  return baseTemplate(`
+    <h2>Tonight. 🔥</h2>
+    <p><span class="highlight">${eventTitle}</span> is happening today. Here's everything you need.</p>
+    <div class="card">
+      <p style="color: #FAFAFA; margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">${eventTitle}</p>
+      <p style="margin: 0;">📍 ${venueName}</p>
+      <p style="margin: 4px 0;">🚪 Doors: ${doorsTime}</p>
+      <p style="margin: 4px 0;">🎵 Show: ${showTime}</p>
+      ${dressCode ? `<p style="margin: 4px 0;">👔 Dress code: ${dressCode}</p>` : ""}
+    </div>
+    <a href="${ticketLink}" class="btn">View Your Ticket →</a>
+    <p style="color: #71717A; font-size: 13px;">Have your QR code ready at the door. See you tonight. 🌙</p>
+  `);
+}
+
+// ── Post-purchase referral nudge ──
+export function referralNudgeEmail(
+  eventTitle: string,
+  buyerName: string,
+  referralLink: string,
+  collectiveName: string
+): string {
+  return baseTemplate(`
+    <h2>You're in, ${buyerName}! One more thing.</h2>
+    <p>Know someone who'd be into <span class="highlight">${eventTitle}</span>? Share your personal link — every friend who buys through you gets tracked.</p>
+    <div class="card">
+      <p style="color: #FAFAFA; margin: 0 0 8px 0; font-weight: 600;">Your referral link</p>
+      <p style="margin: 0; color: #7B2FF7; word-break: break-all; font-size: 13px;">${referralLink}</p>
+    </div>
+    <p style="color: #A1A1AA;">Bring 5 friends and you earn Ambassador status from <span class="highlight">${collectiveName}</span>. Just share the link — we handle the rest.</p>
+  `);
+}
+
+// ── Organizer: 48hr event countdown ──
+export function organizerCountdownEmail(
+  eventTitle: string,
+  eventDate: string,
+  ticketsSold: number,
+  totalCapacity: number,
+  revenue: string,
+  dashboardLink: string
+): string {
+  const percent = totalCapacity > 0 ? Math.round((ticketsSold / totalCapacity) * 100) : 0;
+  return baseTemplate(`
+    <h2>48 hours out. 📊</h2>
+    <p><span class="highlight">${eventTitle}</span> is ${eventDate}. Here's where you stand.</p>
+    <div class="card">
+      <p style="color: #FAFAFA; margin: 0 0 4px 0; font-weight: 600;">🎫 ${ticketsSold} / ${totalCapacity} tickets sold (${percent}%)</p>
+      <p style="margin: 0; color: #7B2FF7; font-weight: 600; font-size: 18px;">💰 ${revenue} revenue</p>
+    </div>
+    ${percent < 50 ? `<p style="color: #FB7185;">You're under 50% — consider a last-minute push. Post the lineup on IG tonight, drop a story countdown, or text your top 10 people directly.</p>` : ""}
+    ${percent >= 75 ? `<p style="color: #2DD4BF;">You're at ${percent}% — looking strong. Consider holding your price or bumping the final tier up.</p>` : ""}
+    <a href="${dashboardLink}" class="btn">Open Dashboard →</a>
+  `);
+}
+
+// ── Organizer: Ticket milestone ──
+export function ticketMilestoneEmail(
+  eventTitle: string,
+  milestone: string,
+  ticketsSold: number,
+  totalCapacity: number,
+  dashboardLink: string
+): string {
+  return baseTemplate(`
+    <h2>${milestone} 🎉</h2>
+    <p><span class="highlight">${eventTitle}</span> just hit <strong>${ticketsSold}</strong> tickets sold out of ${totalCapacity}.</p>
+    <div class="card">
+      <p style="color: #FAFAFA; margin: 0; font-size: 32px; font-weight: 800; text-align: center;">${Math.round((ticketsSold / totalCapacity) * 100)}%</p>
+      <p style="margin: 8px 0 0 0; text-align: center;">capacity sold</p>
+    </div>
+    <a href="${dashboardLink}" class="btn">View Event →</a>
+  `);
+}
+
+// ── Inactive collective nudge ──
+export function inactiveNudgeEmail(
+  collectiveName: string,
+  operatorName: string,
+  lastEventDate: string | null
+): string {
+  return baseTemplate(`
+    <h2>Hey ${operatorName} — we miss ${collectiveName}. 🌙</h2>
+    <p>${lastEventDate ? `Your last event was ${lastEventDate}.` : "You haven't created an event yet."} The scene needs you.</p>
+    <div class="card">
+      <p style="color: #FAFAFA; margin: 0 0 8px 0; font-weight: 600;">Quick ideas to get back in:</p>
+      <p style="margin: 0;">→ Throw a low-key midweek set<br>→ Partner with another collective<br>→ Book a venue you've been eyeing</p>
+    </div>
+    <a href="https://app.trynocturn.com/dashboard/events/new" class="btn">Create Event →</a>
+    <p style="color: #71717A; font-size: 12px;">Don't want these reminders? Reply "stop" and we'll pause them.</p>
+  `);
+}

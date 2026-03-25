@@ -49,9 +49,21 @@ interface DashboardHomeProps {
 
 function getGreeting(): string {
   const hour = new Date().getHours();
+  if (hour < 6) return "Still up?";
   if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
+  if (hour < 17) return "Good afternoon";
+  if (hour < 21) return "Good evening";
+  if (hour < 24) return "The night is young";
   return "Good evening";
+}
+
+function getAmbienceColor(): { glow: string; bg: string } {
+  const hour = new Date().getHours();
+  if (hour < 6) return { glow: "rgba(123,47,247,0.12)", bg: "from-purple-950/20" };    // Late night — deep purple
+  if (hour < 12) return { glow: "rgba(251,191,36,0.06)", bg: "from-amber-950/10" };     // Morning — warm amber
+  if (hour < 17) return { glow: "rgba(251,146,60,0.05)", bg: "from-orange-950/10" };    // Afternoon — subtle orange
+  if (hour < 21) return { glow: "rgba(123,47,247,0.08)", bg: "from-purple-950/15" };    // Evening — purple rising
+  return { glow: "rgba(123,47,247,0.15)", bg: "from-purple-950/25" };                    // Night — full purple energy
 }
 
 function getContextualMessage(props: DashboardHomeProps): string {
@@ -209,8 +221,13 @@ export function DashboardHome(props: DashboardHomeProps) {
     { href: "/dashboard/chat", label: "Team Chat", icon: MessageSquare },
   ];
 
+  const ambience = getAmbienceColor();
+
   return (
     <div className="space-y-6 gradient-mesh relative">
+      {/* Time-of-day ambient glow */}
+      <div className="absolute -top-20 -left-20 w-[400px] h-[400px] rounded-full blur-[120px] pointer-events-none" style={{ background: ambience.glow }} />
+
       {/* ── Greeting — large, editorial ── */}
       <div className="animate-fade-in-up relative z-10">
         <div className="flex items-center gap-3">
