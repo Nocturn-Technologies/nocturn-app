@@ -214,7 +214,7 @@ export function DashboardHome(props: DashboardHomeProps) {
       {/* ── Greeting — large, editorial ── */}
       <div className="animate-fade-in-up relative z-10">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight truncate">
             {greeting}, {props.firstName}
           </h1>
           <Sparkles className="h-6 w-6 shrink-0 text-nocturn-glow animate-text-glow" />
@@ -231,7 +231,7 @@ export function DashboardHome(props: DashboardHomeProps) {
                 <div className="flex h-6 w-6 items-center justify-center rounded-full bg-nocturn/20">
                   <Sparkles className="h-3.5 w-3.5 text-nocturn-glow" />
                 </div>
-                <span className="text-xs font-bold uppercase tracking-widest text-nocturn-light">AI Briefing</span>
+                <h2 className="text-xs font-bold uppercase tracking-widest text-nocturn-light">AI Briefing</h2>
               </div>
               <div className="space-y-1.5">
                 {props.briefing.map((item, i) => (
@@ -288,13 +288,13 @@ export function DashboardHome(props: DashboardHomeProps) {
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn-teal/10">
                     <TrendingUp className="h-5 w-5 text-nocturn-light" />
                   </div>
-                  <span className="text-sm font-bold tracking-wide uppercase text-muted-foreground">Financial Pulse</span>
+                  <h2 className="text-sm font-bold tracking-wide uppercase text-muted-foreground">Financial Pulse</h2>
                 </div>
                 <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </div>
 
               {/* P&L headline */}
-              <p className={`text-2xl font-extrabold ${props.financialPulse.netPL >= 0 ? "text-nocturn-teal" : "text-nocturn-coral"}`}>
+              <p className={`text-2xl font-bold ${props.financialPulse.netPL >= 0 ? "text-nocturn-teal" : "text-nocturn-coral"}`}>
                 {props.financialPulse.netPL >= 0
                   ? `+$${Math.abs(props.financialPulse.netPL).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
                   : `-$${Math.abs(props.financialPulse.netPL).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
@@ -347,7 +347,7 @@ export function DashboardHome(props: DashboardHomeProps) {
               </div>
               <div className="text-center md:text-left">
                 <p className="text-xs text-muted-foreground">Upcoming</p>
-                <p className="text-xl font-extrabold text-nocturn-light">{props.upcomingCount}</p>
+                <p className="text-xl font-bold text-nocturn-light">{props.upcomingCount}</p>
               </div>
             </CardContent>
           </Card>
@@ -358,7 +358,9 @@ export function DashboardHome(props: DashboardHomeProps) {
               </div>
               <div className="text-center md:text-left min-w-0">
                 <p className="text-xs text-muted-foreground">Revenue</p>
-                <p className="text-xl font-extrabold truncate">${props.totalRevenue.toFixed(2)}</p>
+                <p className="text-xl font-bold truncate">
+                  ${props.totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -369,7 +371,7 @@ export function DashboardHome(props: DashboardHomeProps) {
               </div>
               <div className="text-center md:text-left">
                 <p className="text-xs text-muted-foreground">Attendees</p>
-                <p className="text-xl font-extrabold">{props.totalAttendees}</p>
+                <p className="text-xl font-bold">{props.totalAttendees}</p>
               </div>
             </CardContent>
           </Card>
