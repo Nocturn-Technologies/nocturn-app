@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Ticket, Minus, Plus, Tag, Check, X, Loader2 } from "lucide-react";
 import { haptic } from "@/lib/haptics";
-import { StripeCheckout } from "@/components/stripe-checkout";
+import dynamic from "next/dynamic";
+const StripeCheckout = dynamic(() => import("@/components/stripe-checkout").then(m => m.StripeCheckout), { ssr: false });
 import { validatePromoCode } from "@/app/actions/promo-codes";
 
 interface Tier {
