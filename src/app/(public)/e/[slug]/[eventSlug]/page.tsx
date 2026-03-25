@@ -252,8 +252,8 @@ export default async function PublicEventPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
 
-      {/* ═══ SCENE 1: THE ARRIVAL — full-screen immersive hero ═══ */}
-      <div className="relative min-h-[85vh] sm:min-h-[90vh] flex flex-col justify-end overflow-hidden">
+      {/* ═══ SCENE 1: THE POSTER — raw, asymmetric, bold ═══ */}
+      <div className="relative min-h-screen flex items-end overflow-hidden">
         {/* Background layer */}
         {event.flyer_url ? (
           <>
@@ -265,155 +265,161 @@ export default async function PublicEventPage({ params }: Props) {
               priority
               sizes="100vw"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/60 to-[#09090B]/20" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/50 to-[#09090B]/10" />
           </>
         ) : (
           <>
-            {/* Cinematic gradient — not a placeholder, a mood */}
-            <div className="absolute inset-0" style={{ background: `radial-gradient(ellipse at 50% 30%, ${accentColor}18 0%, transparent 70%)` }} />
-            <div className="absolute inset-0" style={{ background: `radial-gradient(circle at 80% 70%, ${accentColor}0c 0%, transparent 50%)` }} />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-transparent to-[#09090B]/40" />
+            <div className="absolute inset-0" style={{ background: `linear-gradient(160deg, ${accentColor}30 0%, #09090B 50%, #0a0a12 100%)` }} />
+            {/* Asymmetric glow shapes */}
+            <div className="absolute -top-[20%] -right-[15%] w-[70vw] h-[70vw] rounded-full blur-[60px]" style={{ background: `radial-gradient(circle, ${accentColor}20 0%, transparent 70%)` }} />
+            <div className="absolute bottom-[10%] -left-[20%] w-[50vw] h-[50vw] rounded-full blur-[80px]" style={{ background: `radial-gradient(circle, ${accentColor}10 0%, transparent 60%)` }} />
             {/* Grain */}
             <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")`, backgroundSize: "128px 128px" }} />
           </>
         )}
 
-        {/* Content overlay — bottom-aligned */}
-        <div className="relative z-10 px-6 pb-10 sm:pb-14 mx-auto max-w-[640px] w-full space-y-5">
-          {/* Collective badge */}
-          <div className="flex items-center gap-2">
-            {collective.logo_url ? (
-              <Image src={collective.logo_url} alt={collective.name} width={24} height={24} className="h-6 w-6 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-bold text-white" style={{ backgroundColor: accentColor }}>
-                {collective.name.charAt(0).toUpperCase()}
-              </div>
-            )}
-            <span className="text-[13px] text-white/60 font-medium">{collective.name}</span>
+        {/* Giant date watermark — top right */}
+        <div className="absolute top-6 right-6 sm:right-12 z-10 text-right select-none pointer-events-none">
+          <div className="font-heading text-[8rem] sm:text-[12rem] font-black leading-[0.8] text-white/[0.05] tracking-[-0.05em]">
+            {String(dayNum).padStart(2, "0")}
+          </div>
+          <div className="text-[14px] font-bold tracking-[0.5em] uppercase" style={{ color: accentColor }}>
+            {monthName}
+          </div>
+        </div>
+
+        {/* Content — bottom-aligned, asymmetric */}
+        <div className="relative z-10 w-full px-5 sm:px-12 pb-12 pt-40">
+          {/* Collective pill */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 border border-white/[0.08] rounded-full backdrop-blur-sm mb-6">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
+            <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-white/40">
+              {collective.name}
+            </span>
           </div>
 
-          {/* Title — cinematic scale */}
-          <h1 className="font-heading text-[3.2rem] sm:text-[5rem] font-black tracking-[-0.05em] text-white leading-[0.9]">
-            {event.title}
+          {/* Title — massive, poster-scale */}
+          <h1 className="font-heading text-[clamp(3.5rem,12vw,8rem)] font-black tracking-[-0.05em] text-white leading-[0.85] max-w-[85%] mb-8">
+            {event.title.split(" ").map((word: string, i: number, arr: string[]) => {
+              // Color the last word/number with accent
+              const isLast = i === arr.length - 1;
+              const isNumber = /\d/.test(word) || /^[IVXLC]+\.?$/.test(word);
+              return (
+                <span key={i}>
+                  {isLast || isNumber ? (
+                    <span style={{ color: accentColor }}>{word}</span>
+                  ) : (
+                    word
+                  )}
+                  {i < arr.length - 1 ? " " : ""}
+                </span>
+              );
+            })}
           </h1>
 
-          {/* Essential info — date, time, venue — one glance */}
-          <div className="flex flex-wrap items-center gap-x-2 text-[15px] text-white/60 font-medium">
-            <span>{dayName} {monthName} {dayNum}</span>
-            <span className="text-white/20">·</span>
-            <span>{startTime}</span>
+          {/* Info bar — utilitarian, separated by borders */}
+          <div className="flex flex-wrap gap-0 mb-6">
+            <div className="pr-5 sm:pr-6 border-r border-white/[0.06] py-1">
+              <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/20 mb-1">Date</div>
+              <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{dayName} {monthName} {dayNum}</div>
+            </div>
+            {doorsTime && (
+              <div className="px-5 sm:px-6 border-r border-white/[0.06] py-1">
+                <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/20 mb-1">Doors</div>
+                <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{doorsTime}</div>
+              </div>
+            )}
+            <div className="px-5 sm:px-6 border-r border-white/[0.06] py-1">
+              <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/20 mb-1">Show</div>
+              <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{startTime}{endTime ? ` — ${endTime}` : ""}</div>
+            </div>
             {venue && (
-              <>
-                <span className="text-white/20">·</span>
-                <span>{venue.name}</span>
-              </>
+              <div className="pl-5 sm:pl-6 py-1">
+                <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/20 mb-1">Venue</div>
+                <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{venue.name}{venue.city ? `, ${venue.city}` : ""}</div>
+              </div>
             )}
           </div>
 
-          {/* CTA — the most important button on the page */}
+          {/* Vibe tags */}
+          {vibeTags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-8">
+              {vibeTags.map((tag) => (
+                <span key={tag} className="text-[10px] font-semibold tracking-[0.15em] uppercase px-3.5 py-1.5 border border-white/[0.06] rounded-full text-white/30">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* CTA — full-width on mobile */}
           {isUpcoming && tiers && tiers.length > 0 && (
             <a
               href="#tickets"
-              className="inline-flex items-center gap-2 rounded-full px-7 py-3.5 text-[15px] font-bold text-white transition-all duration-300 hover:brightness-110 hover:scale-[1.02] active:scale-[0.98]"
+              className="inline-flex items-center justify-center gap-2.5 w-full sm:w-auto px-10 py-[18px] rounded-[14px] text-[16px] font-bold text-white transition-all duration-300 hover:brightness-[1.15] hover:translate-y-[-2px] active:scale-[0.98] max-w-[400px]"
               style={{ backgroundColor: accentColor }}
             >
               {lowestTierPrice === "Free" ? "RSVP — Free" : `Get Tickets — ${lowestTierPrice}`}
+              <span className="transition-transform duration-300 group-hover:translate-x-1">&rarr;</span>
             </a>
           )}
         </div>
-
-        {/* Scroll indicator */}
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10">
-          <div className="w-5 h-8 rounded-full border border-white/15 flex items-start justify-center p-1">
-            <div className="w-1 h-2 rounded-full bg-white/30 animate-bounce" />
-          </div>
-        </div>
       </div>
 
-      {/* ═══ SCENE 2: THE DETAILS — editorial layout ═══ */}
+      {/* Floating "going" badge */}
+      {(ticketsSold ?? 0) > 0 && (
+        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-2.5 bg-[#09090B]/85 backdrop-blur-xl border border-white/[0.08] rounded-full text-[13px] text-white/50">
+          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+          <span><span className="text-white font-semibold">{ticketsSold}</span> going</span>
+        </div>
+      )}
+
+      {/* ═══ SCENE 2: THE STORY — below the fold ═══ */}
       <div className="mx-auto max-w-[640px] px-6">
 
-        {/* Social proof bar */}
-        {(ticketsSold ?? 0) > 0 && (
-          <div className="py-6 flex items-center justify-between border-b border-white/[0.04]">
-            <div className="flex items-center gap-3">
-              <div className="flex -space-x-1.5">
-                {[...Array(Math.min(ticketsSold ?? 0, 5))].map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-6 w-6 rounded-full ring-[1.5px] ring-[#09090B]"
-                    style={{ background: `linear-gradient(135deg, ${accentColor}${50 + i * 10}, ${accentColor}${25 + i * 8})` }}
-                  />
-                ))}
-              </div>
-              <span className="text-[13px] text-white/40">
-                <span className="text-white font-semibold">{ticketsSold}</span> going
-              </span>
-            </div>
-            <SellingFastBadge soldPercent={soldPercent} />
-          </div>
-        )}
-
-        {/* The hook — first sentence, large */}
+        {/* Description — raw, no container */}
         {event.description && (
-          <div className="py-10">
-            <p className="text-[19px] sm:text-[22px] leading-[1.5] text-white/60 font-light max-w-[95%]">
-              {event.description.split(".")[0]}.
+          <div className="py-16 border-b border-white/[0.04]">
+            <p className="text-[17px] leading-[1.8] text-white/40">
+              {event.description}
             </p>
           </div>
         )}
 
-        {/* Countdown */}
+        {/* Countdown — only if upcoming */}
         {isUpcoming && (
-          <div className="pb-10">
+          <div className="py-8 border-b border-white/[0.04]">
             <EventCountdown targetDate={event.doors_at || event.starts_at} />
           </div>
         )}
 
-        {/* ═══ WHEN ═══ */}
-        <div className="py-8 border-t border-white/[0.04]">
-          <div className="flex items-center gap-6">
-            {/* Giant date */}
-            <div className="text-center min-w-[72px]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">{monthName}</p>
-              <p className="font-heading text-[3.5rem] font-black text-white leading-[0.85]">{dayNum}</p>
-              <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">{dayName}</p>
-            </div>
-            <div className="h-16 w-px bg-white/[0.06]" />
-            <div className="space-y-1">
-              <p className="text-xl text-white font-heading font-bold">{startTime}{endTime ? ` — ${endTime}` : ""}</p>
-              {doorsTime && <p className="text-[13px] text-white/35">Doors at {doorsTime}</p>}
-              {minAge && <p className="text-[13px] text-white/35">{minAge}+ only</p>}
-            </div>
-          </div>
-        </div>
-
-        {/* ═══ WHERE ═══ */}
+        {/* ═══ WHERE — brutalist venue card ═══ */}
         {venue && (
           <div className="py-8 border-t border-white/[0.04]">
-            <div className="rounded-2xl overflow-hidden border border-white/[0.04]">
+            <div className="rounded-[20px] overflow-hidden border border-white/[0.06] bg-white/[0.015]">
               <div className="relative h-40 w-full">
                 <iframe
                   src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}&zoom=15&maptype=roadmap`}
-                  className="h-full w-full border-0 opacity-60 grayscale contrast-[1.15] saturate-0"
+                  className="h-full w-full border-0 opacity-50 grayscale contrast-[1.2] saturate-0"
                   allowFullScreen={false}
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
                   title={`Map of ${venue.name}`}
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-transparent to-[#09090B]/30 pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#0e0e12] via-transparent to-[#09090B]/40 pointer-events-none" />
+                <div className="absolute bottom-3 left-4 text-[10px] font-semibold tracking-[0.2em] uppercase text-white/20 px-2.5 py-1 border border-white/[0.08] rounded">MAP</div>
               </div>
-              <div className="px-5 pb-5 -mt-10 relative z-10">
-                <p className="font-heading text-2xl font-bold text-white">{venue.name}</p>
-                <p className="text-[13px] text-white/35 mt-1">
+              <div className="px-6 py-5">
+                <p className="font-heading text-[24px] font-bold text-white">{venue.name}</p>
+                <p className="text-[14px] text-white/30 mt-1">
                   {venue.address}{venue.address && venue.city ? ", " : ""}{venue.city}
                 </p>
                 {mapsUrl && (
                   <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 mt-3 text-[13px] font-semibold transition-colors hover:text-white"
+                    className="inline-flex items-center gap-1.5 mt-4 text-[13px] font-semibold transition-colors hover:text-white"
                     style={{ color: accentColor }}>
                     <Navigation className="h-3.5 w-3.5" />
-                    Get directions
+                    Get directions &rarr;
                   </a>
                 )}
               </div>
