@@ -1,4 +1,5 @@
 "use server";
+import { revalidatePath } from "next/cache";
 
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
@@ -143,7 +144,7 @@ export async function refundTicket(ticketId: string) {
     // Email failure is non-blocking
   }
 
-  return { error: null, refundedAmount: pricePaid };
+  revalidatePath("/dashboard/events"); return { error: null, refundedAmount: pricePaid };
 }
 
 /**

@@ -1,4 +1,5 @@
 "use server";
+import { revalidatePath } from "next/cache";
 
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
@@ -176,7 +177,7 @@ export async function generateSettlement(eventId: string) {
     if (linesError) {
       console.error("Failed to create settlement lines:", linesError);
       // Settlement exists but lines failed — return warning
-      return { error: null, settlementId: settlement.id, warning: "Settlement created but some line items may be missing" };
+      revalidatePath("/dashboard/finance"); return { error: null, settlementId: settlement.id, warning: "Settlement created but some line items may be missing" };
     }
   }
 
@@ -190,7 +191,7 @@ export async function generateSettlement(eventId: string) {
     })
   ).catch(() => {});
 
-  return { error: null, settlementId: settlement.id };
+  revalidatePath("/dashboard/finance"); return { error: null, settlementId: settlement.id };
 }
 
 // Approve a settlement
@@ -231,7 +232,7 @@ export async function approveSettlement(settlementId: string) {
     .eq("status", "draft");
 
   if (error) return { error: error.message };
-  return { error: null };
+  revalidatePath("/dashboard/finance"); return { error: null };
 }
 
 // Get settlement for an event
@@ -287,7 +288,7 @@ export async function addEventExpense(input: {
   });
 
   if (error) return { error: error.message };
-  return { error: null };
+  revalidatePath("/dashboard/finance"); return { error: null };
 }
 
 // Get expenses for an event

@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { generateAutoSettlement } from "./auto-settlement";
 
@@ -226,7 +227,7 @@ export async function createEvent(input: CreateEventInput) {
     trackServerEvent("event_created", { eventId: event.id, title: input.title, collectiveId: memberships[0].collective_id })
   ).catch(() => {});
 
-  return { error: null, eventId: event.id };
+  revalidatePath("/dashboard/events"); return { error: null, eventId: event.id };
 }
 
 export async function updateEvent(eventId: string, input: UpdateEventInput) {
