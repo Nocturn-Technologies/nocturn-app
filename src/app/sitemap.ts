@@ -7,30 +7,30 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // Get all published events with their collective slugs
+  const appUrl = "https://app.trynocturn.com";
+
+  const staticPages: MetadataRoute.Sitemap = [
+    { url: appUrl, lastModified: new Date(), changeFrequency: "weekly", priority: 1 },
+    { url: `${appUrl}/legal/terms`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.3 },
+    { url: `${appUrl}/legal/privacy`, lastModified: new Date(), changeFrequency: "monthly", priority: 0.3 },
+  ];
+
   const { data: events } = await supabase
     .from("events")
-    .select("slug, starts_at, collectives(slug)")
-    .eq("status", "published")
-    .order("starts_at", { ascending: false });
+    .select("slug, updated_at, collective_id, collectives(slug)")
+    .in("status", ["published", "completed"])
+    .order("updated_at", { ascending: false })
+    .limit(500);
 
-  const eventUrls: MetadataRoute.Sitemap = (events ?? []).map((e) => {
-    const collective = e.collectives as unknown as { slug: string };
+  const eventPages: MetadataRoute.Sitemap = (events ?? []).map((e) => {
+    const collective = e.collectives as unknown as { slug: string } | null;
     return {
-      url: `https://app.trynocturn.com/e/${collective?.slug}/${e.slug}`,
-      lastModified: new Date(e.starts_at),
-      changeFrequency: "weekly" as const,
+      url: `${appUrl}/e/${collective?.slug ?? "unknown"}/${e.slug}`,
+      lastModified: new Date(e.updated_at),
+      changeFrequency: "daily" as const,
       priority: 0.8,
     };
   });
 
-  return [
-    {
-      url: "https://app.trynocturn.com",
-      lastModified: new Date(),
-      changeFrequency: "daily",
-      priority: 1,
-    },
-    ...eventUrls,
-  ];
+  return [...staticPages, ...eventPages];
 }
