@@ -53,7 +53,7 @@ export function TicketSection({
   if (showCheckout && selectedTier && selected) {
     return (
       <div className="space-y-4">
-        <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+        <h2 className="font-heading text-[10px] font-semibold uppercase tracking-[0.25em] text-white/15">
           Complete Payment
         </h2>
         <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">

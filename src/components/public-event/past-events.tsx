@@ -20,7 +20,7 @@ export function PastEvents({ events, collectiveSlug, collectiveName }: PastEvent
 
   return (
     <div className="space-y-3">
-      <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+      <h2 className="font-heading text-[10px] font-semibold uppercase tracking-[0.25em] text-white/15">
         Previous events by {collectiveName}
       </h2>
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">

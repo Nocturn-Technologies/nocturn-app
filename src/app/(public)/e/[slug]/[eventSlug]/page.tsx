@@ -184,14 +184,15 @@ export default async function PublicEventPage({ params }: Props) {
   const metadata = (event.metadata ?? {}) as Record<string, string>;
   const accentColor = metadata.themeColor || "#7B2FF7";
 
-  // Formatted date pieces
-  const dayName = eventDate.toLocaleDateString("en", { weekday: "short" }).toUpperCase();
-  const monthName = eventDate.toLocaleDateString("en", { month: "short" }).toUpperCase();
-  const dayNum = eventDate.getDate();
+  // Formatted date pieces — force ET timezone for consistent rendering on Vercel (UTC server)
+  const tz = "America/Toronto";
+  const dayName = eventDate.toLocaleDateString("en", { weekday: "short", timeZone: tz }).toUpperCase();
+  const monthName = eventDate.toLocaleDateString("en", { month: "short", timeZone: tz }).toUpperCase();
+  const dayNum = parseInt(eventDate.toLocaleDateString("en", { day: "numeric", timeZone: tz }));
 
-  const startTime = eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" });
-  const endTime = endsAt ? endsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" }) : null;
-  const doorsTime = doorsAt ? doorsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" }) : null;
+  const startTime = eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz });
+  const endTime = endsAt ? endsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz }) : null;
+  const doorsTime = doorsAt ? doorsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz }) : null;
 
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://nocturn.app"}/e/${slug}/${eventSlug}`;
   const mapsUrl = venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}` : null;
@@ -373,7 +374,7 @@ export default async function PublicEventPage({ params }: Props) {
 
       {/* Floating "going" badge */}
       {(ticketsSold ?? 0) > 0 && (
-        <div className="fixed bottom-5 right-5 z-50 flex items-center gap-2 px-4 py-2.5 bg-[#09090B]/85 backdrop-blur-xl border border-white/[0.08] rounded-full text-[13px] text-white/50">
+        <div className="fixed bottom-20 right-4 z-40 flex items-center gap-2 px-4 py-2.5 bg-[#09090B]/85 backdrop-blur-xl border border-white/[0.08] rounded-full text-[13px] text-white/50">
           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           <span><span className="text-white font-semibold">{ticketsSold}</span> going</span>
         </div>

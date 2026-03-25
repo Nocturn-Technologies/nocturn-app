@@ -90,7 +90,7 @@ export function EventReactions({ eventId, initialCounts }: EventReactionsProps) 
 
   return (
     <div className="space-y-3">
-      <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+      <h2 className="font-heading text-[10px] font-semibold uppercase tracking-[0.25em] text-white/15">
         Vibes
       </h2>
       <div className="flex flex-wrap gap-2">
