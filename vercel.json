@@ -1,4 +1,11 @@
 {
+  "redirects": [
+    { "source": "/events", "destination": "/dashboard/events", "permanent": true },
+    { "source": "/finance", "destination": "/dashboard/finance", "permanent": true },
+    { "source": "/chat", "destination": "/dashboard/chat", "permanent": true },
+    { "source": "/calendar", "destination": "/dashboard/calendar", "permanent": true },
+    { "source": "/settings", "destination": "/dashboard/settings", "permanent": true }
+  ],
   "crons": [
     {
       "path": "/api/cron/reminders",

@@ -206,7 +206,7 @@ export default function CalendarHeatMap() {
       </div>
 
       {/* Month nav */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between px-1">
         <Button
           variant="ghost"
           size="icon"
