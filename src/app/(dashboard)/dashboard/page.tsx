@@ -4,6 +4,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { DashboardHome } from "@/components/dashboard-home";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { getFinancialPulse } from "@/app/actions/finance-pulse";
+import { getActionItems } from "@/app/actions/action-items";
 
 function createAdminClient() {
   return createClient(
@@ -62,6 +63,7 @@ export default async function DashboardPage() {
   let totalRevenue = 0;
   let totalAttendees = 0;
   let financialPulse: Awaited<ReturnType<typeof getFinancialPulse>> | null = null;
+  let actionItems: Awaited<ReturnType<typeof getActionItems>> = [];
 
   if (collectiveIds.length > 0) {
     // Fire ALL queries at once — not sequentially
@@ -71,6 +73,7 @@ export default async function DashboardPage() {
       draftsResult,
       allEventsResult,
       pulseResult,
+      actionItemsResult,
     ] = await Promise.all([
       // Upcoming count
       admin
@@ -106,6 +109,9 @@ export default async function DashboardPage() {
 
       // Financial pulse
       getFinancialPulse(),
+
+      // Action items / alerts
+      getActionItems(),
     ]);
 
     upcomingCount = upcomingResult.count ?? 0;
@@ -123,6 +129,7 @@ export default async function DashboardPage() {
     }
 
     financialPulse = pulseResult;
+    actionItems = actionItemsResult;
 
     // Attendee count (depends on events result)
     const eventIds = allEventsResult.data?.map((e) => e.id) ?? [];
@@ -152,6 +159,7 @@ export default async function DashboardPage() {
       financialPulse={financialPulse}
       briefing={[]}
       collectiveId={collectiveId}
+      actionItems={actionItems}
     />
   );
 }

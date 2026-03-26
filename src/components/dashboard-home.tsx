@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Calendar,
+  ChevronRight,
   DollarSign,
   Sparkles,
   ArrowRight,
@@ -16,6 +17,7 @@ import {
   Mic,
   MapPin,
   MessageSquare,
+  AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -34,6 +36,15 @@ interface BriefingItem {
   link: string;
 }
 
+interface ActionItemData {
+  id: string;
+  type: "unsettled" | "draft" | "upcoming" | "low-sales" | "pending-settlement";
+  message: string;
+  link: string;
+  priority: "urgent" | "high" | "normal";
+  emoji: string;
+}
+
 interface DashboardHomeProps {
   firstName: string;
   collectiveName: string;
@@ -47,6 +58,7 @@ interface DashboardHomeProps {
   financialPulse: FinancialPulseData | null;
   briefing?: BriefingItem[];
   collectiveId?: string;
+  actionItems?: ActionItemData[];
 }
 
 function getGreeting(): string {
@@ -243,6 +255,62 @@ export function DashboardHome(props: DashboardHomeProps) {
 
       {/* ── AI Briefing — lazy loaded so it doesn't block page render ── */}
       <LazyBriefing collectiveId={props.collectiveId} initialBriefing={props.briefing} />
+
+      {/* ── Needs Attention — action items / alerts ── */}
+      {props.actionItems && props.actionItems.length > 0 && (
+        <div className="animate-fade-in-up delay-50 relative z-10">
+          <Card className="border-white/[0.06] overflow-hidden">
+            <CardContent className="p-0">
+              <div className="flex items-center gap-2 px-4 pt-4 pb-2">
+                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                <h2 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  Needs Attention
+                </h2>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {props.actionItems.length}
+                </span>
+              </div>
+              <div className="divide-y divide-white/[0.04]">
+                {props.actionItems.map((item) => (
+                  <Link
+                    key={item.id}
+                    href={item.link}
+                    className={`flex items-center gap-3 px-4 py-3 min-h-[48px] transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06] ${
+                      item.priority === "urgent"
+                        ? "bg-red-500/[0.04]"
+                        : item.priority === "high"
+                          ? "bg-amber-500/[0.02]"
+                          : ""
+                    }`}
+                  >
+                    <span className="text-base shrink-0">{item.emoji}</span>
+                    <span
+                      className={`text-sm leading-snug flex-1 min-w-0 ${
+                        item.priority === "urgent"
+                          ? "text-red-400"
+                          : item.priority === "high"
+                            ? "text-amber-300"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {item.message}
+                    </span>
+                    <ChevronRight
+                      className={`h-4 w-4 shrink-0 ${
+                        item.priority === "urgent"
+                          ? "text-red-400/60"
+                          : item.priority === "high"
+                            ? "text-amber-400/60"
+                            : "text-muted-foreground/40"
+                      }`}
+                    />
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* ── Quick Actions — pill buttons with glow hover ── */}
       <div className="animate-fade-in-up delay-75 relative z-10">
