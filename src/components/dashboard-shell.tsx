@@ -18,21 +18,14 @@ import {
   Calendar,
   Sparkles,
   DollarSign,
-  Users,
-  UserCheck,
-  Music,
   Settings,
   LogOut,
   MessageSquare,
-  MapPin,
-  Mic,
   Search,
   Menu,
   X,
-  BarChart3,
-  CalendarRange,
   UsersRound,
-  TrendingUp,
+  Compass,
 } from "lucide-react";
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -45,45 +38,31 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
-/* ── Desktop sidebar nav items (full list) ── */
+/* ── Desktop sidebar nav items (8 core sections) ── */
 const sidebarNavItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/events", label: "Events", icon: Calendar },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard/venues", label: "Venues", icon: MapPin },
-  { href: "/dashboard/calendar", label: "Calendar", icon: CalendarRange },
-  { href: "/dashboard/record", label: "Record", icon: Mic },
-  { href: "/dashboard/artists", label: "Artists", icon: Music },
-  { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
-  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
-  { href: "/dashboard/promo-insights", label: "Insights", icon: TrendingUp },
+  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
-  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/dashboard/members", label: "Members", icon: Users },
+  { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-/* ── Mobile bottom tab bar items (5 tabs — includes More) ── */
+/* ── Mobile bottom tab bar items (4 tabs) ── */
 const mobileTabItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/events", label: "Events", icon: Calendar },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard/venues", label: "Venues", icon: MapPin },
+  { href: "/dashboard/discover", label: "Discover", icon: Compass },
 ];
 
-/* ── More drawer items (desktop sidebar items not in mobile tabs) ── */
+/* ── More drawer items (items not in mobile tabs) ── */
 const moreDrawerItems = [
-  { href: "/dashboard/calendar", label: "Calendar", icon: CalendarRange },
-  { href: "/dashboard/record", label: "Record", icon: Mic },
-  { href: "/dashboard/artists", label: "Artists", icon: Music },
-  { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
-  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
-  { href: "/dashboard/promo-insights", label: "Insights", icon: TrendingUp },
+  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
-  { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/dashboard/members", label: "Members", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

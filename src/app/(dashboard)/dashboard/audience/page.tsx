@@ -9,7 +9,6 @@ import {
 } from "@/app/actions/audience";
 import {
   generateDMTemplates,
-  generatePersonalizedDM,
   type DMTemplate,
 } from "@/app/actions/ambassador-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -130,12 +129,23 @@ export default function AudiencePage() {
   }
 
   function getPersonalizedMessage(template: DMTemplate, member: AudienceMember): string {
-    return generatePersonalizedDM(template, {
-      name: member.name ?? undefined,
-      eventsAttended: member.eventsAttended,
-      friendsReferred: member.friendsReferred,
-      lastEventName: member.eventNames[member.eventNames.length - 1],
-    });
+    let body = template.body;
+    const name = member.name;
+    if (name) {
+      body = body.replace(/^Hey!/, `Hey ${name}!`);
+      body = body.replace(/^We saw you/, `Hey ${name}! We saw you`);
+    }
+    if (member.eventsAttended > 1) {
+      body = body.replace(/\{events\}/g, String(member.eventsAttended));
+    }
+    if (member.friendsReferred > 0) {
+      body = body.replace(/\{referrals\}/g, String(member.friendsReferred));
+    }
+    const lastEvent = member.eventNames[member.eventNames.length - 1];
+    if (lastEvent) {
+      body = body.replace(/\{lastEvent\}/g, lastEvent);
+    }
+    return body;
   }
 
   const activeSegment = segments[activeTab];

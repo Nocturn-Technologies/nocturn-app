@@ -227,7 +227,8 @@ function generateTemplatesForCollective(
 
 // ── Generate personalized DM for a specific person ──
 
-export function generatePersonalizedDM(
+// Helper — not exported (non-async can't be server actions)
+function generatePersonalizedDM(
   template: DMTemplate,
   person: {
     name?: string;
