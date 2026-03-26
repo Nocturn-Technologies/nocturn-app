@@ -3,9 +3,11 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Calendar, Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { SwipeableEventList } from "@/components/events/swipeable-event-list";
+import { CollapsibleEventSection } from "@/components/events/collapsible-event-section";
+import { EventSuggestions } from "@/components/events/event-suggestions";
+import { getEventSuggestions } from "@/app/actions/event-suggestions";
 
 export default async function EventsPage() {
   const supabase = await createClient();
@@ -42,6 +44,12 @@ export default async function EventsPage() {
       .order("starts_at", { ascending: false });
     events = (data ?? []) as unknown as typeof events;
   }
+
+  // Fetch AI suggestions for the first collective
+  const primaryCollectiveId = collectiveIds[0] ?? null;
+  const suggestions = primaryCollectiveId
+    ? await getEventSuggestions(primaryCollectiveId)
+    : [];
 
   const now = new Date();
   const drafts = events.filter((e) => e.status === "draft");
@@ -93,56 +101,46 @@ export default async function EventsPage() {
       ) : (
         <div className="space-y-6">
           {published.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-green-500" />
-                <h2 className="text-lg font-bold">Published</h2>
-                <span className="text-xs text-muted-foreground">({published.length})</span>
-              </div>
-              <div className="grid gap-3">
-                <SwipeableEventList events={published} />
-              </div>
-            </div>
+            <CollapsibleEventSection
+              title="Published"
+              events={published}
+              dotColor="bg-green-500"
+              defaultOpen={true}
+            />
           )}
           {drafts.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-yellow-500" />
-                <h2 className="text-lg font-bold">Drafts</h2>
-                <span className="text-xs text-muted-foreground">({drafts.length})</span>
-              </div>
-              <div className="grid gap-3">
-                <SwipeableEventList events={drafts} />
-              </div>
-            </div>
+            <CollapsibleEventSection
+              title="Drafts"
+              events={drafts}
+              dotColor="bg-yellow-500"
+              defaultOpen={false}
+            />
           )}
           {past.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-zinc-500" />
-                <h2 className="text-lg font-bold text-muted-foreground">Past</h2>
-                <span className="text-xs text-muted-foreground">({past.length})</span>
-              </div>
-              <div className="grid gap-3">
-                <SwipeableEventList events={past} />
-              </div>
-            </div>
+            <CollapsibleEventSection
+              title="Past"
+              events={past}
+              dotColor="bg-zinc-500"
+              muted
+              defaultOpen={false}
+            />
           )}
           {cancelled.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-red-500" />
-                <h2 className="text-lg font-bold text-muted-foreground">Cancelled</h2>
-                <span className="text-xs text-muted-foreground">({cancelled.length})</span>
-              </div>
-              <div className="grid gap-3">
-                <SwipeableEventList events={cancelled} />
-              </div>
-            </div>
+            <CollapsibleEventSection
+              title="Cancelled"
+              events={cancelled}
+              dotColor="bg-red-500"
+              muted
+              defaultOpen={false}
+            />
           )}
         </div>
+      )}
+
+      {/* AI Event Suggestions */}
+      {suggestions.length > 0 && (
+        <EventSuggestions suggestions={suggestions} />
       )}
     </div>
   );
 }
-
