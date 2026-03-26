@@ -26,6 +26,7 @@ import {
   Coffee,
   RotateCcw,
   Share2,
+  MessageSquare,
 } from "lucide-react";
 import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
@@ -235,6 +236,12 @@ export default async function EventDetailPage({ params }: Props) {
           <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
             <ClipboardList className="mr-2 h-3 w-3" />
             Guest List
+          </Button>
+        </Link>
+        <Link href={`/dashboard/events/${event.id}/chat`}>
+          <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
+            <MessageSquare className="mr-2 h-3 w-3" />
+            Chat
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/refunds`}>
