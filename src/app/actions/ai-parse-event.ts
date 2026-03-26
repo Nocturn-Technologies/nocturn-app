@@ -71,7 +71,7 @@ Return ONLY valid JSON with any of these fields (omit what's not mentioned):
 - description (string), ticketPrice (number), ticketQuantity (number), ticketTierName (string)
 - reply (string): casual 1-sentence acknowledgment of what you understood
 
-Today is 2026-03-18. "10pm"="22:00". "next saturday"="2026-03-21". Assume PM for nightlife times without am/pm.`,
+Today is ${new Date().toISOString().split("T")[0]}. "10pm"="22:00". Assume PM for nightlife times without am/pm.`,
         }],
       }),
     });

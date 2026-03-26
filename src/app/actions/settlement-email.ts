@@ -94,12 +94,32 @@ View full details: ${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.
 
 — Nocturn`;
 
+  // Actually send the email via Resend if API key is configured
+  let sent = false;
+  if (process.env.RESEND_API_KEY && recipientEmails.length > 0) {
+    try {
+      const { Resend } = await import("resend");
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: "Nocturn <noreply@trynocturn.com>",
+        to: recipientEmails,
+        subject,
+        text: body,
+      });
+      sent = true;
+    } catch (emailError) {
+      console.error("[settlement-email] Failed to send:", emailError);
+      // Non-blocking — return the report even if email fails
+    }
+  }
+
   return {
     error: null,
     report: {
       subject,
       body,
       recipients: recipientEmails,
+      sent,
     },
   };
 }

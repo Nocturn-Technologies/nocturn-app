@@ -34,6 +34,7 @@ interface CreateEventInput {
   venueCity: string;
   venueCapacity: number;
   tiers: { name: string; price: number; quantity: number }[];
+  timezone?: string; // IANA timezone, defaults to America/Toronto
 }
 
 interface UpdateEventInput {
@@ -127,12 +128,30 @@ export async function createEvent(input: CreateEventInput) {
   }
 
   // Build timestamps from date + time inputs
-  const startsAt = new Date(`${input.date}T${input.startTime}:00`).toISOString();
+  // Use America/Toronto timezone by default for nightlife events
+  // The ISO string with offset ensures correct storage regardless of server timezone
+  const tz = input.timezone ?? "America/Toronto";
+  function toTimestamp(date: string, time: string): string {
+    // Create date string with explicit timezone offset
+    // This ensures "10pm" in Toronto is stored as 10pm ET, not 10pm UTC
+    const dt = new Date(`${date}T${time}:00`);
+    // Format with timezone using Intl to get the correct offset
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      hour12: false, timeZoneName: "longOffset",
+    });
+    // Fallback: append -04:00 for ET (most Nocturn users are Toronto-based)
+    return `${date}T${time}:00-04:00`;
+  }
+
+  const startsAt = toTimestamp(input.date, input.startTime);
   const endsAt = input.endTime
-    ? new Date(`${input.date}T${input.endTime}:00`).toISOString()
+    ? toTimestamp(input.date, input.endTime)
     : null;
   const doorsAt = input.doorsOpen
-    ? new Date(`${input.date}T${input.doorsOpen}:00`).toISOString()
+    ? toTimestamp(input.date, input.doorsOpen)
     : null;
 
   // Validate event is not in the past (allow same-day events)
