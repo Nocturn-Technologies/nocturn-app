@@ -187,6 +187,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={true}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200 ${
                   active
                     ? "bg-nocturn/15 text-white shadow-[0_0_12px_rgba(123,47,247,0.15)]"

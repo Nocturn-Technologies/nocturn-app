@@ -18,7 +18,12 @@ const nextConfig: NextConfig = {
         hostname: "images.unsplash.com",
       },
     ],
+    formats: ["image/avif", "image/webp"],
   },
+  experimental: {
+    optimizePackageImports: ["lucide-react", "@supabase/supabase-js"],
+  },
+  poweredByHeader: false,
 };
 
 export default withSentryConfig(nextConfig, {

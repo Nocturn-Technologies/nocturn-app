@@ -13,6 +13,22 @@
     { "source": "/venues", "destination": "/dashboard/venues", "permanent": true },
     { "source": "/artists", "destination": "/dashboard/artists", "permanent": true }
   ],
+  "headers": [
+    {
+      "source": "/(.*)\\.(js|css|woff2|png|jpg|svg|ico)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ],
   "crons": [
     {
       "path": "/api/cron/reminders",
