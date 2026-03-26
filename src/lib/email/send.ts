@@ -11,7 +11,7 @@ function getResend(): Resend | null {
   return _resend;
 }
 
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Nocturn <noreply@resend.dev>";
+const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Nocturn <noreply@trynocturn.com>";
 
 export async function sendEmail({
   to,
