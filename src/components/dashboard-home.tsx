@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,8 +44,9 @@ interface DashboardHomeProps {
   draftEventTitle?: string;
   totalRevenue: number;
   totalAttendees: number;
-  financialPulse: FinancialPulseData;
+  financialPulse: FinancialPulseData | null;
   briefing?: BriefingItem[];
+  collectiveId?: string;
 }
 
 function getGreeting(): string {
@@ -239,39 +241,8 @@ export function DashboardHome(props: DashboardHomeProps) {
         <p className="text-sm text-muted-foreground mt-2 line-clamp-2 max-w-lg">{message}</p>
       </div>
 
-      {/* ── AI Briefing — prominent, visually distinct ── */}
-      {props.briefing && props.briefing.length > 0 && (
-        <div className="animate-fade-in-up delay-50 relative z-10">
-          <Card className="border-nocturn/20 bg-nocturn/[0.06] backdrop-blur-sm glow-purple">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-nocturn/20">
-                  <Sparkles className="h-3.5 w-3.5 text-nocturn-glow" />
-                </div>
-                <h2 className="text-xs font-bold uppercase tracking-widest text-nocturn-light">AI Briefing</h2>
-              </div>
-              <div className="space-y-1.5">
-                {props.briefing.map((item, i) => (
-                  <Link
-                    key={i}
-                    href={item.link}
-                    className={`flex items-start gap-2.5 rounded-lg p-2 -mx-2 transition-all duration-200 hover:bg-white/[0.04] ${
-                      item.priority === "urgent"
-                        ? "text-nocturn-coral"
-                        : item.priority === "high"
-                          ? "text-nocturn-amber"
-                          : "text-muted-foreground"
-                    }`}
-                  >
-                    <span className="text-base shrink-0 mt-0.5">{item.emoji}</span>
-                    <span className="text-sm leading-snug">{item.text}</span>
-                  </Link>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* ── AI Briefing — lazy loaded so it doesn't block page render ── */}
+      <LazyBriefing collectiveId={props.collectiveId} initialBriefing={props.briefing} />
 
       {/* ── Quick Actions — pill buttons with glow hover ── */}
       <div className="animate-fade-in-up delay-75 relative z-10">
@@ -297,7 +268,7 @@ export function DashboardHome(props: DashboardHomeProps) {
       {/* ── Bento Grid: Financial Pulse (wide) + Stats (narrow) ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-up delay-100 relative z-10">
         {/* Financial Pulse — spans 2 cols on desktop */}
-        <Link href="/dashboard/finance" className="block md:col-span-2">
+        {props.financialPulse && <Link href="/dashboard/finance" className="block md:col-span-2">
           <Card className="h-full border-white/[0.06] transition-all duration-300 hover:border-nocturn/30 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98]">
             <CardContent className="p-5">
               <div className="flex items-center justify-between mb-4">
@@ -353,7 +324,7 @@ export function DashboardHome(props: DashboardHomeProps) {
               </p>
             </CardContent>
           </Card>
-        </Link>
+        </Link>}
 
         {/* Stats column — stacked */}
         <div className="grid grid-cols-3 md:grid-cols-1 gap-4">
@@ -440,6 +411,91 @@ export function DashboardHome(props: DashboardHomeProps) {
               </p>
             </Link>
           ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ── Lazy-loaded AI Briefing (doesn't block page render) ──
+
+function LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string; initialBriefing?: BriefingItem[] }) {
+  const [briefing, setBriefing] = React.useState<BriefingItem[]>(initialBriefing ?? []);
+  const [loading, setLoading] = React.useState(!initialBriefing?.length && !!collectiveId);
+
+  React.useEffect(() => {
+    if (initialBriefing?.length || !collectiveId) return;
+
+    let cancelled = false;
+    async function load() {
+      try {
+        const { generateMorningBriefing } = await import("@/app/actions/ai-briefing");
+        const result = await generateMorningBriefing(collectiveId!);
+        if (!cancelled && Array.isArray(result)) {
+          setBriefing(result);
+        }
+      } catch {
+        // Briefing failed — non-critical, just hide it
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [collectiveId, initialBriefing]);
+
+  if (loading) {
+    return (
+      <div className="animate-fade-in-up delay-50 relative z-10">
+        <Card className="border-nocturn/20 bg-nocturn/[0.06] backdrop-blur-sm">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-nocturn/20">
+                <Sparkles className="h-3.5 w-3.5 text-nocturn-glow animate-pulse" />
+              </div>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-nocturn-light">AI Briefing</h2>
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 w-3/4 rounded bg-nocturn/10 animate-pulse" />
+              <div className="h-4 w-2/3 rounded bg-nocturn/10 animate-pulse" />
+              <div className="h-4 w-1/2 rounded bg-nocturn/10 animate-pulse" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!briefing.length) return null;
+
+  return (
+    <div className="animate-fade-in-up delay-50 relative z-10">
+      <Card className="border-nocturn/20 bg-nocturn/[0.06] backdrop-blur-sm glow-purple">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-nocturn/20">
+              <Sparkles className="h-3.5 w-3.5 text-nocturn-glow" />
+            </div>
+            <h2 className="text-xs font-bold uppercase tracking-widest text-nocturn-light">AI Briefing</h2>
+          </div>
+          <div className="space-y-1.5">
+            {briefing.map((item, i) => (
+              <Link
+                key={i}
+                href={item.link}
+                className={`flex items-start gap-2.5 rounded-lg p-2 -mx-2 transition-all duration-200 hover:bg-white/[0.04] ${
+                  item.priority === "urgent"
+                    ? "text-nocturn-coral"
+                    : item.priority === "high"
+                      ? "text-nocturn-amber"
+                      : "text-muted-foreground"
+                }`}
+              >
+                <span className="text-base shrink-0 mt-0.5">{item.emoji}</span>
+                <span className="text-sm leading-snug">{item.text}</span>
+              </Link>
+            ))}
+          </div>
         </CardContent>
       </Card>
     </div>

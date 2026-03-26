@@ -1,9 +1,9 @@
+import { Suspense } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { DashboardHome } from "@/components/dashboard-home";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { getFinancialPulse } from "@/app/actions/finance-pulse";
-import { generateMorningBriefing } from "@/app/actions/ai-briefing";
 
 function createAdminClient() {
   return createClient(
@@ -18,23 +18,28 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   const admin = createAdminClient();
 
-  // Get user profile
-  const { data: profile } = await admin
+  // ── PHASE 1: Essential data (fast — all in parallel) ──
+  const now = new Date().toISOString();
+
+  const profileP = admin
     .from("users")
     .select("full_name")
     .eq("id", user!.id)
     .maybeSingle();
 
-  const firstName = (profile?.full_name ?? user!.email ?? "").split(" ")[0] || "there";
-
-  // Get user's collectives
-  const { data: memberships } = await admin
+  const membershipsP = admin
     .from("collective_members")
     .select("collective_id, collectives(name, metadata, created_at)")
     .eq("user_id", user!.id)
     .is("deleted_at", null)
     .limit(1);
 
+  const [{ data: profile }, { data: memberships }] = await Promise.all([
+    profileP,
+    membershipsP,
+  ]);
+
+  const firstName = (profile?.full_name ?? user!.email ?? "").split(" ")[0] || "there";
   const membership = memberships?.[0];
   const collective = membership?.collectives as unknown as {
     name: string;
@@ -46,98 +51,93 @@ export default async function DashboardPage() {
   const collectiveAge = collective?.created_at
     ? Math.floor((Date.now() - new Date(collective.created_at).getTime()) / 86400000)
     : 999;
-
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
+  const collectiveId = collectiveIds[0] || "";
 
-  // Get upcoming events count + next event + draft check
+  // ── PHASE 2: All event data in parallel ──
   let upcomingCount = 0;
   let nextEvent: { title: string; daysUntil: number } | null = null;
   let hasDraftEvent = false;
   let draftEventTitle: string | undefined;
-
-  if (collectiveIds.length > 0) {
-    const now = new Date().toISOString();
-
-    const { count } = await admin
-      .from("events")
-      .select("*", { count: "exact", head: true })
-      .in("collective_id", collectiveIds)
-      .in("status", ["published", "upcoming"])
-      .gte("starts_at", now);
-
-    upcomingCount = count ?? 0;
-
-    // Next upcoming event
-    const { data: nextEvents } = await admin
-      .from("events")
-      .select("title, starts_at")
-      .in("collective_id", collectiveIds)
-      .in("status", ["published", "upcoming"])
-      .gte("starts_at", now)
-      .order("starts_at", { ascending: true })
-      .limit(1);
-
-    if (nextEvents?.[0]) {
-      const daysUntil = Math.ceil(
-        (new Date(nextEvents[0].starts_at).getTime() - Date.now()) / 86400000
-      );
-      nextEvent = { title: nextEvents[0].title, daysUntil };
-    }
-
-    // Check for drafts
-    const { data: drafts } = await admin
-      .from("events")
-      .select("title")
-      .in("collective_id", collectiveIds)
-      .eq("status", "draft")
-      .limit(1);
-
-    if (drafts?.[0]) {
-      hasDraftEvent = true;
-      draftEventTitle = drafts[0].title;
-    }
-  }
-
-  // Revenue from settlements
   let totalRevenue = 0;
-  if (collectiveIds.length > 0) {
-    const { data: settlements } = await admin
-      .from("settlements")
-      .select("gross_revenue")
-      .in("collective_id", collectiveIds);
-
-    totalRevenue = (settlements ?? []).reduce(
-      (sum, s) => sum + (Number(s.gross_revenue) || 0), 0
-    );
-  }
-
-  // Financial Pulse + AI Briefing (parallel)
-  const collectiveId = collectiveIds[0] || "";
-  const [financialPulse, briefing] = await Promise.all([
-    getFinancialPulse(),
-    collectiveId ? generateMorningBriefing(collectiveId).catch(() => []) : Promise.resolve([]),
-  ]);
-
-  // Attendee count
   let totalAttendees = 0;
-  if (collectiveIds.length > 0) {
-    const { data: events } = await admin
-      .from("events")
-      .select("id")
-      .in("collective_id", collectiveIds);
+  let financialPulse: Awaited<ReturnType<typeof getFinancialPulse>> | null = null;
 
-    const eventIds = events?.map((e) => e.id) ?? [];
+  if (collectiveIds.length > 0) {
+    // Fire ALL queries at once — not sequentially
+    const [
+      upcomingResult,
+      nextEventsResult,
+      draftsResult,
+      allEventsResult,
+      pulseResult,
+    ] = await Promise.all([
+      // Upcoming count
+      admin
+        .from("events")
+        .select("*", { count: "exact", head: true })
+        .in("collective_id", collectiveIds)
+        .in("status", ["published", "upcoming"])
+        .gte("starts_at", now),
+
+      // Next event
+      admin
+        .from("events")
+        .select("title, starts_at")
+        .in("collective_id", collectiveIds)
+        .in("status", ["published", "upcoming"])
+        .gte("starts_at", now)
+        .order("starts_at", { ascending: true })
+        .limit(1),
+
+      // Draft check
+      admin
+        .from("events")
+        .select("title")
+        .in("collective_id", collectiveIds)
+        .eq("status", "draft")
+        .limit(1),
+
+      // All events (for attendee count)
+      admin
+        .from("events")
+        .select("id")
+        .in("collective_id", collectiveIds),
+
+      // Financial pulse
+      getFinancialPulse(),
+    ]);
+
+    upcomingCount = upcomingResult.count ?? 0;
+
+    if (nextEventsResult.data?.[0]) {
+      const daysUntil = Math.ceil(
+        (new Date(nextEventsResult.data[0].starts_at).getTime() - Date.now()) / 86400000
+      );
+      nextEvent = { title: nextEventsResult.data[0].title, daysUntil };
+    }
+
+    if (draftsResult.data?.[0]) {
+      hasDraftEvent = true;
+      draftEventTitle = draftsResult.data[0].title;
+    }
+
+    financialPulse = pulseResult;
+
+    // Attendee count (depends on events result)
+    const eventIds = allEventsResult.data?.map((e) => e.id) ?? [];
     if (eventIds.length > 0) {
       const { count } = await admin
         .from("tickets")
         .select("*", { count: "exact", head: true })
         .in("event_id", eventIds)
         .in("status", ["paid", "checked_in"]);
-
       totalAttendees = count ?? 0;
     }
   }
 
+  // ── AI Briefing loads AFTER the page renders (streamed in) ──
+  // Don't block the entire page on a 2-5 second AI call
   return (
     <DashboardHome
       firstName={firstName}
@@ -150,7 +150,8 @@ export default async function DashboardPage() {
       totalRevenue={totalRevenue}
       totalAttendees={totalAttendees}
       financialPulse={financialPulse}
-      briefing={briefing}
+      briefing={[]}
+      collectiveId={collectiveId}
     />
   );
 }
