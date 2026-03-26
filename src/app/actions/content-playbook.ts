@@ -60,7 +60,7 @@ export async function generateContentPlaybook(eventId: string): Promise<{
   // Get event details
   const { data: event } = await admin
     .from("events")
-    .select("title, starts_at, description, vibe_tags, venues(name, city), collective_id, collectives(name)")
+    .select("title, slug, starts_at, description, vibe_tags, venues(name, city), collective_id, collectives(name, slug)")
     .eq("id", eventId)
     .maybeSingle();
 
@@ -70,7 +70,7 @@ export async function generateContentPlaybook(eventId: string): Promise<{
   const now = new Date();
   const daysUntil = Math.ceil((eventDate.getTime() - now.getTime()) / 86400000);
   const venue = event.venues as unknown as { name: string; city: string } | null;
-  const collective = event.collectives as unknown as { name: string } | null;
+  const collective = event.collectives as unknown as { name: string; slug: string } | null;
   const title = event.title;
   const venueName = venue?.name ?? "the venue";
   const city = venue?.city ?? "the city";
@@ -101,7 +101,9 @@ export async function generateContentPlaybook(eventId: string): Promise<{
     .limit(1);
 
   const lowestPrice = tiers?.[0]?.price ? `$${Number(tiers[0].price).toFixed(0)}` : "limited";
-  const ticketLink = `app.trynocturn.com/e/${event.collective_id}/${eventId}`;
+  const collectiveSlug = collective?.slug ?? event.collective_id;
+  const eventSlug = event.slug ?? eventId;
+  const ticketLink = `app.trynocturn.com/e/${collectiveSlug}/${eventSlug}`;
 
   // Get total capacity to determine event size
   const { data: allTiers } = await admin

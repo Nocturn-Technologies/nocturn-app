@@ -21,6 +21,9 @@ export interface Suggestion {
 export async function getEventSuggestions(
   collectiveId: string
 ): Promise<Suggestion[]> {
+  if (!collectiveId) return [];
+
+  try {
   const admin = createAdminClient();
 
   // Fetch past events for this collective to analyze patterns
@@ -222,4 +225,7 @@ export async function getEventSuggestions(
   }
 
   return suggestions;
+  } catch {
+    return [];
+  }
 }

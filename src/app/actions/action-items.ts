@@ -27,6 +27,7 @@ export async function getActionItems(): Promise<ActionItem[]> {
 
   if (!user) return [];
 
+  try {
   const admin = createAdminClient();
 
   // Get user's collectives
@@ -273,4 +274,7 @@ export async function getActionItems(): Promise<ActionItem[]> {
   }
 
   return deduped;
+  } catch {
+    return [];
+  }
 }
