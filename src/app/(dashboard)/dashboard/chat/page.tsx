@@ -1,20 +1,49 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { Sparkles, Hash, Pin, Mic, Calendar, MessageSquare, Users, Plus, Search, Loader2, X } from "lucide-react";
-import { getCollabChannels, searchCollectives, startCollabChat } from "@/app/actions/collab";
+import {
+  MessageSquare,
+  Hash,
+  Calendar,
+  Users,
+  Plus,
+  Search,
+  Loader2,
+  X,
+  Mic,
+  Mail,
+  Send,
+  Check,
+} from "lucide-react";
+import {
+  getCollabChannels,
+  searchCollectives,
+  startCollabChat,
+  inviteToCollab,
+} from "@/app/actions/collab";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+} from "@/components/ui/sheet";
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 interface Channel {
   id: string;
   collective_id: string;
   event_id: string | null;
+  partner_collective_id?: string | null;
   name: string;
-  type: "general" | "event";
+  type: "general" | "event" | "collab";
   created_at: string;
+  metadata?: Record<string, string>;
 }
 
 interface ChannelWithMeta extends Channel {
@@ -25,18 +54,190 @@ interface ChannelWithMeta extends Channel {
   event_date?: string;
 }
 
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function hashColor(name: string): string {
+  const colors = [
+    "#7B2FF7", "#E84393", "#00B894", "#0984E3", "#FDCB6E",
+    "#E17055", "#6C5CE7", "#00CEC9", "#FF7675", "#55EFC4",
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return colors[Math.abs(hash) % colors.length];
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(/[\s×·&]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase())
+    .join("");
+}
+
+function relativeTime(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  const now = Date.now();
+  const d = new Date(dateStr).getTime();
+  const diff = now - d;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "Now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "Yesterday";
+  if (days < 7) {
+    return new Date(dateStr).toLocaleDateString("en", { weekday: "short" });
+  }
+  return new Date(dateStr).toLocaleDateString("en", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function formatEventBadge(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  return new Date(dateStr).toLocaleDateString("en", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+// ─── Components ─────────────────────────────────────────────────────────────
+
+function Avatar({
+  name,
+  size = "md",
+}: {
+  name: string;
+  size?: "sm" | "md";
+}) {
+  const bg = hashColor(name);
+  const initials = getInitials(name);
+  const dim = size === "sm" ? "w-10 h-10" : "w-12 h-12";
+  const text = size === "sm" ? "text-xs" : "text-sm";
+  return (
+    <div
+      className={`${dim} rounded-full flex items-center justify-center shrink-0 font-bold ${text}`}
+      style={{ backgroundColor: `${bg}20`, color: bg }}
+    >
+      {initials}
+    </div>
+  );
+}
+
+function ChannelRow({
+  ch,
+  icon,
+}: {
+  ch: ChannelWithMeta;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={`/dashboard/chat/${ch.id}`}
+      className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] active:bg-white/[0.05] transition-colors border-b border-white/[0.04] last:border-b-0"
+    >
+      {/* Avatar */}
+      {icon ?? <Avatar name={ch.name} />}
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="font-semibold truncate text-[15px] leading-tight text-foreground">
+            {ch.name}
+          </p>
+          {ch.event_date && (
+            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#7B2FF7]/10 text-[#7B2FF7] shrink-0">
+              {formatEventBadge(ch.event_date)}
+            </span>
+          )}
+        </div>
+        <p className="text-[13px] text-muted-foreground truncate mt-0.5 leading-snug">
+          {ch.last_message ?? "No messages yet"}
+        </p>
+      </div>
+
+      {/* Right: time + unread */}
+      <div className="flex flex-col items-end gap-1.5 shrink-0">
+        {ch.last_message_at && (
+          <span className="text-[11px] text-muted-foreground/70">
+            {relativeTime(ch.last_message_at)}
+          </span>
+        )}
+        {ch.unread_count > 0 ? (
+          <div className="min-w-[20px] h-5 rounded-full bg-[#7B2FF7] flex items-center justify-center px-1.5">
+            <span className="text-[11px] font-bold text-white">
+              {ch.unread_count}
+            </span>
+          </div>
+        ) : ch.unread ? (
+          <div className="w-2.5 h-2.5 rounded-full bg-[#7B2FF7]" />
+        ) : null}
+      </div>
+    </Link>
+  );
+}
+
+function SectionHeader({
+  icon,
+  label,
+  count,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+}) {
+  if (count === 0) return null;
+  return (
+    <div className="flex items-center gap-2 px-4 py-2.5">
+      <span className="text-muted-foreground/60">{icon}</span>
+      <p className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-widest">
+        {label}
+      </p>
+      <span className="text-[10px] font-medium text-muted-foreground/40 bg-white/[0.04] rounded-full px-1.5 py-0.5">
+        {count}
+      </span>
+    </div>
+  );
+}
+
+// ─── Main Page ──────────────────────────────────────────────────────────────
+
 export default function ChatPage() {
   const supabase = createClient();
   const [userId, setUserId] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelWithMeta[]>([]);
   const [collabChannels, setCollabChannels] = useState<ChannelWithMeta[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCollabSearch, setShowCollabSearch] = useState(false);
+  const [myCollectiveId, setMyCollectiveId] = useState<string | null>(null);
+
+  // Search
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // New Chat Sheet
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [collabQuery, setCollabQuery] = useState("");
-  const [collabResults, setCollabResults] = useState<Array<{ id: string; name: string; slug: string; city: string | null; logo_url: string | null }>>([]);
+  const [collabResults, setCollabResults] = useState<
+    Array<{
+      id: string;
+      name: string;
+      slug: string;
+      city: string | null;
+      logo_url: string | null;
+    }>
+  >([]);
   const [collabSearching, setCollabSearching] = useState(false);
   const [startingCollab, setStartingCollab] = useState<string | null>(null);
-  const [myCollectiveId, setMyCollectiveId] = useState<string | null>(null);
+  const [inviteSent, setInviteSent] = useState(false);
+  const [inviting, setInviting] = useState(false);
 
   // Get current user
   useEffect(() => {
@@ -117,6 +318,7 @@ export default function ChatPage() {
       .from("channels")
       .select("*")
       .eq("collective_id", collectiveId)
+      .in("type", ["general", "event"])
       .order("created_at", { ascending: true });
 
     if (!allChannels) {
@@ -195,314 +397,386 @@ export default function ChatPage() {
     loadChannels();
   }, [loadChannels]);
 
-  // Separate general from event channels, split upcoming vs past
-  const now = new Date();
-  const generalChannel = channels.find((ch) => ch.type === "general");
-  const eventChannels = channels.filter((ch) => ch.type === "event");
-  const upcomingThreads = eventChannels
-    .filter((ch) => !ch.event_date || new Date(ch.event_date) >= now)
-    .sort((a, b) => {
-      if (a.event_date && b.event_date)
-        return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
-      return 0;
-    });
-  const pastThreads = eventChannels
-    .filter((ch) => ch.event_date && new Date(ch.event_date) < now)
-    .sort((a, b) => {
-      if (a.event_date && b.event_date)
-        return new Date(b.event_date).getTime() - new Date(a.event_date).getTime();
-      return 0;
-    });
+  // ─── Derived data ──────────────────────────────────────────────────────────
 
-  function formatTime(dateStr: string | undefined) {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    const diff = now.getTime() - d.getTime();
-    if (diff < 86400000) {
-      return d.toLocaleTimeString("en", {
-        hour: "numeric",
-        minute: "2-digit",
-      });
+  const teamChannels = useMemo(
+    () => channels.filter((ch) => ch.type === "general"),
+    [channels]
+  );
+
+  const eventChannels = useMemo(
+    () =>
+      channels
+        .filter((ch) => ch.type === "event")
+        .sort((a, b) => {
+          if (a.event_date && b.event_date)
+            return (
+              new Date(a.event_date).getTime() -
+              new Date(b.event_date).getTime()
+            );
+          return 0;
+        }),
+    [channels]
+  );
+
+  // Filter by search
+  const filterBySearch = useCallback(
+    (list: ChannelWithMeta[]) => {
+      if (!searchQuery.trim()) return list;
+      const q = searchQuery.toLowerCase();
+      return list.filter(
+        (ch) =>
+          ch.name.toLowerCase().includes(q) ||
+          ch.last_message?.toLowerCase().includes(q)
+      );
+    },
+    [searchQuery]
+  );
+
+  const filteredCollabs = useMemo(
+    () => filterBySearch(collabChannels),
+    [filterBySearch, collabChannels]
+  );
+  const filteredTeam = useMemo(
+    () => filterBySearch(teamChannels),
+    [filterBySearch, teamChannels]
+  );
+  const filteredEvents = useMemo(
+    () => filterBySearch(eventChannels),
+    [filterBySearch, eventChannels]
+  );
+
+  const totalChannels =
+    collabChannels.length + teamChannels.length + eventChannels.length;
+
+  // ─── New Chat search handler ──────────────────────────────────────────────
+
+  async function handleCollabSearch(query: string) {
+    setCollabQuery(query);
+    setInviteSent(false);
+    if (query.length >= 2 && myCollectiveId) {
+      setCollabSearching(true);
+      const results = await searchCollectives(query, myCollectiveId);
+      setCollabResults(results);
+      setCollabSearching(false);
+    } else {
+      setCollabResults([]);
     }
-    if (diff < 604800000) {
-      return d.toLocaleDateString("en", { weekday: "short" });
+  }
+
+  async function handleStartCollab(collectiveId: string) {
+    if (!myCollectiveId || startingCollab) return;
+    setStartingCollab(collectiveId);
+    const result = await startCollabChat(myCollectiveId, collectiveId);
+    if (result.channelId) {
+      setSheetOpen(false);
+      setCollabQuery("");
+      setCollabResults([]);
+      window.location.href = `/dashboard/chat/${result.channelId}`;
     }
-    return d.toLocaleDateString("en", { month: "short", day: "numeric" });
+    setStartingCollab(null);
   }
 
-  function formatEventDate(dateStr: string | undefined) {
-    if (!dateStr) return "";
-    const d = new Date(dateStr);
-    return d.toLocaleDateString("en", { month: "short", day: "numeric" });
+  async function handleInvite(email: string) {
+    if (!myCollectiveId || inviting) return;
+    setInviting(true);
+    const result = await inviteToCollab(myCollectiveId, email);
+    if (!result.error) {
+      setInviteSent(true);
+    }
+    setInviting(false);
   }
 
-  function ThreadCard({ ch }: { ch: ChannelWithMeta }) {
-    const isGeneral = ch.type === "general";
-    return (
-      <Link
-        key={ch.id}
-        href={`/dashboard/chat/${ch.id}`}
-        className="flex items-center gap-3 p-4 rounded-2xl bg-card border border-border hover:border-[#7B2FF7]/30 hover:bg-accent/50 transition-all min-h-[72px] active:scale-[0.98]"
-      >
-        {/* Avatar / Icon */}
-        <div
-          className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${
-            isGeneral
-              ? "bg-[#7B2FF7]/15"
-              : "bg-zinc-800"
-          }`}
-        >
-          {isGeneral ? (
-            <Hash size={22} className="text-[#7B2FF7]" />
-          ) : (
-            <Calendar size={20} className="text-zinc-400" />
-          )}
-        </div>
+  // ─── Determine if query looks like an email ────────────────────────────────
+  const queryIsEmail = isValidEmail(collabQuery);
+  const showEmailInvite =
+    collabQuery.length >= 3 &&
+    !collabSearching &&
+    collabResults.length === 0 &&
+    queryIsEmail;
 
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            {isGeneral && (
-              <Pin size={12} className="text-[#7B2FF7] shrink-0" />
-            )}
-            <p className="font-semibold truncate text-[15px] leading-tight">
-              {ch.name}
-            </p>
-            {ch.event_date && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#7B2FF7]/10 text-[#7B2FF7] shrink-0">
-                {formatEventDate(ch.event_date)}
-              </span>
-            )}
-          </div>
-          {ch.last_message ? (
-            <p className="text-[13px] text-muted-foreground truncate mt-0.5">
-              {ch.last_message}
-            </p>
-          ) : (
-            <p className="text-[13px] text-muted-foreground/40 mt-0.5">
-              No messages yet
-            </p>
-          )}
-        </div>
-
-        {/* Right side: time + unread */}
-        <div className="flex flex-col items-end gap-1.5 shrink-0">
-          {ch.last_message_at && (
-            <span className="text-[11px] text-muted-foreground">
-              {formatTime(ch.last_message_at)}
-            </span>
-          )}
-          {ch.unread_count > 0 && (
-            <div className="min-w-[20px] h-5 rounded-full bg-[#7B2FF7] flex items-center justify-center px-1.5">
-              <span className="text-[11px] font-bold text-white">
-                {ch.unread_count}
-              </span>
-            </div>
-          )}
-        </div>
-      </Link>
-    );
-  }
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-2xl mx-auto pb-24 md:pb-0">
       {/* Header */}
-      <div className="flex items-center gap-2.5 mb-6">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <MessageSquare className="h-6 w-6 text-[#7B2FF7]" />
-          <h1 className="text-2xl font-bold tracking-tight font-heading">
-            Team Sync
+          <MessageSquare className="h-5 w-5 text-[#7B2FF7]" />
+          <h1 className="text-xl font-bold tracking-tight font-heading">
+            Messages
           </h1>
-          <Sparkles size={18} className="text-[#7B2FF7] animate-pulse" />
         </div>
+        <Button
+          onClick={() => {
+            setSheetOpen(true);
+            setCollabQuery("");
+            setCollabResults([]);
+            setInviteSent(false);
+          }}
+          size="sm"
+          className="bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-full h-9 px-4 text-sm font-semibold"
+        >
+          <Plus className="h-4 w-4 mr-1" />
+          New Chat
+        </Button>
+      </div>
+
+      {/* Search bar */}
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+        <Input
+          placeholder="Search conversations..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 bg-white/[0.04] border-white/[0.06] rounded-xl h-10 text-sm placeholder:text-muted-foreground/40"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-16">
+        <div className="flex justify-center py-20">
           <div className="w-7 h-7 border-2 border-[#7B2FF7] border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : channels.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-4">
-            <Hash size={28} className="text-[#7B2FF7]" />
+      ) : totalChannels === 0 ? (
+        /* Empty state */
+        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+          <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-5">
+            <MessageSquare size={28} className="text-[#7B2FF7]" />
           </div>
-          <p className="font-semibold text-lg mb-1">No channels yet</p>
-          <p className="text-sm text-muted-foreground max-w-xs">
-            Join a collective to start chatting with your team.
+          <p className="font-semibold text-lg mb-2 text-foreground">
+            Start a conversation
           </p>
+          <p className="text-sm text-muted-foreground max-w-[280px] leading-relaxed">
+            Connect with other collectives and coordinate with your team.
+          </p>
+          <Button
+            onClick={() => setSheetOpen(true)}
+            className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-full px-6"
+          >
+            <Plus className="h-4 w-4 mr-1.5" />
+            New Chat
+          </Button>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* General channel — always first, pinned */}
-          {generalChannel && (
+        <div className="rounded-2xl border border-white/[0.06] bg-card overflow-hidden divide-y divide-white/[0.04]">
+          {/* ── Collabs Section ─────────────────────────────────────── */}
+          {filteredCollabs.length > 0 && (
             <div>
-              <ThreadCard ch={generalChannel} />
-            </div>
-          )}
-
-          {/* Upcoming event threads */}
-          {upcomingThreads.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
-                Upcoming Events
-              </p>
-              <div className="space-y-2">
-                {upcomingThreads.map((ch) => (
-                  <ThreadCard key={ch.id} ch={ch} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Past event threads */}
-          {pastThreads.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">
-                Past Events
-              </p>
-              <div className="space-y-2">
-                {pastThreads.map((ch) => (
-                  <ThreadCard key={ch.id} ch={ch} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Collab channels — cross-collective chats */}
-      {!loading && (
-        <div className="mt-6">
-          <div className="flex items-center justify-between mb-3 px-1">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-              <Users size={12} />
-              Collabs
-            </p>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowCollabSearch(!showCollabSearch)}
-              className="text-nocturn text-xs h-7"
-            >
-              {showCollabSearch ? <X className="h-3 w-3 mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
-              {showCollabSearch ? "Cancel" : "New Collab"}
-            </Button>
-          </div>
-
-          {/* Search for collectives to collab with */}
-          {showCollabSearch && (
-            <div className="mb-4 space-y-3 animate-fade-in-up">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Search collectives to collab with..."
-                  value={collabQuery}
-                  onChange={async (e) => {
-                    setCollabQuery(e.target.value);
-                    if (e.target.value.length >= 2 && myCollectiveId) {
-                      setCollabSearching(true);
-                      const results = await searchCollectives(e.target.value, myCollectiveId);
-                      setCollabResults(results);
-                      setCollabSearching(false);
-                    } else {
-                      setCollabResults([]);
-                    }
-                  }}
-                  className="pl-9"
-                  autoFocus
-                />
-              </div>
-              {collabSearching && (
-                <div className="flex justify-center py-3">
-                  <Loader2 className="h-4 w-4 animate-spin text-nocturn" />
-                </div>
-              )}
-              {collabResults.length > 0 && (
-                <div className="space-y-1">
-                  {collabResults.map((c) => (
-                    <button
-                      key={c.id}
-                      onClick={async () => {
-                        if (!myCollectiveId || startingCollab) return;
-                        setStartingCollab(c.id);
-                        const result = await startCollabChat(myCollectiveId, c.id);
-                        if (result.channelId) {
-                          setShowCollabSearch(false);
-                          setCollabQuery("");
-                          setCollabResults([]);
-                          // Navigate to the new channel
-                          window.location.href = `/dashboard/chat/${result.channelId}`;
-                        }
-                        setStartingCollab(null);
-                      }}
-                      disabled={startingCollab === c.id}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-border hover:border-nocturn/30 hover:bg-accent/50 transition-all text-left"
-                    >
-                      <div className="w-10 h-10 rounded-full bg-nocturn/10 flex items-center justify-center shrink-0 text-sm font-bold text-nocturn">
-                        {c.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{c.name}</p>
-                        {c.city && <p className="text-xs text-muted-foreground">{c.city}</p>}
-                      </div>
-                      {startingCollab === c.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin text-nocturn shrink-0" />
-                      ) : (
-                        <span className="text-xs text-nocturn font-medium shrink-0">Chat →</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {collabQuery.length >= 2 && !collabSearching && collabResults.length === 0 && (
-                <p className="text-center text-sm text-muted-foreground py-3">
-                  No collectives found matching &quot;{collabQuery}&quot;
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Existing collab channels */}
-          {collabChannels.length > 0 ? (
-            <div className="space-y-2">
-              {collabChannels.map((ch) => (
-                <Link
-                  key={ch.id}
-                  href={`/dashboard/chat/${ch.id}`}
-                  className="flex items-center gap-3 p-4 rounded-2xl bg-card border border-border hover:border-nocturn/30 hover:bg-accent/50 transition-all min-h-[72px] active:scale-[0.98]"
-                >
-                  <div className="w-12 h-12 rounded-full bg-nocturn/10 flex items-center justify-center shrink-0">
-                    <Users size={20} className="text-nocturn" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold truncate text-[15px] leading-tight">{ch.name}</p>
-                    {ch.last_message ? (
-                      <p className="text-[13px] text-muted-foreground truncate mt-0.5">{ch.last_message}</p>
-                    ) : (
-                      <p className="text-[13px] text-muted-foreground/40 mt-0.5">Start the conversation</p>
-                    )}
-                  </div>
-                  {ch.last_message_at && (
-                    <span className="text-[11px] text-muted-foreground shrink-0">
-                      {formatTime(ch.last_message_at)}
-                    </span>
-                  )}
-                </Link>
+              <SectionHeader
+                icon={<Users size={12} />}
+                label="Collabs"
+                count={filteredCollabs.length}
+              />
+              {filteredCollabs.map((ch) => (
+                <ChannelRow key={ch.id} ch={ch} />
               ))}
             </div>
-          ) : !showCollabSearch && (
-            <button
-              onClick={() => setShowCollabSearch(true)}
-              className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl border border-dashed border-border hover:border-nocturn/30 text-muted-foreground hover:text-nocturn transition-all"
-            >
-              <Users size={18} />
-              <span className="text-sm">Find collectives to collab with</span>
-            </button>
           )}
+
+          {/* ── Team Section ────────────────────────────────────────── */}
+          {filteredTeam.length > 0 && (
+            <div>
+              <SectionHeader
+                icon={<Hash size={12} />}
+                label="Team"
+                count={filteredTeam.length}
+              />
+              {filteredTeam.map((ch) => (
+                <ChannelRow
+                  key={ch.id}
+                  ch={ch}
+                  icon={
+                    <div className="w-12 h-12 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center shrink-0">
+                      <Hash size={20} className="text-[#7B2FF7]" />
+                    </div>
+                  }
+                />
+              ))}
+            </div>
+          )}
+
+          {/* ── Events Section ──────────────────────────────────────── */}
+          {filteredEvents.length > 0 && (
+            <div>
+              <SectionHeader
+                icon={<Calendar size={12} />}
+                label="Events"
+                count={filteredEvents.length}
+              />
+              {filteredEvents.map((ch) => (
+                <ChannelRow
+                  key={ch.id}
+                  ch={ch}
+                  icon={
+                    <div className="w-12 h-12 rounded-full bg-zinc-800/80 flex items-center justify-center shrink-0">
+                      <Calendar size={20} className="text-zinc-400" />
+                    </div>
+                  }
+                />
+              ))}
+            </div>
+          )}
+
+          {/* No search results */}
+          {searchQuery &&
+            filteredCollabs.length === 0 &&
+            filteredTeam.length === 0 &&
+            filteredEvents.length === 0 && (
+              <div className="py-10 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No conversations matching &ldquo;{searchQuery}&rdquo;
+                </p>
+              </div>
+            )}
         </div>
       )}
 
-      {/* Floating Record Call button — makes Record accessible from Chat on mobile */}
+      {/* ── New Chat Sheet ────────────────────────────────────────────────── */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl max-h-[85vh] p-0">
+          <SheetHeader className="px-5 pt-5 pb-3">
+            <SheetTitle className="text-lg font-bold">New Chat</SheetTitle>
+            <SheetDescription>
+              Find a collective or invite someone by email
+            </SheetDescription>
+          </SheetHeader>
+
+          <div className="px-5 pb-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+              <Input
+                placeholder="Search collectives or type an email..."
+                value={collabQuery}
+                onChange={(e) => handleCollabSearch(e.target.value)}
+                className="pl-9 bg-white/[0.04] border-white/[0.06] rounded-xl h-10 text-sm"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <div className="overflow-y-auto max-h-[55vh] px-5 pb-5">
+            {/* Loading */}
+            {collabSearching && (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-[#7B2FF7]" />
+              </div>
+            )}
+
+            {/* Results */}
+            {collabResults.length > 0 && (
+              <div className="space-y-1">
+                {collabResults.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => handleStartCollab(c.id)}
+                    disabled={startingCollab === c.id}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors text-left"
+                  >
+                    <Avatar name={c.name} size="sm" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate text-foreground">
+                        {c.name}
+                      </p>
+                      {c.city && (
+                        <p className="text-xs text-muted-foreground">
+                          {c.city}
+                        </p>
+                      )}
+                    </div>
+                    {startingCollab === c.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin text-[#7B2FF7] shrink-0" />
+                    ) : (
+                      <span className="text-xs text-[#7B2FF7] font-semibold shrink-0">
+                        Chat
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Email invite */}
+            {showEmailInvite && !inviteSent && (
+              <div className="mt-2">
+                <button
+                  onClick={() => handleInvite(collabQuery)}
+                  disabled={inviting}
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-[#7B2FF7]/30 hover:bg-[#7B2FF7]/5 transition-colors text-left"
+                >
+                  <div className="w-10 h-10 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center shrink-0">
+                    <Mail size={18} className="text-[#7B2FF7]" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm text-foreground">
+                      Invite to Nocturn
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {collabQuery}
+                    </p>
+                  </div>
+                  {inviting ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-[#7B2FF7] shrink-0" />
+                  ) : (
+                    <Send size={16} className="text-[#7B2FF7] shrink-0" />
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Invite sent confirmation */}
+            {inviteSent && (
+              <div className="mt-2 flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
+                  <Check size={18} className="text-emerald-400" />
+                </div>
+                <div>
+                  <p className="font-medium text-sm text-foreground">
+                    Invitation sent
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    The chat will activate when they join Nocturn
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* No results, not an email */}
+            {collabQuery.length >= 2 &&
+              !collabSearching &&
+              collabResults.length === 0 &&
+              !queryIsEmail &&
+              !inviteSent && (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-muted-foreground mb-1">
+                    No collectives found
+                  </p>
+                  <p className="text-xs text-muted-foreground/60">
+                    Type an email address to invite someone
+                  </p>
+                </div>
+              )}
+
+            {/* Default state */}
+            {collabQuery.length < 2 && (
+              <div className="py-8 text-center">
+                <p className="text-sm text-muted-foreground/60">
+                  Search for a collective name or enter an email
+                </p>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ── Record Call FAB ───────────────────────────────────────────────── */}
       <Link
         href="/dashboard/record"
         className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full bg-[#7B2FF7] text-white shadow-lg shadow-[#7B2FF7]/30 px-5 py-3.5 hover:bg-[#6B1FE7] active:scale-95 transition-all md:bottom-6"

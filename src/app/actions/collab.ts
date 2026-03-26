@@ -140,3 +140,58 @@ export async function getCollabChannels(collectiveId: string) {
 
   return [...(owned ?? []), ...(partnered ?? [])];
 }
+
+/**
+ * Invite someone by email to collab on Nocturn.
+ * Creates an invitation record with type 'collab'.
+ * When they sign up, the chat thread activates.
+ */
+export async function inviteToCollab(myCollectiveId: string, email: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const sb = admin();
+
+  // Verify user is a member of their collective
+  const { data: membership } = await sb
+    .from("collective_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("collective_id", myCollectiveId)
+    .maybeSingle();
+
+  if (!membership) return { error: "Not a member of this collective" };
+
+  // Check if already invited
+  const { data: existing } = await sb
+    .from("invitations")
+    .select("id, status")
+    .eq("collective_id", myCollectiveId)
+    .eq("email", email.toLowerCase().trim())
+    .eq("type", "collab")
+    .maybeSingle();
+
+  if (existing?.status === "pending") {
+    return { error: "Already invited" };
+  }
+
+  // Create or update invitation
+  if (existing) {
+    await sb
+      .from("invitations")
+      .update({ status: "pending", invited_by: user.id, expires_at: new Date(Date.now() + 7 * 86400000).toISOString() })
+      .eq("id", existing.id);
+  } else {
+    const { error } = await sb.from("invitations").insert({
+      collective_id: myCollectiveId,
+      email: email.toLowerCase().trim(),
+      role: "collab",
+      type: "collab",
+      invited_by: user.id,
+    });
+    if (error) return { error: error.message };
+  }
+
+  return { error: null };
+}
