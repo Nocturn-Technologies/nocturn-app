@@ -22,13 +22,28 @@ export interface PlaybookPost {
   status: "upcoming" | "today" | "past";
 }
 
+export interface OpsTask {
+  id: string;
+  daysBefore: number;
+  date: string;
+  phase: string;
+  task: string;
+  detail: string;
+  priority: "critical" | "high" | "normal";
+  status: "upcoming" | "today" | "past" | "done";
+}
+
 export interface ContentPlaybook {
   eventTitle: string;
   eventDate: string;
+  eventSize: "small" | "medium" | "large";
   totalPosts: number;
+  totalTasks: number;
   phases: {
     name: string;
+    weekLabel: string;
     posts: PlaybookPost[];
+    tasks: OpsTask[];
   }[];
 }
 
@@ -88,9 +103,44 @@ export async function generateContentPlaybook(eventId: string): Promise<{
   const lowestPrice = tiers?.[0]?.price ? `$${Number(tiers[0].price).toFixed(0)}` : "limited";
   const ticketLink = `app.trynocturn.com/e/${event.collective_id}/${eventId}`;
 
+  // Get total capacity to determine event size
+  const { data: allTiers } = await admin
+    .from("ticket_tiers")
+    .select("capacity")
+    .eq("event_id", eventId);
+
+  const totalCapacity = (allTiers ?? []).reduce((sum, t) => sum + (t.capacity ?? 0), 0);
+  const eventSize: "small" | "medium" | "large" =
+    totalCapacity > 300 ? "large" : totalCapacity > 100 ? "medium" : "small";
+
   // Build playbook phases
   const posts: PlaybookPost[] = [];
+  const tasks: OpsTask[] = [];
   let postIndex = 0;
+  let taskIndex = 0;
+
+  function addTask(
+    daysBefore: number,
+    phase: string,
+    task: string,
+    detail: string,
+    priority: OpsTask["priority"]
+  ) {
+    const taskDate = new Date(eventDate.getTime() - daysBefore * 86400000);
+    const isToday = Math.abs(taskDate.getTime() - now.getTime()) < 86400000;
+    const isPast = taskDate < now && !isToday;
+
+    tasks.push({
+      id: `task-${taskIndex++}`,
+      daysBefore,
+      date: taskDate.toISOString().slice(0, 10),
+      phase,
+      task,
+      detail,
+      priority,
+      status: isToday ? "today" : isPast ? "past" : "upcoming",
+    });
+  }
 
   function addPost(
     daysBefore: number,
@@ -115,6 +165,21 @@ export async function generateContentPlaybook(eventId: string): Promise<{
       tip,
       status: isToday ? "today" : isPast ? "past" : "upcoming",
     });
+  }
+
+  // ── PHASE 0: Plan & Book (6-8 weeks out) ──
+
+  if (daysUntil >= 40) {
+    addTask(56, "Plan & Book", "Lock venue", `Confirm ${venueName} — get rental fee, bar minimum, deposit terms in writing`, "critical");
+    addTask(50, "Plan & Book", "Set budget", "Define total budget, break-even ticket price, and profit targets", "critical");
+    addTask(49, "Plan & Book", "Book headliner", `Confirm headliner — negotiate fee, travel, and hospitality. ${eventSize === "large" ? "For 300+ cap, budget $2-5K for talent." : "Keep it under $1K for this size."}`, "critical");
+    addTask(45, "Plan & Book", "Confirm full lineup", "Lock all supporting acts, get promo photos and bios from each artist", "high");
+    addTask(42, "Plan & Book", "Design flyer", "Brief your designer or generate one in Nocturn. Need: event name, date, venue, lineup, ticket link", "high");
+    addTask(42, "Plan & Book", "Set up ticket tiers", "Create Early Bird, Tier 1, Tier 2, Tier 3 pricing in Nocturn", "critical");
+    if (eventSize !== "small") {
+      addTask(40, "Plan & Book", "Hire security", `${eventSize === "large" ? "3-4 security for 300+ cap" : "1-2 security for this size"}. Get quotes, confirm head count.`, "high");
+      addTask(40, "Plan & Book", "Book sound engineer", "Confirm sound tech — get their rate and arrival time", "high");
+    }
   }
 
   // ── PHASE 1: Announce (4 weeks out) ──
@@ -188,6 +253,15 @@ export async function generateContentPlaybook(eventId: string): Promise<{
     );
   }
 
+  // Ops tasks for hype phase
+  if (daysUntil >= 12) {
+    addTask(14, "Build Hype", "Artist spotlight content", "Get each artist to send a 30-sec video or DJ mix clip for stories", "normal");
+    addTask(12, "Build Hype", "Tag all artists in posts", "Every lineup post should tag artists — they repost to their audience", "high");
+    if (eventSize !== "small") {
+      addTask(10, "Build Hype", "Confirm photographer", "Book event photographer — needed for recap content and future promo", "normal");
+    }
+  }
+
   // ── PHASE 3: Urgency (1 week out) ──
 
   if (daysUntil >= 5) {
@@ -217,6 +291,14 @@ export async function generateContentPlaybook(eventId: string): Promise<{
       [],
       "Update the actual numbers. Real scarcity > fake urgency. Screenshot the ticket count from your dashboard."
     );
+  }
+
+  // Ops tasks for urgency phase
+  if (daysUntil >= 5) {
+    addTask(7, "Urgency", "Finalize set times", "Confirm exact set times with all artists. Share internally first.", "critical");
+    addTask(7, "Urgency", "Confirm door staff", "Verify all door/check-in staff are confirmed for event night", "high");
+    addTask(6, "Urgency", "Prep guest list", "Finalize comps, press, VIP list in Nocturn", "normal");
+    addTask(5, "Urgency", "FAQ post prep", "Create an FAQ story: address, parking, dress code, age, re-entry", "normal");
   }
 
   // ── PHASE 4: Final Push (3 days) ──
@@ -250,6 +332,13 @@ export async function generateContentPlaybook(eventId: string): Promise<{
     );
   }
 
+  // Ops tasks for final push
+  if (daysUntil >= 1) {
+    addTask(3, "Final Push", "Share set times", "Post set times publicly — drives commitment from attendees", "high");
+    addTask(2, "Final Push", "Print guest list", "Export guest list from Nocturn, have backup at door", "normal");
+    addTask(1, "Final Push", "Day-before checklist", "Confirm: DJ arrival times, sound check time, security briefing, door open time, bar stock", "critical");
+  }
+
   // ── PHASE 5: Day-Of ──
 
   addPost(
@@ -269,6 +358,12 @@ export async function generateContentPlaybook(eventId: string): Promise<{
     [],
     "Short and urgent. Link to tickets if still available."
   );
+
+  // Ops tasks for day-of
+  addTask(0, "Day-Of", "Sound check", "Be at venue 2-3 hours before doors for sound check and setup", "critical");
+  addTask(0, "Day-Of", "Brief door staff", "Walk through check-in flow, cover charge rules, guest list process", "critical");
+  addTask(0, "Day-Of", "Open Nocturn Live Mode", "Go to Events → Live Mode for real-time check-ins, capacity, and bar tracking", "high");
+  addTask(0, "Day-Of", "Track bar sales", "If you have a bar minimum, log bar revenue hourly in Live Mode", "high");
 
   // ── PHASE 6: Post-Event Recap ──
 
@@ -290,21 +385,42 @@ export async function generateContentPlaybook(eventId: string): Promise<{
     "Include a photo gallery link. Ask them to follow your socials if they haven't. Plant the seed for the next event."
   );
 
+  // Recap ops tasks
+  addTask(-1, "Recap", "Settle finances", "Generate settlement in Nocturn — split revenue, log expenses, calculate net profit", "critical");
+  addTask(-1, "Recap", "Collect photos/videos", "Get photos from photographer, attendees, and artists. Save best for next event promo", "high");
+  addTask(-2, "Recap", "Thank artists", "DM or email every artist — thank them, share crowd photos, plant seed for next booking", "normal");
+  addTask(-3, "Recap", "Review audience data", "Check Reach → Audience. Identify new Core fans and ambassador candidates", "high");
+  addTask(-5, "Recap", "Seed next event", "Start planning the next one. Use calendar heat map to pick the best date", "normal");
+
   // Group by phase
-  const phaseOrder = ["Announce", "Build Hype", "Urgency", "Final Push", "Day-Of", "Recap"];
+  const phaseOrder = ["Plan & Book", "Announce", "Build Hype", "Urgency", "Final Push", "Day-Of", "Recap"];
+  const weekLabels: Record<string, string> = {
+    "Plan & Book": "6-8 weeks out",
+    "Announce": "4 weeks out",
+    "Build Hype": "2 weeks out",
+    "Urgency": "1 week out",
+    "Final Push": "3 days out",
+    "Day-Of": "Event day",
+    "Recap": "After the event",
+  };
+
   const phases = phaseOrder
     .map((name) => ({
       name,
+      weekLabel: weekLabels[name] ?? "",
       posts: posts.filter((p) => p.phase === name),
+      tasks: tasks.filter((t) => t.phase === name),
     }))
-    .filter((p) => p.posts.length > 0);
+    .filter((p) => p.posts.length > 0 || p.tasks.length > 0);
 
   return {
     error: null,
     playbook: {
       eventTitle: title,
       eventDate: event.starts_at,
+      eventSize,
       totalPosts: posts.length,
+      totalTasks: tasks.length,
       phases,
     },
   };

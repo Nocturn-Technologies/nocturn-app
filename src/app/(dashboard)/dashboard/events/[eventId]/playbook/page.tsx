@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
-import { generateContentPlaybook, type ContentPlaybook, type PlaybookPost } from "@/app/actions/content-playbook";
+import { generateContentPlaybook, type ContentPlaybook, type PlaybookPost, type OpsTask } from "@/app/actions/content-playbook";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,6 +18,9 @@ import {
   ChevronUp,
   Sparkles,
   Hash,
+  CheckCircle2,
+  Circle,
+  AlertTriangle,
 } from "lucide-react";
 
 const platformConfig: Record<
@@ -32,6 +35,7 @@ const platformConfig: Record<
 };
 
 const phaseEmoji: Record<string, string> = {
+  "Plan & Book": "📋",
   "Announce": "📢",
   "Build Hype": "🔥",
   "Urgency": "⚡",
@@ -86,15 +90,15 @@ export default function PlaybookPage() {
   const filteredPhases = playbook.phases.map((phase) => ({
     ...phase,
     posts: filter === "all" ? phase.posts : phase.posts.filter((p) => p.platform === filter),
-  })).filter((p) => p.posts.length > 0);
+  })).filter((p) => p.posts.length > 0 || (p.tasks && p.tasks.length > 0));
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Content Playbook</h1>
+        <h1 className="text-2xl font-bold">Event Playbook</h1>
         <p className="text-sm text-muted-foreground">
-          {playbook.totalPosts} posts across {playbook.phases.length} phases — copy, paste, post
+          {playbook.totalPosts} posts + {playbook.totalTasks} ops tasks across {playbook.phases.length} phases
         </p>
       </div>
 
@@ -165,14 +169,49 @@ export default function PlaybookPage() {
       {/* Timeline */}
       {filteredPhases.map((phase) => (
         <div key={phase.name}>
-          <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-2 mb-1">
             <span className="text-lg">{phaseEmoji[phase.name] ?? "📋"}</span>
             <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
               {phase.name}
             </h2>
             <div className="flex-1 h-px bg-border" />
           </div>
+          {phase.weekLabel && (
+            <p className="text-xs text-muted-foreground mb-3 ml-8">{phase.weekLabel}</p>
+          )}
 
+          {/* Ops Tasks */}
+          {phase.tasks && phase.tasks.length > 0 && (
+            <div className="mb-3 space-y-1.5">
+              {phase.tasks.map((task: OpsTask) => (
+                <div
+                  key={task.id}
+                  className={`flex items-start gap-2.5 px-3 py-2 rounded-lg ${
+                    task.status === "past" ? "opacity-40" : ""
+                  } ${task.status === "today" ? "bg-amber-400/5 border border-amber-400/10" : ""}`}
+                >
+                  {task.status === "past" ? (
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                  ) : task.priority === "critical" ? (
+                    <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
+                  ) : (
+                    <Circle className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{task.task}</p>
+                    <p className="text-xs text-muted-foreground">{task.detail}</p>
+                  </div>
+                  {task.status === "today" && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-400/20 text-amber-400 shrink-0">
+                      TODAY
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Content Posts */}
           <div className="space-y-3">
             {phase.posts.map((post) => {
               const conf = platformConfig[post.platform];
