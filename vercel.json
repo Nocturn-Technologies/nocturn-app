@@ -4,7 +4,9 @@
     { "source": "/finance", "destination": "/dashboard/finance", "permanent": true },
     { "source": "/chat", "destination": "/dashboard/chat", "permanent": true },
     { "source": "/calendar", "destination": "/dashboard/calendar", "permanent": true },
-    { "source": "/settings", "destination": "/dashboard/settings", "permanent": true }
+    { "source": "/settings", "destination": "/dashboard/settings", "permanent": true },
+    { "source": "/audience", "destination": "/dashboard/audience", "permanent": true },
+    { "source": "/insights", "destination": "/dashboard/promo-insights", "permanent": true }
   ],
   "crons": [
     {

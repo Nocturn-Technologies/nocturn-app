@@ -31,6 +31,8 @@ import {
   X,
   BarChart3,
   CalendarRange,
+  UsersRound,
+  TrendingUp,
 } from "lucide-react";
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -53,7 +55,9 @@ const sidebarNavItems = [
   { href: "/dashboard/record", label: "Record", icon: Mic },
   { href: "/dashboard/artists", label: "Artists", icon: Music },
   { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
+  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
+  { href: "/dashboard/promo-insights", label: "Insights", icon: TrendingUp },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/members", label: "Members", icon: Users },
@@ -74,7 +78,9 @@ const moreDrawerItems = [
   { href: "/dashboard/record", label: "Record", icon: Mic },
   { href: "/dashboard/artists", label: "Artists", icon: Music },
   { href: "/dashboard/attendees", label: "Attendees", icon: UserCheck },
+  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
+  { href: "/dashboard/promo-insights", label: "Insights", icon: TrendingUp },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
   { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/dashboard/members", label: "Members", icon: Users },
