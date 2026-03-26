@@ -153,11 +153,11 @@ export default async function EventDetailPage({ params }: Props) {
     : "Free";
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 animate-in fade-in duration-500">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         <Link href="/dashboard/events">
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="shrink-0 hover:bg-accent active:scale-95 transition-all duration-200">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -165,7 +165,7 @@ export default async function EventDetailPage({ params }: Props) {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold truncate">{event.title}</h1>
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${statusInfo.color}`}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${statusInfo.color}`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${statusInfo.dotColor}`}
@@ -174,7 +174,7 @@ export default async function EventDetailPage({ params }: Props) {
             </span>
           </div>
           {collective && (
-            <p className="text-sm text-muted-foreground">{collective.name}</p>
+            <p className="text-sm text-muted-foreground truncate">{collective.name}</p>
           )}
         </div>
       </div>
@@ -193,64 +193,64 @@ export default async function EventDetailPage({ params }: Props) {
       <div className="flex flex-wrap gap-2">
         {event.status === "draft" && (
           <Link href={`/dashboard/events/${event.id}/edit`}>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
               <Pencil className="mr-2 h-3 w-3" />
               Edit Event
             </Button>
           </Link>
         )}
         <Link href={`/dashboard/events/${event.id}/design`}>
-          <Button variant="outline" size="sm" className="border-nocturn-glow/30 text-nocturn-glow hover:bg-nocturn-glow/10">
+          <Button variant="outline" size="sm" className="border-nocturn-glow/30 text-nocturn-glow hover:bg-nocturn-glow/10 active:scale-95 transition-all duration-200">
             <Palette className="mr-2 h-3 w-3" />
             Design
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/tasks`}>
-          <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10">
+          <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
             <ListChecks className="mr-2 h-3 w-3" />
             Playbook
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/lineup`}>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
             <Music className="mr-2 h-3 w-3" />
             Manage Lineup
           </Button>
         </Link>
         {(event.status === "published" || event.status === "upcoming") && (
           <Link href={`/dashboard/events/${event.id}/check-in`}>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
               <ScanLine className="mr-2 h-3 w-3" />
               Check-in Scanner
             </Button>
           </Link>
         )}
         <Link href={`/dashboard/events/${event.id}/promos`}>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
             <Tag className="mr-2 h-3 w-3" />
             Promos
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/guests`}>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
             <ClipboardList className="mr-2 h-3 w-3" />
             Guest List
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/refunds`}>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
             <RotateCcw className="mr-2 h-3 w-3" />
             Refunds
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/referrals`}>
-          <Button variant="outline" size="sm" className="border-amber-400/30 text-amber-400 hover:bg-amber-400/10">
+          <Button variant="outline" size="sm" className="border-amber-400/30 text-amber-400 hover:bg-amber-400/10 active:scale-95 transition-all duration-200">
             <Share2 className="mr-2 h-3 w-3" />
             Referrals
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/forecast`}>
-          <Button variant="outline" size="sm" className="border-nocturn-teal/30 text-nocturn-teal hover:bg-nocturn-teal/10">
+          <Button variant="outline" size="sm" className="border-nocturn-teal/30 text-nocturn-teal hover:bg-nocturn-teal/10 active:scale-95 transition-all duration-200">
             <BarChart3 className="mr-2 h-3 w-3" />
             Forecast
           </Button>
@@ -258,13 +258,13 @@ export default async function EventDetailPage({ params }: Props) {
         {(event.status === "completed" || event.status === "settled") && (
           <>
             <Link href={`/dashboard/events/${event.id}/recap`}>
-              <Button variant="outline" size="sm" className="border-nocturn-amber/30 text-nocturn-amber hover:bg-nocturn-amber/10">
+              <Button variant="outline" size="sm" className="border-nocturn-amber/30 text-nocturn-amber hover:bg-nocturn-amber/10 active:scale-95 transition-all duration-200">
                 <FileText className="mr-2 h-3 w-3" />
                 Recap
               </Button>
             </Link>
             <Link href={`/dashboard/events/${event.id}/wrap`}>
-              <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10">
+              <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
                 <Coffee className="mr-2 h-3 w-3" />
                 View Wrap
               </Button>
@@ -273,7 +273,7 @@ export default async function EventDetailPage({ params }: Props) {
         )}
         {publicUrl && (
           <Link href={publicUrl} target="_blank">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
               <ExternalLink className="mr-2 h-3 w-3" />
               View Public Page
             </Button>
@@ -296,9 +296,9 @@ export default async function EventDetailPage({ params }: Props) {
       <Separator />
 
       {/* Event Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+      <Card className="rounded-2xl transition-colors duration-200">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg font-bold">
             <Calendar className="h-4 w-4 text-nocturn" />
             Event Details
           </CardTitle>
@@ -307,8 +307,8 @@ export default async function EventDetailPage({ params }: Props) {
           {/* Date & Time */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span>
+              <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">
                 {eventDate.toLocaleDateString("en", {
                   weekday: "long",
                   month: "long",
@@ -318,8 +318,8 @@ export default async function EventDetailPage({ params }: Props) {
               </span>
             </div>
             <div className="flex items-center gap-2 text-sm">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>
+              <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="truncate">
                 {doorsAt &&
                   `Doors ${doorsAt.toLocaleTimeString("en", {
                     hour: "numeric",
@@ -343,9 +343,9 @@ export default async function EventDetailPage({ params }: Props) {
           {venue && (
             <div className="flex items-start gap-2 text-sm">
               <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              <div>
-                <p className="font-medium">{venue.name}</p>
-                <p className="text-muted-foreground">
+              <div className="min-w-0">
+                <p className="font-medium truncate">{venue.name}</p>
+                <p className="text-muted-foreground truncate">
                   {venue.address}, {venue.city}
                 </p>
                 {venue.capacity && (
@@ -360,7 +360,7 @@ export default async function EventDetailPage({ params }: Props) {
 
           {/* Description */}
           {event.description && (
-            <div className="rounded-lg bg-muted/50 p-3">
+            <div className="rounded-xl bg-muted/50 p-4">
               <p className="text-sm text-muted-foreground leading-relaxed">
                 {event.description}
               </p>
@@ -371,9 +371,9 @@ export default async function EventDetailPage({ params }: Props) {
 
       {/* Ticket Tiers */}
       {tiers && tiers.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+        <Card className="rounded-2xl transition-colors duration-200">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center gap-2 text-lg font-bold">
               <Ticket className="h-4 w-4 text-nocturn" />
               Ticket Tiers
             </CardTitle>
@@ -383,25 +383,25 @@ export default async function EventDetailPage({ params }: Props) {
               {tiers.map((tier) => (
                 <div
                   key={tier.id}
-                  className="flex items-center justify-between rounded-lg border border-border p-3"
+                  className="flex items-center justify-between rounded-xl border border-border p-4 hover:border-nocturn/30 transition-colors duration-200"
                 >
-                  <div>
-                    <p className="text-sm font-medium">{tier.name}</p>
+                  <div className="min-w-0 flex-1 mr-4">
+                    <p className="text-sm font-medium truncate">{tier.name}</p>
                     <p className="text-xs text-muted-foreground">
                       <Users className="mr-1 inline h-3 w-3" />
                       {tier.capacity} available
                     </p>
                   </div>
-                  <span className="flex items-center text-sm font-semibold text-nocturn">
+                  <span className="flex shrink-0 items-center text-sm font-semibold text-nocturn">
                     <DollarSign className="h-3.5 w-3.5" />
                     {Number(tier.price).toFixed(2)}
                   </span>
                 </div>
               ))}
               {/* Summary */}
-              <div className="flex justify-between border-t border-border pt-2 text-sm">
+              <div className="flex justify-between border-t border-border pt-4 text-sm">
                 <span className="text-muted-foreground">Total capacity</span>
-                <span className="font-medium">
+                <span className="font-bold">
                   {tiers.reduce((sum, t) => sum + (t.capacity ?? 0), 0)} tickets
                 </span>
               </div>
@@ -412,13 +412,13 @@ export default async function EventDetailPage({ params }: Props) {
 
       {/* Flyer Preview */}
       {event.flyer_url && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Event Flyer</CardTitle>
+        <Card className="rounded-2xl overflow-hidden transition-colors duration-200">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg font-bold">Event Flyer</CardTitle>
           </CardHeader>
           <CardContent>
             <div
-              className="h-48 rounded-lg bg-cover bg-center"
+              className="h-48 rounded-xl bg-cover bg-center"
               style={{ backgroundImage: `url(${event.flyer_url})` }}
             />
           </CardContent>

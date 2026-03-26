@@ -39,7 +39,7 @@ export function EventStatusActions({
   return (
     <div className="space-y-3">
       {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="rounded-xl bg-destructive/10 p-4 text-sm text-destructive animate-in fade-in duration-200">
           {error}
         </div>
       )}
@@ -47,7 +47,7 @@ export function EventStatusActions({
       <div className="flex flex-wrap gap-2">
         {status === "draft" && (
           <Button
-            className="bg-green-600 hover:bg-green-700 text-white"
+            className="bg-green-600 hover:bg-green-700 active:scale-95 text-white transition-all duration-200"
             onClick={() => handleAction(publishEvent, "publish")}
             disabled={loading !== null}
           >
@@ -68,7 +68,7 @@ export function EventStatusActions({
         {status === "published" && (
           <>
             <Button
-              className="bg-nocturn hover:bg-nocturn-light"
+              className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200"
               onClick={() => handleAction(completeEvent, "complete")}
               disabled={loading !== null}
             >
@@ -87,6 +87,7 @@ export function EventStatusActions({
 
             <Button
               variant="destructive"
+              className="active:scale-95 transition-all duration-200"
               onClick={() => handleAction(cancelEvent, "cancel")}
               disabled={loading !== null}
             >
