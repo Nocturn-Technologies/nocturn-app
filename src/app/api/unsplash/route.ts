@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 
 const UNSPLASH_ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY;
 
@@ -17,6 +18,15 @@ const NIGHTLIFE_QUERIES = [
 ];
 
 export async function GET(req: NextRequest) {
+  // Auth check — prevent unauthenticated API abuse
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (!UNSPLASH_ACCESS_KEY) {
     return NextResponse.json(
       { error: "Unsplash not configured" },

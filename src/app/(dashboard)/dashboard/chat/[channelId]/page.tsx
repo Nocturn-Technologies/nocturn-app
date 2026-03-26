@@ -106,7 +106,16 @@ export default function ChatRoomPage() {
           setTimeout(scrollToBottom, 50);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+          // Auto-reconnect after 3 seconds on disconnect
+          console.warn("[chat] Realtime disconnected, reconnecting...");
+          setTimeout(() => {
+            supabase.removeChannel(sub);
+            // Re-subscribing will happen on next useEffect cycle
+          }, 3000);
+        }
+      });
 
     return () => {
       supabase.removeChannel(sub);

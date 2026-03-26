@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
 import Replicate from "replicate";
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
@@ -38,6 +39,15 @@ function extractUrl(output: unknown): string | null {
 }
 
 export async function POST(request: NextRequest) {
+  // Auth check
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (!REPLICATE_API_TOKEN) {
     return NextResponse.json(
       { error: "Add REPLICATE_API_TOKEN to Vercel environment variables." },
