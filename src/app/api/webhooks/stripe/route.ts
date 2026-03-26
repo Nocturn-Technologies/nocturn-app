@@ -128,6 +128,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     metadata: {
       checkout_session_id: session.id,
       customer_email: session.customer_email ?? session.customer_details?.email,
+      ...(session.metadata?.referrerToken && { referrer_token: session.metadata.referrerToken }),
+      ...(session.metadata?.promoId && { promo_id: session.metadata.promoId, promo_code: session.metadata.promoCode }),
+      ...(session.metadata?.discountCents && { discount_cents: session.metadata.discountCents }),
     },
   }));
 

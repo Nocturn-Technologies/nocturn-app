@@ -20,12 +20,14 @@ interface CheckoutBody {
   tierId: string;
   quantity: number;
   buyerEmail: string;
+  promoCode?: string;
+  referrerToken?: string;
 }
 
 export async function POST(request: NextRequest) {
   try {
     const body: CheckoutBody = await request.json();
-    const { eventId, tierId, quantity, buyerEmail } = body;
+    const { eventId, tierId, quantity, buyerEmail, promoCode, referrerToken } = body;
 
     if (!eventId || !tierId || !quantity || !buyerEmail) {
       return NextResponse.json(
@@ -116,9 +118,48 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate price
-    const unitAmountCents = Math.round(Number(tier.price) * 100);
-    if (unitAmountCents < 0) {
+    // Apply promo code discount if provided
+    let discountPercent = 0;
+    let discountFixed = 0;
+    let promoId: string | null = null;
+
+    if (promoCode) {
+      const { data: promo } = await supabase
+        .from("promo_codes")
+        .select("id, code, discount_type, discount_value, max_uses, uses, expires_at")
+        .eq("event_id", eventId)
+        .ilike("code", promoCode)
+        .maybeSingle();
+
+      if (promo) {
+        const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
+        const isMaxedOut = promo.max_uses && promo.uses >= promo.max_uses;
+
+        if (!isExpired && !isMaxedOut) {
+          promoId = promo.id;
+          if (promo.discount_type === "percentage") {
+            discountPercent = Number(promo.discount_value) / 100;
+          } else {
+            discountFixed = Number(promo.discount_value) * 100; // convert to cents
+          }
+
+          // Increment usage count
+          await supabase
+            .from("promo_codes")
+            .update({ uses: (promo.uses ?? 0) + quantity })
+            .eq("id", promo.id);
+        }
+      }
+    }
+
+    // Calculate price with discount
+    const basePriceCents = Math.round(Number(tier.price) * 100);
+    const discountCents = discountPercent > 0
+      ? Math.round(basePriceCents * discountPercent)
+      : discountFixed;
+    const unitAmountCents = Math.max(basePriceCents - discountCents, 0);
+
+    if (basePriceCents < 0) {
       return NextResponse.json({ error: "Invalid ticket price" }, { status: 400 });
     }
 
@@ -139,6 +180,8 @@ export async function POST(request: NextRequest) {
         metadata: {
           registration_type: "free",
           customer_email: buyerEmail,
+          ...(promoId && { promo_id: promoId, promo_code: promoCode }),
+          ...(referrerToken && { referrer_token: referrerToken }),
         },
       }));
 
@@ -265,6 +308,9 @@ export async function POST(request: NextRequest) {
         quantity: String(quantity),
         ticketPriceCents: String(unitAmountCents),
         serviceFeeCents: String(serviceFeePerTicketCents),
+        ...(promoId && { promoId, promoCode: promoCode ?? "" }),
+        ...(referrerToken && { referrerToken }),
+        ...(discountCents > 0 && { discountCents: String(discountCents) }),
       },
       success_url: `${APP_URL}/e/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: cancelUrl,
