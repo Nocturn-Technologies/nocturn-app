@@ -38,31 +38,29 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
-/* ── Desktop sidebar nav items (8 core sections) ── */
+/* ── Desktop sidebar nav items (7 core sections) ── */
 const sidebarNavItems = [
   { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/dashboard/events", label: "Events", icon: Calendar },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
-  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
+  { href: "/dashboard/events", label: "Ops", icon: Calendar },
+  { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
-  { href: "/dashboard/discover", label: "Discover", icon: Compass },
+  { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 /* ── Mobile bottom tab bar items (4 tabs) ── */
 const mobileTabItems = [
   { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/dashboard/events", label: "Events", icon: Calendar },
+  { href: "/dashboard/events", label: "Ops", icon: Calendar },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard/discover", label: "Discover", icon: Compass },
 ];
 
 /* ── More drawer items (items not in mobile tabs) ── */
 const moreDrawerItems = [
-  { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
-  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
+  { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
+  { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 

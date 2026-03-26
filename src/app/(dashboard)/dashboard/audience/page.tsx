@@ -30,6 +30,10 @@ import {
   ChevronUp,
   Mail,
   Sparkles,
+  UsersRound,
+  MapPin,
+  Music,
+  CalendarRange,
 } from "lucide-react";
 
 // ── Segment Tab Config ──
@@ -174,10 +178,34 @@ export default function AudiencePage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Audience</h1>
+        <h1 className="text-2xl font-bold">Reach</h1>
         <p className="text-sm text-muted-foreground">
-          Know your people — segment, reward, and re-engage your audience
+          Grow your audience — segment, reward, discover, and re-engage
         </p>
+      </div>
+
+      {/* Quick links to sub-sections */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        <a href="/dashboard/audience" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-card border border-border shadow-sm whitespace-nowrap">
+          <UsersRound className="h-3.5 w-3.5 text-nocturn" />
+          Audience
+        </a>
+        <a href="/dashboard/promo-insights" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-card/50 whitespace-nowrap">
+          <TrendingUp className="h-3.5 w-3.5" />
+          Insights
+        </a>
+        <a href="/dashboard/venues" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-card/50 whitespace-nowrap">
+          <MapPin className="h-3.5 w-3.5" />
+          Venues
+        </a>
+        <a href="/dashboard/artists" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-card/50 whitespace-nowrap">
+          <Music className="h-3.5 w-3.5" />
+          Artists
+        </a>
+        <a href="/dashboard/calendar" className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-card/50 whitespace-nowrap">
+          <CalendarRange className="h-3.5 w-3.5" />
+          Calendar
+        </a>
       </div>
 
       {/* Overview Stats */}
