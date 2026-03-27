@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, X, Send, Loader2 } from "lucide-react";
+import { NocturnLogo } from "@/components/nocturn-logo";
 import { askNocturn } from "@/app/actions/ask-nocturn";
 
 interface Message {
@@ -75,7 +76,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
           className="fixed z-[55] bottom-[calc(env(safe-area-inset-bottom)+72px)] right-4 md:bottom-6 md:right-6 h-14 w-14 rounded-full bg-gradient-to-br from-nocturn to-nocturn-light shadow-lg shadow-nocturn/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 animate-pulse-subtle"
           aria-label="Ask Nocturn AI"
         >
-          <Sparkles className="h-6 w-6 text-white" />
+          <NocturnLogo size="sm" showText={false} />
         </button>
       )}
 
