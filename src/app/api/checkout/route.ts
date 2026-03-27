@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getStripe, PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
+import { calculateServiceFeeCents } from "@/lib/pricing";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
@@ -94,7 +95,15 @@ export async function POST(request: NextRequest) {
     // Atomic capacity check — acquire advisory lock to prevent race conditions
     // Two users buying the last ticket simultaneously will be serialized
     const supabaseAdmin = createAdminClient();
-    await supabaseAdmin.rpc("acquire_ticket_lock", { p_tier_id: tierId });
+    const { error: lockError } = await supabaseAdmin.rpc("acquire_ticket_lock", { p_tier_id: tierId });
+
+    if (lockError) {
+      console.error("[checkout] Failed to acquire ticket lock:", lockError.message);
+      return NextResponse.json(
+        { error: "Failed to check ticket availability. Please try again." },
+        { status: 500 }
+      );
+    }
 
     const { count: soldCount, error: countError } = await supabaseAdmin
       .from("tickets")
@@ -126,28 +135,28 @@ export async function POST(request: NextRequest) {
     if (promoCode) {
       const { data: promo } = await supabase
         .from("promo_codes")
-        .select("id, code, discount_type, discount_value, max_uses, uses, expires_at")
+        .select("id, code, discount_type, discount_value, max_uses, current_uses, expires_at")
         .eq("event_id", eventId)
         .ilike("code", promoCode)
         .maybeSingle();
 
       if (promo) {
         const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
-        const isMaxedOut = promo.max_uses && promo.uses >= promo.max_uses;
 
-        if (!isExpired && !isMaxedOut) {
-          promoId = promo.id;
-          if (promo.discount_type === "percentage") {
-            discountPercent = Number(promo.discount_value) / 100;
-          } else {
-            discountFixed = Number(promo.discount_value) * 100; // convert to cents
+        if (!isExpired) {
+          const { data: updated } = await supabase.rpc("claim_promo_code", {
+            p_code_id: promo.id,
+            p_quantity: quantity,
+          });
+
+          if (updated && updated.length > 0) {
+            promoId = promo.id;
+            if (promo.discount_type === "percentage") {
+              discountPercent = Number(promo.discount_value) / 100;
+            } else {
+              discountFixed = Number(promo.discount_value) * 100; // convert to cents
+            }
           }
-
-          // Increment usage count
-          await supabase
-            .from("promo_codes")
-            .update({ uses: (promo.uses ?? 0) + quantity })
-            .eq("id", promo.id);
         }
       }
     }
@@ -164,9 +173,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Free tickets — bypass Stripe, create directly
+    // Insert BEFORE releasing the lock to prevent oversell race condition
     if (unitAmountCents === 0) {
-      const supabaseAdmin = createAdminClient();
-
       // Build ticket records
       const freeTickets = Array.from({ length: quantity }, () => ({
         event_id: eventId,
@@ -260,8 +268,7 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Calculate buyer service fee: 7% + $0.50 per ticket
-    const serviceFeePerTicketCents = Math.round(unitAmountCents * (PLATFORM_FEE_PERCENT / 100)) + PLATFORM_FEE_FLAT_CENTS;
+    const serviceFeePerTicketCents = calculateServiceFeeCents(unitAmountCents);
     const totalPerTicketCents = unitAmountCents + serviceFeePerTicketCents;
 
     // Stripe minimum is $0.50 USD
@@ -277,44 +284,53 @@ export async function POST(request: NextRequest) {
 
     // All payments go to Nocturn platform account — payouts handled manually
     // Buyer pays ticket price + service fee (7% + $0.50)
-    const session = await getStripe().checkout.sessions.create({
-      mode: "payment",
-      customer_email: buyerEmail,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `${tier.name} — ${event.title}`,
+    let session;
+    try {
+      session = await getStripe().checkout.sessions.create({
+        mode: "payment",
+        customer_email: buyerEmail,
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: `${tier.name} — ${event.title}`,
+              },
+              unit_amount: unitAmountCents,
             },
-            unit_amount: unitAmountCents,
+            quantity,
           },
-          quantity,
-        },
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: "Service fee",
+          {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: "Service fee",
+              },
+              unit_amount: serviceFeePerTicketCents,
             },
-            unit_amount: serviceFeePerTicketCents,
+            quantity,
           },
-          quantity,
+        ],
+        metadata: {
+          eventId,
+          tierId,
+          quantity: String(quantity),
+          ticketPriceCents: String(unitAmountCents),
+          serviceFeeCents: String(serviceFeePerTicketCents),
+          ...(promoId && { promoId, promoCode: promoCode ?? "" }),
+          ...(referrerToken && { referrerToken }),
+          ...(discountCents > 0 && { discountCents: String(discountCents) }),
         },
-      ],
-      metadata: {
-        eventId,
-        tierId,
-        quantity: String(quantity),
-        ticketPriceCents: String(unitAmountCents),
-        serviceFeeCents: String(serviceFeePerTicketCents),
-        ...(promoId && { promoId, promoCode: promoCode ?? "" }),
-        ...(referrerToken && { referrerToken }),
-        ...(discountCents > 0 && { discountCents: String(discountCents) }),
-      },
-      success_url: `${APP_URL}/e/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: cancelUrl,
-    });
+        success_url: `${APP_URL}/e/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: cancelUrl,
+      });
+    } catch (stripeErr) {
+      console.error("[checkout] Stripe session creation failed:", stripeErr);
+      return NextResponse.json(
+        { error: "Payment service temporarily unavailable." },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ url: session.url });
   } catch (error) {

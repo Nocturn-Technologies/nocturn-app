@@ -47,7 +47,7 @@ export async function GET(request: Request) {
 
     const { data: todayEvents } = await sb
       .from("events")
-      .select("id, title, starts_at, doors_at, metadata, venues(name, address, city)")
+      .select("id, title, slug, starts_at, doors_at, metadata, venues(name, address, city), collectives(slug)")
       .eq("status", "published")
       .gte("starts_at", todayStart.toISOString())
       .lt("starts_at", todayEnd.toISOString());
@@ -63,6 +63,7 @@ export async function GET(request: Request) {
       if ((count ?? 0) > 0) continue;
 
       const venue = event.venues as unknown as { name: string; city: string } | null;
+      const collective = event.collectives as unknown as { slug: string } | null;
       const meta = (event.metadata ?? {}) as Record<string, string>;
       const doorsTime = event.doors_at
         ? new Date(event.doors_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })
@@ -88,7 +89,9 @@ export async function GET(request: Request) {
         doorsTime,
         showTime,
         meta.dressCode ?? null,
-        `https://app.trynocturn.com/e/event/${event.id}`
+        collective?.slug && event.slug
+          ? `https://app.trynocturn.com/e/${collective.slug}/${event.slug}`
+          : `https://app.trynocturn.com/dashboard/events/${event.id}`
       );
 
       // Send in batches of 50

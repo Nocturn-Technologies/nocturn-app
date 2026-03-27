@@ -22,6 +22,7 @@ export default function AttendeesPage() {
   });
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
@@ -29,7 +30,12 @@ export default function AttendeesPage() {
       if (!result.error) {
         setAttendees(result.attendees);
         setStats(result.stats);
+      } else {
+        setError(true);
       }
+      setLoading(false);
+    }).catch(() => {
+      setError(true);
       setLoading(false);
     });
   }, []);
@@ -57,6 +63,17 @@ export default function AttendeesPage() {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3">
+        <p className="text-sm text-muted-foreground">Failed to load attendees.</p>
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          Try Again
+        </Button>
       </div>
     );
   }

@@ -34,6 +34,10 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
     }
   }, [messages, loading]);
 
+  useEffect(() => {
+    if (shouldHideButton && open) setOpen(false);
+  }, [shouldHideButton, open]);
+
   // Focus input when drawer opens
   useEffect(() => {
     if (open && inputRef.current) {
@@ -118,7 +122,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
             </div>
             <button
               onClick={() => setOpen(false)}
-              className="h-8 w-8 rounded-full flex items-center justify-center hover:bg-white/[0.06] transition-colors"
+              className="h-10 w-10 rounded-full flex items-center justify-center hover:bg-white/[0.06] transition-colors"
               aria-label="Close"
             >
               <X className="h-4 w-4 text-muted-foreground" />

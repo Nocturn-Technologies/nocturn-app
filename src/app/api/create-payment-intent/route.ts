@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getStripe, PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/stripe";
+import { getStripe } from "@/lib/stripe";
+import { calculateServiceFeeCents } from "@/lib/pricing";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 
 function createAdminClient() {
@@ -86,8 +87,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Add buyer service fee: 7% + $0.50 per ticket
-    const serviceFeePerTicketCents = Math.round(unitAmountCents * (PLATFORM_FEE_PERCENT / 100)) + PLATFORM_FEE_FLAT_CENTS;
+    const serviceFeePerTicketCents = calculateServiceFeeCents(unitAmountCents);
     const totalPerTicketCents = unitAmountCents + serviceFeePerTicketCents;
     const totalCents = totalPerTicketCents * quantity;
 

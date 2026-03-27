@@ -84,9 +84,9 @@ export async function askNocturn(
       // Open tasks
       sb
         .from("event_tasks")
-        .select("title, completed, events!inner(collective_id, title)")
+        .select("title, status, events!inner(collective_id, title)")
         .eq("events.collective_id", collectiveId)
-        .eq("completed", false)
+        .neq("status", "done")
         .limit(10),
 
       // Collective name

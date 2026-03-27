@@ -53,7 +53,7 @@ export async function sendEventReminders() {
     const emails = new Set<string>();
     for (const ticket of tickets ?? []) {
       const ticketMeta = ticket.metadata as Record<string, unknown>;
-      const email = (ticketMeta?.customer_email as string) || (ticketMeta?.buyer_email as string);
+      const email = (ticketMeta?.email as string) || (ticketMeta?.customer_email as string) || (ticketMeta?.buyer_email as string);
       if (email) emails.add(email.toLowerCase().trim());
     }
 

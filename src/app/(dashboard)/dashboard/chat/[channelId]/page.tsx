@@ -41,6 +41,7 @@ export default function ChatRoomPage() {
   const [loading, setLoading] = useState(true);
   const [aiTyping, setAiTyping] = useState(false);
   const [userNames, setUserNames] = useState<Record<string, string>>({});
+  const [reconnectCount, setReconnectCount] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -112,7 +113,7 @@ export default function ChatRoomPage() {
           console.warn("[chat] Realtime disconnected, reconnecting...");
           setTimeout(() => {
             supabase.removeChannel(sub);
-            // Re-subscribing will happen on next useEffect cycle
+            setReconnectCount(c => c + 1);
           }, 3000);
         }
       });
@@ -120,7 +121,7 @@ export default function ChatRoomPage() {
     return () => {
       supabase.removeChannel(sub);
     };
-  }, [channelId, scrollToBottom, supabase]);
+  }, [channelId, scrollToBottom, supabase, reconnectCount]);
 
   // Fetch real user names for message authors
   useEffect(() => {

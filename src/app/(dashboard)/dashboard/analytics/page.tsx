@@ -241,7 +241,7 @@ export default async function AnalyticsPage() {
             <p className="text-sm text-muted-foreground py-4 text-center">No events yet</p>
           )}
           {(recentEvents ?? []).map((e) => {
-            const col = (e as Record<string, unknown>).collectives as { name: string } | null;
+            const col = (e as Record<string, unknown>)?.collectives as { name: string } | null;
             return (
               <div key={e.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                 <div className="min-w-0 flex-1">

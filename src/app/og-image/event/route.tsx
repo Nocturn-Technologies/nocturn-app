@@ -5,10 +5,10 @@ export const runtime = "edge";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const title = searchParams.get("title") || "Event";
-  const collective = searchParams.get("collective") || "";
+  const title = (searchParams.get("title") || "Event").slice(0, 100);
+  const collective = (searchParams.get("collective") || "").slice(0, 50);
   const date = searchParams.get("date") || "";
-  const venue = searchParams.get("venue") || "";
+  const venue = (searchParams.get("venue") || "").slice(0, 50);
   const price = searchParams.get("price") || "";
 
   return new ImageResponse(

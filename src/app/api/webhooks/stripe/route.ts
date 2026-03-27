@@ -25,6 +25,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (!STRIPE_WEBHOOK_SECRET) {
+    console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not configured");
+    return NextResponse.json(
+      { error: "Webhook secret is not configured" },
+      { status: 500 }
+    );
+  }
+
   let event: Stripe.Event;
 
   try {
@@ -92,11 +100,12 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const supabase = createAdminClient();
 
   // IDEMPOTENCY CHECK: Prevent duplicate ticket creation on webhook retry
+  // Check both payment intent ID and checkout session ID stored in metadata
   const { count: existingCount } = await supabase
     .from("tickets")
     .select("*", { count: "exact", head: true })
     .eq("event_id", eventId)
-    .eq("stripe_payment_intent_id", paymentIntentId);
+    .or(`stripe_payment_intent_id.eq.${paymentIntentId},metadata->>checkout_session_id.eq.${session.id}`);
 
   if (existingCount && existingCount > 0) {
     console.log(`[stripe-webhook] Tickets already exist for session ${session.id}, skipping`);

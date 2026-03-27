@@ -17,8 +17,8 @@ export async function getEventContext(eventId: string): Promise<string> {
     sb.from("events").select("title, description, status, starts_at, ends_at, doors_at, flyer_url, collective_id, venues(name, city, capacity)").eq("id", eventId).maybeSingle(),
     sb.from("ticket_tiers").select("id, name, price, capacity").eq("event_id", eventId),
     sb.from("tickets").select("ticket_tier_id, status, price_paid, created_at").eq("event_id", eventId),
-    sb.from("event_artists").select("artists(name), fee, set_time, booking_status").eq("event_id", eventId),
-    sb.from("event_tasks").select("title, completed").eq("event_id", eventId),
+    sb.from("event_artists").select("artists(name), fee, set_time, status").eq("event_id", eventId),
+    sb.from("event_tasks").select("title, status").eq("event_id", eventId),
   ]);
 
   const event = eventRes.data;
@@ -59,10 +59,10 @@ export async function getEventContext(eventId: string): Promise<string> {
     artists.length > 0 ? "LINEUP:" : "",
     ...artists.map((a) => {
       const artist = a.artists as unknown as { name: string } | null;
-      return `  ${artist?.name || "TBA"} — $${Number(a.fee || 0).toFixed(0)} (${a.booking_status})`;
+      return `  ${artist?.name || "TBA"} — $${Number(a.fee || 0).toFixed(0)} (${a.status})`;
     }),
     "",
-    tasks.length > 0 ? `TASKS: ${tasks.filter((t) => !t.completed).length} open, ${tasks.filter((t) => t.completed).length} done` : "",
+    tasks.length > 0 ? `TASKS: ${tasks.filter((t) => t.status !== "done").length} open, ${tasks.filter((t) => t.status === "done").length} done` : "",
   ];
 
   return lines.filter(Boolean).join("\n");
@@ -116,7 +116,7 @@ export async function getDashboardBriefingData(collectiveId: string) {
   const [eventsRes, ticketsRes, tasksRes, settlementsRes] = await Promise.all([
     sb.from("events").select("id, title, status, starts_at").eq("collective_id", collectiveId).in("status", ["draft", "published"]).order("starts_at", { ascending: true }).limit(5),
     sb.from("tickets").select("event_id, status, created_at, price_paid").eq("status", "paid").gte("created_at", yesterday.toISOString()),
-    sb.from("event_tasks").select("title, completed, event_id").eq("completed", false).limit(10),
+    sb.from("event_tasks").select("title, status, event_id").neq("status", "done").limit(10),
     sb.from("settlements").select("id, status, gross_revenue, net_revenue, event_id, events(title)").eq("collective_id", collectiveId).in("status", ["draft", "pending_approval"]),
   ]);
 

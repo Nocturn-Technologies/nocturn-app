@@ -18,16 +18,50 @@ function SuccessContent() {
   const freeCount = searchParams.get("tickets");
   const [tickets, setTickets] = useState<TicketStub[]>([]);
   const [loading, setLoading] = useState(false);
+  const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
     if (!sessionId) return;
     setLoading(true);
+
+    const timeout = setTimeout(() => {
+      setTimedOut(true);
+      setLoading(false);
+    }, 10000);
+
     getTicketsBySessionId(sessionId)
       .then(({ tickets: found }) => {
+        clearTimeout(timeout);
         if (found) setTickets(found);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        clearTimeout(timeout);
+        setLoading(false);
+      });
+
+    return () => clearTimeout(timeout);
   }, [sessionId]);
+
+  if (!sessionId && !isFree) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="max-w-md w-full text-center space-y-6">
+          <h1 className="text-2xl font-bold tracking-tight font-heading text-foreground">
+            No order found.
+          </h1>
+          <p className="text-muted-foreground">
+            It looks like you arrived here without a valid session. If you purchased tickets, check your email for confirmation.
+          </p>
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center rounded-lg bg-nocturn hover:bg-nocturn-light text-white font-medium px-6 py-3 transition-colors"
+          >
+            Back to Nocturn
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
@@ -66,6 +100,12 @@ function SuccessContent() {
           <div className="rounded-xl border border-border bg-card p-4">
             <p className="text-sm text-muted-foreground animate-pulse">
               Loading your tickets...
+            </p>
+          </div>
+        ) : timedOut && tickets.length === 0 ? (
+          <div className="rounded-xl border border-border bg-card p-4">
+            <p className="text-sm text-muted-foreground">
+              Your tickets are being processed. Check your email for confirmation, or refresh this page in a moment.
             </p>
           </div>
         ) : tickets.length > 0 ? (

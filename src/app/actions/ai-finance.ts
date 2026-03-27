@@ -548,9 +548,9 @@ Give specific, actionable advice. Reference the actual numbers.`;
           });
         }
       }
-    } catch {
-      // JSON parse failed — keep rule-based insights only
-      console.error("Failed to parse AI recap response");
+    } catch (parseErr) {
+      console.error("[ai-finance] Failed to parse AI recap response:", parseErr);
+      console.error("[ai-finance] Raw AI response:", aiRecapRaw);
     }
   }
 
