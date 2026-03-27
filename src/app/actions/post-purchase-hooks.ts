@@ -95,6 +95,8 @@ export async function runPostPurchaseHooks(input: {
       if (prevPercent >= m.threshold) continue; // Already past this milestone before
 
       // Send milestone email to organizer
+      if (!event) return; // event may have been deleted between hooks
+
       const { data: admins } = await sb
         .from("collective_members")
         .select("users(email)")

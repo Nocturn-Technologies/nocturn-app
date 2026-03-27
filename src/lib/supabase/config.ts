@@ -15,7 +15,7 @@ export const SUPABASE_SERVICE_ROLE_KEY = (() => {
   if (!key) {
     // In development, warn loudly. In production, this would crash (which is correct behavior).
     console.error(
-      "⚠️ SUPABASE_SERVICE_ROLE_KEY is not set. Server actions requiring admin access will fail."
+      "[CRITICAL] SUPABASE_SERVICE_ROLE_KEY is missing. All admin/server-side database operations will fail. Set this environment variable in .env.local (dev) or Vercel project settings (prod)."
     );
     return "";
   }

@@ -64,44 +64,51 @@ export default function MembersPage() {
   const [collectiveId, setCollectiveId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      setCurrentUserId(user.id);
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+        setCurrentUserId(user.id);
 
-      // Get first collective
-      const { data: memberships } = await supabase
-        .from("collective_members")
-        .select("collective_id")
-        .eq("user_id", user.id)
-        .limit(1);
+        // Get first collective
+        const { data: memberships } = await supabase
+          .from("collective_members")
+          .select("collective_id")
+          .eq("user_id", user.id)
+          .limit(1);
 
-      if (!memberships || memberships.length === 0) return;
-      const cId = memberships[0].collective_id;
-      setCollectiveId(cId);
+        if (!memberships || memberships.length === 0) return;
+        const cId = memberships[0].collective_id;
+        setCollectiveId(cId);
 
-      // Get all members with user info
-      const { data: memberData } = await supabase
-        .from("collective_members")
-        .select("id, user_id, role, joined_at, users(full_name, email, avatar_url)")
-        .eq("collective_id", cId)
-        .order("joined_at");
+        // Get all members with user info
+        const { data: memberData } = await supabase
+          .from("collective_members")
+          .select("id, user_id, role, joined_at, users(full_name, email, avatar_url)")
+          .eq("collective_id", cId)
+          .order("joined_at");
 
-      if (memberData) {
-        setMembers(
-          memberData.map((m) => ({
-            id: m.id,
-            user_id: m.user_id,
-            role: m.role as Role,
-            joined_at: m.joined_at,
-            user: m.users as unknown as Member["user"],
-          }))
-        );
+        if (memberData) {
+          setMembers(
+            memberData.map((m) => ({
+              id: m.id,
+              user_id: m.user_id,
+              role: m.role as Role,
+              joined_at: m.joined_at,
+              user: m.users as unknown as Member["user"],
+            }))
+          );
+        }
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : "Failed to load members");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     load();
   }, [supabase]);
@@ -227,6 +234,20 @@ export default function MembersPage() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 text-center">
+        <p className="text-sm text-destructive">{loadError}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-3 text-sm text-nocturn hover:underline"
+        >
+          Try again
+        </button>
       </div>
     );
   }

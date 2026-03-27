@@ -79,7 +79,8 @@ export async function GET(request: Request) {
 
       const emails = new Set<string>();
       for (const t of tickets ?? []) {
-        const email = (t.metadata as Record<string, unknown>)?.email as string;
+        const meta = t.metadata as Record<string, unknown> | null;
+        const email = (meta?.email || meta?.customer_email || meta?.buyer_email) as string;
         if (email) emails.add(email);
       }
 

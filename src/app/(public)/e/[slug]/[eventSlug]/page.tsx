@@ -185,7 +185,9 @@ export default async function PublicEventPage({ params }: Props) {
   const accentColor = metadata.themeColor || "#7B2FF7";
 
   // Formatted date pieces — force ET timezone for consistent rendering on Vercel (UTC server)
-  const tz = "America/Toronto";
+  // TODO: derive EVENT_TIMEZONE from venue/event data instead of hardcoding
+  const EVENT_TIMEZONE = "America/Toronto";
+  const tz = EVENT_TIMEZONE;
   const dayName = eventDate.toLocaleDateString("en", { weekday: "short", timeZone: tz }).toUpperCase();
   const monthName = eventDate.toLocaleDateString("en", { month: "short", timeZone: tz }).toUpperCase();
   const dayNum = parseInt(eventDate.toLocaleDateString("en", { day: "numeric", timeZone: tz }));
@@ -383,15 +385,6 @@ export default async function PublicEventPage({ params }: Props) {
       {/* ═══ SCENE 2: THE STORY — below the fold ═══ */}
       <div className="mx-auto max-w-[640px] px-6">
 
-        {/* Description — raw, no container */}
-        {event.description && (
-          <div className="py-16 border-b border-white/[0.04]">
-            <p className="text-[17px] leading-[1.8] text-white/40">
-              {event.description}
-            </p>
-          </div>
-        )}
-
         {/* Countdown — only if upcoming */}
         {isUpcoming && (
           <div className="py-8 border-b border-white/[0.04]">
@@ -405,7 +398,7 @@ export default async function PublicEventPage({ params }: Props) {
             <div className="rounded-[20px] overflow-hidden border border-white/[0.06] bg-white/[0.015]">
               <div className="relative h-40 w-full">
                 <iframe
-                  src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}&zoom=15&maptype=roadmap`}
+                  src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}&zoom=15&maptype=roadmap`}
                   className="h-full w-full border-0 opacity-50 grayscale contrast-[1.2] saturate-0"
                   allowFullScreen={false}
                   loading="lazy"
@@ -449,7 +442,7 @@ export default async function PublicEventPage({ params }: Props) {
                 <p className="text-[16px] text-white/50 leading-[1.7] italic">&ldquo;{hostMessage}&rdquo;</p>
                 <div className="flex items-center gap-2 mt-3">
                   {collective.logo_url ? (
-                    <Image src={collective.logo_url} alt="" width={20} height={20} className="h-5 w-5 rounded-full" />
+                    <Image src={collective.logo_url} alt={collective.name || "Collective logo"} width={20} height={20} className="h-5 w-5 rounded-full" />
                   ) : (
                     <div className="h-5 w-5 rounded-full text-[8px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: accentColor }}>
                       {collective.name.charAt(0)}
@@ -474,7 +467,8 @@ export default async function PublicEventPage({ params }: Props) {
             <div className="relative">
               <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
                 {artists.map((a: { artist_id: string; set_time: string | null; artists: unknown }) => {
-                  const artist = a.artists as unknown as { name: string; genre: string | null };
+                  const artist = a.artists as unknown as { name: string; genre: string | null } | null;
+                  if (!artist) return null;
                   return (
                     <div
                       key={a.artist_id}

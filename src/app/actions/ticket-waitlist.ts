@@ -99,8 +99,10 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string) {
 
   if (!event) return { notified: false };
 
-  const collective = event.collectives as unknown as { slug: string };
-  const eventUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${collective?.slug}/${event.slug}`;
+  const collective = event.collectives as unknown as { slug: string } | null;
+  const eventUrl = collective?.slug
+    ? `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${collective.slug}/${event.slug}`
+    : `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/dashboard/events/${eventId}`;
 
   // Send notification email
   await sendEmail({

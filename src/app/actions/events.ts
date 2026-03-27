@@ -142,8 +142,12 @@ export async function createEvent(input: CreateEventInput) {
       hour: "2-digit", minute: "2-digit", second: "2-digit",
       hour12: false, timeZoneName: "longOffset",
     });
-    // Fallback: append -04:00 for ET (most Nocturn users are Toronto-based)
-    return `${date}T${time}:00-04:00`;
+    // Use the formatter to get the correct offset for the given timezone
+    const parts = formatter.formatToParts(dt);
+    const offsetPart = parts.find(p => p.type === "timeZoneName")?.value ?? "+00:00";
+    // longOffset gives e.g. "GMT-04:00" — strip the "GMT" prefix
+    const offset = offsetPart.replace("GMT", "") || "+00:00";
+    return `${date}T${time}:00${offset}`;
   }
 
   const startsAt = toTimestamp(input.date, input.startTime);

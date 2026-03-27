@@ -283,6 +283,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
           {/* More button */}
           <button
             onClick={() => { haptic('light'); setMoreOpen(true); }}
+            aria-label="Open menu"
             className={`flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[48px] transition-all ${
               moreOpen
                 ? "text-nocturn"

@@ -41,7 +41,7 @@ export async function getEventContext(eventId: string): Promise<string> {
 
   const lines: string[] = [
     `Event: ${event.title} (${event.status})`,
-    venue ? `Venue: ${venue.name}, ${venue.city} (capacity: ${venue.capacity})` : "",
+    venue ? `Venue: ${venue?.name ?? "Unknown"}, ${venue?.city ?? "Unknown"} (capacity: ${venue?.capacity ?? 0})` : "",
     event.starts_at ? `Date: ${new Date(event.starts_at).toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}` : "",
     event.starts_at ? `Time: ${new Date(event.starts_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}` : "",
     daysUntil !== null ? `Days until event: ${daysUntil}` : "",
@@ -59,7 +59,8 @@ export async function getEventContext(eventId: string): Promise<string> {
     artists.length > 0 ? "LINEUP:" : "",
     ...artists.map((a) => {
       const artist = a.artists as unknown as { name: string } | null;
-      return `  ${artist?.name || "TBA"} — $${Number(a.fee || 0).toFixed(0)} (${a.status})`;
+      if (!artist) return `  TBA — $${Number(a.fee || 0).toFixed(0)} (${a.status})`;
+      return `  ${artist.name || "TBA"} — $${Number(a.fee || 0).toFixed(0)} (${a.status})`;
     }),
     "",
     tasks.length > 0 ? `TASKS: ${tasks.filter((t) => t.status !== "done").length} open, ${tasks.filter((t) => t.status === "done").length} done` : "",
@@ -141,7 +142,7 @@ export async function getDashboardBriefingData(collectiveId: string) {
     revenueToday,
     openTasks: openTasks.length,
     pendingSettlements: pendingSettlements.map((s) => ({
-      eventTitle: (s.events as unknown as { title: string })?.title || "Event",
+      eventTitle: (s.events as unknown as { title: string } | null)?.title || "Event",
       grossRevenue: Number(s.gross_revenue || 0),
       netRevenue: Number(s.net_revenue || 0),
       status: s.status,

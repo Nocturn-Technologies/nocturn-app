@@ -107,7 +107,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
           tierName={tier?.name ?? "General Admission"}
           pricePaid={Number(ticket.price_paid)}
           attendeeName={null}
-          attendeeEmail={(ticket.metadata as Record<string, unknown>)?.email as string ?? "Guest"}
+          attendeeEmail={String((ticket.metadata as Record<string, unknown>)?.email || "") || "Guest"}
           purchaseDate={purchaseDate}
           status={ticket.status}
           isCheckedIn={isCheckedIn}

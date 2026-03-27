@@ -115,7 +115,7 @@ export default function SignupPage() {
     );
   }
 
-  const selectedType = USER_TYPES.find((t) => t.type === userType)!;
+  const selectedType = USER_TYPES.find((t) => t.type === userType) ?? USER_TYPES[0];
 
   return (
     <Card>

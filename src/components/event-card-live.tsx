@@ -111,7 +111,7 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
                   <div className="space-y-1">
                     {card.lineup.map((a, i) => (
                       <div
-                        key={i}
+                        key={`${a.name}-${a.role ?? i}`}
                         className="flex items-center gap-2 text-xs"
                       >
                         <span className="text-foreground">{a.name}</span>
@@ -151,7 +151,7 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
                   <div className="space-y-1">
                     {card.ticket_pricing.map((t, i) => (
                       <div
-                        key={i}
+                        key={`${t.tier ?? "general"}-${i}`}
                         className="flex items-center justify-between text-xs"
                       >
                         <span className="text-foreground">
@@ -170,9 +170,10 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
               {card?.action_items && card.action_items.length > 0 && (
                 <CardSection icon={CheckSquare} title="Action Items">
                   <div className="space-y-1.5">
+                    {/* task text isn't guaranteed unique; index fallback is acceptable */}
                     {card.action_items.map((item, i) => (
                       <div
-                        key={i}
+                        key={`${item.task}-${i}`}
                         className="flex items-start gap-2 text-xs"
                       >
                         <div
