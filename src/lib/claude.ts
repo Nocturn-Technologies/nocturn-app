@@ -4,6 +4,7 @@ let _client: Anthropic | null = null;
 
 function getClient(): Anthropic | null {
   const key = process.env.ANTHROPIC_API_KEY;
+  console.log("[claude] API key check:", key ? `set (${key.substring(0, 10)}...)` : "NOT SET");
   if (!key || key === "your_anthropic_api_key") {
     console.warn("[claude] ANTHROPIC_API_KEY not set or placeholder");
     return null;

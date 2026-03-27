@@ -185,7 +185,9 @@ export async function askNocturn(
       prompt = question;
     }
 
+    console.log("[ask-nocturn] Calling Claude API...");
     const response = await generateWithClaude(prompt, fullSystem);
+    console.log("[ask-nocturn] Response received:", response ? "OK" : "NULL");
     return response || fallbackResponse(question);
   } catch (error) {
     console.error("[ask-nocturn] Error:", error);
