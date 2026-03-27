@@ -1,13 +1,15 @@
 import Anthropic from "@anthropic-ai/sdk";
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-
 let _client: Anthropic | null = null;
 
 function getClient(): Anthropic | null {
-  if (!ANTHROPIC_API_KEY || ANTHROPIC_API_KEY === "your_anthropic_api_key") return null;
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key || key === "your_anthropic_api_key") {
+    console.warn("[claude] ANTHROPIC_API_KEY not set or placeholder");
+    return null;
+  }
   if (!_client) {
-    _client = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
+    _client = new Anthropic({ apiKey: key });
   }
   return _client;
 }
@@ -15,7 +17,6 @@ function getClient(): Anthropic | null {
 export async function generateWithClaude(prompt: string, systemPrompt?: string): Promise<string | null> {
   const client = getClient();
   if (!client) {
-    console.warn("[claude] No valid API key configured");
     return null;
   }
 
@@ -27,8 +28,23 @@ export async function generateWithClaude(prompt: string, systemPrompt?: string):
       messages: [{ role: "user", content: prompt }],
     });
     return response.content[0].type === 'text' ? response.content[0].text : null;
-  } catch (error) {
-    console.error("[claude] API error:", error);
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error("[claude] API error:", msg);
+    // If it's a model not found error, try haiku as fallback
+    if (msg.includes("model") || msg.includes("not_found")) {
+      try {
+        const response = await client!.messages.create({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1024,
+          system: systemPrompt || "You are Nocturn AI, an assistant for nightlife promoters. Be concise, confident, and practical.",
+          messages: [{ role: "user", content: prompt }],
+        });
+        return response.content[0].type === 'text' ? response.content[0].text : null;
+      } catch (fallbackError) {
+        console.error("[claude] Fallback also failed:", fallbackError);
+      }
+    }
     return null;
   }
 }
