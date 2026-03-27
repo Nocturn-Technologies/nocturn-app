@@ -41,12 +41,23 @@ export async function generateSettlement(eventId: string) {
 
   if (existing) return { error: "Settlement already exists", settlementId: existing.id };
 
-  // Calculate revenue from paid and checked-in tickets
-  const { data: tickets } = await admin
-    .from("tickets")
-    .select("price_paid")
-    .eq("event_id", eventId)
-    .in("status", ["paid", "checked_in"]);
+  // Fetch tickets, artist bookings, and expenses in parallel
+  const [{ data: tickets }, { data: bookings }, { data: expenses }] = await Promise.all([
+    admin
+      .from("tickets")
+      .select("price_paid")
+      .eq("event_id", eventId)
+      .in("status", ["paid", "checked_in"]),
+    admin
+      .from("event_artists")
+      .select("artist_id, fee, artists(name)")
+      .eq("event_id", eventId)
+      .eq("status", "confirmed"),
+    admin
+      .from("event_expenses")
+      .select("id, description, amount, category")
+      .eq("event_id", eventId),
+  ]);
 
   const grossRevenue = (tickets ?? []).reduce(
     (sum, t) => sum + (Number(t.price_paid) || 0),
@@ -63,23 +74,10 @@ export async function generateSettlement(eventId: string) {
   const platformFee = 0; // Collective keeps 100% of ticket price
   const nocturnRevenue = Math.round((grossRevenue * (PLATFORM_FEE_PERCENT / 100) + ticketCount * 0.50) * 100) / 100;
 
-  // Get artist fees
-  const { data: bookings } = await admin
-    .from("event_artists")
-    .select("artist_id, fee, artists(name)")
-    .eq("event_id", eventId)
-    .eq("status", "confirmed");
-
   const totalArtistFees = (bookings ?? []).reduce(
     (sum, b) => sum + (Number(b.fee) || 0),
     0
   );
-
-  // Get expenses
-  const { data: expenses } = await admin
-    .from("event_expenses")
-    .select("id, description, amount, category")
-    .eq("event_id", eventId);
 
   const totalExpenses = (expenses ?? []).reduce(
     (sum, e) => sum + (Number(e.amount) || 0),

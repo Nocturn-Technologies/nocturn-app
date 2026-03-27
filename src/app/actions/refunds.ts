@@ -33,6 +33,11 @@ export async function refundTicket(ticketId: string) {
 
   if (!ticket) return { error: "Ticket not found" };
 
+  // Idempotency check — prevent double refunds
+  if (ticket.status === "refunded") {
+    return { error: "This ticket has already been refunded." };
+  }
+
   // Check if refunds are enabled for this event
   const event = ticket.events as unknown as { collective_id: string; metadata: Record<string, unknown> | null };
   const eventMeta = event.metadata || {};

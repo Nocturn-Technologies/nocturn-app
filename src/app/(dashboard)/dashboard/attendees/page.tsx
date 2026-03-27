@@ -21,9 +21,15 @@ export default function AttendeesPage() {
     totalRevenue: 0,
   });
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   useEffect(() => {
     getAttendees().then((result) => {
@@ -41,7 +47,7 @@ export default function AttendeesPage() {
   }, []);
 
   const filtered = attendees.filter((a) =>
-    a.email.toLowerCase().includes(search.toLowerCase())
+    a.email.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
 
   async function handleExport() {

@@ -11,8 +11,13 @@ function createAdminClient() {
   );
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10)));
+    const offset = (page - 1) * limit;
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -31,16 +36,17 @@ export async function GET() {
     const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
 
     if (collectiveIds.length === 0) {
-      return NextResponse.json({ events: [] });
+      return NextResponse.json({ events: [], page, limit, total: 0 });
     }
 
-    const { data: events } = await admin
+    const { data: events, count } = await admin
       .from("events")
-      .select("id, title, status, starts_at")
+      .select("id, title, status, starts_at", { count: "exact" })
       .in("collective_id", collectiveIds)
-      .order("starts_at", { ascending: false });
+      .order("starts_at", { ascending: false })
+      .range(offset, offset + limit - 1);
 
-    return NextResponse.json({ events: events ?? [] });
+    return NextResponse.json({ events: events ?? [], page, limit, total: count ?? 0 });
   } catch (error) {
     console.error("[api/events/list] Error:", error);
     return NextResponse.json({ events: [], error: "Internal error" }, { status: 500 });

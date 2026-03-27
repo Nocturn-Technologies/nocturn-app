@@ -152,8 +152,8 @@ export function TicketSection({
                           <Check className="h-3.5 w-3.5 text-white" />
                         </div>
                       )}
-                      <div className="space-y-0.5">
-                        <p className={`font-heading text-base font-semibold ${isSoldOut || isLocked ? "text-white/50" : "text-white"}`}>
+                      <div className="space-y-0.5 min-w-0">
+                        <p className={`font-heading text-base font-semibold truncate ${isSoldOut || isLocked ? "text-white/50" : "text-white"}`}>
                           {tier.name}
                         </p>
                         <p className="text-sm text-white/40">

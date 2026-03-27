@@ -101,11 +101,12 @@ export default async function DashboardPage() {
         .eq("status", "draft")
         .limit(1),
 
-      // All events (for attendee count)
+      // Attendee count (direct query instead of fetching event IDs first)
       admin
-        .from("events")
-        .select("id")
-        .in("collective_id", collectiveIds),
+        .from("tickets")
+        .select("id, events!inner(collective_id)", { count: "exact", head: true })
+        .in("events.collective_id", collectiveIds)
+        .in("status", ["paid", "checked_in"]),
 
       // Financial pulse
       getFinancialPulse(),
@@ -131,16 +132,8 @@ export default async function DashboardPage() {
     financialPulse = pulseResult;
     actionItems = actionItemsResult;
 
-    // Attendee count (depends on events result)
-    const eventIds = allEventsResult.data?.map((e) => e.id) ?? [];
-    if (eventIds.length > 0) {
-      const { count } = await admin
-        .from("tickets")
-        .select("*", { count: "exact", head: true })
-        .in("event_id", eventIds)
-        .in("status", ["paid", "checked_in"]);
-      totalAttendees = count ?? 0;
-    }
+    // Attendee count (already fetched in parallel above)
+    totalAttendees = allEventsResult.count ?? 0;
   }
 
   // ── AI Briefing loads AFTER the page renders (streamed in) ──

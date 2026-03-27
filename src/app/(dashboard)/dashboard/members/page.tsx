@@ -291,7 +291,7 @@ export default function MembersPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleInvite} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <form onSubmit={handleInvite} className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:gap-3 sm:items-end">
               <div className="flex-1 space-y-2">
                 <Label htmlFor="inviteEmail">Email</Label>
                 <Input

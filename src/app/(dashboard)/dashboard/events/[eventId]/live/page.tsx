@@ -122,17 +122,20 @@ export default function LiveEventPage() {
     }
     setEvent(eventData);
 
-    // Parallel: fetch tiers + checked-in tickets at the same time
-    const [{ data: tierData }, { data: tickets, count }] = await Promise.all([
+    // Parallel: fetch tiers, revenue (all checked-in tickets), and recent check-ins
+    const [{ data: tierData }, { data: allTickets, count }, { data: recentTickets }] = await Promise.all([
       supabase
         .from("ticket_tiers")
         .select("id, name, price, capacity")
         .eq("event_id", eventId),
       supabase
         .from("tickets")
-        .select("id, checked_in_at, attendee_name, ticket_tiers(name, price)", {
-          count: "exact",
-        })
+        .select("price_paid", { count: "exact" })
+        .eq("event_id", eventId)
+        .not("checked_in_at", "is", null),
+      supabase
+        .from("tickets")
+        .select("id, checked_in_at, attendee_name, ticket_tiers(name)")
         .eq("event_id", eventId)
         .not("checked_in_at", "is", null)
         .order("checked_in_at", { ascending: false })
@@ -145,22 +148,15 @@ export default function LiveEventPage() {
 
     setCheckedInCount(count ?? 0);
 
-    // Calc revenue from checked-in tickets
-    if (tickets) {
-      const rev = tickets.reduce((sum, t) => {
-        const tier = t.ticket_tiers as unknown as { name: string; price: number } | null;
-        return sum + (tier?.price ?? 0);
-      }, 0);
-      // If we only fetched 10 but count is higher, estimate proportionally
-      if (count && count > 10 && tickets.length > 0) {
-        const avgPrice = rev / tickets.length;
-        setRevenue(Math.round(avgPrice * count));
-      } else {
-        setRevenue(rev);
-      }
+    // Sum actual revenue from all checked-in tickets
+    if (allTickets) {
+      const rev = allTickets.reduce((sum, t) => sum + (Number(t.price_paid) || 0), 0);
+      setRevenue(rev);
+    }
 
+    if (recentTickets) {
       setRecentCheckIns(
-        tickets.map((t) => ({
+        recentTickets.map((t) => ({
           id: t.id,
           attendee_name: t.attendee_name ?? "Guest",
           tier_name: (t.ticket_tiers as unknown as { name: string } | null)?.name ?? "GA",

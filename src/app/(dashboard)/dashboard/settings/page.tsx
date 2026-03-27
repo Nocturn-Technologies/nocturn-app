@@ -19,6 +19,7 @@ export default function SettingsPage() {
   const router = useRouter();
   const supabase = createClient();
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,49 +40,53 @@ export default function SettingsPage() {
 
   useEffect(() => {
     async function load() {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
 
-      // Load user profile
-      const { data: profile } = await supabase
-        .from("users")
-        .select("full_name, phone")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (profile) {
-        setFullName(profile.full_name ?? "");
-        setPhone(profile.phone ?? "");
+        // Load user profile
+        const { data: profile } = await supabase
+          .from("users")
+          .select("full_name, phone")
+          .eq("id", user.id)
+          .maybeSingle();
+        if (profile) {
+          setFullName(profile.full_name ?? "");
+          setPhone(profile.phone ?? "");
+        }
+
+        // Load first collective
+        const { data: memberships } = await supabase
+          .from("collective_members")
+          .select("collective_id, collectives(*)")
+          .eq("user_id", user.id)
+          .limit(1);
+
+        if (memberships && memberships.length > 0) {
+          const c = memberships[0].collectives as unknown as {
+            id: string;
+            name: string;
+            slug: string;
+            description: string | null;
+            instagram: string | null;
+            website: string | null;
+            metadata: { city?: string } | null;
+          };
+          setCollectiveId(c.id);
+          setName(c.name);
+          setSlug(c.slug);
+          setBio(c.description ?? "");
+          setCity(c.metadata?.city ?? "");
+          setInstagram(c.instagram ?? "");
+          setWebsite(c.website ?? "");
+        }
+      } catch (err) {
+        setLoadError(err instanceof Error ? err.message : "Failed to load settings");
+      } finally {
+        setLoading(false);
       }
-
-      // Load first collective
-      const { data: memberships } = await supabase
-        .from("collective_members")
-        .select("collective_id, collectives(*)")
-        .eq("user_id", user.id)
-        .limit(1);
-
-      if (memberships && memberships.length > 0) {
-        const c = memberships[0].collectives as unknown as {
-          id: string;
-          name: string;
-          slug: string;
-          description: string | null;
-          instagram: string | null;
-          website: string | null;
-          metadata: { city?: string } | null;
-        };
-        setCollectiveId(c.id);
-        setName(c.name);
-        setSlug(c.slug);
-        setBio(c.description ?? "");
-        setCity(c.metadata?.city ?? "");
-        setInstagram(c.instagram ?? "");
-        setWebsite(c.website ?? "");
-
-      }
-      setLoading(false);
     }
     load();
   }, [supabase]);
@@ -146,6 +151,17 @@ export default function SettingsPage() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3">
+        <p className="text-sm text-destructive">{loadError}</p>
+        <Button variant="outline" onClick={() => window.location.reload()}>
+          Try again
+        </Button>
       </div>
     );
   }

@@ -34,6 +34,7 @@ export default function ArtistsPage() {
   const supabase = createClient();
   const [artists, setArtists] = useState<Artist[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -55,13 +56,20 @@ export default function ArtistsPage() {
   }, []);
 
   async function loadArtists() {
-    const { data } = await supabase
-      .from("artists")
-      .select("id, name, slug, bio, genre, instagram, soundcloud, spotify, booking_email, default_fee, metadata")
-      .is("deleted_at", null)
-      .order("name");
-    setArtists((data ?? []) as Artist[]);
-    setLoading(false);
+    try {
+      const { data, error: fetchError } = await supabase
+        .from("artists")
+        .select("id, name, slug, bio, genre, instagram, soundcloud, spotify, booking_email, default_fee, metadata")
+        .is("deleted_at", null)
+        .order("name");
+      if (fetchError) throw fetchError;
+      setArtists((data ?? []) as Artist[]);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load artists");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -117,6 +125,17 @@ export default function ArtistsPage() {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3">
+        <p className="text-sm text-destructive">{loadError}</p>
+        <Button variant="outline" onClick={() => { setLoading(true); setLoadError(null); loadArtists(); }}>
+          Try again
+        </Button>
       </div>
     );
   }

@@ -142,20 +142,17 @@ export async function POST(request: NextRequest) {
 
       if (promo) {
         const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
+        const isMaxedOut = promo.max_uses !== null && (promo.current_uses ?? 0) + quantity > promo.max_uses;
 
-        if (!isExpired) {
-          const { data: updated } = await supabase.rpc("claim_promo_code", {
-            p_code_id: promo.id,
-            p_quantity: quantity,
-          });
-
-          if (updated && updated.length > 0) {
-            promoId = promo.id;
-            if (promo.discount_type === "percentage") {
-              discountPercent = Number(promo.discount_value) / 100;
-            } else {
-              discountFixed = Number(promo.discount_value) * 100; // convert to cents
-            }
+        if (!isExpired && !isMaxedOut) {
+          // Don't claim yet — just calculate the discount.
+          // Claiming happens AFTER the Stripe session is created successfully
+          // to prevent double-claims on checkout retries.
+          promoId = promo.id;
+          if (promo.discount_type === "percentage") {
+            discountPercent = Number(promo.discount_value) / 100;
+          } else {
+            discountFixed = Number(promo.discount_value) * 100; // convert to cents
           }
         }
       }
@@ -330,6 +327,19 @@ export async function POST(request: NextRequest) {
         { error: "Payment service temporarily unavailable." },
         { status: 500 }
       );
+    }
+
+    // Claim promo code AFTER Stripe session is created successfully
+    // This prevents double-claims when checkout requests are retried
+    if (promoId) {
+      try {
+        await supabase.rpc("claim_promo_code", {
+          p_code_id: promoId,
+          p_quantity: quantity,
+        });
+      } catch (claimErr) {
+        console.error("[checkout] Promo claim failed (non-blocking):", claimErr);
+      }
     }
 
     return NextResponse.json({ url: session.url });

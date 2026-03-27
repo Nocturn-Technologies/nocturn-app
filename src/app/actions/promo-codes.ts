@@ -65,6 +65,17 @@ export async function createPromoCode(input: {
   const access = await verifyEventAccess(input.eventId);
   if (access.error) return { error: access.error };
 
+  // Validate discount value bounds
+  if (input.discountType === "percentage") {
+    if (input.discountValue < 1 || input.discountValue > 100) {
+      return { error: "Percentage discount must be between 1 and 100" };
+    }
+  } else if (input.discountType === "fixed") {
+    if (input.discountValue <= 0) {
+      return { error: "Fixed discount must be greater than 0" };
+    }
+  }
+
   const supabase = createAdminClient();
 
   // Check for duplicate code on this event
