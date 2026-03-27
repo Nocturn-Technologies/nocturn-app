@@ -242,7 +242,7 @@ export function TicketSection({
               <button
                 onClick={() => { haptic('light'); setQuantity(Math.max(1, quantity - 1)); }}
                 disabled={quantity <= 1}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
               >
                 <Minus className="h-4 w-4" />
               </button>
@@ -252,7 +252,7 @@ export function TicketSection({
               <button
                 onClick={() => { haptic('light'); setQuantity(Math.min(10, quantity + 1)); }}
                 disabled={quantity >= 10}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
               >
                 <Plus className="h-4 w-4" />
               </button>

@@ -135,7 +135,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
           </div>
 
           {/* Messages */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+          <div ref={scrollRef} className="flex-1 overflow-y-auto scroll-smooth px-4 py-3 space-y-3">
             {messages.length === 0 && !loading && (
               <div className="flex flex-col items-center justify-center h-full text-center px-4">
                 <div className="h-12 w-12 rounded-full bg-nocturn/10 flex items-center justify-center mb-3">

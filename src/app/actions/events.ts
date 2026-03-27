@@ -5,6 +5,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { generateAutoSettlement } from "./auto-settlement";
+import { getStripe } from "@/lib/stripe";
 
 function slugify(text: string): string {
   return text
@@ -504,6 +505,107 @@ export async function cancelEvent(eventId: string) {
     .eq("id", eventId);
 
   if (error) return { error: `Failed to cancel: ${error.message}` };
+
+  // --- Refund all paid tickets ---
+  const { data: paidTickets } = await admin
+    .from("tickets")
+    .select("id, price_paid, stripe_payment_intent_id, metadata")
+    .eq("event_id", eventId)
+    .eq("status", "paid");
+
+  const refundResults: { ticketId: string; success: boolean; error?: string }[] = [];
+
+  if (paidTickets && paidTickets.length > 0) {
+    const stripe = getStripe();
+
+    const results = await Promise.allSettled(
+      paidTickets.map(async (ticket) => {
+        const pricePaid = Number(ticket.price_paid) || 0;
+
+        // Issue Stripe refund if there was a real payment
+        if (ticket.stripe_payment_intent_id && pricePaid > 0) {
+          try {
+            await stripe.refunds.create({
+              payment_intent: ticket.stripe_payment_intent_id,
+              amount: Math.round(pricePaid * 100),
+              reason: "requested_by_customer",
+            });
+          } catch (stripeErr) {
+            const msg = stripeErr instanceof Error ? stripeErr.message : "Stripe refund failed";
+            console.error(`[cancelEvent] Stripe refund failed for ticket ${ticket.id}:`, msg);
+            throw new Error(msg);
+          }
+        }
+
+        // Update ticket to refunded
+        const { error: updateErr } = await admin
+          .from("tickets")
+          .update({
+            status: "refunded",
+            metadata: {
+              ...(ticket.metadata as Record<string, unknown>),
+              refunded_at: new Date().toISOString(),
+              refunded_by: user!.id,
+              refund_reason: "event_cancelled",
+              refund_amount: pricePaid,
+            },
+          })
+          .eq("id", ticket.id);
+
+        if (updateErr) throw new Error(updateErr.message);
+        return ticket.id;
+      })
+    );
+
+    results.forEach((result, i) => {
+      if (result.status === "fulfilled") {
+        refundResults.push({ ticketId: paidTickets[i].id, success: true });
+      } else {
+        refundResults.push({ ticketId: paidTickets[i].id, success: false, error: result.reason?.message });
+      }
+    });
+  }
+
+  // --- Cancel pending tickets ---
+  await admin
+    .from("tickets")
+    .update({ status: "cancelled" })
+    .eq("event_id", eventId)
+    .eq("status", "pending");
+
+  // --- Cancel waitlist entries ---
+  await admin
+    .from("waitlist_entries")
+    .update({ status: "cancelled" })
+    .eq("event_id", eventId)
+    .neq("status", "cancelled");
+
+  // --- Log the cancellation in event_activity ---
+  await admin
+    .from("event_activity")
+    .insert({
+      event_id: eventId,
+      user_id: user!.id,
+      type: "event_cancelled",
+      metadata: {
+        cancelled_at: new Date().toISOString(),
+        tickets_refunded: refundResults.filter((r) => r.success).length,
+        tickets_failed: refundResults.filter((r) => !r.success).length,
+        previous_status: status,
+      },
+    });
+
+  revalidatePath("/dashboard/events");
+
+  const failedRefunds = refundResults.filter((r) => !r.success);
+  if (failedRefunds.length > 0) {
+    return {
+      error: null,
+      warning: `Event cancelled but ${failedRefunds.length} ticket refund(s) failed. Check the dashboard to retry.`,
+      failedRefunds,
+    };
+  }
+
   return { error: null };
 }
 
