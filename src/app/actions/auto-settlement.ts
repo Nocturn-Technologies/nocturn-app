@@ -78,7 +78,8 @@ export async function generateAutoSettlement(eventId: string) {
     const { data: eventArtists, error: artistsError } = await admin
       .from("event_artists")
       .select("fee")
-      .eq("event_id", eventId);
+      .eq("event_id", eventId)
+      .eq("status", "confirmed");
 
     if (artistsError) {
       return { error: `Artists query failed: ${artistsError.message}` };

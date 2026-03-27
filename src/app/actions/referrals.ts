@@ -33,6 +33,26 @@ export async function getEventReferralStats(eventId: string): Promise<{
 
   const admin = createAdminClient();
 
+  // Verify user has access to this event's collective
+  const { data: event } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found", stats: [], totalReferrals: 0 };
+
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) {
+    return { error: "You don't have access to this event", stats: [], totalReferrals: 0 };
+  }
+
   // Get all tickets with referrals for this event
   const { data: tickets } = await admin
     .from("tickets")

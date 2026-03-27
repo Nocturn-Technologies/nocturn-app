@@ -96,6 +96,9 @@ export async function createPromoCode(input: {
 }
 
 export async function getPromoCodes(eventId: string): Promise<PromoCode[]> {
+  const access = await verifyEventAccess(eventId);
+  if (access.error) return [];
+
   const supabase = createAdminClient();
 
   const { data, error } = await supabase

@@ -170,7 +170,7 @@ export async function generateEventForecast(eventId: string): Promise<{
   const estimatedExpenses = (expenses ?? []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   // Calculate fees
-  const stripeFees = Math.round(projectedRevenue * 0.029 * 100 + projectedTickets * 30) / 100;
+  const stripeFees = Math.round((projectedRevenue * 0.029 + projectedTickets * 0.30) * 100) / 100;
   const platformFee = Math.round(projectedRevenue * (PLATFORM_FEE_PERCENT / 100) * 100) / 100;
 
   const totalCosts = stripeFees + platformFee + artistFees + talentTravelCosts + venueCost + estimatedExpenses;
@@ -179,7 +179,7 @@ export async function generateEventForecast(eventId: string): Promise<{
 
   // Break-even calculation (includes all fixed costs)
   const fixedCosts = artistFees + talentTravelCosts + venueCost + estimatedExpenses;
-  const netPerTicket = avgTicketPrice * (1 - PLATFORM_FEE_PERCENT / 100 - 0.029);
+  const netPerTicket = avgTicketPrice * (1 - PLATFORM_FEE_PERCENT / 100 - 0.029) - 0.30;
   const breakEvenTickets = netPerTicket > 0
     ? Math.ceil(Math.max(0, fixedCosts - estimatedBarRevenue) / netPerTicket)
     : 0;

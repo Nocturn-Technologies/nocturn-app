@@ -1,4 +1,28 @@
 /**
+ * Round-rect helper for OffscreenCanvas (roundRect not available on OffscreenCanvasRenderingContext2D).
+ */
+function roundRect(
+  ctx: OffscreenCanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+/**
  * Generate a 1080x1920 branded image for IG Story sharing.
  * Uses OffscreenCanvas for server-safe rendering.
  */
@@ -81,8 +105,7 @@ export async function generateStoryImage(data: {
     const badgeText = data.tierName;
     ctx.font = "700 28px sans-serif";
     const badgeWidth = ctx.measureText(badgeText).width + 40;
-    ctx.beginPath();
-    ctx.roundRect(80, badgeY - 30, badgeWidth, 50, 25);
+    roundRect(ctx, 80, badgeY - 30, badgeWidth, 50, 25);
     ctx.fill();
     ctx.fillStyle = "#7B2FF7";
     ctx.fillText(badgeText, 100, badgeY);
@@ -91,8 +114,7 @@ export async function generateStoryImage(data: {
     if (data.qrDataUrl) {
       // Draw white rounded rect behind QR
       ctx.fillStyle = "#FFFFFF";
-      ctx.beginPath();
-      ctx.roundRect(340, 1400, 400, 400, 20);
+      roundRect(ctx, 340, 1400, 400, 400, 20);
       ctx.fill();
 
       // Load and draw QR

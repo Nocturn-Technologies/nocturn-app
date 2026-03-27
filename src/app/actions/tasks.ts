@@ -12,6 +12,33 @@ function createAdminClient() {
   );
 }
 
+// Verify user owns the event via collective membership
+async function verifyEventAccess(eventId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", userId: null };
+
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found", userId: null };
+
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { error: "You don't have access to this event", userId: null };
+
+  return { error: null, userId: user.id };
+}
+
 // Get playbook templates
 export async function getPlaybookTemplates() {
   const admin = createAdminClient();
@@ -100,6 +127,9 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
 
 // Get tasks for an event
 export async function getEventTasks(eventId: string) {
+  const access = await verifyEventAccess(eventId);
+  if (access.error) return [];
+
   const admin = createAdminClient();
 
   const { data } = await admin
@@ -243,6 +273,9 @@ export async function postEventMessage(eventId: string, content: string) {
 
 // Get event activity feed
 export async function getEventActivity(eventId: string) {
+  const access = await verifyEventAccess(eventId);
+  if (access.error) return [];
+
   const admin = createAdminClient();
 
   const { data } = await admin
