@@ -1,21 +1,14 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email/send";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 /**
  * Send reminder emails to all ticket holders for events happening in the next 24 hours.
  * Designed to be called by a cron job or manual trigger.
  */
 export async function sendEventReminders() {
-  const sb = admin();
+  const sb = createAdminClient();
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 

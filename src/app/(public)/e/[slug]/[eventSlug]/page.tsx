@@ -1,4 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
 import { notFound } from "next/navigation";
 import { Calendar, Clock, MapPin, Navigation, Music } from "lucide-react";
 import { TicketSection } from "@/components/public-event/ticket-section";
@@ -15,16 +14,8 @@ import { StickyTicketBar } from "@/components/public-event/sticky-ticket-bar";
 import { AlsoThisWeek } from "@/components/public-event/also-this-week";
 import type { Metadata } from "next";
 import Image from "next/image";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import Link from "next/link";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 // Revalidate public event pages every 60 seconds (ISR)
 // Visitors get instant cached pages, data refreshes in background
@@ -38,20 +29,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug, eventSlug } = await params;
   const supabase = createAdminClient();
 
-  const { data: collective } = await supabase
+  const { data: collectiveRaw } = await supabase
     .from("collectives")
     .select("id, name")
     .eq("slug", slug)
     .maybeSingle();
+  const collective = collectiveRaw as { id: string; name: string } | null;
 
   if (!collective) return { title: "Event Not Found" };
 
-  const { data: event } = await supabase
+  const { data: eventRaw } = await supabase
     .from("events")
     .select("title, description, flyer_url, starts_at, venues(name, city)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
     .maybeSingle();
+  const event = eventRaw as { title: string; description: string | null; flyer_url: string | null; starts_at: string; venues: { name: string; city: string } | null } | null;
 
   if (!event) return { title: "Event Not Found" };
 
@@ -61,14 +54,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const canonicalUrl = `${appUrl}/e/${slug}/${eventSlug}`;
 
   // Use flyer if available, otherwise generate dynamic OG image
-  const venue = event.venues as unknown as { name: string; city: string } | null;
+  const venue = event.venues;
   const dateStr = event.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })
     : "";
   // Only use flyer_url for OG if it's a real URL (not a base64 data URL)
   const flyerIsValidUrl = event.flyer_url && event.flyer_url.startsWith("http");
   const ogImageUrl = flyerIsValidUrl
-    ? event.flyer_url
+    ? event.flyer_url!
     : `${appUrl}/og-image/event?${new URLSearchParams({
       title: event.title,
       collective: collective.name,
@@ -104,21 +97,23 @@ export default async function PublicEventPage({ params }: Props) {
   const supabase = createAdminClient();
 
   // Fetch collective (include description for profile section)
-  const { data: collective } = await supabase
+  const { data: collectiveRaw2 } = await supabase
     .from("collectives")
     .select("id, name, slug, logo_url, instagram, description")
     .eq("slug", slug)
     .maybeSingle();
+  const collective = collectiveRaw2 as { id: string; name: string; slug: string; logo_url: string | null; instagram: string | null; description: string | null } | null;
 
   if (!collective) notFound();
 
   // Fetch event with venue + metadata
-  const { data: event } = await supabase
+  const { data: eventRaw2 } = await supabase
     .from("events")
     .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, venues(name, address, city, capacity)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
     .maybeSingle();
+  const event = eventRaw2 as { id: string; title: string; slug: string; description: string | null; starts_at: string; ends_at: string | null; doors_at: string | null; status: string; flyer_url: string | null; vibe_tags: string[] | null; min_age: number | null; metadata: Record<string, string> | null; collective_id: string; venues: { name: string; address: string; city: string; capacity: number } | null } | null;
 
   if (!event || event.status === "draft") notFound();
 
@@ -127,14 +122,14 @@ export default async function PublicEventPage({ params }: Props) {
   const weekFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
-    { data: tiers },
+    { data: tiersRaw },
     { count: ticketsSold },
-    { data: artists },
-    { data: reactionRows },
+    { data: artistsRaw },
+    { data: reactionRowsRaw },
     { count: collectiveEventCount },
-    { data: pastEvents },
-    { data: nearbyEvents },
-    { data: tierTickets },
+    { data: pastEventsRaw },
+    { data: nearbyEventsRaw },
+    { data: tierTicketsRaw },
   ] = await Promise.all([
     supabase.from("ticket_tiers").select("*").eq("event_id", event.id).order("sort_order"),
     supabase.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
@@ -154,6 +149,13 @@ export default async function PublicEventPage({ params }: Props) {
     supabase.from("tickets").select("ticket_tier_id").eq("event_id", event.id).in("status", ["paid", "checked_in"]),
   ]);
 
+  const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number; sort_order: number }[] | null;
+  const artists = artistsRaw as { artist_id: string; set_time: string | null; artists: { name: string; genre: string | null } | null }[] | null;
+  const reactionRows = reactionRowsRaw as { emoji: string }[] | null;
+  const pastEvents = pastEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string }[] | null;
+  const nearbyEvents = nearbyEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string; collective_id: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string } | null }[] | null;
+  const tierTickets = tierTicketsRaw as { ticket_tier_id: string }[] | null;
+
   // Compute per-tier sold counts for accurate "remaining" display
   const tierSoldCounts: Record<string, number> = {};
   for (const t of tierTickets || []) {
@@ -168,12 +170,7 @@ export default async function PublicEventPage({ params }: Props) {
     reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
   }
 
-  const venue = event.venues as unknown as {
-    name: string;
-    address: string;
-    city: string;
-    capacity: number;
-  } | null;
+  const venue = event.venues;
 
   const eventDate = new Date(event.starts_at);
   const endsAt = event.ends_at ? new Date(event.ends_at) : null;
@@ -181,7 +178,7 @@ export default async function PublicEventPage({ params }: Props) {
   const isUpcoming = eventDate >= new Date() && event.status === "published";
 
   // Theme color from metadata or default nocturn purple
-  const metadata = (event.metadata ?? {}) as Record<string, string>;
+  const metadata = event.metadata ?? {};
   const accentColor = metadata.themeColor || "#7B2FF7";
 
   // Formatted date pieces — force ET timezone for consistent rendering on Vercel (UTC server)
@@ -202,8 +199,8 @@ export default async function PublicEventPage({ params }: Props) {
   // Dress code / min age / host message from metadata
   const dressCode = metadata.dressCode || null;
   const hostMessage = metadata.hostMessage || null;
-  const minAge = event.min_age as number | null;
-  const vibeTags = (event.vibe_tags ?? []) as string[];
+  const minAge = event.min_age;
+  const vibeTags = event.vibe_tags ?? [];
 
   // Share card data
   const shareCardDate = `${dayName} ${monthName} ${dayNum} \u2022 ${startTime}`;
@@ -466,8 +463,8 @@ export default async function PublicEventPage({ params }: Props) {
           <div className="py-8 border-t border-white/[0.04]">
             <div className="relative">
               <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
-                {artists.map((a: { artist_id: string; set_time: string | null; artists: unknown }) => {
-                  const artist = a.artists as unknown as { name: string; genre: string | null } | null;
+                {artists.map((a) => {
+                  const artist = a.artists;
                   if (!artist) return null;
                   return (
                     <div
@@ -600,8 +597,8 @@ export default async function PublicEventPage({ params }: Props) {
       {/* Cross-promotion: other events happening soon */}
       <AlsoThisWeek
         events={(nearbyEvents || []).map((e) => {
-          const c = e.collectives as unknown as { name: string; slug: string };
-          const v = e.venues as unknown as { name: string; city: string } | null;
+          const c = e.collectives;
+          const v = e.venues;
           return {
             title: e.title,
             slug: e.slug,

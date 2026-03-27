@@ -327,8 +327,9 @@ export default function ChatPage() {
     }
 
     // Get last message for each channel
+    const typedChannels = allChannels as unknown as Channel[];
     const channelsWithMeta: ChannelWithMeta[] = await Promise.all(
-      allChannels.map(async (ch) => {
+      typedChannels.map(async (ch) => {
         const { data: msgs } = await supabase
           .from("messages")
           .select("content, created_at, type")
@@ -367,11 +368,11 @@ export default function ChatPage() {
     try {
       const collabs = await getCollabChannels(collectiveId);
       const collabsWithMeta: ChannelWithMeta[] = await Promise.all(
-        (collabs ?? []).map(async (ch) => {
+        ((collabs ?? []) as Channel[]).map(async (ch) => {
           const { data: msgs } = await supabase
             .from("messages")
             .select("content, created_at, type")
-            .eq("channel_id", ch.id)
+            .eq("channel_id", ch.id as string)
             .order("created_at", { ascending: false })
             .limit(1);
 

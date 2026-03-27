@@ -72,7 +72,7 @@ export default function InvitePage() {
       }
 
       setCollectiveName(
-        (invitation.collectives as { name: string } | null)?.name ?? "this collective"
+        (invitation.collectives as unknown as { name: string } | null)?.name ?? "this collective"
       );
       setInviteRole(invitation.role);
       setState("ready");

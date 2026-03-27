@@ -1,18 +1,9 @@
 import { Suspense } from "react";
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { DashboardHome } from "@/components/dashboard-home";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { getFinancialPulse } from "@/app/actions/finance-pulse";
 import { getActionItems } from "@/app/actions/action-items";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
@@ -40,9 +31,11 @@ export default async function DashboardPage() {
     membershipsP,
   ]);
 
-  const firstName = (profile?.full_name ?? user!.email ?? "").split(" ")[0] || "there";
-  const membership = memberships?.[0];
-  const collective = membership?.collectives as unknown as {
+  const profileRow = profile as { full_name: string } | null;
+  const membershipRows = (memberships ?? []) as unknown as { collective_id: string; collectives: { name: string; metadata: Record<string, unknown> | null; created_at: string } | null }[];
+  const firstName = (profileRow?.full_name ?? user!.email ?? "").split(" ")[0] || "there";
+  const membership = membershipRows[0];
+  const collective = membership?.collectives as {
     name: string;
     metadata: Record<string, unknown> | null;
     created_at: string;
@@ -52,7 +45,7 @@ export default async function DashboardPage() {
   const collectiveAge = collective?.created_at
     ? Math.floor((Date.now() - new Date(collective.created_at).getTime()) / 86400000)
     : 999;
-  const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
+  const collectiveIds = membershipRows.map((m) => m.collective_id);
   const collectiveId = collectiveIds[0] || "";
 
   // ── PHASE 2: All event data in parallel ──
@@ -117,16 +110,18 @@ export default async function DashboardPage() {
 
     upcomingCount = upcomingResult.count ?? 0;
 
-    if (nextEventsResult.data?.[0]) {
+    const nextEventRow = (nextEventsResult.data as { title: string; starts_at: string }[] | null)?.[0];
+    if (nextEventRow) {
       const daysUntil = Math.ceil(
-        (new Date(nextEventsResult.data[0].starts_at).getTime() - Date.now()) / 86400000
+        (new Date(nextEventRow.starts_at).getTime() - Date.now()) / 86400000
       );
-      nextEvent = { title: nextEventsResult.data[0].title, daysUntil };
+      nextEvent = { title: nextEventRow.title, daysUntil };
     }
 
-    if (draftsResult.data?.[0]) {
+    const draftRow = (draftsResult.data as { title: string }[] | null)?.[0];
+    if (draftRow) {
       hasDraftEvent = true;
-      draftEventTitle = draftsResult.data[0].title;
+      draftEventTitle = draftRow.title;
     }
 
     financialPulse = pulseResult;

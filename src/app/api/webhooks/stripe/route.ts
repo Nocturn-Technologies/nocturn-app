@@ -1,18 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { after } from "next/server";
 import { getStripe, STRIPE_WEBHOOK_SECRET } from "@/lib/stripe";
 import Stripe from "stripe";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -53,15 +45,21 @@ export async function POST(request: NextRequest) {
   try {
     switch (event.type) {
       case "checkout.session.completed": {
-        await handleCheckoutCompleted(
+        const result = await handleCheckoutCompleted(
           event.data.object as Stripe.Checkout.Session
         );
+        if (result?.backgroundWork) {
+          after(result.backgroundWork);
+        }
         break;
       }
       case "payment_intent.succeeded": {
-        await handlePaymentIntentSucceeded(
+        const result = await handlePaymentIntentSucceeded(
           event.data.object as Stripe.PaymentIntent
         );
+        if (result?.backgroundWork) {
+          after(result.backgroundWork);
+        }
         break;
       }
       default:
@@ -100,7 +98,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const supabase = createAdminClient();
 
   // IDEMPOTENCY CHECK: Prevent duplicate ticket creation on webhook retry
-  // Check both payment intent ID and checkout session ID stored in metadata
   const { count: existingCount } = await supabase
     .from("tickets")
     .select("*", { count: "exact", head: true })
@@ -143,6 +140,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     },
   }));
 
+  // CRITICAL: Insert tickets — must complete before responding to Stripe
   const { data: insertedTickets, error: insertError } = await supabase
     .from("tickets")
     .insert(tickets)
@@ -157,95 +155,103 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     `[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`
   );
 
-  // Track ticket purchase
-  import("@/lib/track-server").then(({ trackServerEvent }) =>
-    trackServerEvent("ticket_purchased", {
-      eventId,
-      quantity,
-      revenue: Number(tier.price) * quantity,
-      sessionId: session.id,
-    })
-  ).catch(() => {});
-
-  // Generate QR codes for each ticket
-  if (insertedTickets && insertedTickets.length > 0) {
-    const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
-
-    await Promise.allSettled(
-      insertedTickets.map(async (ticket) => {
-        try {
-          const checkInUrl = `${BASE_URL}/check-in/${ticket.ticket_token}`;
-          const qrDataUrl = await QRCode.toDataURL(checkInUrl, {
-            width: 400,
-            margin: 2,
-            color: { dark: "#000000", light: "#ffffff" },
-            errorCorrectionLevel: "H",
-          });
-
-          await supabase
-            .from("tickets")
-            .update({ qr_code: qrDataUrl })
-            .eq("id", ticket.id);
-        } catch (qrErr) {
-          console.error(
-            `[stripe-webhook] QR generation failed for ticket ${ticket.id}:`,
-            qrErr
-          );
-        }
-      })
-    );
-
-    console.log(
-      `[stripe-webhook] Generated QR codes for ${insertedTickets.length} ticket(s)`
-    );
-  }
-
-  // Send branded confirmation email
-  try {
-    const customerEmail = session.customer_email ?? session.customer_details?.email;
-    if (customerEmail) {
-      const { data: event } = await supabase
-        .from("events")
-        .select("title, starts_at, venues(name)")
-        .eq("id", eventId)
-        .maybeSingle();
-
-      const { data: tierInfo } = await supabase
-        .from("ticket_tiers")
-        .select("name")
-        .eq("id", tierId)
-        .maybeSingle();
-
-      if (event) {
-        const venue = event.venues as unknown as { name: string } | null;
-        const { sendTicketConfirmation } = await import("@/app/actions/email");
-        await sendTicketConfirmation({
-          to: customerEmail,
-          eventTitle: event.title || "Event",
-          eventDate: new Date(event.starts_at).toLocaleDateString("en", {
-            weekday: "long", month: "long", day: "numeric", year: "numeric",
-          }),
-          venueName: venue?.name || "TBA",
-          tierName: tierInfo?.name || "General Admission",
+  // Return background work to run AFTER the response is sent to Stripe.
+  // QR generation + email sending can take 10-30s and would cause Stripe timeouts.
+  return {
+    backgroundWork: async () => {
+      // Track ticket purchase
+      try {
+        const { trackServerEvent } = await import("@/lib/track-server");
+        await trackServerEvent("ticket_purchased", {
+          eventId,
           quantity,
-          totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
-          ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+          revenue: Number(tier.price) * quantity,
+          sessionId: session.id,
         });
-        console.log("[stripe-webhook] Confirmation email sent");
+      } catch { /* non-critical */ }
 
-        // Post-purchase hooks: referral nudge + milestone check (non-blocking)
-        import("@/app/actions/post-purchase-hooks").then(({ runPostPurchaseHooks }) =>
-          runPostPurchaseHooks({
-            eventId,
-            buyerEmail: customerEmail!,
-            ticketToken: insertedTickets?.[0]?.ticket_token || "",
+      // Generate QR codes for each ticket
+      if (insertedTickets && insertedTickets.length > 0) {
+        const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+
+        await Promise.allSettled(
+          insertedTickets.map(async (ticket) => {
+            try {
+              const checkInUrl = `${BASE_URL}/check-in/${ticket.ticket_token}`;
+              const qrDataUrl = await QRCode.toDataURL(checkInUrl, {
+                width: 400,
+                margin: 2,
+                color: { dark: "#000000", light: "#ffffff" },
+                errorCorrectionLevel: "H",
+              });
+
+              await supabase
+                .from("tickets")
+                .update({ qr_code: qrDataUrl })
+                .eq("id", ticket.id);
+            } catch (qrErr) {
+              console.error(
+                `[stripe-webhook] QR generation failed for ticket ${ticket.id}:`,
+                qrErr
+              );
+            }
           })
-        ).catch(() => {});
+        );
+
+        console.log(
+          `[stripe-webhook] Generated QR codes for ${insertedTickets.length} ticket(s)`
+        );
       }
-    }
-  } catch (emailErr) {
-    console.error("[stripe-webhook] Email send failed (non-blocking):", emailErr);
-  }
+
+      // Send branded confirmation email
+      try {
+        const customerEmail = session.customer_email ?? session.customer_details?.email;
+        if (customerEmail) {
+          const { data: event } = await supabase
+            .from("events")
+            .select("title, starts_at, venues(name)")
+            .eq("id", eventId)
+            .maybeSingle();
+
+          const { data: tierInfo } = await supabase
+            .from("ticket_tiers")
+            .select("name")
+            .eq("id", tierId)
+            .maybeSingle();
+
+          if (event) {
+            const venue = event.venues as unknown as { name: string } | null;
+            const { sendTicketConfirmation } = await import("@/app/actions/email");
+            await sendTicketConfirmation({
+              to: customerEmail,
+              eventTitle: event.title || "Event",
+              eventDate: new Date(event.starts_at).toLocaleDateString("en", {
+                weekday: "long", month: "long", day: "numeric", year: "numeric",
+              }),
+              venueName: venue?.name || "TBA",
+              tierName: tierInfo?.name || "General Admission",
+              quantity,
+              totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
+              ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+            });
+            console.log("[stripe-webhook] Confirmation email sent");
+
+            // Post-purchase hooks: referral nudge + milestone check
+            try {
+              const { runPostPurchaseHooks } = await import("@/app/actions/post-purchase-hooks");
+              await runPostPurchaseHooks({
+                eventId,
+                buyerEmail: customerEmail!,
+                ticketToken: insertedTickets?.[0]?.ticket_token || "",
+              });
+            } catch { /* non-critical */ }
+          }
+        }
+      } catch (emailErr) {
+        console.error("[stripe-webhook] Email send failed (non-blocking):", emailErr);
+      }
+    },
+  };
 }
 
 // Handle embedded checkout (PaymentIntent) — same ticket creation logic
@@ -303,6 +309,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     },
   }));
 
+  // CRITICAL: Insert tickets — must complete before responding to Stripe
   const { data: insertedTickets, error: insertError } = await supabase
     .from("tickets")
     .insert(tickets)
@@ -315,66 +322,72 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   console.log(`[stripe-webhook] Created ${quantity} ticket(s) for PI ${paymentIntent.id}`);
 
-  // Generate QR codes
-  if (insertedTickets && insertedTickets.length > 0) {
-    await Promise.allSettled(
-      insertedTickets.map(async (ticket) => {
-        try {
-          const qrDataUrl = await QRCode.toDataURL(
-            `${BASE_URL}/check-in/${ticket.ticket_token}`,
-            { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
-          );
-          await supabase.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
-        } catch (qrErr) {
-          console.error(`[stripe-webhook] QR failed for ${ticket.id}:`, qrErr);
-        }
-      })
-    );
-  }
-
-  // Send confirmation email
-  try {
-    if (buyerEmail) {
-      const { data: event } = await supabase
-        .from("events")
-        .select("title, starts_at, venues(name)")
-        .eq("id", eventId)
-        .maybeSingle();
-
-      const { data: tierInfo } = await supabase
-        .from("ticket_tiers")
-        .select("name")
-        .eq("id", tierId)
-        .maybeSingle();
-
-      if (event) {
-        const venue = event.venues as unknown as { name: string } | null;
-        const { sendTicketConfirmation } = await import("@/app/actions/email");
-        await sendTicketConfirmation({
-          to: buyerEmail,
-          eventTitle: event.title || "Event",
-          eventDate: new Date(event.starts_at).toLocaleDateString("en", {
-            weekday: "long", month: "long", day: "numeric", year: "numeric",
-          }),
-          venueName: venue?.name || "TBA",
-          tierName: tierInfo?.name || "General Admission",
-          quantity,
-          totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
-          ticketLink: `${BASE_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
-        });
+  // Return background work to run AFTER the response is sent to Stripe
+  return {
+    backgroundWork: async () => {
+      // Generate QR codes
+      if (insertedTickets && insertedTickets.length > 0) {
+        await Promise.allSettled(
+          insertedTickets.map(async (ticket) => {
+            try {
+              const qrDataUrl = await QRCode.toDataURL(
+                `${BASE_URL}/check-in/${ticket.ticket_token}`,
+                { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
+              );
+              await supabase.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
+            } catch (qrErr) {
+              console.error(`[stripe-webhook] QR failed for ${ticket.id}:`, qrErr);
+            }
+          })
+        );
       }
-    }
-    // Post-purchase hooks (non-blocking)
-    if (buyerEmail) {
-      import("@/app/actions/post-purchase-hooks").then(({ runPostPurchaseHooks }) =>
-        runPostPurchaseHooks({
-          eventId,
-          buyerEmail,
-          ticketToken: insertedTickets?.[0]?.ticket_token || "",
-        })
-      ).catch(() => {});
-    }
-  } catch (emailErr) {
-    console.error("[stripe-webhook] Email failed (non-blocking):", emailErr);
-  }
+
+      // Send confirmation email
+      try {
+        if (buyerEmail) {
+          const { data: event } = await supabase
+            .from("events")
+            .select("title, starts_at, venues(name)")
+            .eq("id", eventId)
+            .maybeSingle();
+
+          const { data: tierInfo } = await supabase
+            .from("ticket_tiers")
+            .select("name")
+            .eq("id", tierId)
+            .maybeSingle();
+
+          if (event) {
+            const venue = event.venues as unknown as { name: string } | null;
+            const { sendTicketConfirmation } = await import("@/app/actions/email");
+            await sendTicketConfirmation({
+              to: buyerEmail,
+              eventTitle: event.title || "Event",
+              eventDate: new Date(event.starts_at).toLocaleDateString("en", {
+                weekday: "long", month: "long", day: "numeric", year: "numeric",
+              }),
+              venueName: venue?.name || "TBA",
+              tierName: tierInfo?.name || "General Admission",
+              quantity,
+              totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
+              ticketLink: `${BASE_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+            });
+          }
+        }
+        // Post-purchase hooks
+        if (buyerEmail) {
+          try {
+            const { runPostPurchaseHooks } = await import("@/app/actions/post-purchase-hooks");
+            await runPostPurchaseHooks({
+              eventId,
+              buyerEmail,
+              ticketToken: insertedTickets?.[0]?.ticket_token || "",
+            });
+          } catch { /* non-critical */ }
+        }
+      } catch (emailErr) {
+        console.error("[stripe-webhook] Email failed (non-blocking):", emailErr);
+      }
+    },
+  };
 }

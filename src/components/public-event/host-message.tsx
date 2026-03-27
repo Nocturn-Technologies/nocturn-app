@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 interface HostMessageProps {
   message: string;
   hostName: string;
@@ -23,10 +25,12 @@ export function HostMessage({ message, hostName, hostAvatarUrl, accentColor }: H
         </p>
         <div className="flex items-center gap-2.5">
           {hostAvatarUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={hostAvatarUrl}
               alt={hostName}
+              width={24}
+              height={24}
+              unoptimized
               className="h-6 w-6 rounded-full object-cover ring-1 ring-white/10"
             />
           ) : (

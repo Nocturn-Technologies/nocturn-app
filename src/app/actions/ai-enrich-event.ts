@@ -1,13 +1,6 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 export interface EnrichedEventContent {
   description: string;
@@ -41,11 +34,12 @@ export async function enrichEventContent(input: {
   let venueAddress: string | null = null;
 
   if (input.venueName) {
-    const { data: venue } = await admin
+    const { data: venueRaw } = await admin
       .from("venues")
       .select("description, capacity, address, city, metadata")
       .ilike("name", `%${input.venueName}%`)
       .maybeSingle();
+    const venue = venueRaw as { description: string | null; capacity: number | null; address: string | null; city: string | null; metadata: Record<string, unknown> | null } | null;
 
     if (venue) {
       venueDescription = venue.description ?? null;

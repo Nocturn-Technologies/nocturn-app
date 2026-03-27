@@ -1,14 +1,7 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 // ── Types ──
 
@@ -59,11 +52,12 @@ export async function getAmbassadorConfig(eventId: string): Promise<{
 
   const admin = createAdminClient();
 
-  const { data: event } = await admin
+  const { data: eventRaw } = await admin
     .from("events")
     .select("metadata")
     .eq("id", eventId)
     .maybeSingle();
+  const event = eventRaw as { metadata: Record<string, unknown> | null } | null;
 
   if (!event) return { error: "Event not found", config: DEFAULT_CONFIG };
 
@@ -89,15 +83,16 @@ export async function saveAmbassadorConfig(
   const admin = createAdminClient();
 
   // Get current metadata
-  const { data: event } = await admin
+  const { data: eventRaw2 } = await admin
     .from("events")
     .select("metadata")
     .eq("id", eventId)
     .maybeSingle();
+  const event2 = eventRaw2 as { metadata: Record<string, unknown> | null } | null;
 
-  if (!event) return { error: "Event not found" };
+  if (!event2) return { error: "Event not found" };
 
-  const currentMetadata = (event.metadata ?? {}) as Record<string, unknown>;
+  const currentMetadata = (event2.metadata ?? {}) as Record<string, unknown>;
 
   // Merge ambassador_config into existing metadata
   const updatedMetadata = {
@@ -105,9 +100,8 @@ export async function saveAmbassadorConfig(
     ambassador_config: config,
   };
 
-  const { error } = await admin
-    .from("events")
-    .update({ metadata: updatedMetadata })
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (admin.from("events") as any).update({ metadata: updatedMetadata })
     .eq("id", eventId);
 
   if (error) return { error: error.message };
@@ -142,22 +136,24 @@ export async function generateDMTemplates(
   const admin = createAdminClient();
 
   // Get collective info
-  const { data: collective } = await admin
+  const { data: collectiveRaw } = await admin
     .from("collectives")
     .select("id, name, slug")
     .eq("slug", collectiveSlug)
     .maybeSingle();
+  const collective = collectiveRaw as { id: string; name: string; slug: string } | null;
 
   if (!collective) {
     // Fallback: try by membership
-    const { data: memberships } = await admin
+    const { data: membershipsRaw } = await admin
       .from("collective_members")
       .select("collective_id, collectives!inner(id, name, slug)")
       .eq("user_id", user.id)
       .is("deleted_at", null)
       .limit(1);
+    const memberships = membershipsRaw as { collective_id: string; collectives: { id: string; name: string; slug: string } | null }[] | null;
 
-    const firstCollective = memberships?.[0]?.collectives as unknown as { id: string; name: string; slug: string } | null;
+    const firstCollective = memberships?.[0]?.collectives;
     if (!firstCollective) return { error: null, templates: [] };
 
     return generateTemplatesForCollective(firstCollective.name, params);

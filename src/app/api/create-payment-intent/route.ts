@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { getStripe } from "@/lib/stripe";
 import { calculateServiceFeeCents } from "@/lib/pricing";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 export async function POST(request: NextRequest) {
   try {

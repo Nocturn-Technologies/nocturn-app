@@ -24,23 +24,33 @@ export default async function PublicCheckInPage({ params }: Props) {
     notFound();
   }
 
-  const event = ticket.events as unknown as {
+  const typedTicket = ticket as unknown as {
     id: string;
-    title: string;
-    slug: string;
-    starts_at: string;
-    ends_at: string | null;
-    doors_at: string | null;
-    venues: { name: string; address: string; city: string } | null;
-  } | null;
+    ticket_token: string;
+    status: string;
+    price_paid: number | null;
+    currency: string | null;
+    qr_code: string | null;
+    checked_in_at: string | null;
+    metadata: Record<string, unknown> | null;
+    created_at: string;
+    events: {
+      id: string;
+      title: string;
+      slug: string;
+      starts_at: string;
+      ends_at: string | null;
+      doors_at: string | null;
+      venues: { name: string; address: string; city: string } | null;
+    } | null;
+    ticket_tiers: { name: string; price: number } | null;
+  };
 
-  const tier = ticket.ticket_tiers as unknown as {
-    name: string;
-    price: number;
-  } | null;
+  const event = typedTicket.events;
+  const tier = typedTicket.ticket_tiers;
 
-  const isCheckedIn = ticket.status === "checked_in";
-  const isPaid = ticket.status === "paid";
+  const isCheckedIn = typedTicket.status === "checked_in";
+  const isPaid = typedTicket.status === "paid";
 
   const eventDate = event?.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en-US", {
@@ -67,18 +77,20 @@ export default async function PublicCheckInPage({ params }: Props) {
 
   let isAdmin = false;
   if (user && event) {
-    const { data: memberships } = await supabase
+    const { data: membershipsRaw } = await supabase
       .from("collective_members")
       .select("collective_id")
       .eq("user_id", user.id);
+    const memberships = membershipsRaw as { collective_id: string }[] | null;
 
     if (memberships && memberships.length > 0) {
       const collectiveIds = memberships.map((m) => m.collective_id);
-      const { data: ev } = await supabase
+      const { data: evRaw } = await supabase
         .from("events")
         .select("collective_id")
         .eq("id", event.id)
         .maybeSingle();
+      const ev = evRaw as { collective_id: string } | null;
 
       if (ev && collectiveIds.includes(ev.collective_id)) {
         isAdmin = true;
@@ -136,9 +148,9 @@ export default async function PublicCheckInPage({ params }: Props) {
                   <p className="text-lg font-semibold text-green-500">
                     Already Checked In
                   </p>
-                  {ticket.checked_in_at && (
+                  {typedTicket.checked_in_at && (
                     <p className="text-sm text-muted-foreground">
-                      {new Date(ticket.checked_in_at).toLocaleString("en-US")}
+                      {new Date(typedTicket.checked_in_at!).toLocaleString("en-US")}
                     </p>
                   )}
                 </div>
@@ -186,7 +198,7 @@ export default async function PublicCheckInPage({ params }: Props) {
                     Ticket Not Valid
                   </p>
                   <p className="text-sm text-muted-foreground capitalize">
-                    Status: {ticket.status}
+                    Status: {typedTicket.status}
                   </p>
                 </div>
               )}

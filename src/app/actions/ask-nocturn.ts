@@ -1,14 +1,7 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 const SYSTEM_PROMPT = `You are Nocturn's AI assistant for music collectives and promoters. You have access to the user's real data. Answer questions concisely and actionably. Use their actual numbers. If they ask you to do something you can't (like send an email), tell them which page to go to. Keep responses under 3 sentences unless they ask for detail.
 
@@ -32,7 +25,7 @@ export async function askNocturn(
     return "Ask me anything about your events, revenue, audience, or how to use Nocturn.";
   }
 
-  const sb = admin();
+  const sb = createAdminClient();
 
   try {
     // Query relevant data in parallel
@@ -97,14 +90,15 @@ export async function askNocturn(
         .maybeSingle(),
     ]);
 
-    // Build context string
+    // Build context string — cast Supabase results (no generated DB types)
+    /* eslint-disable @typescript-eslint/no-explicit-any */
     const contextLines: string[] = [];
-    const collectiveName = collectiveRes.data?.name || "Your collective";
+    const collectiveName = (collectiveRes.data as any)?.name || "Your collective";
     contextLines.push(`Collective: ${collectiveName}`);
     contextLines.push("");
 
     // Upcoming events
-    const upcoming = upcomingRes.data || [];
+    const upcoming = (upcomingRes.data || []) as any[];
     if (upcoming.length > 0) {
       contextLines.push("UPCOMING EVENTS:");
       for (const e of upcoming) {
@@ -121,7 +115,7 @@ export async function askNocturn(
     }
 
     // Recent completed events
-    const recent = recentRes.data || [];
+    const recent = (recentRes.data || []) as any[];
     if (recent.length > 0) {
       contextLines.push("RECENT COMPLETED EVENTS:");
       for (const e of recent) {
@@ -137,13 +131,13 @@ export async function askNocturn(
     }
 
     // Monthly revenue
-    const monthTickets = monthTicketsRes.data || [];
+    const monthTickets = (monthTicketsRes.data || []) as any[];
     const monthRevenue = monthTickets.reduce((s, t) => s + Number(t.price_paid || 0), 0);
     contextLines.push(`THIS MONTH: $${monthRevenue.toFixed(0)} revenue from ${monthTickets.length} tickets`);
     contextLines.push("");
 
     // Audience stats — email stored in metadata jsonb
-    const allTickets = audienceRes.data || [];
+    const allTickets = (audienceRes.data || []) as any[];
     const getEmail = (t: { metadata?: Record<string, unknown> | null }) =>
       (t.metadata?.email as string) ?? (t.metadata?.customer_email as string) ?? null;
     const uniqueEmails = new Set(allTickets.map(getEmail).filter(Boolean));
@@ -160,7 +154,7 @@ export async function askNocturn(
     contextLines.push("");
 
     // Open tasks
-    const openTasks = tasksRes.data || [];
+    const openTasks = (tasksRes.data || []) as any[];
     if (openTasks.length > 0) {
       contextLines.push("OPEN ACTION ITEMS:");
       for (const t of openTasks) {

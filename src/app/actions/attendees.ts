@@ -1,16 +1,7 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 export interface AttendeeRow {
   email: string;
@@ -36,7 +27,7 @@ async function getCollectiveIds(userId: string) {
     .eq("user_id", userId)
     .is("deleted_at", null);
 
-  return memberships?.map((m) => m.collective_id) ?? [];
+  return (memberships as { collective_id: string }[] | null)?.map((m) => m.collective_id) ?? [];
 }
 
 export async function getAttendees(collectiveId?: string): Promise<{
@@ -73,10 +64,12 @@ export async function getAttendees(collectiveId?: string): Promise<{
   }
 
   // Get all events for these collectives
-  const { data: events } = await admin
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: eventsRaw } = await admin
     .from("events")
     .select("id, title, starts_at")
     .in("collective_id", collectiveIds);
+  const events = eventsRaw as { id: string; title: string; starts_at: string }[] | null;
 
   if (!events || events.length === 0) {
     return {
@@ -90,11 +83,13 @@ export async function getAttendees(collectiveId?: string): Promise<{
   const eventMap = new Map(events.map((e) => [e.id, e]));
 
   // Get all paid/checked-in tickets for these events
-  const { data: tickets, error: ticketError } = await admin
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: ticketsRaw, error: ticketError } = await admin
     .from("tickets")
     .select("id, event_id, price_paid, metadata, created_at")
     .in("event_id", eventIds)
     .in("status", ["paid", "checked_in"]);
+  const tickets = ticketsRaw as { id: string; event_id: string; price_paid: number | null; metadata: Record<string, unknown> | null; created_at: string }[] | null;
 
   if (ticketError) {
     return {

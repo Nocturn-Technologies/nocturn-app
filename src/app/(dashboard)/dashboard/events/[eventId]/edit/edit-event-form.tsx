@@ -271,6 +271,7 @@ export function EditEventForm({ event }: { event: EventData }) {
             <Input
               id="venueCapacity"
               type="number"
+              inputMode="numeric"
               value={venueCapacity || ""}
               onChange={(e) => setVenueCapacity(Number(e.target.value))}
               placeholder="e.g. 500"
@@ -294,6 +295,7 @@ export function EditEventForm({ event }: { event: EventData }) {
               <Input
                 id="venueCost"
                 type="number"
+                inputMode="numeric"
                 min="0"
                 step="0.01"
                 value={venueCostVal}
@@ -306,6 +308,7 @@ export function EditEventForm({ event }: { event: EventData }) {
               <Input
                 id="venueDeposit"
                 type="number"
+                inputMode="numeric"
                 min="0"
                 step="0.01"
                 value={venueDeposit}
@@ -321,6 +324,7 @@ export function EditEventForm({ event }: { event: EventData }) {
               <Input
                 id="barMinimum"
                 type="number"
+                inputMode="numeric"
                 min="0"
                 step="0.01"
                 value={barMinimum}
@@ -334,6 +338,7 @@ export function EditEventForm({ event }: { event: EventData }) {
               <Input
                 id="estimatedBarRevenue"
                 type="number"
+                inputMode="numeric"
                 min="0"
                 step="0.01"
                 value={estimatedBarRevenue}
@@ -391,6 +396,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                   <Label className="text-xs">Price ($)</Label>
                   <Input
                     type="number"
+                    inputMode="numeric"
                     min="0"
                     step="0.01"
                     value={tier.price || ""}
@@ -404,6 +410,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                   <Label className="text-xs">Quantity</Label>
                   <Input
                     type="number"
+                    inputMode="numeric"
                     min="0"
                     value={tier.quantity || ""}
                     onChange={(e) =>

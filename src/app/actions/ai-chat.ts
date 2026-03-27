@@ -1,15 +1,8 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
 import { getEventContext, getCollectiveContext } from "@/lib/ai-context";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 import { SYSTEM_PROMPTS } from "@/lib/ai-prompts";
 
@@ -20,16 +13,17 @@ export async function generateChatResponse(
   userMessage: string,
   recentMessages?: { role: string; content: string }[]
 ): Promise<string> {
-  const sb = admin();
+  const sb = createAdminClient();
   let aiContent: string;
 
   try {
     // 1. Fetch channel to determine context type
-    const { data: channel, error: channelError } = await sb
+    const { data: channelRaw, error: channelError } = await sb
       .from("channels")
       .select("id, event_id, collective_id")
       .eq("id", channelId)
       .maybeSingle();
+    const channel = channelRaw as { id: string; event_id: string | null; collective_id: string | null } | null;
 
     if (channelError || !channel) {
       console.error("Failed to fetch channel:", channelError);
@@ -70,7 +64,8 @@ export async function generateChatResponse(
 
   // 6. Insert AI response server-side using admin client (bypasses RLS)
   try {
-    await sb.from("messages").insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (sb.from("messages") as any).insert({
       channel_id: channelId,
       user_id: null,
       content: aiContent,

@@ -1,14 +1,7 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { randomUUID } from "crypto";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 /**
  * Seeds a demo collective with realistic past events, ticket sales,
@@ -17,7 +10,7 @@ function admin() {
  * Call from browser console: fetch('/api/seed-demo', { method: 'POST' })
  */
 export async function seedDemoData(collectiveId: string) {
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Verify collective exists
   const { data: collective } = await sb

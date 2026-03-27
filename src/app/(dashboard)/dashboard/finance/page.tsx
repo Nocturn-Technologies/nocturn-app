@@ -1,4 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,13 +15,7 @@ import {
   CircleDollarSign,
 } from "lucide-react";
 import Link from "next/link";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 function formatMoney(amount: number): string {
   if (amount >= 10000) return `$${(amount / 1000).toFixed(1)}k`;
@@ -47,7 +40,7 @@ export default async function FinancePage() {
     .eq("user_id", user!.id)
     .is("deleted_at", null);
 
-  const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
+  const collectiveIds = (memberships as { collective_id: string }[] | null)?.map((m) => m.collective_id) ?? [];
 
   // --- Data Fetching ---
 

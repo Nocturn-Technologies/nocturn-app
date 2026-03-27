@@ -1,14 +1,7 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { enrichAttendeeCRM } from "./crm-enrichment";
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 const STRIPE_RATE = 0.029; // 2.9%
 const STRIPE_FIXED = 0.3; // $0.30 per ticket

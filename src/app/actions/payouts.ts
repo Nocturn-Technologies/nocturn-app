@@ -1,16 +1,7 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 // Mark a settlement as paid (manual payout — e-transfer, Venmo, etc.)
 export async function markSettlementPaid(settlementId: string, payoutMethod?: string) {

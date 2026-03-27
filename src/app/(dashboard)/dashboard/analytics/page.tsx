@@ -1,6 +1,5 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Users,
@@ -15,12 +14,6 @@ import {
   Eye,
 } from "lucide-react";
 import { redirect } from "next/navigation";
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 function fmt(n: number): string {
   if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
@@ -78,9 +71,9 @@ export default async function AnalyticsPage() {
     admin.from("artists").select("*", { count: "exact", head: true }),
     admin.from("venues").select("*", { count: "exact", head: true }),
     // Last 30 days tickets
-    admin.from("tickets").select("created_at, total_price").in("status", ["paid", "checked_in"]).gte("created_at", thirtyDaysAgo),
+    admin.from("tickets").select("created_at, price_paid").in("status", ["paid", "checked_in"]).gte("created_at", thirtyDaysAgo),
     // Previous 30 days tickets (for comparison)
-    admin.from("tickets").select("created_at, total_price").in("status", ["paid", "checked_in"]).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
+    admin.from("tickets").select("created_at, price_paid").in("status", ["paid", "checked_in"]).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
     // All settlements
     admin.from("settlements").select("gross_revenue, net_revenue, platform_fee, profit, status"),
     // New collectives last 30d
@@ -96,15 +89,18 @@ export default async function AnalyticsPage() {
   ]);
 
   // Revenue calculations
-  const totalGMV = (recentTickets ?? []).reduce((s, t) => s + Number(t.total_price || 0), 0);
-  const prevGMV = (previousTickets ?? []).reduce((s, t) => s + Number(t.total_price || 0), 0);
+  const recentTicketRows = (recentTickets ?? []) as { created_at: string; price_paid: number }[];
+  const previousTicketRows = (previousTickets ?? []) as { created_at: string; price_paid: number }[];
+  const totalGMV = recentTicketRows.reduce((s, t) => s + Number(t.price_paid || 0), 0);
+  const prevGMV = previousTicketRows.reduce((s, t) => s + Number(t.price_paid || 0), 0);
   const gmvGrowth = prevGMV > 0 ? ((totalGMV - prevGMV) / prevGMV) * 100 : totalGMV > 0 ? 100 : 0;
 
-  const totalPlatformFees = (settlements ?? []).reduce((s, r) => s + Number(r.platform_fee || 0), 0);
-  const totalGrossRevenue = (settlements ?? []).reduce((s, r) => s + Number(r.gross_revenue || 0), 0);
+  const settlementRows = (settlements ?? []) as { gross_revenue: number; net_revenue: number; platform_fee: number; profit: number; status: string }[];
+  const totalPlatformFees = settlementRows.reduce((s, r) => s + Number(r.platform_fee || 0), 0);
+  const totalGrossRevenue = settlementRows.reduce((s, r) => s + Number(r.gross_revenue || 0), 0);
 
-  const recentTicketCount = recentTickets?.length ?? 0;
-  const prevTicketCount = previousTickets?.length ?? 0;
+  const recentTicketCount = recentTicketRows.length;
+  const prevTicketCount = previousTicketRows.length;
   const ticketGrowth = prevTicketCount > 0 ? ((recentTicketCount - prevTicketCount) / prevTicketCount) * 100 : recentTicketCount > 0 ? 100 : 0;
 
   const checkInRate = (paidTickets ?? 0) > 0 ? Math.round(((checkedInTickets ?? 0) / ((paidTickets ?? 0) + (freeTickets ?? 0))) * 100) : 0;
@@ -115,7 +111,7 @@ export default async function AnalyticsPage() {
     const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
     dailyVolume[d.toISOString().slice(0, 10)] = 0;
   }
-  for (const t of recentTickets ?? []) {
+  for (const t of recentTicketRows) {
     const day = t.created_at.slice(0, 10);
     if (dailyVolume[day] !== undefined) dailyVolume[day]++;
   }
@@ -240,8 +236,8 @@ export default async function AnalyticsPage() {
           {(recentEvents ?? []).length === 0 && (
             <p className="text-sm text-muted-foreground py-4 text-center">No events yet</p>
           )}
-          {(recentEvents ?? []).map((e) => {
-            const col = (e as Record<string, unknown>)?.collectives as { name: string } | null;
+          {((recentEvents ?? []) as unknown as { id: string; title: string; starts_at: string; status: string; collective_id: string; collectives: { name: string } | null }[]).map((e) => {
+            const col = e.collectives;
             return (
               <div key={e.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                 <div className="min-w-0 flex-1">

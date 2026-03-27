@@ -1,14 +1,7 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 export interface ActionItem {
   id: string;
@@ -31,11 +24,12 @@ export async function getActionItems(): Promise<ActionItem[]> {
   const admin = createAdminClient();
 
   // Get user's collectives
-  const { data: memberships } = await admin
+  const { data: membershipsRaw } = await admin
     .from("collective_members")
     .select("collective_id")
     .eq("user_id", user.id)
     .is("deleted_at", null);
+  const memberships = membershipsRaw as { collective_id: string }[] | null;
 
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
   if (collectiveIds.length === 0) return [];
@@ -110,13 +104,14 @@ export async function getActionItems(): Promise<ActionItem[]> {
 
   // ── 1. Unsettled events ──
   // Find completed events that have no settlement at all
-  const completedEvents = completedEventsResult.data ?? [];
+  const completedEvents = (completedEventsResult.data ?? []) as { id: string; title: string; ends_at: string }[];
   if (completedEvents.length > 0) {
     const completedIds = completedEvents.map((e) => e.id);
-    const { data: settledEvents } = await admin
+    const { data: settledEventsRaw } = await admin
       .from("settlements")
       .select("event_id")
       .in("event_id", completedIds);
+    const settledEvents = settledEventsRaw as { event_id: string }[] | null;
 
     const settledEventIds = new Set(
       (settledEvents ?? []).map((s) => s.event_id)
@@ -140,7 +135,7 @@ export async function getActionItems(): Promise<ActionItem[]> {
   }
 
   // ── 2. Draft events ──
-  const draftEvents = draftEventsResult.data ?? [];
+  const draftEvents = (draftEventsResult.data ?? []) as { id: string; title: string }[];
   for (const event of draftEvents) {
     items.push({
       id: `draft-${event.id}`,
@@ -153,7 +148,7 @@ export async function getActionItems(): Promise<ActionItem[]> {
   }
 
   // ── 3. Events this week ──
-  const upcomingEvents = upcomingEventsResult.data ?? [];
+  const upcomingEvents = (upcomingEventsResult.data ?? []) as { id: string; title: string; starts_at: string }[];
   for (const event of upcomingEvents) {
     const daysUntil = Math.ceil(
       (new Date(event.starts_at).getTime() - now.getTime()) / 86400000
@@ -169,7 +164,7 @@ export async function getActionItems(): Promise<ActionItem[]> {
   }
 
   // ── 4. Low ticket sales ──
-  const soonEvents = soonEventsResult.data ?? [];
+  const soonEvents = (soonEventsResult.data ?? []) as { id: string; title: string; starts_at: string }[];
   if (soonEvents.length > 0) {
     const soonIds = soonEvents.map((e) => e.id);
 
@@ -188,14 +183,14 @@ export async function getActionItems(): Promise<ActionItem[]> {
 
     // Aggregate capacity per event
     const capacityByEvent: Record<string, number> = {};
-    for (const tier of tiersResult.data ?? []) {
+    for (const tier of (tiersResult.data ?? []) as { event_id: string; capacity: number }[]) {
       capacityByEvent[tier.event_id] =
         (capacityByEvent[tier.event_id] || 0) + (Number(tier.capacity) || 0);
     }
 
     // Count tickets sold per event
     const soldByEvent: Record<string, number> = {};
-    for (const ticket of ticketsResult.data ?? []) {
+    for (const ticket of (ticketsResult.data ?? []) as { event_id: string }[]) {
       soldByEvent[ticket.event_id] =
         (soldByEvent[ticket.event_id] || 0) + 1;
     }
@@ -223,9 +218,9 @@ export async function getActionItems(): Promise<ActionItem[]> {
   }
 
   // ── 5. Pending settlements ──
-  const pendingSettlements = pendingSettlementsResult.data ?? [];
+  const pendingSettlements = (pendingSettlementsResult.data ?? []) as unknown as { id: string; event_id: string; status: string; events: { title: string } | null }[];
   for (const settlement of pendingSettlements) {
-    const event = settlement.events as unknown as { title: string } | null;
+    const event = settlement.events;
     const eventTitle = event?.title ?? "Unknown Event";
     items.push({
       id: `pending-settlement-${settlement.id}`,

@@ -1,18 +1,9 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import QRCode from "qrcode";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 /**
  * Generate a QR code data URL for a ticket and persist it.

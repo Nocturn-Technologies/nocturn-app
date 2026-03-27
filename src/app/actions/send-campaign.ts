@@ -1,15 +1,8 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/send";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 /**
  * Send an email campaign to all attendees of an event.
@@ -24,7 +17,7 @@ export async function sendCampaignEmail(input: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", sent: 0 };
 
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Get event to verify ownership
   const { data: event } = await sb

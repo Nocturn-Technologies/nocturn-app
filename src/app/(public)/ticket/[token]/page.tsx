@@ -22,28 +22,38 @@ export default async function TicketPage({ params }: TicketPageProps) {
     notFound();
   }
 
+  const typedTicket = ticket as unknown as {
+    id: string;
+    ticket_token: string;
+    status: string;
+    price_paid: number | null;
+    currency: string | null;
+    qr_code: string | null;
+    checked_in_at: string | null;
+    metadata: Record<string, unknown> | null;
+    created_at: string;
+    events: {
+      id: string;
+      title: string;
+      slug: string;
+      starts_at: string;
+      ends_at: string | null;
+      doors_at: string | null;
+      venues: { name: string; address: string; city: string } | null;
+    } | null;
+    ticket_tiers: { name: string; price: number } | null;
+  };
+
   // If QR code hasn't been generated yet, generate it now (fallback)
-  let qrCode = ticket.qr_code;
+  let qrCode = typedTicket.qr_code;
   if (!qrCode) {
     const { qrCode: generated } = await generateTicketQRCode(token);
     qrCode = generated;
   }
 
   // Extract nested relations
-  const event = ticket.events as unknown as {
-    id: string;
-    title: string;
-    slug: string;
-    starts_at: string;
-    ends_at: string | null;
-    doors_at: string | null;
-    venues: { name: string; address: string; city: string } | null;
-  } | null;
-
-  const tier = ticket.ticket_tiers as unknown as {
-    name: string;
-    price: number;
-  } | null;
+  const event = typedTicket.events;
+  const tier = typedTicket.ticket_tiers;
 
   const eventDate = event?.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en-US", {
@@ -68,12 +78,12 @@ export default async function TicketPage({ params }: TicketPageProps) {
       })
     : null;
 
-  const purchaseDate = new Date(ticket.created_at).toLocaleDateString(
+  const purchaseDate = new Date(typedTicket.created_at).toLocaleDateString(
     "en-US",
     { year: "numeric", month: "long", day: "numeric" }
   );
 
-  const isCheckedIn = !!ticket.checked_in_at;
+  const isCheckedIn = !!typedTicket.checked_in_at;
 
   return (
     <div className="min-h-screen bg-[#09090B]">
@@ -105,15 +115,15 @@ export default async function TicketPage({ params }: TicketPageProps) {
           venueAddress={event?.venues?.address ?? null}
           venueCity={event?.venues?.city ?? null}
           tierName={tier?.name ?? "General Admission"}
-          pricePaid={Number(ticket.price_paid)}
+          pricePaid={Number(typedTicket.price_paid)}
           attendeeName={null}
-          attendeeEmail={String((ticket.metadata as Record<string, unknown>)?.email || "") || "Guest"}
+          attendeeEmail={String(typedTicket.metadata?.email || "") || "Guest"}
           purchaseDate={purchaseDate}
-          status={ticket.status}
+          status={typedTicket.status}
           isCheckedIn={isCheckedIn}
-          checkedInAt={ticket.checked_in_at ?? null}
+          checkedInAt={typedTicket.checked_in_at ?? null}
           qrCode={qrCode ?? null}
-          ticketToken={ticket.ticket_token}
+          ticketToken={typedTicket.ticket_token}
         />
       </main>
 

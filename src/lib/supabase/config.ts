@@ -1,5 +1,8 @@
 // Supabase config — public values can be hardcoded, secrets MUST come from env vars
 
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "./database.types";
+
 // These are public (embedded in client JS anyway via NEXT_PUBLIC_ vars)
 export const SUPABASE_URL =
   process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://bpzwbqtpyorppijdblhy.supabase.co";
@@ -21,3 +24,15 @@ export const SUPABASE_SERVICE_ROLE_KEY = (() => {
   }
   return key;
 })();
+
+// ── Singleton admin client (reused across all server actions) ────────
+let _adminClient: ReturnType<typeof createClient<Database>> | null = null;
+
+export function createAdminClient() {
+  if (!_adminClient) {
+    _adminClient = createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+  }
+  return _adminClient;
+}

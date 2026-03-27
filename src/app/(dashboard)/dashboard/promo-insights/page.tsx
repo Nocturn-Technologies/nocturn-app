@@ -1,9 +1,5 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { createClient } from "@supabase/supabase-js";
-import {
-  SUPABASE_URL,
-  SUPABASE_SERVICE_ROLE_KEY,
-} from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Clock,
@@ -22,12 +18,6 @@ import {
   generatePromoSchedule,
   getAudienceInsights,
 } from "@/app/actions/promo-intelligence";
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 function formatHour(h: number): string {
   const period = h >= 12 ? "PM" : "AM";
@@ -62,7 +52,7 @@ export default async function PromoInsightsPage() {
     .limit(1)
     .maybeSingle();
 
-  const collectiveId = membership?.collective_id;
+  const collectiveId = (membership as { collective_id: string } | null)?.collective_id;
 
   if (!collectiveId) {
     return (
@@ -86,7 +76,7 @@ export default async function PromoInsightsPage() {
   }
 
   // Get next upcoming event for promo schedule
-  const { data: nextEvent } = await admin
+  const { data: nextEventRaw } = await admin
     .from("events")
     .select("id, title, starts_at")
     .eq("collective_id", collectiveId)
@@ -94,6 +84,8 @@ export default async function PromoInsightsPage() {
     .order("starts_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+
+  const nextEvent = nextEventRaw as { id: string; title: string; starts_at: string } | null;
 
   // Fetch all data in parallel
   const [patternsResult, audienceResult, scheduleResult] = await Promise.all([

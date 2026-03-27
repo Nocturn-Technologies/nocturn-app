@@ -26,7 +26,7 @@ export default async function EventsPage() {
 
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
 
-  let events: Array<{
+  type EventRow = {
     id: string;
     title: string;
     slug: string;
@@ -34,22 +34,25 @@ export default async function EventsPage() {
     status: string;
     flyer_url: string | null;
     venues: { name: string; city: string } | null;
-  }> = [];
+  };
 
-  if (collectiveIds.length > 0) {
-    const { data } = await admin
-      .from("events")
-      .select("id, title, slug, starts_at, status, flyer_url, venues(name, city)")
-      .in("collective_id", collectiveIds)
-      .order("starts_at", { ascending: false });
-    events = (data ?? []) as unknown as typeof events;
-  }
-
-  // Fetch AI suggestions for the first collective
+  // Fetch events and AI suggestions in parallel
   const primaryCollectiveId = collectiveIds[0] ?? null;
-  const suggestions = primaryCollectiveId
-    ? await getEventSuggestions(primaryCollectiveId)
-    : [];
+
+  const [eventsResult, suggestions] = await Promise.all([
+    collectiveIds.length > 0
+      ? admin
+          .from("events")
+          .select("id, title, slug, starts_at, status, flyer_url, venues(name, city)")
+          .in("collective_id", collectiveIds)
+          .order("starts_at", { ascending: false })
+      : Promise.resolve({ data: null }),
+    primaryCollectiveId
+      ? getEventSuggestions(primaryCollectiveId)
+      : Promise.resolve([]),
+  ]);
+
+  const events = (eventsResult.data ?? []) as unknown as EventRow[];
 
   const now = new Date();
   const drafts = events.filter((e) => e.status === "draft");

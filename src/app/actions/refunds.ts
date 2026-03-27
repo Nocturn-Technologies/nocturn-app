@@ -1,16 +1,9 @@
 "use server";
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 /**
  * Refund a ticket — marks as refunded in DB and issues Stripe refund.
@@ -22,7 +15,7 @@ export async function refundTicket(ticketId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Get ticket with event info for ownership check
   const { data: ticket } = await sb
@@ -160,7 +153,7 @@ export async function getRefundableTickets(eventId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", tickets: [] };
 
-  const sb = admin();
+  const sb = createAdminClient();
 
   const { data: tickets } = await sb
     .from("tickets")
@@ -195,7 +188,7 @@ export async function toggleRefundPolicy(eventId: string, enabled: boolean) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Get current event metadata
   const { data: event } = await sb
@@ -233,7 +226,7 @@ export async function toggleRefundPolicy(eventId: string, enabled: boolean) {
  * Get refund policy status for an event.
  */
 export async function getRefundPolicy(eventId: string) {
-  const sb = admin();
+  const sb = createAdminClient();
   const { data: event } = await sb
     .from("events")
     .select("metadata")

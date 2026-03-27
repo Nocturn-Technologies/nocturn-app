@@ -1,20 +1,13 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 /**
  * Search for other collectives on Nocturn to collaborate with.
  */
 export async function searchCollectives(query: string, myCollectiveId: string) {
-  const sb = admin();
+  const sb = createAdminClient();
 
   let builder = sb
     .from("collectives")
@@ -39,7 +32,7 @@ export async function startCollabChat(myCollectiveId: string, partnerCollectiveI
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", channelId: null };
 
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Verify user is a member of their collective
   const { data: membership } = await sb
@@ -122,7 +115,7 @@ export async function startCollabChat(myCollectiveId: string, partnerCollectiveI
  * Get collab channels where this collective is either owner or partner.
  */
 export async function getCollabChannels(collectiveId: string) {
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Channels where we're the owner
   const { data: owned } = await sb
@@ -151,7 +144,7 @@ export async function inviteToCollab(myCollectiveId: string, email: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Verify user is a member of their collective
   const { data: membership } = await sb

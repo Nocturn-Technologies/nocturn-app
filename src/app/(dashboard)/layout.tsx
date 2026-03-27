@@ -1,17 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { DashboardShell } from "@/components/dashboard-shell";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-// Admin client for bypassing RLS on membership check
-function createAdminClient() {
-  return createSupabaseClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 export default async function DashboardLayout({
   children,
@@ -55,14 +45,14 @@ export default async function DashboardLayout({
     .is("deleted_at", null);
 
   const collectives =
-    memberships?.map((m) => {
-      const c = m.collectives as unknown as { id: string; name: string; slug: string; logo_url: string | null };
+    ((memberships ?? []) as unknown as { collective_id: string; role: string; collectives: { id: string; name: string; slug: string; logo_url: string | null } | null }[]).map((m) => {
+      const c = m.collectives ?? { id: m.collective_id, name: "", slug: "", logo_url: null };
       return { ...c, role: m.role };
-    }) ?? [];
+    });
 
   return (
     <DashboardShell
-      user={{ id: user.id, email: user.email ?? "", fullName: profile?.full_name ?? "" }}
+      user={{ id: user.id, email: user.email ?? "", fullName: (profile as { full_name?: string } | null)?.full_name ?? "" }}
       collectives={collectives}
     >
       {children}

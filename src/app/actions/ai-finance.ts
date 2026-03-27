@@ -1,18 +1,9 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { PLATFORM_FEE_PERCENT } from "@/lib/stripe";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 export interface ForecastData {
   // Revenue projections
@@ -69,11 +60,12 @@ export async function generateEventForecast(eventId: string): Promise<{
   const admin = createAdminClient();
 
   // Get event
-  const { data: event } = await admin
+  const { data: eventRaw } = await admin
     .from("events")
     .select("id, title, starts_at, collective_id, bar_minimum, venue_deposit, venue_cost, estimated_bar_revenue")
     .eq("id", eventId)
     .maybeSingle();
+  const event = eventRaw as { id: string; title: string; starts_at: string; collective_id: string; bar_minimum: number | null; venue_deposit: number | null; venue_cost: number | null; estimated_bar_revenue: number | null } | null;
 
   if (!event) return { error: "Event not found", forecast: null };
 
@@ -82,11 +74,12 @@ export async function generateEventForecast(eventId: string): Promise<{
   );
 
   // Get ticket tiers
-  const { data: tiers } = await admin
+  const { data: tiersRaw } = await admin
     .from("ticket_tiers")
     .select("id, name, price, capacity")
     .eq("event_id", eventId)
     .order("sort_order");
+  const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number }[] | null;
 
   if (!tiers || tiers.length === 0) {
     return { error: "No ticket tiers configured", forecast: null };
@@ -141,11 +134,12 @@ export async function generateEventForecast(eventId: string): Promise<{
   const worstCase = currentRevenue; // no more sales
 
   // Get artist fees + travel costs
-  const { data: bookings } = await admin
+  const { data: bookingsRaw } = await admin
     .from("event_artists")
     .select("fee, flight_cost, hotel_cost, transport_cost")
     .eq("event_id", eventId)
     .eq("status", "confirmed");
+  const bookings = bookingsRaw as { fee: number | null; flight_cost: number | null; hotel_cost: number | null; transport_cost: number | null }[] | null;
 
   const artistFees = (bookings ?? []).reduce((s, b) => s + (Number(b.fee) || 0), 0);
   const talentTravelCosts = (bookings ?? []).reduce(
@@ -162,10 +156,11 @@ export async function generateEventForecast(eventId: string): Promise<{
   const depositAtRisk = !barMinimumMet && venueDeposit > 0;
 
   // Get known expenses
-  const { data: expenses } = await admin
+  const { data: expensesRaw } = await admin
     .from("event_expenses")
     .select("amount")
     .eq("event_id", eventId);
+  const expenses = expensesRaw as { amount: number }[] | null;
 
   const estimatedExpenses = (expenses ?? []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
@@ -229,7 +224,7 @@ export async function generateEventForecast(eventId: string): Promise<{
 
   // AI narrative — send computed data to Claude for a plain-English summary
   // Calculate ticket velocity: tickets sold / days since first ticket sale
-  const { data: firstTicket } = await admin
+  const { data: firstTicketRaw } = await admin
     .from("tickets")
     .select("created_at")
     .eq("event_id", eventId)
@@ -237,6 +232,7 @@ export async function generateEventForecast(eventId: string): Promise<{
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
+  const firstTicket = firstTicketRaw as { created_at: string } | null;
 
   const daysSinceSalesStarted = firstTicket?.created_at
     ? Math.max(1, Math.ceil((Date.now() - new Date(firstTicket.created_at).getTime()) / 86400000))
@@ -329,21 +325,23 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   const admin = createAdminClient();
 
   // Get event with venue
-  const { data: event } = await admin
+  const { data: eventRaw2 } = await admin
     .from("events")
     .select("id, title, starts_at, collective_id, status, venues(name, city)")
     .eq("id", eventId)
     .maybeSingle();
+  const event = eventRaw2 as { id: string; title: string; starts_at: string; collective_id: string; status: string; venues: { name: string; city: string } | null } | null;
 
   if (!event) return { error: "Event not found", recap: null };
 
-  const venue = event.venues as unknown as { name: string; city: string } | null;
+  const venue = event.venues;
 
   // Ticket data
-  const { data: tickets } = await admin
+  const { data: ticketsRaw } = await admin
     .from("tickets")
     .select("status, price_paid, checked_in_at")
     .eq("event_id", eventId);
+  const tickets = ticketsRaw as { status: string; price_paid: number | null; checked_in_at: string | null }[] | null;
 
   const paidTickets = (tickets ?? []).filter((t) => t.status === "paid" || t.status === "checked_in");
   const checkedIn = (tickets ?? []).filter((t) => t.status === "checked_in").length;
@@ -352,29 +350,32 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   const avgTicketPrice = ticketsSold > 0 ? grossRevenue / ticketsSold : 0;
 
   // Capacity
-  const { data: tiers } = await admin
+  const { data: tiersRaw2 } = await admin
     .from("ticket_tiers")
     .select("capacity")
     .eq("event_id", eventId);
-  const capacity = (tiers ?? []).reduce((s, t) => s + t.capacity, 0);
+  const tiers2 = tiersRaw2 as { capacity: number }[] | null;
+  const capacity = (tiers2 ?? []).reduce((s, t) => s + t.capacity, 0);
   const sellThrough = capacity > 0 ? ticketsSold / capacity : 0;
 
   // Settlement
-  const { data: settlement } = await admin
+  const { data: settlementRaw } = await admin
     .from("settlements")
     .select("profit, status")
     .eq("event_id", eventId)
     .maybeSingle();
+  const settlement = settlementRaw as { profit: number | null; status: string } | null;
 
   const netProfit = Number(settlement?.profit ?? 0);
 
   // Past events for comparison
-  const { data: pastEvents } = await admin
+  const { data: pastEventsRaw } = await admin
     .from("events")
     .select("id")
     .eq("collective_id", event.collective_id)
     .eq("status", "completed")
     .neq("id", eventId);
+  const pastEvents = pastEventsRaw as { id: string }[] | null;
 
   let avgPastSellThrough = 0;
   if (pastEvents && pastEvents.length > 0) {

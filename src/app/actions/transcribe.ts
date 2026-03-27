@@ -1,16 +1,9 @@
 "use server";
 
 import OpenAI from "openai";
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 /**
  * Transcribe audio from a Supabase Storage URL (for long recordings).

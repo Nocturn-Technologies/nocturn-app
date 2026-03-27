@@ -1,17 +1,8 @@
 "use server";
 import { revalidatePath } from "next/cache";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 function slugify(text: string): string {
   return text
@@ -40,8 +31,8 @@ export async function createArtist(formData: {
   const admin = createAdminClient();
   const slug = slugify(formData.name) + "-" + Math.random().toString(36).slice(2, 6);
 
-  const { data: artist, error } = await admin
-    .from("artists")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: artist, error } = await (admin.from("artists") as any)
     .insert({
       name: formData.name,
       slug,
@@ -57,8 +48,8 @@ export async function createArtist(formData: {
     .select("id, name, slug")
     .single();
 
-  if (error) return { error: error.message, artist: null };
-  return { error: null, artist };
+  if (error) return { error: (error as { message: string }).message, artist: null };
+  return { error: null, artist: artist as { id: string; name: string; slug: string } };
 }
 
 export async function addArtistToEvent(formData: {
@@ -77,7 +68,8 @@ export async function addArtistToEvent(formData: {
 
   const admin = createAdminClient();
 
-  const { error } = await admin.from("event_artists").insert({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (admin.from("event_artists") as any).insert({
     event_id: formData.eventId,
     artist_id: formData.artistId,
     fee: formData.fee,
@@ -88,7 +80,7 @@ export async function addArtistToEvent(formData: {
     notes: formData.notes,
   });
 
-  if (error) return { error: error.message };
+  if (error) return { error: (error as { message: string }).message };
   return { error: null };
 }
 
@@ -104,11 +96,11 @@ export async function updateBookingStatus(formData: {
 
   const admin = createAdminClient();
 
-  const { error } = await admin
-    .from("event_artists")
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (admin.from("event_artists") as any)
     .update({ status: formData.status })
     .eq("id", formData.eventArtistId);
 
-  if (error) return { error: error.message };
+  if (error) return { error: (error as { message: string }).message };
   return { error: null };
 }

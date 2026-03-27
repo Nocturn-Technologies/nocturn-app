@@ -1,17 +1,20 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+// ── In-memory cache (5-minute TTL) ──────────────────────────────────
+const contextCache = new Map<string, { data: string; time: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // ── Event context for AI prompts ──────────────────────────────────
 export async function getEventContext(eventId: string): Promise<string> {
-  const sb = admin();
+  const cacheKey = `event:${eventId}`;
+  const cached = contextCache.get(cacheKey);
+  if (cached && Date.now() - cached.time < CACHE_TTL) {
+    return cached.data;
+  }
+
+  const sb = createAdminClient();
 
   const [eventRes, tiersRes, ticketsRes, artistsRes, tasksRes] = await Promise.all([
     sb.from("events").select("title, description, status, starts_at, ends_at, doors_at, flyer_url, collective_id, venues(name, city, capacity)").eq("id", eventId).maybeSingle(),
@@ -66,12 +69,14 @@ export async function getEventContext(eventId: string): Promise<string> {
     tasks.length > 0 ? `TASKS: ${tasks.filter((t) => t.status !== "done").length} open, ${tasks.filter((t) => t.status === "done").length} done` : "",
   ];
 
-  return lines.filter(Boolean).join("\n");
+  const result = lines.filter(Boolean).join("\n");
+  contextCache.set(cacheKey, { data: result, time: Date.now() });
+  return result;
 }
 
 // ── Collective context for AI prompts ─────────────────────────────
 export async function getCollectiveContext(collectiveId: string): Promise<string> {
-  const sb = admin();
+  const sb = createAdminClient();
 
   const [collectiveRes, eventsRes, membersRes, settlementsRes] = await Promise.all([
     sb.from("collectives").select("name, slug, bio").eq("id", collectiveId).maybeSingle(),
@@ -109,7 +114,7 @@ export async function getCollectiveContext(collectiveId: string): Promise<string
 
 // ── Dashboard briefing data ───────────────────────────────────────
 export async function getDashboardBriefingData(collectiveId: string) {
-  const sb = admin();
+  const sb = createAdminClient();
 
   const now = new Date();
   const yesterday = new Date(now.getTime() - 86400000);

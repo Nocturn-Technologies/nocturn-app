@@ -1,16 +1,7 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 // Generate a post-event recap email using Claude API
 export async function generatePostEventEmail(eventId: string) {
@@ -21,11 +12,12 @@ export async function generatePostEventEmail(eventId: string) {
   const admin = createAdminClient();
 
   // Get event details
-  const { data: event } = await admin
+  const { data: eventRaw } = await admin
     .from("events")
     .select("*, venues(name, city), collectives(name, slug)")
     .eq("id", eventId)
     .maybeSingle();
+  const event = eventRaw as { id: string; title: string; slug: string; starts_at: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string } | null; [key: string]: unknown } | null;
 
   if (!event) return { error: "Event not found", email: null };
 
@@ -37,19 +29,19 @@ export async function generatePostEventEmail(eventId: string) {
     .in("status", ["paid", "checked_in"]);
 
   // Get lineup
-  const { data: lineup } = await admin
+  const { data: lineupRaw } = await admin
     .from("event_artists")
     .select("artists(name)")
     .eq("event_id", eventId)
     .eq("status", "confirmed");
+  const lineup = lineupRaw as { artists: { name: string } | null }[] | null;
 
   const artistNames = (lineup ?? []).map((l) => {
-    const a = l.artists as unknown as { name: string };
-    return a.name;
+    return l.artists?.name ?? "";
   });
 
-  const collective = event.collectives as unknown as { name: string; slug: string };
-  const venue = event.venues as unknown as { name: string; city: string } | null;
+  const collective = event.collectives ?? { name: "Unknown", slug: "" };
+  const venue = event.venues;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -136,33 +128,35 @@ export async function generatePromoEmail(eventId: string) {
 
   const admin = createAdminClient();
 
-  const { data: event } = await admin
+  const { data: eventRaw2 } = await admin
     .from("events")
     .select("*, venues(name, city, address), collectives(name, slug)")
     .eq("id", eventId)
     .maybeSingle();
+  const event = eventRaw2 as { id: string; title: string; slug: string; starts_at: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string; address: string } | null; [key: string]: unknown } | null;
 
   if (!event) return { error: "Event not found", email: null };
 
-  const { data: tiers } = await admin
+  const { data: tiersRaw } = await admin
     .from("ticket_tiers")
     .select("name, price, capacity")
     .eq("event_id", eventId)
     .order("sort_order");
+  const tiers = tiersRaw as { name: string; price: number; capacity: number }[] | null;
 
-  const { data: lineup } = await admin
+  const { data: lineupRaw2 } = await admin
     .from("event_artists")
     .select("artists(name)")
     .eq("event_id", eventId)
     .eq("status", "confirmed");
+  const lineup = lineupRaw2 as { artists: { name: string } | null }[] | null;
 
   const artistNames = (lineup ?? []).map((l) => {
-    const a = l.artists as unknown as { name: string };
-    return a.name;
+    return l.artists?.name ?? "";
   });
 
-  const collective = event.collectives as unknown as { name: string; slug: string };
-  const venue = event.venues as unknown as { name: string; city: string; address: string } | null;
+  const collective = event.collectives ?? { name: "Unknown", slug: "" };
+  const venue = event.venues;
   const eventDate = new Date(event.starts_at);
 
   const ticketInfo = (tiers ?? [])

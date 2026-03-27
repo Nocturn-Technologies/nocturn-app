@@ -1,4 +1,5 @@
 import { Instagram } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
 interface CollectiveProfileProps {
@@ -31,10 +32,12 @@ export function CollectiveProfile({
         {/* Avatar + name */}
         <div className="flex items-center gap-3">
           {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={logoUrl}
               alt={name}
+              width={48}
+              height={48}
+              unoptimized
               className="h-12 w-12 rounded-full object-cover ring-2 ring-white/10"
             />
           ) : (

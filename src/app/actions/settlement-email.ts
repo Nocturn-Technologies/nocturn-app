@@ -1,15 +1,7 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
+import { createAdminClient } from "@/lib/supabase/config";
+import { getResendClient } from "@/lib/resend";
 
 // Generate a settlement report email and return it (for now, no Resend — just generates the content)
 export async function generateSettlementReport(settlementId: string) {
@@ -94,12 +86,11 @@ View full details: ${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.
 
 — Nocturn`;
 
-  // Actually send the email via Resend if API key is configured
+  // Actually send the email via Resend singleton if configured
   let sent = false;
-  if (process.env.RESEND_API_KEY && recipientEmails.length > 0) {
+  const resend = getResendClient();
+  if (resend && recipientEmails.length > 0) {
     try {
-      const { Resend } = await import("resend");
-      const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from: "Nocturn <noreply@trynocturn.com>",
         to: recipientEmails,

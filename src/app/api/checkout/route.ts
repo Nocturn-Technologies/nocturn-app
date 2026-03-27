@@ -1,18 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { getStripe } from "@/lib/stripe";
 import { calculateServiceFeeCents } from "@/lib/pricing";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
-
-function createAdminClient() {
-  return createClient(
-    SUPABASE_URL,
-    SUPABASE_SERVICE_ROLE_KEY,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 

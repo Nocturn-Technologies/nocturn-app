@@ -1,15 +1,8 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { generateWithClaude } from "@/lib/claude";
 import { getDashboardBriefingData } from "@/lib/ai-context";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -96,11 +89,11 @@ function generateFallbackBriefing(data: Awaited<ReturnType<typeof getDashboardBr
 const BRIEFING_CACHE_HOURS = 4; // Only regenerate every 4 hours
 
 export async function generateMorningBriefing(collectiveId: string): Promise<BriefingItem[]> {
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Check cache — avoid burning API calls on every dashboard load
   try {
-    const { data: cached } = await sb
+    const { data: cachedRaw } = await sb
       .from("audit_logs")
       .select("new_data, created_at")
       .eq("table_name", "briefing_cache")
@@ -108,6 +101,7 @@ export async function generateMorningBriefing(collectiveId: string): Promise<Bri
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+    const cached = cachedRaw as { new_data: Record<string, unknown> | null; created_at: string } | null;
 
     if (cached?.created_at) {
       const ageMs = Date.now() - new Date(cached.created_at).getTime();
@@ -165,7 +159,8 @@ Generate the morning briefing JSON array.`;
 
   // Cache the result (non-blocking)
   try {
-    await sb.from("audit_logs").insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (sb.from("audit_logs") as any).insert({
       table_name: "briefing_cache",
       record_id: collectiveId,
       action: "briefing_generated",

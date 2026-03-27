@@ -1,20 +1,13 @@
 "use server";
 
-import { createClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email/send";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 
 /**
  * Join the waitlist for a sold-out ticket tier.
  */
 export async function joinWaitlist(eventId: string, tierId: string, email: string) {
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Verify tier is actually sold out
   const { data: tier } = await sb
@@ -54,7 +47,7 @@ export async function joinWaitlist(eventId: string, tierId: string, email: strin
  * Get waitlist count for a tier.
  */
 export async function getWaitlistCount(tierId: string) {
-  const sb = admin();
+  const sb = createAdminClient();
   const { count } = await sb
     .from("ticket_waitlist")
     .select("id", { count: "exact", head: true })
@@ -69,7 +62,7 @@ export async function getWaitlistCount(tierId: string) {
  * Notifies the first person on the waitlist.
  */
 export async function notifyNextOnWaitlist(eventId: string, tierId: string) {
-  const sb = admin();
+  const sb = createAdminClient();
 
   // Get the next person waiting
   const { data: next } = await sb

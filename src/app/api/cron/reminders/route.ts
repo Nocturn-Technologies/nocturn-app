@@ -1,19 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { sendEmail } from "@/lib/email/send";
 import {
   dayOfHypeEmail,
   organizerCountdownEmail,
   inactiveNudgeEmail,
 } from "@/lib/email/templates";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { sendEventReminders } from "@/app/actions/event-reminders";
-
-function admin() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-}
 
 export async function GET(request: Request) {
   // Verify cron secret (Vercel sets this automatically)
@@ -29,7 +22,7 @@ export async function GET(request: Request) {
     inactiveNudge: 0,
   };
 
-  const sb = admin();
+  const sb = createAdminClient();
   const now = new Date();
 
   // ── 1. 24hr Event Reminders (existing) ──

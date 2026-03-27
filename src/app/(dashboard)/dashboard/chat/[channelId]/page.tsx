@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, memo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -156,9 +156,26 @@ export default function ChatRoomPage() {
     if (!input.trim() || !userId || !channelId) return;
 
     const content = input.trim();
+    const optimisticId = crypto.randomUUID();
+
+    // Optimistic: add message to state immediately
+    const optimisticMsg: Message = {
+      id: optimisticId,
+      channel_id: channelId,
+      user_id: userId,
+      content,
+      type: "text",
+      voice_url: null,
+      voice_duration: null,
+      metadata: null,
+      created_at: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
     setInput("");
 
-    const { data } = await supabase
+    // Send to server in background — don't block UI
+    supabase
       .from("messages")
       .insert({
         channel_id: channelId,
@@ -167,15 +184,26 @@ export default function ChatRoomPage() {
         type: "text",
       })
       .select()
-      .single();
-
-    if (data) {
-      setMessages((prev) => {
-        const exists = prev.find((m) => m.id === data.id);
-        if (exists) return prev;
-        return [...prev, data as Message];
+      .single()
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("[chat] Failed to send message:", error);
+          // Remove optimistic message on failure
+          setMessages((prev) => prev.filter((m) => m.id !== optimisticId));
+          setInput(content); // Restore input so user can retry
+          return;
+        }
+        // Replace optimistic message with server-confirmed one
+        // (Realtime dedup will handle if the subscription delivers it first)
+        if (data) {
+          setMessages((prev) => {
+            const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
+            const alreadyDelivered = withoutOptimistic.some((m) => m.id === data.id);
+            if (alreadyDelivered) return withoutOptimistic;
+            return [...withoutOptimistic, data as Message];
+          });
+        }
       });
-    }
 
     // AI always responds — this is a copilot, not a dumb chatroom
     if (!aiTyping) {
@@ -457,7 +485,7 @@ export default function ChatRoomPage() {
 }
 
 /* ── Message Bubble ── */
-function MessageBubble({
+const MessageBubble = memo(function MessageBubble({
   msg,
   isOwn,
   userName,
@@ -654,4 +682,4 @@ function MessageBubble({
       </div>
     </div>
   );
-}
+});
