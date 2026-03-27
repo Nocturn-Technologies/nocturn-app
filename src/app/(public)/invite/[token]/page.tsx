@@ -66,7 +66,7 @@ export default function InvitePage() {
         return;
       }
 
-      if (new Date(invitation.expires_at) < new Date()) {
+      if (invitation.expires_at && new Date(invitation.expires_at) < new Date()) {
         setState("expired");
         return;
       }

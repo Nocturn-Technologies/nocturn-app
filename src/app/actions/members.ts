@@ -168,7 +168,7 @@ export async function acceptInvitation(token: string) {
   }
 
   // Check if expired
-  if (new Date(invitation.expires_at) < new Date()) {
+  if (invitation.expires_at && new Date(invitation.expires_at) < new Date()) {
     await admin
       .from("invitations")
       .update({ status: "expired" })

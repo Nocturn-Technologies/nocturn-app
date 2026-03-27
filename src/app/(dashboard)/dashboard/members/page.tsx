@@ -27,7 +27,7 @@ interface Member {
   id: string;
   user_id: string;
   role: Role;
-  joined_at: string;
+  joined_at: string | null;
   user: {
     full_name: string;
     email: string;

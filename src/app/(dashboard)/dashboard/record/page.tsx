@@ -27,12 +27,12 @@ interface Recording {
   duration_seconds: number | null;
   transcript: string | null;
   summary: string | null;
-  action_items: string[];
-  key_decisions: string[];
-  entities: Record<string, unknown>;
+  action_items: string[] | null;
+  key_decisions: string[] | null;
   audio_url: string | null;
-  status: "recording" | "processing" | "done" | "failed";
+  status: string;
   created_at: string;
+  updated_at: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -140,12 +140,12 @@ function RecordingCard({
                 </span>
               </>
             )}
-            {recording.action_items?.length > 0 && (
+            {(recording.action_items?.length ?? 0) > 0 && (
               <>
                 <span className="text-xs text-muted-foreground">-</span>
                 <span className="text-xs text-nocturn font-medium">
-                  {recording.action_items.length} action
-                  {recording.action_items.length !== 1 ? "s" : ""}
+                  {recording.action_items!.length} action
+                  {recording.action_items!.length !== 1 ? "s" : ""}
                 </span>
               </>
             )}
@@ -173,13 +173,13 @@ function RecordingCard({
             </div>
           )}
 
-          {recording.action_items?.length > 0 && (
+          {(recording.action_items?.length ?? 0) > 0 && (
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
                 Action Items
               </p>
               <div className="space-y-1.5">
-                {recording.action_items.map((item, i) => (
+                {recording.action_items!.map((item, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <div className="w-5 h-5 rounded-md bg-nocturn/20 flex items-center justify-center shrink-0 mt-0.5">
                       <span className="text-[10px] font-bold text-nocturn">
@@ -193,13 +193,13 @@ function RecordingCard({
             </div>
           )}
 
-          {recording.key_decisions?.length > 0 && (
+          {(recording.key_decisions?.length ?? 0) > 0 && (
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
                 Key Decisions
               </p>
               <div className="space-y-1">
-                {recording.key_decisions.map((d, i) => (
+                {recording.key_decisions!.map((d, i) => (
                   <p key={i} className="text-sm text-muted-foreground">
                     - {d}
                   </p>

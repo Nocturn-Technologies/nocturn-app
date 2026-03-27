@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { SessionTimeout } from "@/components/session-timeout";
 import { createAdminClient } from "@/lib/supabase/config";
 
 export default async function DashboardLayout({
@@ -51,11 +52,14 @@ export default async function DashboardLayout({
     });
 
   return (
+    <>
+    <SessionTimeout />
     <DashboardShell
       user={{ id: user.id, email: user.email ?? "", fullName: (profile as { full_name?: string } | null)?.full_name ?? "" }}
       collectives={collectives}
     >
       {children}
     </DashboardShell>
+    </>
   );
 }

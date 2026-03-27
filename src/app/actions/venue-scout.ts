@@ -49,7 +49,7 @@ export async function saveVenueScoutNotes(notes: ScoutNote) {
 
   const { error } = await admin
     .from("saved_venues")
-    .update({ venue_notes: updatedNotes })
+    .update({ venue_notes: JSON.stringify(updatedNotes) })
     .eq("id", savedVenue.id);
 
   if (error) return { error: error.message };

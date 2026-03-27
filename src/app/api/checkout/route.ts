@@ -4,6 +4,7 @@ import { calculateServiceFeeCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
+import { rateLimit } from "@/lib/rate-limit";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
@@ -17,6 +18,15 @@ interface CheckoutBody {
 }
 
 export async function POST(request: NextRequest) {
+  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { success } = rateLimit(`checkout:${clientIp}`, 10, 60000); // 10 requests per minute
+  if (!success) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again in a moment." },
+      { status: 429 }
+    );
+  }
+
   try {
     const body: CheckoutBody = await request.json();
     const { eventId, tierId, quantity, buyerEmail, promoCode, referrerToken } = body;

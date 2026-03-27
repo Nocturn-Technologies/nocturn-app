@@ -128,7 +128,15 @@ export async function seedDemoData(collectiveId: string) {
 
     // Create tickets (all checked_in for past events)
     const soldCounts = [config.earlySold, config.gaSold, config.vipSold];
-    const allTickets: Array<Record<string, unknown>> = [];
+    const allTickets: Array<{
+      event_id: string;
+      ticket_tier_id: string;
+      status: string;
+      price_paid: number;
+      currency: string;
+      ticket_token: string;
+      metadata: Record<string, unknown>;
+    }> = [];
 
     for (let t = 0; t < insertedTiers.length; t++) {
       const tier = insertedTiers[t];
@@ -165,7 +173,7 @@ export async function seedDemoData(collectiveId: string) {
       + config.vipSold * config.vipPrice;
     const totalTickets = config.earlySold + config.gaSold + config.vipSold;
     const stripeFees = Math.round((grossRevenue * 0.029 + totalTickets * 0.30) * 100) / 100;
-    const totalArtistFees = insertedArtists[artistIndex].default_fee + insertedArtists[secondArtist].default_fee;
+    const totalArtistFees = (insertedArtists[artistIndex].default_fee ?? 0) + (insertedArtists[secondArtist].default_fee ?? 0);
     const platformFee = 0; // Buyer pays — organizer keeps 100%
     const nocturnRevenue = Math.round((grossRevenue * 0.07 + totalTickets * 0.50) * 100) / 100;
     const netRevenue = grossRevenue - stripeFees - platformFee;
