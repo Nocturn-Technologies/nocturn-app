@@ -131,7 +131,7 @@ function AiBubble({ children }: { children: React.ReactNode }) {
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#7B2FF7]/20">
         <Sparkles className="h-4 w-4 text-[#7B2FF7]" />
       </div>
-      <div className="rounded-2xl rounded-tl-sm bg-zinc-900 border border-white/5 px-4 py-3 max-w-[85%]">
+      <div className="rounded-2xl rounded-tl-sm bg-zinc-900 border border-white/5 px-4 py-3 max-w-[85%] overflow-hidden">
         {children}
       </div>
     </div>
@@ -141,7 +141,7 @@ function AiBubble({ children }: { children: React.ReactNode }) {
 function UserBubble({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex justify-end animate-fade-in-up">
-      <div className="rounded-2xl rounded-tr-sm bg-[#7B2FF7] px-4 py-3 max-w-[85%]">
+      <div className="rounded-2xl rounded-tr-sm bg-[#7B2FF7] px-4 py-3 max-w-[85%] overflow-hidden">
         {children}
       </div>
     </div>
@@ -208,7 +208,7 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
           setEditValue(value);
           setEditing(true);
         }}
-        className="text-lg font-bold text-white flex items-center gap-1.5 text-left"
+        className="text-lg font-bold text-white flex items-center gap-1.5 text-left hover:text-nocturn-light active:scale-[0.98] transition-all duration-200"
       >
         {value}
         <Pencil className="h-3 w-3 text-zinc-600 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0" />
@@ -271,7 +271,7 @@ function EditableRow({
             setEditValue(value);
             setEditing(true);
           }}
-          className="flex items-center gap-1.5 text-sm text-left min-w-0 group/row"
+          className="flex items-center gap-1.5 text-sm text-left min-w-0 group/row hover:text-nocturn-light active:scale-[0.98] transition-all duration-200"
         >
           <span className="text-zinc-400 shrink-0">{label}:</span>
           <span className="font-medium text-white truncate">{value}</span>
@@ -328,7 +328,7 @@ function EventConfirmationCard({
     : "";
 
   return (
-    <div className="ml-11 rounded-xl border border-[#7B2FF7]/20 bg-zinc-900 overflow-hidden animate-scale-in">
+    <div className="ml-11 rounded-2xl border border-[#7B2FF7]/20 bg-zinc-900 overflow-hidden animate-scale-in">
       <div className="p-4 space-y-3">
         {/* Status badge */}
         <div className="flex items-center gap-2">
@@ -347,7 +347,7 @@ function EventConfirmationCard({
         />
 
         {data.description && (
-          <p className="text-sm text-zinc-400">{data.description}</p>
+          <p className="text-sm text-zinc-400 line-clamp-3">{data.description}</p>
         )}
 
         {/* Details grid */}
@@ -397,7 +397,7 @@ function EventConfirmationCard({
             </div>
             <div className="space-y-2">
               {tiers.map((tier, i) => (
-                <div key={i} className="flex items-center justify-between bg-zinc-800/50 rounded-lg px-3 py-2">
+                <div key={i} className="flex items-center justify-between bg-zinc-800/50 rounded-xl px-3 py-2 transition-colors duration-200 hover:bg-zinc-800/80">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-white">{tier.name}</span>
                     <span className="text-xs text-zinc-500">{tier.capacity} tickets</span>
@@ -433,7 +433,7 @@ function EventConfirmationCard({
       </div>
 
       {error && (
-        <div className="mx-4 mb-3 rounded-lg bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400 text-center">
+        <div className="mx-4 mb-3 rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400 text-center">
           {error}
         </div>
       )}
@@ -442,7 +442,7 @@ function EventConfirmationCard({
       <div className="flex border-t border-white/5">
         <button
           onClick={onEdit}
-          className="flex-1 flex items-center justify-center gap-1.5 h-12 text-sm text-zinc-400 font-medium hover:text-white transition-colors border-r border-white/5"
+          className="flex-1 flex items-center justify-center gap-1.5 h-12 text-sm text-zinc-400 font-medium hover:text-white hover:bg-white/5 active:scale-[0.98] transition-all duration-200 border-r border-white/5"
         >
           <Pencil className="h-3.5 w-3.5" />
           Change something
@@ -450,7 +450,7 @@ function EventConfirmationCard({
         <button
           onClick={onCreate}
           disabled={creating}
-          className="flex-1 flex items-center justify-center gap-1.5 h-12 text-sm text-[#7B2FF7] font-semibold hover:text-white transition-colors"
+          className="flex-1 flex items-center justify-center gap-1.5 h-12 text-sm text-[#7B2FF7] font-semibold hover:text-white hover:bg-[#7B2FF7]/10 active:scale-[0.98] transition-all duration-200"
         >
           {creating ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -522,11 +522,11 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
       </div>
 
       <div className="grid grid-cols-2 gap-1.5 mb-2">
-        <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+        <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${pricing.avgGA}</p>
           <p className="text-[9px] text-zinc-500">avg GA in {city}</p>
         </div>
-        <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+        <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${pricing.avgVIP}</p>
           <p className="text-[9px] text-zinc-500">avg VIP in {city}</p>
         </div>
@@ -651,7 +651,7 @@ function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
         {projections.map((p) => (
           <div
             key={p.label}
-            className="flex items-center gap-3 rounded-lg bg-zinc-800/30 px-3 py-2"
+            className="flex items-center gap-3 rounded-xl bg-zinc-800/30 px-3 py-2 transition-colors duration-200 hover:bg-zinc-800/50"
           >
             <span className="text-sm">{p.emoji}</span>
             <div className="flex-1 min-w-0">
@@ -677,15 +677,15 @@ function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
 
       {/* Quick metrics */}
       <div className="grid grid-cols-3 gap-1.5">
-        <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+        <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${avgPrice.toFixed(0)}</p>
           <p className="text-[9px] text-zinc-500">avg ticket</p>
         </div>
-        <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+        <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">{totalCapacity}</p>
           <p className="text-[9px] text-zinc-500">capacity</p>
         </div>
-        <div className="rounded-lg bg-zinc-800/50 p-2 text-center">
+        <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-green-400">
             ${projections[1].net.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </p>
@@ -1204,15 +1204,15 @@ export default function NewEventPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg flex flex-col h-[calc(100dvh-8rem)]">
+    <div className="mx-auto max-w-lg flex flex-col h-[calc(100dvh-8rem)] animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-3 pb-4 shrink-0">
         <Link href="/dashboard/events">
-          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
-        <h1 className="text-lg font-bold font-heading">
+        <h1 className="text-xl font-bold font-heading truncate">
           New Event
         </h1>
         <div className="ml-auto flex items-center gap-1.5 rounded-full bg-[#7B2FF7]/10 px-3 py-1">
@@ -1281,7 +1281,7 @@ export default function NewEventPage() {
               <Check className="h-8 w-8 text-green-500" />
             </div>
             <div className="text-center">
-              <h2 className="text-xl font-bold font-heading">
+              <h2 className="text-lg font-bold font-heading truncate max-w-full px-4">
                 {eventData.title} is live!
               </h2>
               <p className="text-sm text-zinc-400 mt-1">
@@ -1316,7 +1316,7 @@ export default function NewEventPage() {
             type="button"
             size="icon"
             onClick={listening ? stopListening : startListening}
-            className={`shrink-0 rounded-full min-h-[44px] min-w-[44px] transition-colors ${
+            className={`shrink-0 rounded-full min-h-[44px] min-w-[44px] transition-all duration-200 active:scale-95 ${
               listening
                 ? "bg-red-600 hover:bg-red-700 animate-pulse"
                 : "bg-zinc-800 hover:bg-zinc-700 border border-white/10"
@@ -1328,7 +1328,7 @@ export default function NewEventPage() {
           <Button
             type="submit"
             size="icon"
-            className="bg-[#7B2FF7] hover:bg-[#6B1FE7] shrink-0 rounded-full min-h-[44px] min-w-[44px]"
+            className="bg-[#7B2FF7] hover:bg-[#6B1FE7] shrink-0 rounded-full min-h-[44px] min-w-[44px] transition-all duration-200 active:scale-95"
             disabled={!input.trim() || thinking}
           >
             {thinking ? (
