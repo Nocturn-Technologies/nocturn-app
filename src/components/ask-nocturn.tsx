@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Sparkles, X, Send, Loader2 } from "lucide-react";
 import { NocturnLogo } from "@/components/nocturn-logo";
+import { usePathname } from "next/navigation";
 import { askNocturn } from "@/app/actions/ask-nocturn";
 
 interface Message {
@@ -15,7 +16,12 @@ interface AskNocturnProps {
 }
 
 export function AskNocturn({ collectiveId }: AskNocturnProps) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  // Hide floating button on pages where it overlaps with input areas
+  const hiddenPaths = ["/dashboard/chat/", "/dashboard/events/new"];
+  const shouldHideButton = !open && hiddenPaths.some((p) => pathname.startsWith(p));
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -69,8 +75,8 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
 
   return (
     <>
-      {/* ── Floating trigger button ── */}
-      {!open && (
+      {/* ── Floating trigger button (hidden on chat/event-creation pages) ── */}
+      {!open && !shouldHideButton && (
         <button
           onClick={() => setOpen(true)}
           className="fixed z-[55] bottom-[calc(env(safe-area-inset-bottom)+72px)] right-4 md:bottom-6 md:right-6 h-14 w-14 rounded-full bg-gradient-to-br from-nocturn to-nocturn-light shadow-lg shadow-nocturn/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 animate-pulse-subtle"

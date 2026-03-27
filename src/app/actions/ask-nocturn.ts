@@ -74,10 +74,10 @@ export async function askNocturn(
         .in("status", ["paid", "checked_in"])
         .gte("created_at", monthStart),
 
-      // Audience stats
+      // Audience stats — email is in metadata jsonb, not a column
       sb
         .from("tickets")
-        .select("attendee_email, status, events!inner(collective_id)")
+        .select("metadata, status, events!inner(collective_id)")
         .eq("events.collective_id", collectiveId)
         .in("status", ["paid", "checked_in"]),
 
@@ -142,13 +142,16 @@ export async function askNocturn(
     contextLines.push(`THIS MONTH: $${monthRevenue.toFixed(0)} revenue from ${monthTickets.length} tickets`);
     contextLines.push("");
 
-    // Audience stats
+    // Audience stats — email stored in metadata jsonb
     const allTickets = audienceRes.data || [];
-    const uniqueEmails = new Set(allTickets.map((t) => t.attendee_email).filter(Boolean));
+    const getEmail = (t: { metadata?: Record<string, unknown> | null }) =>
+      (t.metadata?.email as string) ?? (t.metadata?.customer_email as string) ?? null;
+    const uniqueEmails = new Set(allTickets.map(getEmail).filter(Boolean));
     const emailCounts: Record<string, number> = {};
     for (const t of allTickets) {
-      if (t.attendee_email) {
-        emailCounts[t.attendee_email] = (emailCounts[t.attendee_email] || 0) + 1;
+      const email = getEmail(t);
+      if (email) {
+        emailCounts[email] = (emailCounts[email] || 0) + 1;
       }
     }
     const repeatCount = Object.values(emailCounts).filter((c) => c > 1).length;
