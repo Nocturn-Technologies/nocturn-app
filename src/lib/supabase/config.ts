@@ -5,11 +5,10 @@ import type { Database } from "./database.types";
 
 // These are public (embedded in client JS anyway via NEXT_PUBLIC_ vars)
 export const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://bpzwbqtpyorppijdblhy.supabase.co";
+  process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 
 export const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwendicXRweW9ycHBpamRibGh5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3MTA3NzIsImV4cCI6MjA4OTI4Njc3Mn0.RAYfZJoeKaYQKpsDuLLywG3OSei8X6yJ2KQoNC5Hlp8";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
 
 // Service role key — MUST come from environment variable, NEVER hardcoded
 // This key bypasses all Row Level Security — treat it like a database password

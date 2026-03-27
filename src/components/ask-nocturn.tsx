@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { askNocturn } from "@/app/actions/ask-nocturn";
 
 interface Message {
+  id: string;
   role: "user" | "assistant";
   content: string;
 }
@@ -49,7 +50,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
     const question = input.trim();
     if (!question || loading) return;
 
-    const userMessage: Message = { role: "user", content: question };
+    const userMessage: Message = { id: crypto.randomUUID(), role: "user", content: question };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
@@ -58,11 +59,11 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
       // Send last 6 messages as history context
       const history = [...messages, userMessage].slice(-6);
       const response = await askNocturn(question, collectiveId, history);
-      setMessages((prev) => [...prev, { role: "assistant", content: response }]);
+      setMessages((prev) => [...prev, { id: crypto.randomUUID(), role: "assistant", content: response }]);
     } catch {
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Something went wrong. Try again in a moment." },
+        { id: crypto.randomUUID(), role: "assistant", content: "Something went wrong. Try again in a moment." },
       ]);
     } finally {
       setLoading(false);
@@ -101,7 +102,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
       {open && (
         <div
           className={
-            "fixed z-[75] flex flex-col bg-[#12111a]/95 backdrop-blur-2xl border-white/[0.08] " +
+            "fixed z-[75] flex flex-col bg-card/95 backdrop-blur-2xl border-white/[0.08] " +
             // Mobile: bottom sheet
             "inset-x-0 bottom-0 h-[80vh] rounded-t-3xl border-t " +
             // Desktop: right panel
@@ -169,7 +170,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
 
             {messages.map((msg, i) => (
               <div
-                key={i}
+                key={msg.id}
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
               >
                 <div className="max-w-[85%]">

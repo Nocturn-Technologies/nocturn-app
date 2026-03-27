@@ -105,7 +105,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .or(`stripe_payment_intent_id.eq.${paymentIntentId},metadata->>checkout_session_id.eq.${session.id}`);
 
   if (existingCount && existingCount > 0) {
-    console.log(`[stripe-webhook] Tickets already exist for session ${session.id}, skipping`);
+    console.log(
+      `[stripe-webhook] Idempotency: tickets already exist for session ${session.id}` +
+      (paymentIntentId ? ` / PI ${paymentIntentId}` : "") +
+      `, skipping duplicate creation`
+    );
     return;
   }
 
@@ -271,15 +275,26 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   const supabase = createAdminClient();
 
-  // Idempotency check
+  // Retrieve checkout_session_id if this PI originated from a Checkout Session
+  const checkoutSessionId = metadata.checkoutSessionId ?? null;
+
+  // IDEMPOTENCY CHECK: Prevent duplicate ticket creation using BOTH identifiers
+  const idempotencyFilter = checkoutSessionId
+    ? `stripe_payment_intent_id.eq.${paymentIntent.id},metadata->>checkout_session_id.eq.${checkoutSessionId}`
+    : `stripe_payment_intent_id.eq.${paymentIntent.id}`;
+
   const { count: existingCount } = await supabase
     .from("tickets")
     .select("*", { count: "exact", head: true })
     .eq("event_id", eventId)
-    .eq("stripe_payment_intent_id", paymentIntent.id);
+    .or(idempotencyFilter);
 
   if (existingCount && existingCount > 0) {
-    console.log(`[stripe-webhook] Tickets already exist for PI ${paymentIntent.id}, skipping`);
+    console.log(
+      `[stripe-webhook] Idempotency: tickets already exist for PI ${paymentIntent.id}` +
+      (checkoutSessionId ? ` / session ${checkoutSessionId}` : "") +
+      `, skipping duplicate creation`
+    );
     return;
   }
 
@@ -305,6 +320,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     ticket_token: randomUUID(),
     metadata: {
       payment_intent_id: paymentIntent.id,
+      ...(checkoutSessionId && { checkout_session_id: checkoutSessionId }),
       customer_email: buyerEmail,
     },
   }));

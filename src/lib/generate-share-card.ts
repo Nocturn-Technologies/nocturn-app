@@ -92,6 +92,7 @@ export async function generateShareCard(event: ShareCardEvent): Promise<Blob> {
   if (event.flyerUrl) {
     try {
       const resp = await fetch(event.flyerUrl);
+      if (!resp.ok) throw new Error(`Flyer fetch failed: ${resp.status}`);
       const blob = await resp.blob();
       const bitmap = await createImageBitmap(blob);
 

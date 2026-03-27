@@ -497,12 +497,12 @@ export async function cancelEvent(eventId: string) {
 
   if (error) return { error: `Failed to cancel: ${error.message}` };
 
-  // --- Refund all paid tickets ---
+  // --- Refund all paid and checked-in tickets ---
   const { data: paidTickets } = await admin
     .from("tickets")
     .select("id, price_paid, stripe_payment_intent_id, metadata")
     .eq("event_id", eventId)
-    .eq("status", "paid");
+    .in("status", ["paid", "checked_in"]);
 
   const refundResults: { ticketId: string; success: boolean; error?: string }[] = [];
 
@@ -557,12 +557,12 @@ export async function cancelEvent(eventId: string) {
     });
   }
 
-  // --- Cancel pending tickets ---
+  // --- Cancel remaining non-refunded tickets (pending, free, etc.) ---
   await admin
     .from("tickets")
     .update({ status: "cancelled" })
     .eq("event_id", eventId)
-    .eq("status", "pending");
+    .not("status", "in", "(refunded,cancelled)");
 
   // --- Cancel waitlist entries ---
   await admin

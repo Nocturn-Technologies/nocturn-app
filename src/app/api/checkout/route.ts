@@ -28,6 +28,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(buyerEmail)) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
+    }
+
     if (quantity < 1 || quantity > 10) {
       return NextResponse.json(
         { error: "Quantity must be between 1 and 10" },
@@ -245,6 +250,18 @@ export async function POST(request: NextRequest) {
         console.error("[checkout] Free ticket email failed (non-blocking):", emailErr);
       }
 
+      // Claim promo code for free tickets (must happen before returning)
+      if (promoId) {
+        try {
+          await supabase.rpc("claim_promo_code", {
+            p_code_id: promoId,
+            p_quantity: quantity,
+          });
+        } catch (claimErr) {
+          console.error("[checkout] Free ticket promo claim failed (non-blocking):", claimErr);
+        }
+      }
+
       // Track free registration
       import("@/lib/track-server").then(({ trackServerEvent }) =>
         trackServerEvent("ticket_free_registered", { eventId, quantity, buyerEmail })
@@ -268,7 +285,14 @@ export async function POST(request: NextRequest) {
     }
 
     const referer = request.headers.get("referer");
-    const cancelUrl = referer && referer.startsWith("http") ? referer : APP_URL;
+    let cancelUrl = APP_URL;
+    if (referer) {
+      try {
+        const refererOrigin = new URL(referer).origin;
+        const appOrigin = new URL(APP_URL).origin;
+        if (refererOrigin === appOrigin) cancelUrl = referer;
+      } catch {}
+    }
 
     // All payments go to Nocturn platform account — payouts handled manually
     // Buyer pays ticket price + service fee (7% + $0.50)

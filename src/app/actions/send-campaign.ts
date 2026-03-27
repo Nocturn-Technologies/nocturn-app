@@ -57,10 +57,15 @@ export async function sendCampaignEmail(input: {
     return { error: "No attendees found for this event", sent: 0 };
   }
 
+  // Escape HTML to prevent XSS in email content
+  function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
   // Build HTML email from plain text body
   const htmlBody = input.body
     .split("\n")
-    .map((line) => (line.trim() === "" ? "<br>" : `<p>${line}</p>`))
+    .map((line) => (line.trim() === "" ? "<br>" : `<p>${escapeHtml(line)}</p>`))
     .join("");
 
   const html = `

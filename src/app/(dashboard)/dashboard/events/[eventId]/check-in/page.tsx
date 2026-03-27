@@ -26,6 +26,7 @@ export default function CheckInScannerPage() {
     checkedIn: 0,
     recentCheckIns: [],
   });
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [processing, setProcessing] = useState(false);
   const lastScannedRef = useRef<string>("");
@@ -33,13 +34,19 @@ export default function CheckInScannerPage() {
 
   // Load initial stats
   useEffect(() => {
-    getCheckInStats(eventId).then(setStats);
+    getCheckInStats(eventId).then(setStats).catch((err) => {
+      console.error("[check-in] Failed to load initial stats:", err);
+      setStatsError("Failed to load stats");
+    });
   }, [eventId]);
 
   // Refresh stats periodically (every 15 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
-      getCheckInStats(eventId).then(setStats);
+      getCheckInStats(eventId).then(setStats).catch((err) => {
+        console.error("[check-in] Failed to refresh stats:", err);
+        setStatsError("Failed to load stats");
+      });
     }, 15000);
     return () => clearInterval(interval);
   }, [eventId]);
@@ -96,7 +103,9 @@ export default function CheckInScannerPage() {
           tierName: result.ticket?.tierName,
         });
         // Refresh stats immediately
-        getCheckInStats(eventId).then(setStats);
+        getCheckInStats(eventId).then(setStats).catch((err) => {
+          console.error("[check-in] Failed to refresh stats after scan:", err);
+        });
 
         // Track check-in (client-side)
         import("@/lib/track").then(({ trackEvent }) =>
@@ -149,6 +158,11 @@ export default function CheckInScannerPage() {
       </div>
 
       {/* Stats Banner */}
+      {statsError && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
+          {statsError}
+        </div>
+      )}
       <Card>
         <CardContent className="flex items-center justify-between p-4">
           <div className="flex items-center gap-3">

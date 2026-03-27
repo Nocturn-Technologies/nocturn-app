@@ -51,6 +51,7 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
   const supabase = createClient();
   const [card, setCard] = useState<EventCardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
@@ -60,8 +61,10 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
       .eq("channel_id", channelId)
       .eq("event_id", eventId)
       .limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0) {
+      .then(({ data, error: queryError }) => {
+        if (queryError) {
+          setError(true);
+        } else if (data && data.length > 0) {
           setCard(data[0] as EventCardData);
         }
         setLoading(false);
@@ -69,6 +72,18 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
   }, [channelId, eventId, supabase]);
 
   if (loading) return null;
+
+  if (error) {
+    return (
+      <div className="mx-3 mt-2 mb-1 rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3">
+          <Sparkles size={16} className="text-muted-foreground" />
+          <span className="text-sm font-semibold text-muted-foreground">Event Card</span>
+          <span className="ml-auto text-xs text-muted-foreground">Unable to load</span>
+        </div>
+      </div>
+    );
+  }
 
   const isEmpty =
     !card ||

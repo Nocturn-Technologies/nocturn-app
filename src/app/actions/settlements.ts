@@ -209,7 +209,7 @@ export async function approveSettlement(settlementId: string) {
 
   if (!count || count === 0) return { error: "You don't have permission to approve this settlement" };
 
-  const { error } = await admin
+  const { data: updated, error } = await admin
     .from("settlements")
     .update({
       status: "approved",
@@ -218,15 +218,44 @@ export async function approveSettlement(settlementId: string) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", settlementId)
-    .eq("status", "draft");
+    .eq("status", "draft")
+    .select("id");
 
   if (error) return { error: error.message };
+
+  if (!updated || updated.length === 0) {
+    return { error: "Settlement is not in draft status" };
+  }
+
   revalidatePath("/dashboard/finance"); return { error: null };
 }
 
 // Get settlement for an event
 export async function getSettlement(eventId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", settlement: null, lines: [] };
+
   const admin = createAdminClient();
+
+  // Look up the event's collective_id
+  const { data: event } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found", settlement: null, lines: [] };
+
+  // Verify user is a member of this collective
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { error: "Not authorized", settlement: null, lines: [] };
 
   const { data: settlement } = await admin
     .from("settlements")

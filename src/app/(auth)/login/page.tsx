@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -29,8 +29,40 @@ export default function LoginPage() {
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [resetSent, setResetSent] = useState(false);
 
+  // Rate limiting state
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+  const lockoutTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const MAX_ATTEMPTS = 5;
+  const LOCKOUT_DURATION = 30;
+
+  const isLockedOut = lockoutSeconds > 0;
+
+  const startLockout = useCallback(() => {
+    setLockoutSeconds(LOCKOUT_DURATION);
+    if (lockoutTimerRef.current) clearInterval(lockoutTimerRef.current);
+    lockoutTimerRef.current = setInterval(() => {
+      setLockoutSeconds((prev) => {
+        if (prev <= 1) {
+          if (lockoutTimerRef.current) clearInterval(lockoutTimerRef.current);
+          lockoutTimerRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (lockoutTimerRef.current) clearInterval(lockoutTimerRef.current);
+    };
+  }, []);
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    if (isLockedOut) return;
     setError(null);
     setLoading(true);
 
@@ -40,9 +72,24 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      const newAttempts = failedAttempts + 1;
+      setFailedAttempts(newAttempts);
+      if (newAttempts >= MAX_ATTEMPTS) {
+        startLockout();
+        setError(`Too many attempts. Try again in ${LOCKOUT_DURATION}s`);
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
       return;
+    }
+
+    // Reset rate limiting on successful login
+    setFailedAttempts(0);
+    setLockoutSeconds(0);
+    if (lockoutTimerRef.current) {
+      clearInterval(lockoutTimerRef.current);
+      lockoutTimerRef.current = null;
     }
 
     // Check user type for routing
@@ -192,11 +239,20 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
-          {error && (
+          {isLockedOut && (
+            <p className="text-sm text-destructive">
+              Too many attempts. Try again in {lockoutSeconds}s
+            </p>
+          )}
+          {error && !isLockedOut && (
             <p className="text-sm text-destructive">{error}</p>
           )}
-          <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light" disabled={loading}>
-            {loading ? "Signing in..." : "Sign in"}
+          <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light" disabled={loading || isLockedOut}>
+            {isLockedOut
+              ? `Locked (${lockoutSeconds}s)`
+              : loading
+                ? "Signing in..."
+                : "Sign in"}
           </Button>
         </form>
 

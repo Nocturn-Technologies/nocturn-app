@@ -57,7 +57,7 @@ export function NotificationToast({ notifications, onDismiss }: NotificationToas
           className="pointer-events-auto w-full max-w-md animate-slide-down"
           style={{ animationDelay: `${index * 100}ms` }}
         >
-          <div className="flex items-start gap-3 rounded-2xl border border-[#7B2FF7]/20 bg-[#09090B]/95 backdrop-blur-sm px-4 py-3 shadow-lg shadow-[#7B2FF7]/10">
+          <div className="flex items-start gap-3 rounded-2xl border border-[#7B2FF7]/20 bg-background/95 backdrop-blur-sm px-4 py-3 shadow-lg shadow-[#7B2FF7]/10">
             <p className="flex-1 text-sm text-white leading-relaxed">
               {notification.message}
             </p>
