@@ -189,7 +189,6 @@ export default function ChatRoomPage() {
   };
 
   // Generate AI response using real Claude API + event data
-  // Server action inserts the AI message directly — realtime subscription picks it up
   const generateAIResponse = async (userMessage: string) => {
     if (!channelId) return;
 
@@ -203,19 +202,51 @@ export default function ChatRoomPage() {
       }));
 
       // Server action generates response AND inserts it into DB
-      // Realtime subscription will push the new message to the client
-      await generateChatResponse(channelId, userMessage, recentMsgs);
+      const aiContent = await generateChatResponse(channelId, userMessage, recentMsgs);
+
+      // Also add to local state directly (don't rely solely on Realtime)
+      if (aiContent) {
+        setMessages((prev) => {
+          // Check if Realtime already delivered it
+          const alreadyHas = prev.some(
+            (m) => m.type === "ai" && m.content === aiContent && Date.now() - new Date(m.created_at).getTime() < 30000
+          );
+          if (alreadyHas) return prev;
+          return [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              channel_id: channelId,
+              user_id: null as unknown as string,
+              content: aiContent,
+              type: "ai" as const,
+              voice_url: null,
+              voice_duration: null,
+              metadata: null,
+              created_at: new Date().toISOString(),
+            },
+          ];
+        });
+        scrollToBottom();
+      }
     } catch (err) {
       console.error("[chat] AI response error:", err);
-      // If server action completely fails, insert fallback client-side
-      await supabase
-        .from("messages")
-        .insert({
+      const fallback = "I'm having trouble connecting right now. Try asking again in a moment.";
+      // Show fallback in UI immediately
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
           channel_id: channelId,
-          user_id: null,
-          content: "I'm having trouble connecting right now. Try asking again in a moment.",
-          type: "ai",
-        });
+          user_id: null as unknown as string,
+          content: fallback,
+          type: "ai" as const,
+          voice_url: null,
+          voice_duration: null,
+          metadata: null,
+          created_at: new Date().toISOString(),
+        },
+      ]);
     }
   };
 
