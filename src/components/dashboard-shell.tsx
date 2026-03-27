@@ -30,6 +30,7 @@ import {
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
 import { NocturnLogo } from "@/components/nocturn-logo";
+import { AskNocturn } from "@/components/ask-nocturn";
 import { posthog } from "@/lib/posthog";
 
 interface DashboardShellProps {
@@ -345,6 +346,9 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
           </div>
         </div>
       )}
+
+      {/* ── Ask Nocturn AI Assistant ── */}
+      {activeColl && <AskNocturn collectiveId={activeColl.id} />}
       </div>
     </div>
   );
