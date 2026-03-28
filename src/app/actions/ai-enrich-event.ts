@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
 export interface EnrichedEventContent {
@@ -26,6 +27,10 @@ export async function enrichEventContent(input: {
   collectiveName?: string;
   tiers?: Array<{ name: string; price: number }>;
 }): Promise<EnrichedEventContent> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { description: "", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
+
   const admin = createAdminClient();
 
   // Step 1: Try to enrich venue from DB

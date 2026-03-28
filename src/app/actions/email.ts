@@ -1,5 +1,4 @@
-"use server";
-
+// Internal email utilities — NOT a server action (not client-callable)
 import { sendEmail } from "@/lib/email/send";
 import {
   ticketConfirmationEmail,

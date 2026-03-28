@@ -7,6 +7,10 @@ import { createAdminClient } from "@/lib/supabase/config";
  * Search for other collectives on Nocturn to collaborate with.
  */
 export async function searchCollectives(query: string, myCollectiveId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const sb = createAdminClient();
 
   let builder = sb
@@ -16,7 +20,11 @@ export async function searchCollectives(query: string, myCollectiveId: string) {
     .order("name");
 
   if (query.trim()) {
-    builder = builder.or(`name.ilike.%${query}%,city.ilike.%${query}%,slug.ilike.%${query}%`);
+    // Sanitize input to prevent PostgREST filter injection
+    const sanitized = query.replace(/[%_.,()]/g, "").trim();
+    if (sanitized) {
+      builder = builder.or(`name.ilike.%${sanitized}%,city.ilike.%${sanitized}%,slug.ilike.%${sanitized}%`);
+    }
   }
 
   const { data } = await builder.limit(20);
@@ -115,6 +123,10 @@ export async function startCollabChat(myCollectiveId: string, partnerCollectiveI
  * Get collab channels where this collective is either owner or partner.
  */
 export async function getCollabChannels(collectiveId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const sb = createAdminClient();
 
   // Channels where we're the owner

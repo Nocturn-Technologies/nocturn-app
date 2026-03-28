@@ -1,5 +1,4 @@
-"use server";
-
+// Internal cron utility — NOT a server action (only called by cron API route)
 import { sendEmail } from "@/lib/email/send";
 import { createAdminClient } from "@/lib/supabase/config";
 

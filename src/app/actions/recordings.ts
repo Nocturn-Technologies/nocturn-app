@@ -4,16 +4,19 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
 export async function saveRecording(data: {
-  user_id: string;
   collective_id?: string | null;
   duration_seconds?: number | null;
   status?: string;
 }) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
   const admin = createAdminClient();
   const { data: row, error } = await admin
     .from("recordings")
     .insert({
-      user_id: data.user_id,
+      user_id: user.id,
       collective_id: data.collective_id ?? null,
       duration_seconds: data.duration_seconds ?? null,
       status: data.status ?? "recording",
@@ -53,11 +56,17 @@ export async function updateRecording(
     key_decisions?: string[];
   }
 ) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
   const admin = createAdminClient();
+  // Only allow updating own recordings
   const { error } = await admin
     .from("recordings")
     .update(data)
-    .eq("id", id);
+    .eq("id", id)
+    .eq("user_id", user.id);
 
   if (error) return { error: error.message };
   return { success: true };

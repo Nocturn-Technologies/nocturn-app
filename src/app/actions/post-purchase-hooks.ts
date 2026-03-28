@@ -1,5 +1,4 @@
-"use server";
-
+// Internal webhook utility — NOT a server action (only called by Stripe webhook)
 import { sendEmail } from "@/lib/email/send";
 import { referralNudgeEmail, ticketMilestoneEmail } from "@/lib/email/templates";
 import { createAdminClient } from "@/lib/supabase/config";
