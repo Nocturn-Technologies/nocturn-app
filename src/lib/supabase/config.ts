@@ -24,14 +24,20 @@ export const SUPABASE_SERVICE_ROLE_KEY = (() => {
   return key;
 })();
 
-// ── Singleton admin client (reused across all server actions) ────────
+// ── Admin client factory (server-side only) ──────────────────────────
+// Re-reads env var each cold start so a fixed key takes effect immediately.
+// Cached per-instance for the lifetime of the serverless function.
 let _adminClient: ReturnType<typeof createClient<Database>> | null = null;
+let _adminClientKey: string | null = null;
 
 export function createAdminClient() {
-  if (!_adminClient) {
-    _adminClient = createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  const currentKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  // Recreate if key changed (e.g. env var was fixed) or client doesn't exist
+  if (!_adminClient || _adminClientKey !== currentKey) {
+    _adminClient = createClient<Database>(SUPABASE_URL, currentKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+    _adminClientKey = currentKey;
   }
   return _adminClient;
 }
