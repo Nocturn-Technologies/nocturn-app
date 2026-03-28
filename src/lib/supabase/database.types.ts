@@ -56,6 +56,7 @@ export type Database = {
           instagram: string | null
           city: string | null
           stripe_account_id: string | null
+          referral_code: string | null
           metadata: Record<string, unknown> | null
           created_at: string
           updated_at: string
@@ -71,6 +72,7 @@ export type Database = {
           instagram?: string | null
           city?: string | null
           stripe_account_id?: string | null
+          referral_code?: string | null
           metadata?: Record<string, unknown> | null
           created_at?: string
           updated_at?: string
@@ -86,6 +88,7 @@ export type Database = {
           instagram?: string | null
           city?: string | null
           stripe_account_id?: string | null
+          referral_code?: string | null
           metadata?: Record<string, unknown> | null
           created_at?: string
           updated_at?: string
