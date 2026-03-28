@@ -29,7 +29,10 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: CheckoutBody = await request.json();
-    const { eventId, tierId, quantity, buyerEmail, promoCode, referrerToken } = body;
+    const { eventId, tierId, quantity, buyerEmail, promoCode } = body;
+    // referrerToken must be a valid UUID (user ID from ?ref= link)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let referrerToken = body.referrerToken && uuidRegex.test(body.referrerToken) ? body.referrerToken : undefined;
 
     if (!eventId || !tierId || !quantity || !buyerEmail) {
       return NextResponse.json(
@@ -51,6 +54,12 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createAdminClient();
+
+    // Validate referrer user actually exists (prevents FK constraint violation)
+    if (referrerToken) {
+      const { data: referrerUser } = await supabase.from("users").select("id").eq("id", referrerToken).maybeSingle();
+      if (!referrerUser) referrerToken = undefined;
+    }
 
     // Look up the event
     const { data: event, error: eventError } = await supabase
@@ -188,6 +197,7 @@ export async function POST(request: NextRequest) {
         currency: "usd",
         stripe_payment_intent_id: null,
         ticket_token: randomUUID(),
+        referred_by: referrerToken ?? null,
         metadata: {
           registration_type: "free",
           customer_email: buyerEmail,

@@ -26,6 +26,7 @@ import {
   X,
   UsersRound,
   Compass,
+  Megaphone,
 } from "lucide-react";
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -43,6 +44,7 @@ interface DashboardShellProps {
 const sidebarNavItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/events", label: "Ops", icon: Calendar },
   { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
@@ -54,6 +56,7 @@ const sidebarNavItems = [
 const mobileTabItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/events", label: "Ops", icon: Calendar },
+  { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
 ];
 
@@ -62,6 +65,20 @@ const moreDrawerItems = [
   { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+];
+
+/* ── Promoter-specific nav ── */
+const promoterSidebarItems = [
+  { href: "/dashboard/promote", label: "Promote", icon: Megaphone },
+  { href: "/dashboard/discover", label: "Discover", icon: Compass },
+  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+];
+
+const promoterMobileTabItems = [
+  { href: "/dashboard/promote", label: "Promote", icon: Megaphone },
+  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -128,9 +145,16 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
   }
 
   const activeColl = collectives[0];
+  const isPromoter = activeColl?.role === "promoter";
+
+  // Select nav items based on user type
+  const currentSidebarItems = isPromoter ? promoterSidebarItems : sidebarNavItems;
+  const currentMobileItems = isPromoter ? promoterMobileTabItems : mobileTabItems;
+  const currentMoreItems = isPromoter ? [] : moreDrawerItems;
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";
+    if (href === "/dashboard/promote") return pathname === "/dashboard/promote";
     return pathname.startsWith(href);
   }
 
@@ -181,7 +205,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
         )}
 
         <nav className="flex-1 space-y-0.5 p-3 relative z-10">
-          {sidebarNavItems.map((item) => {
+          {currentSidebarItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (
@@ -256,7 +280,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
 
         {/* ── Mobile bottom tab bar (hidden on desktop) ── */}
         <nav className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-around border-t border-white/[0.06] bg-background/90 backdrop-blur-xl px-2 pt-2 pb-[max(env(safe-area-inset-bottom),8px)] md:hidden">
-          {mobileTabItems.map((item) => {
+          {currentMobileItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (
@@ -280,19 +304,21 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
               </Link>
             );
           })}
-          {/* More button */}
-          <button
-            onClick={() => { haptic('light'); setMoreOpen(true); }}
-            aria-label="Open menu"
-            className={`flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[48px] transition-all ${
-              moreOpen
-                ? "text-nocturn"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <Menu className="h-5 w-5 shrink-0" />
-            <span className="text-[10px]">More</span>
-          </button>
+          {/* More button (hidden for promoters — all tabs fit) */}
+          {currentMoreItems.length > 0 && (
+            <button
+              onClick={() => { haptic('light'); setMoreOpen(true); }}
+              aria-label="Open menu"
+              className={`flex flex-col items-center justify-center gap-0.5 min-h-[48px] min-w-[48px] transition-all ${
+                moreOpen
+                  ? "text-nocturn"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Menu className="h-5 w-5 shrink-0" />
+              <span className="text-[10px]">More</span>
+            </button>
+          )}
         </nav>
       </div>
 
@@ -313,7 +339,7 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
               </div>
               {/* Nav items */}
               <nav className="space-y-0.5 mb-4">
-                {moreDrawerItems.map((item) => {
+                {currentMoreItems.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(item.href);
                   return (

@@ -32,6 +32,8 @@ import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
 import { LiveModeBanner } from "./live-mode-banner";
 import { EventShareCard } from "./event-share-card";
+import { ExternalTicketsForm } from "./external-tickets";
+import { getExternalTicketData } from "@/app/actions/external-tickets";
 
 interface Props {
   params: Promise<{ eventId: string }>;
@@ -417,6 +419,9 @@ export default async function EventDetailPage({ params }: Props) {
         </Card>
       )}
 
+      {/* External Ticket Data */}
+      <ExternalTicketsFormWrapper eventId={event.id} />
+
       {/* Flyer Preview */}
       {event.flyer_url && (
         <Card className="rounded-2xl overflow-hidden transition-colors duration-200">
@@ -433,4 +438,9 @@ export default async function EventDetailPage({ params }: Props) {
       )}
     </div>
   );
+}
+
+async function ExternalTicketsFormWrapper({ eventId }: { eventId: string }) {
+  const data = await getExternalTicketData(eventId);
+  return <ExternalTicketsForm eventId={eventId} initial={data} />;
 }

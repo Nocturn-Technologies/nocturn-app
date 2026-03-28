@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      console.log("[generate-poster] Flux Pro output type:", typeof output, JSON.stringify(output).slice(0, 200));
+      // Debug output type removed — use error logs only
       imageUrl = extractUrl(output);
     } catch (proErr) {
       console.error("[generate-poster] Flux Pro failed, trying schnell:", proErr);
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        console.log("[generate-poster] Flux Schnell output type:", typeof output, JSON.stringify(output).slice(0, 200));
+        // Debug output type removed — use error logs only
         imageUrl = extractUrl(output);
       } catch (schnellErr) {
         console.error("[generate-poster] Flux Schnell also failed:", schnellErr);

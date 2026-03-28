@@ -43,9 +43,10 @@ export async function refundTicket(ticketId: string) {
     .eq("user_id", user.id)
     .eq("collective_id", event.collective_id)
     .in("role", ["admin", "promoter"])
+    .is("deleted_at", null)
     .maybeSingle();
 
-  if (!membership) return { error: "Only admins and promoters can issue refunds" };
+  if (!membership) return { error: "Only active admins and promoters can issue refunds" };
 
   // Can only refund paid or checked_in tickets
   if (!["paid", "checked_in"].includes(ticket.status)) {

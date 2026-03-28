@@ -20,8 +20,8 @@ Mobile-first web app for nightlife promoters and collectives. Manage events, sel
 - **Public site**: https://trynocturn.com (Vercel: nocturn-site)
 - **GitHub (app)**: https://github.com/Nocturn-Technologies/nocturn-app
 - **GitHub (site)**: https://github.com/Nocturn-Technologies/nocturn-site
-- **Supabase project**: bpzwbqtpyorppijdblhy
-- **Supabase URL**: https://bpzwbqtpyorppijdblhy.supabase.co
+- **Supabase project**: zvmslijvdkcnkrjjgaie
+- **Supabase URL**: https://zvmslijvdkcnkrjjgaie.supabase.co
 
 ## Brand
 - **Primary**: #7B2FF7 (Nocturn Purple)
@@ -140,7 +140,7 @@ collectives, collective_members, users, events, venues, ticket_tiers, tickets, a
 
 ## Environment Variables
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://bpzwbqtpyorppijdblhy.supabase.co
+NEXT_PUBLIC_SUPABASE_URL=https://zvmslijvdkcnkrjjgaie.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 STRIPE_SECRET_KEY=sk_live_... (MUST be live key for real payments)

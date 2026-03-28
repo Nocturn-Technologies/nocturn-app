@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 
 const torontoArtists = [
@@ -27,7 +28,14 @@ const torontoArtists = [
   { name: "Tezz", genre: ["hip hop", "trap", "open format"], instagram: "@djtezz", soundcloud: "soundcloud.com/djtezz", spotify: null, booking_email: null, default_fee: 1500, bio: "Toronto hip hop and trap DJ. Known for high-energy club nights." },
 ];
 
-export async function GET() {
+export async function POST() {
+  // Auth check — only admins can seed data
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
   const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });

@@ -158,6 +158,7 @@ export default function OnboardingPage() {
             <>
               <AiBubble>
                 <p className="text-sm">What&apos;s your collective called?</p>
+                <p className="text-[11px] text-muted-foreground mt-1">Already selling tickets on another platform? No problem — you can still use all of Nocturn&apos;s planning and ops tools.</p>
               </AiBubble>
               <div className="ml-8 sm:ml-11 animate-fade-in-up delay-200 space-y-3">
                 <Input

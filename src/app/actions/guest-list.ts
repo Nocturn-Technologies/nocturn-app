@@ -1,6 +1,37 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+
+/** Verify the caller is an admin/member of the collective that owns this event */
+async function verifyEventAccess(eventId: string): Promise<{ error: string | null; userId: string | null }> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", userId: null };
+
+  const admin = createAdminClient();
+
+  // Get the event's collective
+  const { data: event } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found", userId: null };
+
+  // Check membership
+  const { data: membership } = await admin
+    .from("collective_members")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("collective_id", event.collective_id)
+    .maybeSingle();
+
+  if (!membership) return { error: "You don't have access to this event", userId: null };
+
+  return { error: null, userId: user.id };
+}
 
 export interface Guest {
   id: string;
@@ -25,6 +56,9 @@ export async function addGuest(input: {
   notes?: string | null;
   addedBy?: string | null;
 }) {
+  const { error: authError, userId } = await verifyEventAccess(input.eventId);
+  if (authError) return { error: authError };
+
   const supabase = createAdminClient();
 
   const { error } = await supabase.from("guest_list").insert({
@@ -35,7 +69,7 @@ export async function addGuest(input: {
     plus_ones: input.plusOnes ?? 0,
     status: "pending",
     notes: input.notes?.trim() || null,
-    added_by: input.addedBy ?? null,
+    added_by: input.addedBy ?? userId,
   });
 
   if (error) return { error: error.message };
@@ -43,6 +77,9 @@ export async function addGuest(input: {
 }
 
 export async function getGuestList(eventId: string): Promise<Guest[]> {
+  const { error: authError } = await verifyEventAccess(eventId);
+  if (authError) return [];
+
   const supabase = createAdminClient();
 
   const { data, error } = await supabase
@@ -59,7 +96,23 @@ export async function getGuestList(eventId: string): Promise<Guest[]> {
   return (data ?? []) as Guest[];
 }
 
+/** Look up event_id from a guest record and verify access */
+async function verifyGuestAccess(guestId: string): Promise<{ error: string | null }> {
+  const supabase = createAdminClient();
+  const { data: guest } = await supabase
+    .from("guest_list")
+    .select("event_id")
+    .eq("id", guestId)
+    .maybeSingle();
+
+  if (!guest) return { error: "Guest not found" };
+  return verifyEventAccess(guest.event_id);
+}
+
 export async function checkInGuest(guestId: string) {
+  const { error: authError } = await verifyGuestAccess(guestId);
+  if (authError) return { error: authError };
+
   const supabase = createAdminClient();
 
   const { error } = await supabase
@@ -78,6 +131,9 @@ export async function updateGuestStatus(
   guestId: string,
   status: "pending" | "confirmed" | "checked_in" | "no_show"
 ) {
+  const { error: authError } = await verifyGuestAccess(guestId);
+  if (authError) return { error: authError };
+
   const supabase = createAdminClient();
 
   const updates: Record<string, unknown> = { status };
@@ -96,6 +152,9 @@ export async function updateGuestStatus(
 }
 
 export async function removeGuest(guestId: string) {
+  const { error: authError } = await verifyGuestAccess(guestId);
+  if (authError) return { error: authError };
+
   const supabase = createAdminClient();
 
   const { error } = await supabase

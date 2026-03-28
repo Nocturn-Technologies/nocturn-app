@@ -26,6 +26,7 @@ interface StripeCheckoutProps {
   eventTitle?: string;
   eventDate?: string;
   eventVenue?: string;
+  referrerToken?: string;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -264,6 +265,7 @@ export function StripeCheckout({
   eventTitle,
   eventDate,
   eventVenue,
+  referrerToken,
   onSuccess,
   onCancel,
 }: StripeCheckoutProps) {
@@ -277,7 +279,7 @@ export function StripeCheckout({
         const res = await fetch("/api/create-payment-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ eventId, tierId, quantity, buyerEmail }),
+          body: JSON.stringify({ eventId, tierId, quantity, buyerEmail, ...(referrerToken && { referrerToken }) }),
         });
 
         const data = await res.json();
@@ -297,7 +299,7 @@ export function StripeCheckout({
     }
 
     createIntent();
-  }, [eventId, tierId, quantity, buyerEmail]);
+  }, [eventId, tierId, quantity, buyerEmail, referrerToken]);
 
   if (loading) {
     return (

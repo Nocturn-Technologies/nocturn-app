@@ -20,10 +20,12 @@ export function TicketSection({
   tiers,
   eventId,
   accentColor = "#7B2FF7",
+  referrerToken,
 }: {
   tiers: Tier[];
   eventId: string;
   accentColor?: string;
+  referrerToken?: string;
 }) {
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
@@ -78,6 +80,7 @@ export function TicketSection({
             quantity={quantity}
             buyerEmail={email}
             totalAmount={total}
+            referrerToken={referrerToken}
             onSuccess={() => {
               // Success handled inside StripeCheckout component
             }}

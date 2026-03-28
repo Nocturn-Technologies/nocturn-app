@@ -13,7 +13,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Music, Plus, Search, Instagram, ExternalLink, MapPin } from "lucide-react";
+import { Music, Plus, Search, Instagram, ExternalLink, MapPin, BarChart3 } from "lucide-react";
 import Link from "next/link";
 
 interface Artist {
@@ -149,13 +149,21 @@ export default function ArtistsPage() {
             Shared directory of DJs, producers, and performers across Nocturn
           </p>
         </div>
-        <Button
-          className="bg-nocturn hover:bg-nocturn-light"
-          onClick={() => setShowAdd(!showAdd)}
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Artist
-        </Button>
+        <div className="flex gap-2">
+          <Link href="/dashboard/artists/analytics">
+            <Button variant="outline" className="border-nocturn/20 text-nocturn hover:bg-nocturn/10">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Performance
+            </Button>
+          </Link>
+          <Button
+            className="bg-nocturn hover:bg-nocturn-light"
+            onClick={() => setShowAdd(!showAdd)}
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Artist
+          </Button>
+        </div>
       </div>
 
       {error && (

@@ -15,16 +15,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Users, Music, MapPin, ArrowLeft } from "lucide-react";
+import { Users, Music, MapPin, ArrowLeft, Megaphone, Camera, Video, Speaker, Lightbulb, BadgeDollarSign } from "lucide-react";
 
-type UserType = "collective" | "artist" | "venue";
+type UserType = "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor";
 
 const USER_TYPES: Array<{ type: UserType; icon: typeof Users; label: string; description: string }> = [
   {
     type: "collective",
     icon: Users,
-    label: "Collective / Promoter",
+    label: "Collective",
     description: "Run events, sell tickets, manage your crew",
+  },
+  {
+    type: "promoter",
+    icon: Megaphone,
+    label: "Promoter",
+    description: "Sell tickets, track your sales, grow your network",
   },
   {
     type: "artist",
@@ -37,6 +43,36 @@ const USER_TYPES: Array<{ type: UserType; icon: typeof Users; label: string; des
     icon: MapPin,
     label: "Venue",
     description: "List your space, manage bookings, connect with promoters",
+  },
+  {
+    type: "photographer",
+    icon: Camera,
+    label: "Photographer",
+    description: "Showcase your portfolio and get booked for events",
+  },
+  {
+    type: "videographer",
+    icon: Video,
+    label: "Videographer",
+    description: "Event recaps, aftermovies, and livestreams",
+  },
+  {
+    type: "sound_production",
+    icon: Speaker,
+    label: "Sound & Production",
+    description: "PA systems, sound engineering, DJ equipment",
+  },
+  {
+    type: "lighting_production",
+    icon: Lightbulb,
+    label: "Lighting & Visuals",
+    description: "Stage lighting, lasers, LED walls, VJ",
+  },
+  {
+    type: "sponsor",
+    icon: BadgeDollarSign,
+    label: "Sponsor / Brand",
+    description: "Connect with events and collectives for partnerships",
   },
 ];
 
@@ -66,13 +102,21 @@ export default function SignupPage() {
     // Route based on user type
     if (userType === "collective") {
       router.push("/onboarding");
-    } else if (userType === "artist") {
-      router.push("/dashboard/artists/me");
+    } else if (userType === "promoter") {
+      router.push("/dashboard/promote");
     } else {
-      router.push("/dashboard/venues/me");
+      router.push("/onboarding/marketplace");
     }
     router.refresh();
   }
+
+  // Split into primary types (full cards) and marketplace types (compact grid)
+  const primaryTypes = USER_TYPES.filter((t) =>
+    ["collective", "promoter"].includes(t.type)
+  );
+  const marketplaceTypes = USER_TYPES.filter(
+    (t) => !["collective", "promoter"].includes(t.type)
+  );
 
   if (step === "type") {
     return (
@@ -81,27 +125,60 @@ export default function SignupPage() {
           <CardTitle className="text-2xl">Join Nocturn</CardTitle>
           <CardDescription>How do you want to use the platform?</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {USER_TYPES.map(({ type, icon: Icon, label, description }) => (
-            <button
-              key={type}
-              onClick={() => {
-                setUserType(type);
-                setStep("form");
-              }}
-              className={`w-full flex items-center gap-4 rounded-xl border p-4 text-left transition-all hover:border-nocturn/50 hover:bg-nocturn/5 active:scale-[0.98] ${
-                userType === type ? "border-nocturn bg-nocturn/10" : "border-border"
-              }`}
-            >
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-nocturn/20 shrink-0">
-                <Icon className="h-6 w-6 text-nocturn" />
-              </div>
-              <div>
-                <p className="font-semibold text-white">{label}</p>
-                <p className="text-sm text-muted-foreground">{description}</p>
-              </div>
-            </button>
-          ))}
+        <CardContent className="space-y-5">
+          {/* Primary: Collective & Promoter — full-width cards */}
+          <div className="space-y-3">
+            {primaryTypes.map(({ type, icon: Icon, label, description }) => (
+              <button
+                key={type}
+                onClick={() => {
+                  setUserType(type);
+                  setStep("form");
+                }}
+                className={`w-full flex items-center gap-4 rounded-xl border p-4 text-left transition-all hover:border-nocturn/50 hover:bg-nocturn/5 active:scale-[0.98] ${
+                  userType === type ? "border-nocturn bg-nocturn/10" : "border-border"
+                }`}
+              >
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-nocturn/20 shrink-0">
+                  <Icon className="h-6 w-6 text-nocturn" />
+                </div>
+                <div>
+                  <p className="font-semibold text-white">{label}</p>
+                  <p className="text-sm text-muted-foreground">{description}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground uppercase tracking-wider">
+              List yourself on the marketplace
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
+          {/* Marketplace types — compact 2-column grid */}
+          <div className="grid grid-cols-2 gap-2">
+            {marketplaceTypes.map(({ type, icon: Icon, label }) => (
+              <button
+                key={type}
+                onClick={() => {
+                  setUserType(type);
+                  setStep("form");
+                }}
+                className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-all hover:border-nocturn/50 hover:bg-nocturn/5 active:scale-[0.98] min-h-[56px] ${
+                  userType === type ? "border-nocturn bg-nocturn/10" : "border-border"
+                }`}
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-nocturn/20 shrink-0">
+                  <Icon className="h-4 w-4 text-nocturn" />
+                </div>
+                <p className="font-medium text-sm text-white leading-tight">{label}</p>
+              </button>
+            ))}
+          </div>
         </CardContent>
         <CardFooter className="justify-center">
           <p className="text-sm text-muted-foreground">
@@ -149,6 +226,7 @@ export default function SignupPage() {
               placeholder={
                 userType === "venue" ? "e.g. CODA Toronto" :
                 userType === "artist" ? "e.g. DJ Shadow" :
+                userType === "promoter" ? "Your name" :
                 "Your full name"
               }
               value={fullName}

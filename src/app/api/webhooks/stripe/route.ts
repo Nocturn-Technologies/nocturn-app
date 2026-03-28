@@ -63,13 +63,28 @@ export async function POST(request: NextRequest) {
         break;
       }
       default:
-        console.log(`[stripe-webhook] Unhandled event type: ${event.type}`);
+        console.info(`[stripe-webhook] Unhandled event type: ${event.type}`);
     }
   } catch (err) {
     console.error(`[stripe-webhook] Error handling ${event.type}:`, err);
+    // Only return 500 (triggering Stripe retry) for transient errors like DB connection failures.
+    // For logic errors, return 200 to prevent infinite retries and duplicate tickets.
+    const isTransient = err instanceof Error && (
+      err.message.includes("connect") ||
+      err.message.includes("timeout") ||
+      err.message.includes("ECONNREFUSED") ||
+      err.message.includes("fetch failed")
+    );
+    if (isTransient) {
+      return NextResponse.json(
+        { error: "Webhook handler failed (transient)" },
+        { status: 500 }
+      );
+    }
+    // Non-retryable error — acknowledge receipt so Stripe doesn't retry
     return NextResponse.json(
-      { error: "Webhook handler failed" },
-      { status: 500 }
+      { error: "Webhook handler failed (non-retryable)", detail: err instanceof Error ? err.message : "Unknown" },
+      { status: 200 }
     );
   }
 
@@ -90,6 +105,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const eventId = metadata.eventId;
   const tierId = metadata.tierId;
   const quantity = parseInt(metadata.quantity, 10);
+  if (isNaN(quantity) || quantity < 1) {
+    console.error("[stripe-webhook] Invalid quantity in metadata:", metadata.quantity);
+    return;
+  }
   const paymentIntentId =
     typeof session.payment_intent === "string"
       ? session.payment_intent
@@ -105,7 +124,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .or(`stripe_payment_intent_id.eq.${paymentIntentId},metadata->>checkout_session_id.eq.${session.id}`);
 
   if (existingCount && existingCount > 0) {
-    console.log(
+    console.info(
       `[stripe-webhook] Idempotency: tickets already exist for session ${session.id}` +
       (paymentIntentId ? ` / PI ${paymentIntentId}` : "") +
       `, skipping duplicate creation`
@@ -125,7 +144,14 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  // Build ticket records
+  // Build ticket records — referrerToken is a user UUID (from ?ref= link)
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let referrerToken = metadata.referrerToken && uuidRegex.test(metadata.referrerToken) ? metadata.referrerToken : null;
+  // Validate referrer user actually exists (prevents FK constraint violation)
+  if (referrerToken) {
+    const { data: referrerUser } = await supabase.from("users").select("id").eq("id", referrerToken).maybeSingle();
+    if (!referrerUser) referrerToken = null;
+  }
   const tickets = Array.from({ length: quantity }, () => ({
     event_id: eventId,
     ticket_tier_id: tierId,
@@ -135,10 +161,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     currency: "usd",
     stripe_payment_intent_id: paymentIntentId,
     ticket_token: randomUUID(),
+    referred_by: referrerToken,
     metadata: {
       checkout_session_id: session.id,
       customer_email: session.customer_email ?? session.customer_details?.email,
-      ...(session.metadata?.referrerToken && { referrer_token: session.metadata.referrerToken }),
+      ...(referrerToken && { referrer_token: referrerToken }),
       ...(session.metadata?.promoId && { promo_id: session.metadata.promoId, promo_code: session.metadata.promoCode }),
       ...(session.metadata?.discountCents && { discount_cents: session.metadata.discountCents }),
     },
@@ -155,7 +182,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     throw insertError; // Will cause 500 so Stripe retries
   }
 
-  console.log(
+  console.info(
     `[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`
   );
 
@@ -202,7 +229,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           })
         );
 
-        console.log(
+        console.info(
           `[stripe-webhook] Generated QR codes for ${insertedTickets.length} ticket(s)`
         );
       }
@@ -238,7 +265,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
               totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
               ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
             });
-            console.log("[stripe-webhook] Confirmation email sent");
+            console.info("[stripe-webhook] Confirmation email sent");
 
             // Post-purchase hooks: referral nudge + milestone check
             try {
@@ -270,6 +297,10 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   const eventId = metadata.eventId;
   const tierId = metadata.tierId;
   const quantity = parseInt(metadata.quantity, 10);
+  if (isNaN(quantity) || quantity < 1) {
+    console.error("[stripe-webhook] Invalid quantity in PI metadata:", metadata.quantity);
+    return;
+  }
   const buyerEmail = metadata.buyerEmail || paymentIntent.receipt_email;
   const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
@@ -290,7 +321,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     .or(idempotencyFilter);
 
   if (existingCount && existingCount > 0) {
-    console.log(
+    console.info(
       `[stripe-webhook] Idempotency: tickets already exist for PI ${paymentIntent.id}` +
       (checkoutSessionId ? ` / session ${checkoutSessionId}` : "") +
       `, skipping duplicate creation`
@@ -309,6 +340,12 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
+  const uuidRegex2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let referrerToken = metadata.referrerToken && uuidRegex2.test(metadata.referrerToken) ? metadata.referrerToken : null;
+  if (referrerToken) {
+    const { data: referrerUser } = await supabase.from("users").select("id").eq("id", referrerToken).maybeSingle();
+    if (!referrerUser) referrerToken = null;
+  }
   const tickets = Array.from({ length: quantity }, () => ({
     event_id: eventId,
     ticket_tier_id: tierId,
@@ -318,10 +355,12 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     currency: "usd",
     stripe_payment_intent_id: paymentIntent.id,
     ticket_token: randomUUID(),
+    referred_by: referrerToken,
     metadata: {
       payment_intent_id: paymentIntent.id,
       ...(checkoutSessionId && { checkout_session_id: checkoutSessionId }),
       customer_email: buyerEmail,
+      ...(referrerToken && { referrer_token: referrerToken }),
     },
   }));
 
@@ -336,7 +375,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     throw insertError;
   }
 
-  console.log(`[stripe-webhook] Created ${quantity} ticket(s) for PI ${paymentIntent.id}`);
+  console.info(`[stripe-webhook] Created ${quantity} ticket(s) for PI ${paymentIntent.id}`);
 
   // Return background work to run AFTER the response is sent to Stripe
   return {

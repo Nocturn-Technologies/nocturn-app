@@ -11,7 +11,11 @@ import { sendEventReminders } from "@/app/actions/event-reminders";
 export async function GET(request: Request) {
   // Verify cron secret (Vercel sets this automatically)
   const authHeader = request.headers.get("authorization");
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}` && process.env.CRON_SECRET) {
+  if (!process.env.CRON_SECRET) {
+    console.error("[cron] CRON_SECRET is not set — rejecting request");
+    return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
+  }
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

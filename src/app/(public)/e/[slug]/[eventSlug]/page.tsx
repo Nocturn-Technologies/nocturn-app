@@ -23,6 +23,7 @@ export const revalidate = 60;
 
 interface Props {
   params: Promise<{ slug: string; eventSlug: string }>;
+  searchParams: Promise<{ ref?: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -92,8 +93,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function PublicEventPage({ params }: Props) {
+export default async function PublicEventPage({ params, searchParams }: Props) {
   const { slug, eventSlug } = await params;
+  const { ref: referrerToken } = await searchParams;
   const supabase = createAdminClient();
 
   // Fetch collective (include description for profile section)
@@ -193,7 +195,7 @@ export default async function PublicEventPage({ params }: Props) {
   const endTime = endsAt ? endsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz }) : null;
   const doorsTime = doorsAt ? doorsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz }) : null;
 
-  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://nocturn.app"}/e/${slug}/${eventSlug}`;
+  const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${slug}/${eventSlug}`;
   const mapsUrl = venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}` : null;
 
   // Dress code / min age / host message from metadata
@@ -518,6 +520,7 @@ export default async function PublicEventPage({ params }: Props) {
                 }))}
                 eventId={event.id}
                 accentColor={accentColor}
+                referrerToken={referrerToken}
               />
             </div>
           )}

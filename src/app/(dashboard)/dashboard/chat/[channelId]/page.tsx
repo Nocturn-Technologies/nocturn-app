@@ -109,17 +109,18 @@ export default function ChatRoomPage() {
       )
       .subscribe((status) => {
         if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          // Auto-reconnect after 3 seconds on disconnect
-          console.warn("[chat] Realtime disconnected, reconnecting...");
+          console.warn("[chat] Realtime disconnected, will reconnect...");
+          // Exponential backoff: 3s, 6s, 12s, max 30s
+          const delay = Math.min(3000 * Math.pow(2, reconnectCount), 30000);
           setTimeout(() => {
-            supabase.removeChannel(sub);
+            try { supabase.removeChannel(sub); } catch { /* already removed */ }
             setReconnectCount(c => c + 1);
-          }, 3000);
+          }, delay);
         }
       });
 
     return () => {
-      supabase.removeChannel(sub);
+      try { supabase.removeChannel(sub); } catch { /* already removed */ }
     };
   }, [channelId, scrollToBottom, supabase, reconnectCount]);
 

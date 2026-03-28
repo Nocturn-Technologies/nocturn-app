@@ -1552,11 +1552,335 @@ export type Database = {
           },
         ]
       }
+
+      external_events: {
+        Row: {
+          id: string
+          promoter_id: string
+          title: string
+          external_url: string
+          platform: string | null
+          event_date: string | null
+          venue_name: string | null
+          flyer_url: string | null
+          metadata: Record<string, unknown> | null
+          created_at: string
+          updated_at: string
+          deleted_at: string | null
+        }
+        Insert: {
+          id?: string
+          promoter_id: string
+          title: string
+          external_url: string
+          platform?: string | null
+          event_date?: string | null
+          venue_name?: string | null
+          flyer_url?: string | null
+          metadata?: Record<string, unknown> | null
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+        }
+        Update: {
+          id?: string
+          promoter_id?: string
+          title?: string
+          external_url?: string
+          platform?: string | null
+          event_date?: string | null
+          venue_name?: string | null
+          flyer_url?: string | null
+          metadata?: Record<string, unknown> | null
+          created_at?: string
+          updated_at?: string
+          deleted_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_events_promoter_id_fkey"
+            columns: ["promoter_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      promo_links: {
+        Row: {
+          id: string
+          promoter_id: string
+          event_id: string | null
+          external_event_id: string | null
+          token: string
+          click_count: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          promoter_id: string
+          event_id?: string | null
+          external_event_id?: string | null
+          token: string
+          click_count?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          promoter_id?: string
+          event_id?: string | null
+          external_event_id?: string | null
+          token?: string
+          click_count?: number
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promo_links_promoter_id_fkey"
+            columns: ["promoter_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promo_links_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promo_links_external_event_id_fkey"
+            columns: ["external_event_id"]
+            isOneToOne: false
+            referencedRelation: "external_events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      promo_clicks: {
+        Row: {
+          id: string
+          promo_link_id: string
+          clicked_at: string
+          referrer: string | null
+          user_agent: string | null
+        }
+        Insert: {
+          id?: string
+          promo_link_id: string
+          clicked_at?: string
+          referrer?: string | null
+          user_agent?: string | null
+        }
+        Update: {
+          id?: string
+          promo_link_id?: string
+          clicked_at?: string
+          referrer?: string | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promo_clicks_promo_link_id_fkey"
+            columns: ["promo_link_id"]
+            isOneToOne: false
+            referencedRelation: "promo_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      marketplace_profiles: {
+        Row: {
+          id: string
+          user_id: string
+          user_type: string
+          display_name: string
+          slug: string
+          bio: string | null
+          avatar_url: string | null
+          cover_photo_url: string | null
+          city: string | null
+          instagram_handle: string | null
+          website_url: string | null
+          soundcloud_url: string | null
+          spotify_url: string | null
+          genres: string[] | null
+          services: string[] | null
+          rate_range: string | null
+          availability: string | null
+          portfolio_urls: string[] | null
+          past_venues: string[] | null
+          created_at: string
+          updated_at: string
+          is_verified: boolean
+          is_active: boolean
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          user_type: string
+          display_name: string
+          slug: string
+          bio?: string | null
+          avatar_url?: string | null
+          cover_photo_url?: string | null
+          city?: string | null
+          instagram_handle?: string | null
+          website_url?: string | null
+          soundcloud_url?: string | null
+          spotify_url?: string | null
+          genres?: string[] | null
+          services?: string[] | null
+          rate_range?: string | null
+          availability?: string | null
+          portfolio_urls?: string[] | null
+          past_venues?: string[] | null
+          created_at?: string
+          updated_at?: string
+          is_verified?: boolean
+          is_active?: boolean
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          user_type?: string
+          display_name?: string
+          slug?: string
+          bio?: string | null
+          avatar_url?: string | null
+          cover_photo_url?: string | null
+          city?: string | null
+          instagram_handle?: string | null
+          website_url?: string | null
+          soundcloud_url?: string | null
+          spotify_url?: string | null
+          genres?: string[] | null
+          services?: string[] | null
+          rate_range?: string | null
+          availability?: string | null
+          portfolio_urls?: string[] | null
+          past_venues?: string[] | null
+          created_at?: string
+          updated_at?: string
+          is_verified?: boolean
+          is_active?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_profiles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      marketplace_inquiries: {
+        Row: {
+          id: string
+          from_user_id: string
+          to_profile_id: string
+          event_id: string | null
+          message: string | null
+          inquiry_type: string
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          from_user_id: string
+          to_profile_id: string
+          event_id?: string | null
+          message?: string | null
+          inquiry_type?: string
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          from_user_id?: string
+          to_profile_id?: string
+          event_id?: string | null
+          message?: string | null
+          inquiry_type?: string
+          status?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_inquiries_from_user_id_fkey"
+            columns: ["from_user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketplace_inquiries_to_profile_id_fkey"
+            columns: ["to_profile_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketplace_inquiries_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      marketplace_saved: {
+        Row: {
+          id: string
+          user_id: string
+          profile_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          profile_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          profile_id?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketplace_saved_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "marketplace_saved_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "marketplace_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
 
     Views: Record<string, never>
 
     Functions: {
+      increment_promo_click: {
+        Args: { p_link_id: string }
+        Returns: void
+      }
       increment_promo_uses: {
         Args: { code_id: string }
         Returns: void

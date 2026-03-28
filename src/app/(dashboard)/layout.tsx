@@ -27,8 +27,19 @@ export default async function DashboardLayout({
     .eq("user_id", user.id)
     .is("deleted_at", null);
 
+  // Promoters auto-get a collective on signup, but if somehow they don't have one,
+  // check user_type before redirecting to onboarding
   if (!count || count === 0) {
-    redirect("/onboarding");
+    const { data: userRow } = await admin
+      .from("users")
+      .select("user_type")
+      .eq("id", user.id)
+      .maybeSingle();
+    const userType = (userRow as { user_type?: string } | null)?.user_type;
+    const skipOnboarding = ["promoter", "artist", "venue", "photographer", "videographer", "sound_production", "lighting_production", "sponsor"];
+    if (!skipOnboarding.includes(userType ?? "")) {
+      redirect("/onboarding");
+    }
   }
 
   // Fetch user profile (admin to bypass RLS)

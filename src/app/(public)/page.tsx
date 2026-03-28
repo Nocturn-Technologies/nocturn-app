@@ -170,6 +170,10 @@ export default function HomePage() {
           </h2>
         </div>
 
+        <p className="text-sm text-muted-foreground mb-8 -mt-8">
+          Use Nocturn&apos;s event tools, team chat, and AI agents whether you ticket here or somewhere else. No lock-in.
+        </p>
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {features.map((feature) => {
             const Icon = feature.icon;

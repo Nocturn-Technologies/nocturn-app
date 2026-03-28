@@ -2,10 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { calculateServiceFeeCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest) {
+  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { success } = rateLimit(`payment-intent:${clientIp}`, 10, 60000); // 10 requests per minute
+  if (!success) {
+    return NextResponse.json(
+      { error: "Too many requests. Please try again in a moment." },
+      { status: 429 }
+    );
+  }
+
   try {
-    const { eventId, tierId, quantity, buyerEmail } = await request.json();
+    const body = await request.json();
+    const { eventId, tierId, quantity, buyerEmail } = body;
+    // Validate referrerToken as UUID to prevent FK violations downstream
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const referrerToken = body.referrerToken && uuidRegex.test(body.referrerToken) ? body.referrerToken : undefined;
 
     if (!eventId || !tierId || !quantity || !buyerEmail) {
       return NextResponse.json(
@@ -94,6 +108,7 @@ export async function POST(request: NextRequest) {
         tierId,
         quantity: String(quantity),
         buyerEmail,
+        ...(referrerToken && { referrerToken }),
       },
       automatic_payment_methods: { enabled: true },
     });

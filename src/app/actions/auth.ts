@@ -7,7 +7,7 @@ export async function signUpUser(formData: {
   email: string;
   password: string;
   fullName: string;
-  userType?: "collective" | "artist" | "venue";
+  userType?: "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor";
 }) {
   const admin = createAdminClient();
   const userType = formData.userType ?? "collective";
@@ -21,16 +21,62 @@ export async function signUpUser(formData: {
   });
 
   if (createError) {
+    console.error("[signup] createUser failed:", createError.message);
     return { error: createError.message };
   }
 
-  // Insert into users table
-  await admin.from("users").insert({
-    id: newUser.user.id,
-    email: formData.email,
-    full_name: formData.fullName,
-    user_type: userType,
-  });
+  const userId = newUser.user.id;
+
+  // Insert public.users row (without user_type — PostgREST schema cache is stale for that column).
+  // The user_type defaults to 'collective' in DB. Auth metadata stores the real type.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: usersInsertError } = await (admin.from("users") as any)
+    .upsert(
+      {
+        id: userId,
+        email: formData.email,
+        full_name: formData.fullName,
+      },
+      { onConflict: "id" }
+    );
+  if (usersInsertError) {
+    console.error("[signup] users insert failed:", usersInsertError.message);
+  }
+
+  // For all non-collective types: auto-create a personal collective so they satisfy the
+  // dashboard layout's "must have ≥1 collective membership" requirement
+  if (userType !== "collective") {
+    const firstName = formData.fullName.split(" ")[0] || "My";
+    const collectiveName = `${firstName}'s ${userType === "promoter" ? "Promos" : "Profile"}`;
+    // Use 12 chars of UUID to reduce slug collision risk
+    const slug = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, "")}-${userType.replace("_", "-")}-${userId.replace(/-/g, "").slice(0, 12)}`;
+    const { data: collective, error: collectiveError } = await admin
+      .from("collectives")
+      .insert({
+        name: collectiveName,
+        slug,
+        description: null,
+        metadata: { auto_created: true, [userType]: true },
+      })
+      .select("id")
+      .single();
+
+    if (collectiveError) {
+      console.error(`[signup] Failed to create ${userType} collective:`, collectiveError.message);
+      // Non-fatal — user can still use the app, dashboard layout handles missing collective
+    }
+
+    if (collective) {
+      const { error: memberError } = await admin.from("collective_members").insert({
+        collective_id: collective.id,
+        user_id: userId,
+        role: userType === "promoter" ? "promoter" : "admin",
+      });
+      if (memberError) {
+        console.error(`[signup] Failed to add ${userType} as collective member:`, memberError.message);
+      }
+    }
+  }
 
   // Send welcome email (non-blocking)
   sendWelcomeEmail(formData.email, formData.fullName, userType).catch(() => {});
@@ -49,12 +95,18 @@ export async function signUpUser(formData: {
   return { error: null };
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 async function sendWelcomeEmail(email: string, name: string, userType: string) {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return;
+  const safeName = escapeHtml(name.split(" ")[0]);
 
   const typeMessages: Record<string, string> = {
     collective: "You're all set to create events, sell tickets, and grow your collective. Start by creating your first event — our AI will help you set everything up.",
+    promoter: "You're ready to start promoting. Find events, grab your link, and share it with your network. Every ticket sold through your link is tracked automatically.",
     artist: "Your profile is live on the Nocturn directory. Collectives in your city can now discover and book you. Fill out your SoundCloud and Spotify to stand out.",
     venue: "Your venue is listed on Nocturn. Promoters can now find your space and reach out for bookings. Add your capacity and pricing to attract the right events.",
   };
@@ -66,14 +118,14 @@ async function sendWelcomeEmail(email: string, name: string, userType: string) {
       body: JSON.stringify({
         from: "Nocturn <nocturn@trynocturn.com>",
         to: email,
-        subject: `Welcome to Nocturn, ${name.split(" ")[0]}`,
+        subject: `Welcome to Nocturn, ${safeName}`,
         html: `
           <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
             <div style="margin-bottom: 32px;">
               <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
             </div>
             <h1 style="font-size: 28px; font-weight: 800; margin: 0 0 16px; line-height: 1.2;">
-              Welcome, ${name.split(" ")[0]}.
+              Welcome, ${safeName}.
             </h1>
             <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
               ${typeMessages[userType] || typeMessages.collective}
