@@ -16,10 +16,10 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://maps.googleapis.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://maps.googleapis.com https://us.posthog.com https://us.i.posthog.com",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://*.supabase.co https://*.stripe.com https://*.googleapis.com https://*.gstatic.com https://*.replicate.delivery https://cdn.replicate.com",
-              "connect-src 'self' data: blob: https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://api.anthropic.com https://maps.googleapis.com https://app.posthog.com https://*.replicate.delivery",
+              "connect-src 'self' data: blob: https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://api.anthropic.com https://maps.googleapis.com https://app.posthog.com https://us.posthog.com https://us.i.posthog.com https://*.replicate.delivery",
               "frame-src 'self' https://js.stripe.com https://hooks.stripe.com https://www.google.com",
               "font-src 'self' https://fonts.gstatic.com",
             ].join("; "),
