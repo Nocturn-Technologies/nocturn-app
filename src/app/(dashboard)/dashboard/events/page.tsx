@@ -14,7 +14,7 @@ export default async function EventsPage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) { const { redirect } = await import("next/navigation"); redirect("/login"); }
+  if (!user) { const { redirect } = await import("next/navigation"); redirect("/login"); return; }
 
   const admin = createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -23,7 +23,7 @@ export default async function EventsPage() {
   const { data: memberships } = await admin
     .from("collective_members")
     .select("collective_id")
-    .eq("user_id", user!.id);
+    .eq("user_id", user.id);
 
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
 

@@ -553,7 +553,7 @@ export async function cancelEvent(eventId: string) {
             metadata: {
               ...(ticket.metadata as Record<string, unknown>),
               refunded_at: new Date().toISOString(),
-              refunded_by: user!.id,
+              refunded_by: user.id,
               refund_reason: "event_cancelled",
               refund_amount: pricePaid,
             },
@@ -593,7 +593,7 @@ export async function cancelEvent(eventId: string) {
     .from("event_activity")
     .insert({
       event_id: eventId,
-      user_id: user!.id,
+      user_id: user.id,
       type: "event_cancelled",
       metadata: {
         cancelled_at: new Date().toISOString(),

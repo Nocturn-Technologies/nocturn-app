@@ -8,7 +8,7 @@ import { getActionItems } from "@/app/actions/action-items";
 export default async function DashboardPage() {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) { const { redirect } = await import("next/navigation"); redirect("/login"); }
+  if (!user) { const { redirect } = await import("next/navigation"); redirect("/login"); return; }
   const admin = createAdminClient();
 
   // ── PHASE 1: Essential data (fast — all in parallel) ──
@@ -17,13 +17,13 @@ export default async function DashboardPage() {
   const profileP = admin
     .from("users")
     .select("full_name")
-    .eq("id", user!.id)
+    .eq("id", user.id)
     .maybeSingle();
 
   const membershipsP = admin
     .from("collective_members")
     .select("collective_id, collectives(name, metadata, created_at)")
-    .eq("user_id", user!.id)
+    .eq("user_id", user.id)
     .is("deleted_at", null)
     .limit(1);
 
@@ -34,7 +34,7 @@ export default async function DashboardPage() {
 
   const profileRow = profile as { full_name: string } | null;
   const membershipRows = (memberships ?? []) as unknown as { collective_id: string; collectives: { name: string; metadata: Record<string, unknown> | null; created_at: string } | null }[];
-  const firstName = (profileRow?.full_name ?? user!.email ?? "").split(" ")[0] || "there";
+  const firstName = (profileRow?.full_name ?? user.email ?? "").split(" ")[0] || "there";
   const membership = membershipRows[0];
   const collective = membership?.collectives as {
     name: string;

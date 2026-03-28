@@ -31,14 +31,14 @@ export default async function FinancePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) { const { redirect } = await import("next/navigation"); redirect("/login"); }
+  if (!user) { const { redirect } = await import("next/navigation"); redirect("/login"); return; }
   const admin = createAdminClient();
 
   // Get user's collectives
   const { data: memberships } = await admin
     .from("collective_members")
     .select("collective_id")
-    .eq("user_id", user!.id)
+    .eq("user_id", user.id)
     .is("deleted_at", null);
 
   const collectiveIds = (memberships as { collective_id: string }[] | null)?.map((m) => m.collective_id) ?? [];
