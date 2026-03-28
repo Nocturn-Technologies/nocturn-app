@@ -27,6 +27,8 @@ import {
   UsersRound,
   Compass,
   Megaphone,
+  UserCircle,
+  Inbox,
 } from "lucide-react";
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -37,6 +39,7 @@ import { posthog } from "@/lib/posthog";
 interface DashboardShellProps {
   user: { id: string; email: string; fullName: string };
   collectives: { id: string; name: string; slug: string; logo_url: string | null; role: string }[];
+  userType?: string;
   children: React.ReactNode;
 }
 
@@ -82,7 +85,31 @@ const promoterMobileTabItems = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-export function DashboardShell({ user, collectives, children }: DashboardShellProps) {
+/* ── Marketplace user nav (artists, photographers, venues, etc.) ── */
+const MARKETPLACE_TYPES = ["artist", "venue", "photographer", "videographer", "sound_production", "lighting_production", "sponsor"];
+
+const marketplaceSidebarItems = [
+  { href: "/dashboard", label: "Home", icon: Home },
+  { href: "/dashboard/my-profile", label: "My Profile", icon: UserCircle },
+  { href: "/dashboard/discover", label: "Discover", icon: Compass },
+  { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
+  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+];
+
+const marketplaceMobileTabItems = [
+  { href: "/dashboard", label: "Home", icon: Home },
+  { href: "/dashboard/my-profile", label: "Profile", icon: UserCircle },
+  { href: "/dashboard/discover", label: "Discover", icon: Compass },
+  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+];
+
+const marketplaceMoreItems = [
+  { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+];
+
+export function DashboardShell({ user, collectives, userType, children }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -146,11 +173,12 @@ export function DashboardShell({ user, collectives, children }: DashboardShellPr
 
   const activeColl = collectives[0];
   const isPromoter = activeColl?.role === "promoter";
+  const isMarketplace = MARKETPLACE_TYPES.includes(userType ?? "");
 
   // Select nav items based on user type
-  const currentSidebarItems = isPromoter ? promoterSidebarItems : sidebarNavItems;
-  const currentMobileItems = isPromoter ? promoterMobileTabItems : mobileTabItems;
-  const currentMoreItems = isPromoter ? [] : moreDrawerItems;
+  const currentSidebarItems = isMarketplace ? marketplaceSidebarItems : isPromoter ? promoterSidebarItems : sidebarNavItems;
+  const currentMobileItems = isMarketplace ? marketplaceMobileTabItems : isPromoter ? promoterMobileTabItems : mobileTabItems;
+  const currentMoreItems = isMarketplace ? marketplaceMoreItems : isPromoter ? [] : moreDrawerItems;
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";

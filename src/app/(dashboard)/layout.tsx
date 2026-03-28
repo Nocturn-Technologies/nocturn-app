@@ -62,12 +62,16 @@ export default async function DashboardLayout({
       return { ...c, role: m.role };
     });
 
+  // Get user type from auth metadata or DB
+  const userType = user.user_metadata?.user_type ?? (profile as { user_type?: string } | null)?.user_type ?? "collective";
+
   return (
     <>
     <SessionTimeout />
     <DashboardShell
       user={{ id: user.id, email: user.email ?? "", fullName: (profile as { full_name?: string } | null)?.full_name ?? "" }}
       collectives={collectives}
+      userType={userType}
     >
       {children}
     </DashboardShell>
