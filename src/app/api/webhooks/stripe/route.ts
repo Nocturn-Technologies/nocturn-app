@@ -144,6 +144,21 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
+  // Calculate actual price paid, accounting for discounts
+  // The checkout route stores ticketPriceCents (discounted unit price in cents) and
+  // discountCents (per-ticket discount in cents) in session metadata
+  let pricePaid: number;
+  if (metadata.ticketPriceCents) {
+    // Use the exact discounted price from checkout (convert cents to dollars)
+    pricePaid = Number(metadata.ticketPriceCents) / 100;
+  } else if (metadata.discountCents) {
+    // Fallback: subtract discount from tier price
+    pricePaid = Math.max(Number(tier.price) - Number(metadata.discountCents) / 100, 0);
+  } else {
+    // No discount — full price
+    pricePaid = Number(tier.price);
+  }
+
   // Build ticket records — referrerToken is a user UUID (from ?ref= link)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let referrerToken = metadata.referrerToken && uuidRegex.test(metadata.referrerToken) ? metadata.referrerToken : null;
@@ -157,7 +172,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     ticket_tier_id: tierId,
     user_id: null, // Guest purchase — no user linked
     status: "paid" as const,
-    price_paid: tier.price,
+    price_paid: pricePaid,
     currency: "usd",
     stripe_payment_intent_id: paymentIntentId,
     ticket_token: randomUUID(),
@@ -196,7 +211,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         await trackServerEvent("ticket_purchased", {
           eventId,
           quantity,
-          revenue: Number(tier.price) * quantity,
+          revenue: pricePaid * quantity,
           sessionId: session.id,
         });
       } catch { /* non-critical */ }
@@ -262,7 +277,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
               venueName: venue?.name || "TBA",
               tierName: tierInfo?.name || "General Admission",
               quantity,
-              totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
+              totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
               ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
             });
             console.info("[stripe-webhook] Confirmation email sent");
@@ -340,6 +355,16 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
+  // Calculate actual price paid, accounting for discounts
+  let pricePaid: number;
+  if (metadata.ticketPriceCents) {
+    pricePaid = Number(metadata.ticketPriceCents) / 100;
+  } else if (metadata.discountCents) {
+    pricePaid = Math.max(Number(tier.price) - Number(metadata.discountCents) / 100, 0);
+  } else {
+    pricePaid = Number(tier.price);
+  }
+
   const uuidRegex2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let referrerToken = metadata.referrerToken && uuidRegex2.test(metadata.referrerToken) ? metadata.referrerToken : null;
   if (referrerToken) {
@@ -351,7 +376,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     ticket_tier_id: tierId,
     user_id: null,
     status: "paid" as const,
-    price_paid: tier.price,
+    price_paid: pricePaid,
     currency: "usd",
     stripe_payment_intent_id: paymentIntent.id,
     ticket_token: randomUUID(),
@@ -424,7 +449,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
               venueName: venue?.name || "TBA",
               tierName: tierInfo?.name || "General Admission",
               quantity,
-              totalPrice: `$${(Number(tier.price) * quantity).toFixed(2)}`,
+              totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
               ticketLink: `${BASE_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
             });
           }

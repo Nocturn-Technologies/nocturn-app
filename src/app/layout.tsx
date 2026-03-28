@@ -66,9 +66,9 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <head>
         {/* Preconnect to critical third-party origins */}
-        <link rel="preconnect" href="https://bpzwbqtpyorppijdblhy.supabase.co" />
+        <link rel="preconnect" href="https://zvmslijvdkcnkrjjgaie.supabase.co" />
         <link rel="preconnect" href="https://js.stripe.com" />
-        <link rel="dns-prefetch" href="https://bpzwbqtpyorppijdblhy.supabase.co" />
+        <link rel="dns-prefetch" href="https://zvmslijvdkcnkrjjgaie.supabase.co" />
         <link rel="dns-prefetch" href="https://js.stripe.com" />
 
         <link rel="manifest" href="/manifest.json" />

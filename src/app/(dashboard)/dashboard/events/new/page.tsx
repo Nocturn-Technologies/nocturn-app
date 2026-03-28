@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/ai-parse-event";
 import { getTicketPricingSuggestion, type PricingSuggestion } from "@/app/actions/pricing-suggestion";
 import { calculateBudget, type BudgetResult, type BudgetInput } from "@/app/actions/budget-planner";
+import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import VenuePicker, { type SelectedVenue } from "@/components/venue-picker";
@@ -555,8 +556,8 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
 
 function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
   const [priceMultiplier, setPriceMultiplier] = useState(1.0);
-  const PLATFORM_FEE = 0.07; // 7% + $0.50 per ticket (buyer pays)
-  const PLATFORM_FEE_FLAT = 0.50;
+  const PLATFORM_FEE = PLATFORM_FEE_PERCENT / 100; // 7% + $0.50 per ticket (buyer pays)
+  const PLATFORM_FEE_FLAT = PLATFORM_FEE_FLAT_CENTS / 100;
   const STRIPE_FEE_RATE = 0.029;
   const STRIPE_FEE_FLAT = 0.30;
 

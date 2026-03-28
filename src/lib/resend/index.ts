@@ -13,6 +13,3 @@ export function getResendClient(): Resend | null {
   }
   return _client;
 }
-
-/** @deprecated Use getResendClient() instead */
-export const resend = null as unknown as Resend;

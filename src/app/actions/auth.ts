@@ -3,6 +3,25 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
+const VALID_USER_TYPES = [
+  "collective",
+  "promoter",
+  "artist",
+  "venue",
+  "photographer",
+  "videographer",
+  "sound_production",
+  "lighting_production",
+  "sponsor",
+  "artist_manager",
+  "tour_manager",
+  "booking_agent",
+  "event_staff",
+  "mc_host",
+  "graphic_designer",
+  "pr_publicist",
+] as const;
+
 export async function signUpUser(formData: {
   email: string;
   password: string;
@@ -11,6 +30,11 @@ export async function signUpUser(formData: {
 }) {
   const admin = createAdminClient();
   const userType = formData.userType ?? "collective";
+
+  // Validate userType against whitelist
+  if (!VALID_USER_TYPES.includes(userType as (typeof VALID_USER_TYPES)[number])) {
+    return { error: "Invalid user type" };
+  }
 
   // Collectives and promoters require manual approval
   const requiresApproval = userType === "collective" || userType === "promoter";

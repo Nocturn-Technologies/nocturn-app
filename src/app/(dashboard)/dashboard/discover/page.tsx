@@ -64,7 +64,7 @@ export default function DiscoverPage() {
   const [networkQuery, setNetworkQuery] = useState("");
 
   const [loadingDiscover, setLoadingDiscover] = useState(true);
-  const [loadingSaved, setLoadingSaved] = useState(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
 
   const [contactProfile, setContactProfile] = useState<{
     id: string;
@@ -101,23 +101,13 @@ export default function DiscoverPage() {
   // ── Fetch saved profiles ───────────────────────────────────────────────
 
   const fetchSaved = useCallback(async () => {
-    setLoadingSaved(true);
     const result = await getSavedProfiles();
     setSavedProfiles(result.profiles);
-    // Convert Set from server to client Set
-    const ids = new Set<string>();
-    if (result.savedIds) {
-      // savedIds comes as a Set but gets serialized — handle both
-      if (result.savedIds instanceof Set) {
-        result.savedIds.forEach((id: string) => ids.add(id));
-      } else if (Array.isArray(result.savedIds)) {
-        (result.savedIds as string[]).forEach((id) => ids.add(id));
-      }
-    }
-    // Also build from profiles as fallback
+    // savedIds is a string[] from the server action
+    const ids = new Set<string>(result.savedIds ?? []);
+    // Also include profile IDs as fallback
     result.profiles.forEach((p) => ids.add((p as { id: string }).id));
     setSavedIds(ids);
-    setLoadingSaved(false);
   }, []);
 
   useEffect(() => {
@@ -128,10 +118,16 @@ export default function DiscoverPage() {
 
   const fetchNetwork = useCallback(async () => {
     setLoadingNetwork(true);
-    const result = await getNetworkProfiles();
-    setNetworkProfiles(result.profiles);
-    setNetworkConnectionTypes(result.connectionTypes);
-    setLoadingNetwork(false);
+    setNetworkError(null);
+    try {
+      const result = await getNetworkProfiles();
+      setNetworkProfiles(result.profiles);
+      setNetworkConnectionTypes(result.connectionTypes);
+    } catch {
+      setNetworkError("Failed to load your network. Please try again.");
+    } finally {
+      setLoadingNetwork(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -295,6 +291,25 @@ export default function DiscoverPage() {
               className="w-full pl-10"
             />
           </div>
+        </div>
+      )}
+
+      {/* Network error */}
+      {activeTab === "network" && networkError && (
+        <div className="px-4 md:px-0">
+          <Card>
+            <CardContent className="flex flex-col items-center gap-3 py-8">
+              <p className="text-sm text-destructive">{networkError}</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchNetwork}
+                className="min-h-[44px]"
+              >
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       )}
 

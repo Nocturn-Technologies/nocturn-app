@@ -1,5 +1,7 @@
 "use server";
 
+import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
+
 export interface BudgetInput {
   headlinerType: "local" | "international" | "none";
   headlinerOrigin?: string; // e.g. "London, UK" or "New York"
@@ -124,8 +126,8 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
   const capacity = input.venueCapacity ?? 200;
 
   // Calculate break-even price
-  const PLATFORM_FEE_RATE = 0.07;
-  const PLATFORM_FEE_FLAT = 0.50;
+  const PLATFORM_FEE_RATE = PLATFORM_FEE_PERCENT / 100;
+  const PLATFORM_FEE_FLAT = PLATFORM_FEE_FLAT_CENTS / 100;
   const STRIPE_FEE_RATE = 0.029;
   const STRIPE_FEE_FLAT = 0.30;
 

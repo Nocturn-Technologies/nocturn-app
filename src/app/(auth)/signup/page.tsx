@@ -272,6 +272,7 @@ export default function SignupPage() {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
+              maxLength={100}
               disabled={loading}
             />
           </div>
