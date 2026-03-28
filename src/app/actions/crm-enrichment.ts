@@ -1,11 +1,16 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
 const VIP_EVENT_THRESHOLD = 5;
 const VIP_SPEND_THRESHOLD = 500;
 
 export async function enrichAttendeeCRM(eventId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
   const admin = createAdminClient();
 
   try {

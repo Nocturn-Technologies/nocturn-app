@@ -29,6 +29,11 @@ const torontoArtists = [
 ];
 
 export async function POST() {
+  // Block in production
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_SEED) {
+    return NextResponse.json({ error: 'Seed routes disabled in production' }, { status: 403 });
+  }
+
   // Auth check — only admins can seed data
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -1,5 +1,7 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
+
 export interface TicketTier {
   name: string;
   price: number;
@@ -39,6 +41,10 @@ export async function parseEventDetails(
   message: string,
   existingData: Partial<ParsedEventDetails> = {}
 ): Promise<{ parsed: ParsedEventDetails; reply: string }> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { parsed: {}, reply: "Not authenticated" };
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const localParsed = localParse(message, existingData);
   const merged = { ...existingData, ...localParsed };

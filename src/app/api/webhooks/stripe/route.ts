@@ -159,6 +159,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     pricePaid = Number(tier.price);
   }
 
+  // Re-check capacity before inserting (defense against overselling)
+  const { data: recheck } = await supabase.rpc("check_and_reserve_capacity", {
+    p_tier_id: tierId,
+    p_quantity: quantity,
+  });
+  if (!recheck?.success) {
+    console.error(`[webhook] Capacity exceeded for tier ${tierId} — payment ${paymentIntentId} needs manual refund`);
+    // Don't insert tickets but still return 200 to acknowledge webhook
+    // The payment will need manual review/refund
+    return;
+  }
+
   // Build ticket records — referrerToken is a user UUID (from ?ref= link)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let referrerToken = metadata.referrerToken && uuidRegex.test(metadata.referrerToken) ? metadata.referrerToken : null;

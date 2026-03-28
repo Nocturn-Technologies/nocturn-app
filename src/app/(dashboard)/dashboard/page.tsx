@@ -8,6 +8,7 @@ import { getActionItems } from "@/app/actions/action-items";
 export default async function DashboardPage() {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) { const { redirect } = await import("next/navigation"); redirect("/login"); }
   const admin = createAdminClient();
 
   // ── PHASE 1: Essential data (fast — all in parallel) ──

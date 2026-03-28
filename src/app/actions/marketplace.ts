@@ -469,7 +469,10 @@ export async function sendInquiry(data: {
   if (profile?.users?.email) {
     try {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.trynocturn.com";
-      const internalSecret = process.env.INTERNAL_API_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+      if (!process.env.INTERNAL_API_SECRET) {
+        console.warn("INTERNAL_API_SECRET is not set — internal API calls will not be authenticated");
+      }
+      const internalSecret = process.env.INTERNAL_API_SECRET || "";
       fetch(`${appUrl}/api/marketplace-inquiry-email`, {
         method: "POST",
         headers: {

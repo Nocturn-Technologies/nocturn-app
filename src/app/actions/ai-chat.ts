@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
 import { getEventContext, getCollectiveContext } from "@/lib/ai-context";
@@ -13,6 +14,10 @@ export async function generateChatResponse(
   userMessage: string,
   recentMessages?: { role: string; content: string }[]
 ): Promise<string> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return "Not authenticated";
+
   const sb = createAdminClient();
   let aiContent: string;
 

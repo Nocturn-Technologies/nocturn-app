@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { generateWithClaude } from "@/lib/claude";
 import { getDashboardBriefingData } from "@/lib/ai-context";
 import { createAdminClient } from "@/lib/supabase/config";
@@ -89,6 +90,10 @@ function generateFallbackBriefing(data: Awaited<ReturnType<typeof getDashboardBr
 const BRIEFING_CACHE_HOURS = 4; // Only regenerate every 4 hours
 
 export async function generateMorningBriefing(collectiveId: string): Promise<BriefingItem[]> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const sb = createAdminClient();
 
   // Check cache — avoid burning API calls on every dashboard load

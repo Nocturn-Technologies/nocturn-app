@@ -114,38 +114,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Atomic capacity check — acquire advisory lock to prevent race conditions
-    // Two users buying the last ticket simultaneously will be serialized
+    // Atomic capacity check — lock + count + validate in a single DB transaction
     const supabaseAdmin = createAdminClient();
-    const { error: lockError } = await supabaseAdmin.rpc("acquire_ticket_lock", { p_tier_id: tierId });
+    const { data: capacityCheck, error: capacityError } = await supabaseAdmin.rpc("check_and_reserve_capacity", {
+      p_tier_id: tierId,
+      p_quantity: quantity,
+    });
 
-    if (lockError) {
-      console.error("[checkout] Failed to acquire ticket lock:", lockError.message);
+    if (capacityError || !capacityCheck?.success) {
+      if (capacityError) {
+        console.error("[checkout] Capacity check failed:", capacityError.message);
+      }
       return NextResponse.json(
-        { error: "Failed to check ticket availability. Please try again." },
-        { status: 500 }
-      );
-    }
-
-    const { count: soldCount, error: countError } = await supabaseAdmin
-      .from("tickets")
-      .select("id", { count: "exact", head: true })
-      .eq("ticket_tier_id", tierId)
-      .in("status", ["paid", "checked_in"]);
-
-    if (countError) {
-      console.error("[checkout] Capacity check failed:", countError.message);
-      return NextResponse.json(
-        { error: "Failed to check ticket availability" },
-        { status: 500 }
-      );
-    }
-
-    const remaining = tier.capacity - (soldCount ?? 0);
-    if (remaining < quantity) {
-      return NextResponse.json(
-        { error: `Only ${remaining} ticket(s) remaining for this tier` },
-        { status: 409 }
+        { error: capacityCheck?.error || "Failed to check capacity" },
+        { status: capacityCheck?.remaining !== undefined ? 409 : 500 }
       );
     }
 
@@ -159,6 +141,7 @@ export async function POST(request: NextRequest) {
         .from("promo_codes")
         .select("id, code, discount_type, discount_value, max_uses, current_uses, expires_at")
         .eq("event_id", eventId)
+        .eq("is_active", true)
         .ilike("code", promoCode)
         .maybeSingle();
 

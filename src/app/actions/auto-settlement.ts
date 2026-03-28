@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { enrichAttendeeCRM } from "./crm-enrichment";
 
@@ -9,6 +10,10 @@ const STRIPE_FIXED = 0.3; // $0.30 per ticket
 const PLATFORM_RATE = 0; // Organizer keeps 100% of ticket revenue
 
 export async function generateAutoSettlement(eventId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
   const admin = createAdminClient();
 
   try {

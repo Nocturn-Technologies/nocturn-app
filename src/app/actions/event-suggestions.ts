@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
 export interface Suggestion {
@@ -14,6 +15,10 @@ export interface Suggestion {
 export async function getEventSuggestions(
   collectiveId: string
 ): Promise<Suggestion[]> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   if (!collectiveId) return [];
 
   try {

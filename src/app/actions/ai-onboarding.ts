@@ -1,9 +1,14 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { generateWithClaude } from "@/lib/claude";
 import { generateEventBio } from "@/app/actions/ai-generate";
 
 export async function generateOnboardingSuggestions(name: string, city: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { bio: "", instagramCaption: "", welcomeMessage: "" };
+
   const fallback = {
     bio: `${name} — curating unforgettable nights in ${city}.`,
     instagramCaption: `Something new is coming to ${city}'s nightlife. ${name} has arrived. Stay tuned. 🌙\n\n#nightlife #${city.toLowerCase().replace(/\s+/g, "")} #${name.toLowerCase().replace(/\s+/g, "")}`,

@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 
 export interface BudgetInput {
@@ -92,6 +93,10 @@ function estimateHotelPerNight(city: string): number {
 }
 
 export async function calculateBudget(input: BudgetInput): Promise<BudgetResult> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { totalExpenses: 0, travelEstimate: null, suggestedTiers: [], breakEven: { ticketsNeeded: 0, atPrice: 0 }, scenarios: [], summary: "Not authenticated" };
+
   let travelEstimate: TravelEstimate | null = null;
 
   if (input.headlinerType === "international" && input.headlinerOrigin) {

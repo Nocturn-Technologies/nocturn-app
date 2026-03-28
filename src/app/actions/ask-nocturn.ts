@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
 
@@ -21,6 +22,10 @@ export async function askNocturn(
   collectiveId: string,
   history?: { role: "user" | "assistant"; content: string }[]
 ): Promise<string> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return "Not authenticated";
+
   if (!question.trim()) {
     return "Ask me anything about your events, revenue, audience, or how to use Nocturn.";
   }

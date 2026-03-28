@@ -1,6 +1,7 @@
 "use server";
 
 import OpenAI from "openai";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -10,6 +11,10 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
  * Downloads the file server-side, chunks if needed, transcribes with Whisper.
  */
 export async function transcribeFromStorage(storagePath: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", transcript: "", summary: "", action_items: [], key_decisions: [] };
+
   try {
     const admin = createAdminClient();
 
@@ -122,6 +127,10 @@ If the transcript is casual conversation with no clear action items or decisions
  * For longer recordings, use transcribeFromStorage instead.
  */
 export async function transcribeAudio(audioBase64: string, mimeType: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", transcript: "", summary: "", action_items: [], key_decisions: [] };
+
   try {
     const buffer = Buffer.from(audioBase64, "base64");
     const file = new File([buffer], "recording.webm", { type: mimeType });

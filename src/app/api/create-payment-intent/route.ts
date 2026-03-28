@@ -69,20 +69,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Ticket sales have ended" }, { status: 400 });
     }
 
-    // Atomic capacity check with advisory lock
-    await supabase.rpc("acquire_ticket_lock", { p_tier_id: tierId });
+    // Atomic capacity check — lock + count + validate in a single DB transaction
+    const { data: capacityCheck, error: capacityError } = await supabase.rpc("check_and_reserve_capacity", {
+      p_tier_id: tierId,
+      p_quantity: quantity,
+    });
 
-    const { count: soldCount } = await supabase
-      .from("tickets")
-      .select("id", { count: "exact", head: true })
-      .eq("ticket_tier_id", tierId)
-      .in("status", ["paid", "checked_in"]);
-
-    const remaining = tier.capacity - (soldCount ?? 0);
-    if (remaining < quantity) {
+    if (capacityError || !capacityCheck?.success) {
+      if (capacityError) {
+        console.error("[create-payment-intent] Capacity check failed:", capacityError.message);
+      }
       return NextResponse.json(
-        { error: `Only ${remaining} ticket(s) remaining` },
-        { status: 409 }
+        { error: capacityCheck?.error || "Failed to check capacity" },
+        { status: capacityCheck?.remaining !== undefined ? 409 : 500 }
       );
     }
 

@@ -31,6 +31,7 @@ export default async function FinancePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (!user) { const { redirect } = await import("next/navigation"); redirect("/login"); }
   const admin = createAdminClient();
 
   // Get user's collectives

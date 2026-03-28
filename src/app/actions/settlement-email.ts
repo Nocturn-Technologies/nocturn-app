@@ -1,10 +1,15 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { getResendClient } from "@/lib/resend";
 
 // Generate a settlement report email and return it (for now, no Resend — just generates the content)
 export async function generateSettlementReport(settlementId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", report: null };
+
   const admin = createAdminClient();
 
   // Get settlement with event and collective

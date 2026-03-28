@@ -63,12 +63,15 @@ export async function sendCampaignEmail(input: {
   }
 
   // Build HTML email from plain text body
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+  const eventTitle = event.title;
   const htmlBody = input.body
     .split("\n")
     .map((line) => (line.trim() === "" ? "<br>" : `<p>${escapeHtml(line)}</p>`))
     .join("");
 
-  const html = `
+  function buildHtml(recipientEmail: string) {
+    return `
     <div style="font-family: -apple-system, BlinkMacSystemFont, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
       <div style="margin-bottom: 24px;">
         <span style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</span>
@@ -78,14 +81,16 @@ export async function sendCampaignEmail(input: {
       </div>
       <hr style="border: none; border-top: 1px solid #27272A; margin: 32px 0;" />
       <p style="font-size: 12px; color: #71717A;">
-        You're receiving this because you attended ${event.title} via Nocturn.
+        You're receiving this because you attended ${eventTitle} via Nocturn.
         <br/>
-        <a href="${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}" style="color: #7B2FF7;">Powered by Nocturn</a>
-        <br/>
-        <span style="font-size: 11px;">Don't want these emails? Reply with "unsubscribe" to opt out.</span>
+        <a href="${appUrl}" style="color: #7B2FF7;">Powered by Nocturn</a>
+      </p>
+      <p style="color: #71717A; font-size: 11px; margin-top: 32px; text-align: center;">
+        To stop receiving emails, <a href="${appUrl}/unsubscribe?email=${encodeURIComponent(recipientEmail)}" style="color: #7B2FF7; text-decoration: underline;">unsubscribe here</a>.
       </p>
     </div>
   `;
+  }
 
   // Send in batches of 10 to respect Resend rate limits (~100 req/sec)
   let sent = 0;
@@ -101,7 +106,7 @@ export async function sendCampaignEmail(input: {
         const result = await sendEmail({
           to: email,
           subject: input.subject,
-          html,
+          html: buildHtml(email),
         });
         if (!result.error) sent++;
         else failed++;

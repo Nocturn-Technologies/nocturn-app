@@ -725,7 +725,8 @@ function parseDateTimeFromMessage(message: string): {
         jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
       };
       const m = months[monthDay[1].slice(0, 3)];
-      result.date = `2026-${m}-${monthDay[2].padStart(2, "0")}`;
+      const year = new Date().getFullYear();
+      result.date = `${year}-${m}-${monthDay[2].padStart(2, "0")}`;
     }
   }
 

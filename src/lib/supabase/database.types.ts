@@ -1899,6 +1899,10 @@ export type Database = {
         Args: { p_tier_id: string }
         Returns: void
       }
+      check_and_reserve_capacity: {
+        Args: { p_tier_id: string; p_quantity: number }
+        Returns: { success: boolean; error?: string; remaining?: number }
+      }
     }
 
     Enums: Record<string, never>

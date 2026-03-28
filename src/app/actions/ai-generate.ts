@@ -1,5 +1,6 @@
 "use server";
 
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { generateWithClaude } from "@/lib/claude";
 
 // ─── Event Description ──────────────────────────────────────────────────────
@@ -10,6 +11,10 @@ export async function generateEventDescription(
   date: string,
   genre: string
 ): Promise<string> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return "";
+
   const prompt = `Write a compelling event description for a nightlife event. Keep it under 150 words. Make it feel exclusive and exciting.
 
 Event: "${eventName}"
@@ -36,6 +41,10 @@ export async function generatePromoCaption(
   ticketPrice: string,
   genre: string
 ): Promise<string> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return "";
+
   const prompt = `Write an Instagram caption for a nightlife event promotion. Include 4-6 relevant hashtags at the end. Keep it punchy and hype — 2-3 short lines max before the hashtags. Use a moon emoji 🌙 somewhere.
 
 Event: "${eventName}"
@@ -62,6 +71,10 @@ export async function generateEventBio(
   collectiveName: string,
   city: string
 ): Promise<string> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return "";
+
   const prompt = `Write a punchy 1-2 sentence bio for a nightlife collective. Max 120 characters. Make it sound cool and authentic to underground nightlife culture.
 
 Collective name: "${collectiveName}"

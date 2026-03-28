@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { PLATFORM_FEE_PERCENT } from "@/lib/stripe";
+import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 
 // Generate a settlement for a completed event
@@ -42,13 +42,18 @@ export async function generateSettlement(eventId: string) {
 
   if (existing) return { error: "Settlement already exists", settlementId: existing.id };
 
-  // Fetch tickets, artist bookings, and expenses in parallel
-  const [{ data: tickets }, { data: bookings }, { data: expenses }] = await Promise.all([
+  // Fetch tickets, refunded tickets, artist bookings, and expenses in parallel
+  const [{ data: tickets }, { data: refundedTickets }, { data: bookings }, { data: expenses }] = await Promise.all([
     admin
       .from("tickets")
       .select("price_paid")
       .eq("event_id", eventId)
       .in("status", ["paid", "checked_in"]),
+    admin
+      .from("tickets")
+      .select("price_paid")
+      .eq("event_id", eventId)
+      .eq("status", "refunded"),
     admin
       .from("event_artists")
       .select("artist_id, fee, artists(name)")
@@ -65,6 +70,11 @@ export async function generateSettlement(eventId: string) {
     0
   );
 
+  const refundsTotal = (refundedTickets ?? []).reduce(
+    (sum, t) => sum + (Number(t.price_paid) || 0),
+    0
+  );
+
   // Stripe processing fees (~2.9% + $0.30 per transaction, estimated)
   const ticketCount = tickets?.length ?? 0;
   const stripeFees = Math.round((grossRevenue * 0.029 + ticketCount * 0.30) * 100) / 100;
@@ -73,7 +83,7 @@ export async function generateSettlement(eventId: string) {
   // So the platform fee does NOT reduce the collective's revenue
   // We track it for reporting but it comes from the service fee, not ticket revenue
   const platformFee = 0; // Collective keeps 100% of ticket price
-  const nocturnRevenue = Math.round((grossRevenue * (PLATFORM_FEE_PERCENT / 100) + ticketCount * 0.50) * 100) / 100;
+  const nocturnRevenue = Math.round((grossRevenue * (PLATFORM_FEE_PERCENT / 100) + ticketCount * (PLATFORM_FEE_FLAT_CENTS / 100)) * 100) / 100;
 
   const totalArtistFees = (bookings ?? []).reduce(
     (sum, b) => sum + (Number(b.fee) || 0),
@@ -85,8 +95,8 @@ export async function generateSettlement(eventId: string) {
     0
   );
 
-  // Calculate net and profit
-  const netRevenue = grossRevenue - stripeFees - platformFee;
+  // Calculate net and profit (subtract refunds from gross revenue)
+  const netRevenue = grossRevenue - refundsTotal - stripeFees - platformFee;
   const profit = netRevenue - totalArtistFees - totalExpenses;
 
   // Create settlement
