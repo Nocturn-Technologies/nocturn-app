@@ -280,9 +280,27 @@ export default function ChatRoomPage() {
     }
   };
 
-  // Send voice message
-  const handleSendVoice = async (duration: number) => {
+  // Send voice message — upload blob to Supabase Storage, then insert message
+  const handleSendVoice = async (blob: Blob, duration: number) => {
     if (!userId || !channelId) return;
+
+    // Upload to Supabase Storage
+    const fileName = `voice/${channelId}/${userId}-${Date.now()}.webm`;
+    const { error: uploadError } = await supabase.storage
+      .from("recordings")
+      .upload(fileName, blob, { contentType: "audio/webm", upsert: false });
+
+    let voiceUrl: string;
+    if (uploadError) {
+      console.error("[voice] Upload failed:", uploadError.message);
+      // Still save the message but with a placeholder URL
+      voiceUrl = `mock://voice/${Date.now()}`;
+    } else {
+      const { data: urlData } = supabase.storage
+        .from("recordings")
+        .getPublicUrl(fileName);
+      voiceUrl = urlData.publicUrl;
+    }
 
     const { data } = await supabase
       .from("messages")
@@ -291,7 +309,7 @@ export default function ChatRoomPage() {
         user_id: userId,
         content: "",
         type: "voice",
-        voice_url: `mock://voice/${Date.now()}`,
+        voice_url: voiceUrl,
         voice_duration: duration,
       })
       .select()

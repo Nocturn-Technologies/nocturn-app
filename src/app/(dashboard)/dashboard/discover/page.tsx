@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { ProfileCard } from "./profile-card";
 import { ContactDialog } from "./contact-dialog";
 import {
@@ -12,7 +13,7 @@ import {
   unsaveProfile,
 } from "@/app/actions/marketplace";
 import { haptic } from "@/lib/haptics";
-import { Search, Compass } from "lucide-react";
+import { Search, Compass, ChevronLeft, ChevronRight } from "lucide-react";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -31,11 +32,15 @@ const CATEGORY_TABS = [
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
+const PER_PAGE = 20;
+
 export default function DiscoverPage() {
   const [activeTab, setActiveTab] = useState<"discover" | "saved">("discover");
   const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -53,6 +58,11 @@ export default function DiscoverPage() {
     city: string;
   } | null>(null);
 
+  // Reset page when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [category, query, cityFilter]);
+
   // ── Fetch discover profiles ────────────────────────────────────────────
 
   const fetchProfiles = useCallback(async () => {
@@ -61,10 +71,12 @@ export default function DiscoverPage() {
       type: category === "all" ? null : category,
       query: query.trim() || null,
       city: cityFilter.trim() || null,
+      page,
     });
     setProfiles(result.profiles);
+    setTotalCount(result.total);
     setLoadingDiscover(false);
-  }, [category, query, cityFilter]);
+  }, [category, query, cityFilter, page]);
 
   useEffect(() => {
     const timer = setTimeout(fetchProfiles, 200);
@@ -133,6 +145,8 @@ export default function DiscoverPage() {
 
   const displayProfiles = activeTab === "discover" ? profiles : savedProfiles;
   const isLoading = activeTab === "discover" ? loadingDiscover : loadingSaved;
+  const totalPages = Math.ceil(totalCount / PER_PAGE);
+  const showPagination = activeTab === "discover" && totalPages > 1;
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -246,25 +260,92 @@ export default function DiscoverPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {displayProfiles.map((profile) => (
-              <ProfileCard
-                key={profile.id}
-                profile={profile}
-                isSaved={savedIds.has(profile.id)}
-                onSave={() => handleSave(profile.id)}
-                onUnsave={() => handleUnsave(profile.id)}
-                onContact={() =>
-                  setContactProfile({
-                    id: profile.id,
-                    name: profile.display_name,
-                    type: profile.user_type ?? profile.type ?? "artist",
-                    city: profile.city ?? "",
-                  })
-                }
-              />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {displayProfiles.map((profile) => (
+                <ProfileCard
+                  key={profile.id}
+                  profile={profile}
+                  isSaved={savedIds.has(profile.id)}
+                  onSave={() => handleSave(profile.id)}
+                  onUnsave={() => handleUnsave(profile.id)}
+                  onContact={() =>
+                    setContactProfile({
+                      id: profile.id,
+                      name: profile.display_name,
+                      type: profile.user_type ?? profile.type ?? "artist",
+                      city: profile.city ?? "",
+                    })
+                  }
+                />
+              ))}
+            </div>
+
+            {/* Result count */}
+            <p className="text-xs text-muted-foreground text-center pt-2">
+              {totalCount} {totalCount === 1 ? "profile" : "profiles"} found
+              {totalPages > 1 && ` · Page ${page} of ${totalPages}`}
+            </p>
+
+            {/* Pagination */}
+            {showPagination && (
+              <div className="flex items-center justify-center gap-2 pt-2 pb-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page <= 1}
+                  onClick={() => {
+                    setPage((p) => Math.max(1, p - 1));
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="min-h-[44px] min-w-[44px]"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                  // Show pages around current
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (page <= 3) {
+                    pageNum = i + 1;
+                  } else if (page >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = page - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={page === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setPage(pageNum);
+                        window.scrollTo({ top: 0, behavior: "smooth" });
+                      }}
+                      className={`min-h-[44px] min-w-[44px] ${
+                        page === pageNum ? "bg-nocturn hover:bg-nocturn-light" : ""
+                      }`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={page >= totalPages}
+                  onClick={() => {
+                    setPage((p) => Math.min(totalPages, p + 1));
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="min-h-[44px] min-w-[44px]"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
 

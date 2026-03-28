@@ -49,6 +49,32 @@ ALTER TABLE external_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE promo_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE promo_clicks ENABLE ROW LEVEL SECURITY;
 
+-- RLS Policies: external_events
+CREATE POLICY "Users can view own external events" ON external_events
+  FOR SELECT USING (auth.uid() = promoter_id);
+CREATE POLICY "Users can insert own external events" ON external_events
+  FOR INSERT WITH CHECK (auth.uid() = promoter_id);
+CREATE POLICY "Users can update own external events" ON external_events
+  FOR UPDATE USING (auth.uid() = promoter_id);
+CREATE POLICY "Users can delete own external events" ON external_events
+  FOR DELETE USING (auth.uid() = promoter_id);
+
+-- RLS Policies: promo_links
+CREATE POLICY "Users can view own promo links" ON promo_links
+  FOR SELECT USING (auth.uid() = promoter_id);
+CREATE POLICY "Users can insert own promo links" ON promo_links
+  FOR INSERT WITH CHECK (auth.uid() = promoter_id);
+CREATE POLICY "Anyone can read promo links by token" ON promo_links
+  FOR SELECT USING (true);
+
+-- RLS Policies: promo_clicks
+CREATE POLICY "Anyone can insert clicks" ON promo_clicks
+  FOR INSERT WITH CHECK (true);
+CREATE POLICY "Link owners can view clicks" ON promo_clicks
+  FOR SELECT USING (
+    promo_link_id IN (SELECT id FROM promo_links WHERE promoter_id = auth.uid())
+  );
+
 -- RPC to atomically increment click count
 CREATE OR REPLACE FUNCTION increment_promo_click(p_link_id UUID)
 RETURNS void AS $$

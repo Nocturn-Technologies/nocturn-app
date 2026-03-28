@@ -116,49 +116,92 @@ export function RecordingIndicator({ duration }: { duration: number }) {
   );
 }
 
-/* ── Voice Playback ── */
+/* ── Voice Playback (with real audio) ── */
 interface VoicePlaybackProps {
   voiceUrl?: string;
   voiceDuration: number;
   isOwn: boolean;
 }
 
-export function VoicePlayback({ voiceDuration, isOwn }: VoicePlaybackProps) {
+export function VoicePlayback({ voiceUrl, voiceDuration, isOwn }: VoicePlaybackProps) {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const animFrameRef = useRef<number | null>(null);
 
   const formatDur = (s: number) => {
     const m = Math.floor(s / 60);
-    const sec = s % 60;
+    const sec = Math.floor(s) % 60;
     return `${m}:${sec.toString().padStart(2, "0")}`;
   };
 
-  const togglePlay = () => {
+  // Real audio URL check — skip mock URLs
+  const hasRealAudio = voiceUrl && !voiceUrl.startsWith("mock://");
+
+  const updateProgress = useCallback(() => {
+    const audio = audioRef.current;
+    if (audio && audio.duration && !isNaN(audio.duration)) {
+      setProgress((audio.currentTime / audio.duration) * 100);
+    }
     if (playing) {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      animFrameRef.current = requestAnimationFrame(updateProgress);
+    }
+  }, [playing]);
+
+  const togglePlay = async () => {
+    if (!hasRealAudio) return;
+
+    // Create audio element on first play
+    if (!audioRef.current) {
+      const audio = new Audio(voiceUrl);
+      audio.preload = "auto";
+      audio.onended = () => {
+        setPlaying(false);
+        setProgress(0);
+      };
+      audio.onerror = () => {
+        setPlaying(false);
+        setProgress(0);
+      };
+      audioRef.current = audio;
+    }
+
+    const audio = audioRef.current;
+
+    if (playing) {
+      audio.pause();
       setPlaying(false);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     } else {
-      if (voiceDuration <= 0) return;
-      setPlaying(true);
-      setProgress(0);
-      const step = 100 / (voiceDuration * 10);
-      intervalRef.current = setInterval(() => {
-        setProgress((p) => {
-          if (p >= 100) {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-            setPlaying(false);
-            return 0;
-          }
-          return p + step;
-        });
-      }, 100);
+      try {
+        await audio.play();
+        setPlaying(true);
+        animFrameRef.current = requestAnimationFrame(updateProgress);
+      } catch {
+        // Playback failed (autoplay blocked, etc)
+        setPlaying(false);
+      }
     }
   };
 
+  // Start progress tracking when playing
+  useEffect(() => {
+    if (playing) {
+      animFrameRef.current = requestAnimationFrame(updateProgress);
+    }
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [playing, updateProgress]);
+
+  // Cleanup audio on unmount
   useEffect(() => {
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, []);
 
@@ -171,11 +214,19 @@ export function VoicePlayback({ voiceDuration, isOwn }: VoicePlaybackProps) {
     8, 12, 6, 4,
   ];
 
+  // Show current time when playing, total duration otherwise
+  const displayTime = playing && audioRef.current
+    ? formatDur(audioRef.current.currentTime)
+    : formatDur(voiceDuration);
+
   return (
     <div className="flex items-center gap-2 min-w-[160px]">
       <button
         onClick={togglePlay}
-        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+        disabled={!hasRealAudio}
+        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-opacity ${
+          !hasRealAudio ? "opacity-40 cursor-not-allowed" : ""
+        }`}
         style={{
           background: isOwn
             ? "rgba(255,255,255,0.2)"
@@ -202,7 +253,7 @@ export function VoicePlayback({ voiceDuration, isOwn }: VoicePlaybackProps) {
           return (
             <div
               key={i}
-              className={`w-[2px] rounded-full ${
+              className={`w-[2px] rounded-full transition-colors ${
                 pct < progress ? barActiveColor : barColor
               }`}
               style={{ height: `${h}px` }}
@@ -216,7 +267,7 @@ export function VoicePlayback({ voiceDuration, isOwn }: VoicePlaybackProps) {
           isOwn ? "text-white/70" : "text-muted-foreground"
         }`}
       >
-        {formatDur(voiceDuration)}
+        {displayTime}
       </span>
     </div>
   );
@@ -224,7 +275,7 @@ export function VoicePlayback({ voiceDuration, isOwn }: VoicePlaybackProps) {
 
 /* ── Mic Button for Chat Input Bar ── */
 interface MicButtonProps {
-  onSendVoice: (duration: number) => void;
+  onSendVoice: (blob: Blob, duration: number) => void;
 }
 
 export function MicButton({ onSendVoice }: MicButtonProps) {
@@ -234,7 +285,7 @@ export function MicButton({ onSendVoice }: MicButtonProps) {
     if (isRecording) {
       const result = await stop();
       if (result && result.duration > 0) {
-        onSendVoice(result.duration);
+        onSendVoice(result.blob, result.duration);
       }
     } else {
       start();
