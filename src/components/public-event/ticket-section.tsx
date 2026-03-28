@@ -92,12 +92,12 @@ export function TicketSection({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">
         Tickets
       </h2>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {(() => {
           // Progressive tier unlock logic:
           // Sort tiers by price (cheapest first = Early Bird → Tier 1 → Tier 2 → Tier 3)
@@ -237,7 +237,7 @@ export function TicketSection({
 
       {/* Expanded section when tier selected */}
       {selectedTier && (
-        <div className="space-y-5 rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-6 animate-fade-in-up">
+        <div className="space-y-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-5 animate-fade-in-up">
           {/* Quantity selector */}
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-white/60">Quantity</span>

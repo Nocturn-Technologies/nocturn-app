@@ -97,10 +97,10 @@ export function ShareCardGenerator({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <h2
-        className={`font-heading text-sm font-semibold uppercase tracking-wider ${
-          accentColor ? "text-white/40" : "text-muted-foreground"
+        className={`font-heading text-[10px] font-semibold uppercase tracking-[0.2em] ${
+          accentColor ? "text-white/20" : "text-muted-foreground"
         }`}
       >
         Share as Story

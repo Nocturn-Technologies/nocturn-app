@@ -24,8 +24,8 @@ export function CollectiveProfile({
   const igHandle = instagram?.replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//, "") || null;
 
   return (
-    <div className="space-y-3">
-      <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+    <div className="space-y-2">
+      <h2 className="font-heading text-[10px] font-semibold uppercase tracking-[0.2em] text-white/20">
         About the collective
       </h2>
       <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-4">

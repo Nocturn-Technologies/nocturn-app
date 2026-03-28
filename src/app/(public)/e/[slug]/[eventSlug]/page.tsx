@@ -547,32 +547,32 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             </div>
           )}
 
-          {/* ─── Share ─── */}
-          <ShareButton url={publicUrl} title={event.title} />
+          {/* ─── Share + About ─── */}
+          <div className="space-y-6 py-8 border-t border-white/[0.04]">
+            <ShareButton url={publicUrl} title={event.title} />
 
-          {/* ─── Share Card ─── */}
-          <PublicEventShareCard
-            event={{
-              title: event.title,
-              date: shareCardDate,
-              venue: shareCardVenue,
-              price: lowestTierPrice,
-              flyerUrl: event.flyer_url,
-              publicUrl,
-            }}
-            accentColor={accentColor}
-          />
+            <PublicEventShareCard
+              event={{
+                title: event.title,
+                date: shareCardDate,
+                venue: shareCardVenue,
+                price: lowestTierPrice,
+                flyerUrl: event.flyer_url,
+                publicUrl,
+              }}
+              accentColor={accentColor}
+            />
 
-          {/* ─── Collective Profile ─── */}
-          <CollectiveProfile
-            name={collective.name}
-            slug={collective.slug}
-            description={collective.description ?? null}
-            logoUrl={collective.logo_url}
-            instagram={collective.instagram}
-            eventCount={collectiveEventCount ?? 0}
-            accentColor={accentColor}
-          />
+            <CollectiveProfile
+              name={collective.name}
+              slug={collective.slug}
+              description={collective.description ?? null}
+              logoUrl={collective.logo_url}
+              instagram={collective.instagram}
+              eventCount={collectiveEventCount ?? 0}
+              accentColor={accentColor}
+            />
+          </div>
 
           {/* ─── Past Events ─── */}
           <PastEvents

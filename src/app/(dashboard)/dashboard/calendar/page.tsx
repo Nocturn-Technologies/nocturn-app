@@ -244,10 +244,12 @@ export default function CalendarHeatMap() {
           ) : (
             <div className="grid grid-cols-7 gap-1">
               {calendarDays.map(({ date, inMonth }, i) => {
-                const dateKey = date.toISOString().slice(0, 10);
+                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
                 const dayData = eventMap[dateKey];
                 const isPast = date < new Date(new Date().toDateString());
-                const isToday = dateKey === new Date().toISOString().slice(0, 10);
+                const now = new Date();
+                const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+                const isToday = dateKey === todayKey;
                 const isYourEvent = allEvents.some(
                   (e) => e.starts_at.slice(0, 10) === dateKey && yourCollectiveIds.includes(e.collective_id)
                 );
@@ -345,7 +347,7 @@ export default function CalendarHeatMap() {
           <p>{events.reduce((s, e) => s + e.count, 0)} events across {events.length} nights this month</p>
           <p>{calendarDays.filter(({ date, inMonth }) => {
             if (!inMonth) return false;
-            const dateKey = date.toISOString().slice(0, 10);
+            const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
             const isPast = date < new Date(new Date().toDateString());
             if (isPast) return false;
             const dayData = eventMap[dateKey];
