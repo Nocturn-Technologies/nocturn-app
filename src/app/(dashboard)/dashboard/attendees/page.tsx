@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, UserCheck, DollarSign, Download, Search } from "lucide-react";
+import { Users, UserCheck, DollarSign, Download, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import {
   getAttendees,
@@ -12,6 +12,8 @@ import {
   type AttendeeRow,
   type AttendeeStats,
 } from "@/app/actions/attendees";
+
+const PER_PAGE = 25;
 
 export default function AttendeesPage() {
   const [attendees, setAttendees] = useState<AttendeeRow[]>([]);
@@ -22,6 +24,7 @@ export default function AttendeesPage() {
   });
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -46,9 +49,14 @@ export default function AttendeesPage() {
     });
   }, []);
 
+  // Reset page when search changes
+  useEffect(() => { setPage(1); }, [debouncedSearch]);
+
   const filtered = attendees.filter((a) =>
     a.email.toLowerCase().includes(debouncedSearch.toLowerCase())
   );
+  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+  const paginatedAttendees = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   async function handleExport() {
     setExporting(true);
@@ -162,7 +170,13 @@ export default function AttendeesPage() {
       {/* Attendee list */}
       {filtered.length > 0 ? (
         <div className="space-y-2">
-          {/* Desktop header */}
+          {/* Count + Desktop header */}
+          <div className="flex items-center justify-between px-4 mb-1">
+            <p className="text-xs text-muted-foreground">
+              {filtered.length} attendee{filtered.length !== 1 ? "s" : ""}
+              {totalPages > 1 && ` · Page ${page} of ${totalPages}`}
+            </p>
+          </div>
           <div className="hidden sm:grid grid-cols-12 gap-2 px-4 text-xs font-medium text-muted-foreground">
             <span className="col-span-4">Email</span>
             <span className="col-span-2 text-center">Events</span>
@@ -171,7 +185,7 @@ export default function AttendeesPage() {
             <span className="col-span-2 text-right">Last Event</span>
           </div>
 
-          {filtered.map((attendee) => (
+          {paginatedAttendees.map((attendee) => (
             <Card key={attendee.email}>
               <CardContent className="p-4">
                 {/* Desktop row */}
@@ -254,6 +268,48 @@ export default function AttendeesPage() {
               </CardContent>
             </Card>
           ))}
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className="min-h-[44px] min-w-[44px]"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 5) pageNum = i + 1;
+                else if (page <= 3) pageNum = i + 1;
+                else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+                else pageNum = page - 2 + i;
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={page === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => { setPage(pageNum); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                    className={`min-h-[44px] min-w-[44px] ${page === pageNum ? "bg-nocturn hover:bg-nocturn-light" : ""}`}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className="min-h-[44px] min-w-[44px]"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
         </div>
       ) : attendees.length === 0 ? (
         <Card>

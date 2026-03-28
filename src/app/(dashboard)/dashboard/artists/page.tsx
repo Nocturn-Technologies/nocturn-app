@@ -13,7 +13,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Music, Plus, Search, Instagram, ExternalLink, MapPin, BarChart3 } from "lucide-react";
+import { Music, Plus, Search, Instagram, ExternalLink, MapPin, BarChart3, ChevronLeft, ChevronRight } from "lucide-react";
+
+const PER_PAGE = 20;
 import Link from "next/link";
 
 interface Artist {
@@ -36,6 +38,7 @@ export default function ArtistsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,12 +117,17 @@ export default function ArtistsPage() {
     loadArtists();
   }
 
+  // Reset page on search change
+  useEffect(() => { setPage(1); }, [search]);
+
   const filtered = artists.filter(
     (a) =>
       a.name.toLowerCase().includes(search.toLowerCase()) ||
       a.genre?.some((g) => g.toLowerCase().includes(search.toLowerCase())) ||
       (a.metadata as { location?: string })?.location?.toLowerCase().includes(search.toLowerCase())
   );
+  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+  const paginatedArtists = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   if (loading) {
     return (
@@ -302,7 +310,10 @@ export default function ArtistsPage() {
 
       {/* Artist count */}
       {artists.length > 0 && (
-        <p className="text-xs text-muted-foreground">{filtered.length} artist{filtered.length !== 1 ? "s" : ""}</p>
+        <p className="text-xs text-muted-foreground">
+          {filtered.length} artist{filtered.length !== 1 ? "s" : ""}
+          {totalPages > 1 && ` · Page ${page} of ${totalPages}`}
+        </p>
       )}
 
       {/* Artist list */}
@@ -322,7 +333,7 @@ export default function ArtistsPage() {
         </Card>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {filtered.map((artist) => {
+          {paginatedArtists.map((artist) => {
             const loc = (artist.metadata as { location?: string })?.location;
             return (
               <Link key={artist.id} href={`/dashboard/artists/${artist.id}`}>
@@ -374,6 +385,48 @@ export default function ArtistsPage() {
               </Link>
             );
           })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 pt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => { setPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className="min-h-[44px] min-w-[44px]"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+            let pageNum: number;
+            if (totalPages <= 5) pageNum = i + 1;
+            else if (page <= 3) pageNum = i + 1;
+            else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
+            else pageNum = page - 2 + i;
+            return (
+              <Button
+                key={pageNum}
+                variant={page === pageNum ? "default" : "outline"}
+                size="sm"
+                onClick={() => { setPage(pageNum); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className={`min-h-[44px] min-w-[44px] ${page === pageNum ? "bg-nocturn hover:bg-nocturn-light" : ""}`}
+              >
+                {pageNum}
+              </Button>
+            );
+          })}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= totalPages}
+            onClick={() => { setPage((p) => Math.min(totalPages, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className="min-h-[44px] min-w-[44px]"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       )}
     </div>
