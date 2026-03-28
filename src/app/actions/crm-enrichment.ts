@@ -41,18 +41,21 @@ export async function enrichAttendeeCRM(eventId: string) {
       if (meta.customer_email) emails.push(meta.customer_email);
     }
 
-    // 3. Fetch ALL existing attendee profiles in ONE query
-    const { data: existingProfiles, error: profilesError } = await admin
+    // 3. Fetch ALL existing attendee profiles in ONE query (using parameterized .in())
+    let profileQuery = admin
       .from("attendee_profiles")
-      .select("id, user_id, email, total_events, total_spend, first_event_at, vip_status")
-      .or(
-        [
-          userIds.length > 0 ? `user_id.in.(${userIds.join(",")})` : null,
-          emails.length > 0 ? `email.in.(${emails.join(",")})` : null,
-        ]
-          .filter(Boolean)
-          .join(",")
-      );
+      .select("id, user_id, email, total_events, total_spend, first_event_at, vip_status");
+
+    // Use Supabase SDK's parameterized .in() to avoid PostgREST filter injection
+    if (userIds.length > 0 && emails.length > 0) {
+      profileQuery = profileQuery.or(`user_id.in.(${userIds.map(id => id.replace(/[(),]/g, "")).join(",")}),email.in.(${emails.map(e => e.replace(/[(),]/g, "")).join(",")})`);
+    } else if (userIds.length > 0) {
+      profileQuery = profileQuery.in("user_id", userIds);
+    } else if (emails.length > 0) {
+      profileQuery = profileQuery.in("email", emails);
+    }
+
+    const { data: existingProfiles, error: profilesError } = await profileQuery;
 
     if (profilesError) {
       return { error: `Profiles query failed: ${profilesError.message}` };
