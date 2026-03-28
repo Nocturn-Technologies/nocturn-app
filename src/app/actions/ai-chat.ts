@@ -42,19 +42,13 @@ export async function generateChatResponse(
       // 3. Build system prompt with real data
       const systemPrompt = `${SYSTEM_PROMPT_BASE}\n\n--- DATA ---\n${contextData}`;
 
-      // 4. Build the full prompt including conversation history
-      let prompt = "";
-      if (recentMessages && recentMessages.length > 0) {
-        const history = recentMessages
-          .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-          .join("\n");
-        prompt = `Recent conversation:\n${history}\n\nUser: ${userMessage}`;
-      } else {
-        prompt = userMessage;
-      }
+      // 4. Build conversation history for prompt caching
+      const history = (recentMessages ?? [])
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-      // 5. Call Claude
-      const aiResponse = await generateWithClaude(prompt, systemPrompt);
+      // 5. Call Claude with prompt caching
+      const aiResponse = await generateWithClaude(userMessage, systemPrompt, history);
       aiContent = aiResponse || fallbackResponse(userMessage);
     }
   } catch (error) {

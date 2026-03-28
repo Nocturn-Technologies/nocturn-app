@@ -168,18 +168,8 @@ export async function askNocturn(
     const dataContext = contextLines.join("\n");
     const fullSystem = `${SYSTEM_PROMPT}\n\n--- OPERATOR'S DATA ---\n${dataContext}`;
 
-    // Build prompt with history
-    let prompt = "";
-    if (history && history.length > 0) {
-      const historyText = history
-        .map((m) => `${m.role === "user" ? "Operator" : "Nocturn"}: ${m.content}`)
-        .join("\n");
-      prompt = `Recent conversation:\n${historyText}\n\nOperator: ${question}`;
-    } else {
-      prompt = question;
-    }
-
-    const response = await generateWithClaude(prompt, fullSystem);
+    // Pass conversation history as structured messages for proper prompt caching
+    const response = await generateWithClaude(question, fullSystem, history);
     return response || fallbackResponse(question);
   } catch (error) {
     console.error("[ask-nocturn] Error:", error);
