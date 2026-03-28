@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
           { key: "X-XSS-Protection", value: "1; mode=block" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(self), geolocation=()" },
           {
-            key: "Content-Security-Policy-Report-Only",
+            key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://maps.googleapis.com",
@@ -32,7 +32,7 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "bpzwbqtpyorppijdblhy.supabase.co",
+        hostname: "zvmslijvdkcnkrjjgaie.supabase.co",
         pathname: "/storage/**",
       },
       {

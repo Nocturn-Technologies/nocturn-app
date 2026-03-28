@@ -1,14 +1,50 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/config";
+import { createClient } from "@/lib/supabase/server";
+
+/**
+ * Verify the authenticated user is a member of the event's collective.
+ */
+async function verifyCheckInAccess(eventId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const admin = createAdminClient();
+  const { data: event } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found" };
+
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id);
+
+  if (!count || count === 0) return { error: "You don't have access to this event" };
+
+  return { error: null };
+}
 
 /**
  * Validate and check in a ticket by its token.
+ * - Verifies the caller is authenticated and a member of the event's collective
  * - Verifies the ticket exists and belongs to the given event
  * - Ensures ticket status is 'paid' (not already checked in, refunded, etc.)
  * - Updates status to 'checked_in' with timestamp
  */
 export async function checkInTicket(ticketToken: string, eventId: string) {
+  // Auth check: only collective members can check in tickets
+  const access = await verifyCheckInAccess(eventId);
+  if (access.error) {
+    return { success: false, error: access.error, ticket: null };
+  }
+
   const supabase = createAdminClient();
 
   // Fetch the ticket with event and tier info
@@ -121,6 +157,12 @@ export interface CheckInStats {
  * - Most recent check-ins
  */
 export async function getCheckInStats(eventId: string): Promise<CheckInStats> {
+  // Auth check: only collective members can view check-in stats
+  const access = await verifyCheckInAccess(eventId);
+  if (access.error) {
+    return { totalTickets: 0, checkedIn: 0, recentCheckIns: [] };
+  }
+
   const supabase = createAdminClient();
 
   // Count total eligible tickets (paid + checked_in)

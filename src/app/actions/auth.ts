@@ -40,6 +40,7 @@ export async function signUpUser(formData: {
         email: formData.email,
         full_name: formData.fullName,
         is_approved: isApproved,
+        user_type: userType,
       },
       { onConflict: "id" }
     );
@@ -118,6 +119,18 @@ async function sendWelcomeEmail(email: string, name: string, userType: string) {
     promoter: "You're ready to start promoting. Find events, grab your link, and share it with your network. Every ticket sold through your link is tracked automatically.",
     artist: "Your profile is live on the Nocturn directory. Collectives in your city can now discover and book you. Fill out your SoundCloud and Spotify to stand out.",
     venue: "Your venue is listed on Nocturn. Promoters can now find your space and reach out for bookings. Add your capacity and pricing to attract the right events.",
+    photographer: "Your photography profile is live on the Nocturn marketplace. Start getting discovered by collectives and promoters.",
+    videographer: "Your videography profile is live on the Nocturn marketplace. Start getting discovered by collectives and promoters.",
+    sound_production: "Your sound & production profile is live on the Nocturn marketplace. Connect with event organizers looking for audio services.",
+    lighting_production: "Your lighting & visuals profile is live on the Nocturn marketplace. Connect with event organizers looking for production services.",
+    sponsor: "Your brand profile is live on the Nocturn marketplace. Discover partnership opportunities with collectives and events.",
+    artist_manager: "Your artist management profile is live on the Nocturn marketplace. Connect with talent and event organizers.",
+    tour_manager: "Your tour management profile is live on the Nocturn marketplace. Connect with artists and event organizers.",
+    booking_agent: "Your booking agent profile is live on the Nocturn marketplace. Discover talent and venues looking for bookings.",
+    event_staff: "Your event staff profile is live on the Nocturn marketplace. Get discovered by collectives looking for crew.",
+    mc_host: "Your MC & host profile is live on the Nocturn marketplace. Get booked for events and shows.",
+    graphic_designer: "Your design profile is live on the Nocturn marketplace. Connect with collectives looking for creative work.",
+    pr_publicist: "Your PR profile is live on the Nocturn marketplace. Connect with artists and collectives looking for media outreach.",
   };
 
   try {
@@ -229,7 +242,11 @@ async function sendApprovalRequestEmail(userId: string, email: string, name: str
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return;
 
-  const approvalSecret = process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const approvalSecret = process.env.CRON_SECRET || "";
+  if (!approvalSecret) {
+    console.error("[signup] CRON_SECRET not set — skipping approval request email");
+    return;
+  }
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
   const approveUrl = `${baseUrl}/api/approve-user?user_id=${userId}&action=approve&secret=${encodeURIComponent(approvalSecret)}`;
   const denyUrl = `${baseUrl}/api/approve-user?user_id=${userId}&action=deny&secret=${encodeURIComponent(approvalSecret)}`;

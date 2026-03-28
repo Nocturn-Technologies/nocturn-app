@@ -156,6 +156,24 @@ export async function getRefundableTickets(eventId: string) {
 
   const sb = createAdminClient();
 
+  // Verify user is a member of the event's collective
+  const { data: event } = await sb
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found", tickets: [] };
+
+  const { count } = await sb
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { error: "You don't have access to this event", tickets: [] };
+
   const { data: tickets } = await sb
     .from("tickets")
     .select("id, price_paid, status, metadata, created_at, ticket_tiers(name)")
@@ -207,6 +225,7 @@ export async function toggleRefundPolicy(eventId: string, enabled: boolean) {
     .eq("user_id", user.id)
     .eq("collective_id", event.collective_id)
     .in("role", ["admin", "promoter"])
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!membership) return { error: "Only admins and promoters can change refund policy" };
@@ -227,14 +246,30 @@ export async function toggleRefundPolicy(eventId: string, enabled: boolean) {
  * Get refund policy status for an event.
  */
 export async function getRefundPolicy(eventId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { enabled: true };
+
   const sb = createAdminClient();
+
   const { data: event } = await sb
     .from("events")
-    .select("metadata")
+    .select("metadata, collective_id")
     .eq("id", eventId)
     .maybeSingle();
 
   if (!event) return { enabled: true }; // Default to enabled
+
+  // Verify user is a member of this collective
+  const { count } = await sb
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { enabled: true };
+
   const meta = (event.metadata as Record<string, unknown>) || {};
   return { enabled: meta.refunds_enabled !== false }; // Default true unless explicitly disabled
 }

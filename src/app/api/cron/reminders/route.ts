@@ -143,13 +143,14 @@ export async function GET(request: Request) {
       if ((count ?? 0) > 0) continue;
 
       // Get ticket stats
-      const [{ count: ticketsSold }, { data: tiers }] = await Promise.all([
+      const [{ count: ticketsSold }, { data: tiers }, { data: ticketRevenue }] = await Promise.all([
         sb.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
         sb.from("ticket_tiers").select("capacity, price").eq("event_id", event.id),
+        sb.from("tickets").select("price_paid").eq("event_id", event.id).in("status", ["paid", "checked_in"]),
       ]);
 
       const totalCap = (tiers ?? []).reduce((s, t) => s + (t.capacity || 0), 0);
-      const revenue = (tiers ?? []).reduce((s, t) => s + (t.price * Math.min(t.capacity, ticketsSold ?? 0)), 0);
+      const revenue = (ticketRevenue ?? []).reduce((s: number, t: { price_paid: unknown }) => s + (Number(t.price_paid) || 0), 0);
 
       // Get organizer email
       const { data: members } = await sb

@@ -347,8 +347,9 @@ export default function DiscoverPage() {
 
             {/* Result count */}
             <p className="text-xs text-muted-foreground text-center pt-2">
-              {totalCount} {totalCount === 1 ? "profile" : "profiles"} found
-              {totalPages > 1 && ` · Page ${page} of ${totalPages}`}
+              {activeTab === "discover"
+                ? `${totalCount} ${totalCount === 1 ? "profile" : "profiles"} found${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`
+                : `${filteredNetwork.length} ${filteredNetwork.length === 1 ? "connection" : "connections"}`}
             </p>
 
             {/* Pagination */}

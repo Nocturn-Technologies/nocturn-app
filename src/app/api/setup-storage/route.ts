@@ -10,8 +10,8 @@ export async function POST(request: Request) {
   const authHeader = request.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET;
 
-  // Allow if CRON_SECRET matches, or if called from localhost in dev
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  // Require CRON_SECRET to be set and matching
+  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

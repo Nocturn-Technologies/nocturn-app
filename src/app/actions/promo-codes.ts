@@ -156,36 +156,75 @@ export async function validatePromoCode(eventId: string, code: string) {
   };
 }
 
-export async function applyPromoCode(codeId: string) {
+export async function applyPromoCode(codeId: string, quantity: number = 1) {
   const supabase = createAdminClient();
 
-  const { error } = await supabase.rpc("increment_promo_uses", { code_id: codeId });
+  // Atomic claim: read current state and conditionally update in one query.
+  // The .lte() filter ensures we only increment if there's capacity remaining,
+  // preventing race conditions from concurrent requests.
+  const { data: promo } = await supabase
+    .from("promo_codes")
+    .select("id, current_uses, max_uses")
+    .eq("id", codeId)
+    .maybeSingle();
 
-  // Fallback: manual increment if RPC doesn't exist
-  if (error) {
-    const { data: current } = await supabase
-      .from("promo_codes")
-      .select("current_uses")
-      .eq("id", codeId)
-      .maybeSingle();
+  if (!promo) return { error: "Promo code not found" };
 
-    if (!current) return { error: "Promo code not found" };
+  const newUses = (promo.current_uses ?? 0) + quantity;
 
-    const { error: updateError } = await supabase
-      .from("promo_codes")
-      .update({ current_uses: (current.current_uses ?? 0) + 1 })
-      .eq("id", codeId);
+  // Build atomic update with capacity guard
+  let updateQuery = supabase
+    .from("promo_codes")
+    .update({ current_uses: newUses })
+    .eq("id", codeId);
 
-    if (updateError) return { error: updateError.message };
+  // Only add capacity check if max_uses is set
+  if (promo.max_uses !== null) {
+    updateQuery = updateQuery.lte("current_uses", promo.max_uses - quantity);
   }
+
+  const { data: result, error: updateError } = await updateQuery.select("id");
+
+  if (updateError) return { error: updateError.message };
+  if (!result || result.length === 0) return { error: "Promo code has reached its usage limit" };
 
   return { error: null };
 }
 
 export async function togglePromoCode(codeId: string, isActive: boolean) {
-  const supabase = createAdminClient();
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
 
-  const { error } = await supabase
+  const admin = createAdminClient();
+
+  // Look up the promo code's event, then verify collective membership
+  const { data: promo } = await admin
+    .from("promo_codes")
+    .select("event_id")
+    .eq("id", codeId)
+    .maybeSingle();
+
+  if (!promo) return { error: "Promo code not found" };
+
+  const { data: event } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", promo.event_id)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found" };
+
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { error: "You don't have access to this event" };
+
+  const { error } = await admin
     .from("promo_codes")
     .update({ is_active: isActive })
     .eq("id", codeId);

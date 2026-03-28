@@ -42,6 +42,16 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Check if user has been denied
+  if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
+    const isDenied = user.user_metadata?.is_denied;
+    if (isDenied === true) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/account-denied";
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Check approval gate for collective/promoter users
   if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
     const userType = user.user_metadata?.user_type;
@@ -51,6 +61,16 @@ export async function updateSession(request: NextRequest) {
     if ((userType === "collective" || userType === "promoter") && isApproved === false) {
       const url = request.nextUrl.clone();
       url.pathname = "/pending-approval";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // If non-denied user visits account-denied, redirect to dashboard
+  if (user && request.nextUrl.pathname === "/account-denied") {
+    const isDenied = user.user_metadata?.is_denied;
+    if (isDenied !== true) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
       return NextResponse.redirect(url);
     }
   }

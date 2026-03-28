@@ -1,6 +1,7 @@
 "use server";
 
 import { getStripe } from "@/lib/stripe";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
 /**
@@ -8,7 +9,21 @@ import { createAdminClient } from "@/lib/supabase/config";
  * saves the account ID, and returns an onboarding URL.
  */
 export async function createConnectAccount(collectiveId: string) {
+  const serverSupabase = await createServerClient();
+  const { data: { user } } = await serverSupabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
   const supabase = createAdminClient();
+
+  // Verify user is a member of this collective
+  const { count } = await supabase
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { error: "You don't have permission to manage this collective" };
 
   // Check if collective already has a Stripe account
   const { data: collective, error: fetchError } = await supabase
@@ -61,7 +76,21 @@ export async function createConnectAccount(collectiveId: string) {
  * Checks whether a collective's Stripe Connect account is fully set up.
  */
 export async function getConnectAccountStatus(collectiveId: string) {
+  const serverSupabase = await createServerClient();
+  const { data: { user } } = await serverSupabase.auth.getUser();
+  if (!user) return { hasAccount: false, chargesEnabled: false, payoutsEnabled: false };
+
   const supabase = createAdminClient();
+
+  // Verify user is a member of this collective
+  const { count: memberCount } = await supabase
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) return { hasAccount: false, chargesEnabled: false, payoutsEnabled: false };
 
   const { data: collective, error } = await supabase
     .from("collectives")
@@ -88,7 +117,21 @@ export async function getConnectAccountStatus(collectiveId: string) {
  * Creates a login link to the Stripe Express Dashboard for a collective.
  */
 export async function createConnectLoginLink(collectiveId: string) {
+  const serverSupabase = await createServerClient();
+  const { data: { user } } = await serverSupabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
   const supabase = createAdminClient();
+
+  // Verify user is a member of this collective
+  const { count: memberCount } = await supabase
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) return { error: "You don't have permission to manage this collective" };
 
   const { data: collective, error } = await supabase
     .from("collectives")

@@ -23,6 +23,16 @@ export async function generateSettlement(eventId: string) {
   if (!event) return { error: "Event not found" };
   if (event.status !== "completed") return { error: "Event must be completed before settlement" };
 
+  // Verify user is a member of this collective
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) return { error: "You don't have permission to generate this settlement" };
+
   // Check if settlement already exists
   const { data: existing } = await admin
     .from("settlements")
@@ -296,6 +306,16 @@ export async function addEventExpense(input: {
 
   if (!event) return { error: "Event not found" };
 
+  // Verify user is a member of this collective
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { error: "You don't have permission to add expenses to this event" };
+
   const { error } = await admin.from("event_expenses").insert({
     event_id: input.eventId,
     collective_id: event.collective_id,
@@ -311,7 +331,30 @@ export async function addEventExpense(input: {
 
 // Get expenses for an event
 export async function getEventExpenses(eventId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const admin = createAdminClient();
+
+  // Get event's collective_id
+  const { data: event } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return [];
+
+  // Verify user is a member of this collective
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return [];
 
   const { data } = await admin
     .from("event_expenses")

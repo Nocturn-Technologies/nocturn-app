@@ -16,6 +16,7 @@ export type Database = {
           metadata: Record<string, unknown> | null
           created_at: string
           updated_at: string
+          is_approved: boolean
         }
         Insert: {
           id: string
@@ -28,6 +29,7 @@ export type Database = {
           metadata?: Record<string, unknown> | null
           created_at?: string
           updated_at?: string
+          is_approved?: boolean
         }
         Update: {
           id?: string
@@ -40,6 +42,7 @@ export type Database = {
           metadata?: Record<string, unknown> | null
           created_at?: string
           updated_at?: string
+          is_approved?: boolean
         }
         Relationships: []
       }

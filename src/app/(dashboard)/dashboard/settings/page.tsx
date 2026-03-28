@@ -32,7 +32,7 @@ export default function SettingsPage() {
   const [city, setCity] = useState("");
   const [instagram, setInstagram] = useState("");
   const [website, setWebsite] = useState("");
-
+  const [collectiveMetadata, setCollectiveMetadata] = useState<Record<string, unknown> | null>(null);
 
   // User profile fields
   const [fullName, setFullName] = useState("");
@@ -81,6 +81,7 @@ export default function SettingsPage() {
           setCity(c.metadata?.city ?? "");
           setInstagram(c.instagram ?? "");
           setWebsite(c.website ?? "");
+          setCollectiveMetadata(c.metadata ?? null);
         }
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : "Failed to load settings");
@@ -132,7 +133,7 @@ export default function SettingsPage() {
         description: bio || null,
         instagram: instagram || null,
         website: website || null,
-        metadata: { city },
+        metadata: { ...(collectiveMetadata ?? {}), city },
       })
       .eq("id", collectiveId);
 

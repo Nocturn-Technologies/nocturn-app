@@ -66,6 +66,10 @@ export async function markSettlementPaid(settlementId: string, payoutMethod?: st
 
 // Get payout status for a settlement
 export async function getPayoutStatus(settlementId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const admin = createAdminClient();
 
   const { data: lines } = await admin

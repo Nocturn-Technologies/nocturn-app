@@ -23,6 +23,5 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
-// Platform fee: 7% + $0.50 per ticket (buyer pays, organizer keeps 100%)
-export const PLATFORM_FEE_PERCENT = 7;
-export const PLATFORM_FEE_FLAT_CENTS = 50; // $0.50 per ticket
+// Re-export platform fee constants from single source of truth
+export { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";

@@ -46,6 +46,7 @@ interface UpdateEventInput {
   venueDeposit?: number | null;
   venueCost?: number | null;
   estimatedBarRevenue?: number | null;
+  timezone?: string; // IANA timezone, defaults to America/Toronto
 }
 
 export async function createEvent(input: CreateEventInput) {
@@ -314,13 +315,28 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     venueId = newVenue.id;
   }
 
-  // Build timestamps
-  const startsAt = new Date(`${input.date}T${input.startTime}:00`).toISOString();
+  // Build timestamps with timezone awareness (same approach as createEvent)
+  const tz = input.timezone ?? "America/Toronto";
+  function toTimestamp(date: string, time: string): string {
+    const dt = new Date(`${date}T${time}:00`);
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      hour12: false, timeZoneName: "longOffset",
+    });
+    const parts = formatter.formatToParts(dt);
+    const offsetPart = parts.find(p => p.type === "timeZoneName")?.value ?? "+00:00";
+    const offset = offsetPart.replace("GMT", "") || "+00:00";
+    return `${date}T${time}:00${offset}`;
+  }
+
+  const startsAt = toTimestamp(input.date, input.startTime);
   const endsAt = input.endTime
-    ? new Date(`${input.date}T${input.endTime}:00`).toISOString()
+    ? toTimestamp(input.date, input.endTime)
     : null;
   const doorsAt = input.doorsOpen
-    ? new Date(`${input.date}T${input.doorsOpen}:00`).toISOString()
+    ? toTimestamp(input.date, input.doorsOpen)
     : null;
 
   // Update event
@@ -403,7 +419,8 @@ async function verifyEventOwnership(userId: string, eventId: string) {
   const { data: memberships } = await admin
     .from("collective_members")
     .select("collective_id")
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .is("deleted_at", null);
 
   if (!memberships || memberships.length === 0) {
     return { error: "No collective found.", event: null };

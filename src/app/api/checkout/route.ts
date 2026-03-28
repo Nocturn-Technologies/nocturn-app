@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     // Look up the event
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, title, slug, collective_id")
+      .select("id, title, slug, collective_id, status")
       .eq("id", eventId)
       .maybeSingle();
 
@@ -73,6 +73,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Event not found" },
         { status: 404 }
+      );
+    }
+
+    if (event.status === "draft" || event.status === "cancelled" || event.status === "completed") {
+      return NextResponse.json(
+        { error: "This event is not available for ticket purchases" },
+        { status: 400 }
       );
     }
 
@@ -157,18 +164,38 @@ export async function POST(request: NextRequest) {
 
       if (promo) {
         const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
-        const isMaxedOut = promo.max_uses !== null && (promo.current_uses ?? 0) + quantity > promo.max_uses;
 
-        if (!isExpired && !isMaxedOut) {
-          // Don't claim yet — just calculate the discount.
-          // Claiming happens AFTER the Stripe session is created successfully
-          // to prevent double-claims on checkout retries.
-          promoId = promo.id;
-          if (promo.discount_type === "percentage") {
-            discountPercent = Number(promo.discount_value) / 100;
-          } else {
-            discountFixed = Number(promo.discount_value) * 100; // convert to cents
+        if (isExpired) {
+          // Expired — skip silently (no discount applied)
+        } else {
+          // Atomic claim: increment current_uses only if capacity remains.
+          // This prevents race conditions where two concurrent checkouts
+          // both read current_uses < max_uses and both claim.
+          const claimQuery = promo.max_uses !== null
+            ? supabase
+                .from("promo_codes")
+                .update({ current_uses: (promo.current_uses ?? 0) + quantity })
+                .eq("id", promo.id)
+                .lte("current_uses", promo.max_uses - quantity)
+                .select("id")
+            : supabase
+                .from("promo_codes")
+                .update({ current_uses: (promo.current_uses ?? 0) + quantity })
+                .eq("id", promo.id)
+                .select("id");
+
+          const { data: claimResult } = await claimQuery;
+
+          if (claimResult && claimResult.length > 0) {
+            // Successfully claimed — apply the discount
+            promoId = promo.id;
+            if (promo.discount_type === "percentage") {
+              discountPercent = Number(promo.discount_value) / 100;
+            } else {
+              discountFixed = Number(promo.discount_value) * 100; // convert to cents
+            }
           }
+          // If claimResult is empty, the code is maxed out — no discount applied
         }
       }
     }
@@ -270,17 +297,7 @@ export async function POST(request: NextRequest) {
         console.error("[checkout] Free ticket email failed (non-blocking):", emailErr);
       }
 
-      // Claim promo code for free tickets (must happen before returning)
-      if (promoId) {
-        try {
-          await supabase.rpc("claim_promo_code", {
-            p_code_id: promoId,
-            p_quantity: quantity,
-          });
-        } catch (claimErr) {
-          console.error("[checkout] Free ticket promo claim failed (non-blocking):", claimErr);
-        }
-      }
+      // Promo code was already atomically claimed during validation above
 
       // Track free registration
       import("@/lib/track-server").then(({ trackServerEvent }) =>
@@ -364,18 +381,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Claim promo code AFTER Stripe session is created successfully
-    // This prevents double-claims when checkout requests are retried
-    if (promoId) {
-      try {
-        await supabase.rpc("claim_promo_code", {
-          p_code_id: promoId,
-          p_quantity: quantity,
-        });
-      } catch (claimErr) {
-        console.error("[checkout] Promo claim failed (non-blocking):", claimErr);
-      }
-    }
+    // Promo code was already atomically claimed during validation above
 
     return NextResponse.json({ url: session.url });
   } catch (error) {

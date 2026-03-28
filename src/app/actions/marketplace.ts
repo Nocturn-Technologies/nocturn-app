@@ -79,7 +79,7 @@ export async function createMarketplaceProfile(data: {
 
   if (error) return { error: (error as { message: string }).message, slug: null };
 
-  revalidatePath("/dashboard/marketplace");
+  revalidatePath("/dashboard/discover");
   return { error: null, slug };
 }
 
@@ -135,7 +135,7 @@ export async function updateMarketplaceProfile(data: {
 
   if (error) return { error: (error as { message: string }).message };
 
-  revalidatePath("/dashboard/marketplace");
+  revalidatePath("/dashboard/discover");
   return { error: null };
 }
 
@@ -248,7 +248,7 @@ export async function saveProfile(
     return { error: (error as { message: string }).message };
   }
 
-  revalidatePath("/dashboard/marketplace");
+  revalidatePath("/dashboard/discover");
   return { error: null };
 }
 
@@ -271,7 +271,7 @@ export async function unsaveProfile(
 
   if (error) return { error: (error as { message: string }).message };
 
-  revalidatePath("/dashboard/marketplace");
+  revalidatePath("/dashboard/discover");
   return { error: null };
 }
 
@@ -436,6 +436,17 @@ export async function sendInquiry(data: {
 
   const admin = createAdminClient();
 
+  // Prevent self-inquiry
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: targetProfile } = await (admin.from("marketplace_profiles") as any)
+    .select("user_id")
+    .eq("id", data.toProfileId)
+    .maybeSingle();
+
+  if (targetProfile?.user_id === user.id) {
+    return { error: "You cannot send an inquiry to yourself" };
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (admin.from("marketplace_inquiries") as any).insert({
     from_user_id: user.id,
@@ -469,6 +480,7 @@ export async function sendInquiry(data: {
           toEmail: profile.users.email,
           toName: profile.display_name,
           fromUserId: user.id,
+          senderName: user.user_metadata?.full_name ?? user.email ?? "Someone",
           message: data.message,
           inquiryType: data.inquiryType ?? "general",
         }),
@@ -480,6 +492,6 @@ export async function sendInquiry(data: {
     }
   }
 
-  revalidatePath("/dashboard/marketplace");
+  revalidatePath("/dashboard/discover");
   return { error: null };
 }

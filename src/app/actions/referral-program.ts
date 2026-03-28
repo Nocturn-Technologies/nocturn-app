@@ -73,12 +73,26 @@ export async function trackReferralSignup(
   referralCode: string,
   collectiveId: string
 ): Promise<{ error: string | null }> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
   const admin = createAdminClient();
+
+  // Fetch existing metadata to merge instead of replacing
+  const { data: existingUser } = await admin
+    .from("users")
+    .select("metadata")
+    .eq("id", userId)
+    .maybeSingle();
+
+  const existingMetadata = (existingUser?.metadata as Record<string, unknown>) || {};
 
   const { error } = await admin
     .from("users")
     .update({
       metadata: {
+        ...existingMetadata,
         referred_by_code: referralCode,
         referred_by_collective: collectiveId,
         referred_at: new Date().toISOString(),

@@ -65,6 +65,7 @@ export default async function DashboardPage() {
       nextEventsResult,
       draftsResult,
       allEventsResult,
+      revenueResult,
       pulseResult,
       actionItemsResult,
     ] = await Promise.all([
@@ -101,6 +102,13 @@ export default async function DashboardPage() {
         .in("events.collective_id", collectiveIds)
         .in("status", ["paid", "checked_in"]),
 
+      // Revenue from paid tickets
+      admin
+        .from("tickets")
+        .select("price_paid, events!inner(collective_id)")
+        .in("events.collective_id", collectiveIds)
+        .in("status", ["paid", "checked_in"]),
+
       // Financial pulse
       getFinancialPulse(),
 
@@ -129,6 +137,12 @@ export default async function DashboardPage() {
 
     // Attendee count (already fetched in parallel above)
     totalAttendees = allEventsResult.count ?? 0;
+
+    // Revenue from actual ticket payments
+    totalRevenue = (revenueResult.data || []).reduce(
+      (sum: number, t: { price_paid: unknown }) => sum + (Number(t.price_paid) || 0),
+      0
+    );
   }
 
   // ── AI Briefing loads AFTER the page renders (streamed in) ──
