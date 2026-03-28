@@ -141,11 +141,9 @@ export default function SignupPage() {
       return;
     }
 
-    // Route based on user type
-    if (userType === "collective") {
-      router.push("/onboarding");
-    } else if (userType === "promoter") {
-      router.push("/dashboard/promote");
+    // Route based on user type — collectives and promoters need approval
+    if (userType === "collective" || userType === "promoter") {
+      router.push("/pending-approval");
     } else {
       router.push("/onboarding/marketplace");
     }

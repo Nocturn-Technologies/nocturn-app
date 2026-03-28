@@ -12,12 +12,16 @@ export async function signUpUser(formData: {
   const admin = createAdminClient();
   const userType = formData.userType ?? "collective";
 
+  // Collectives and promoters require manual approval
+  const requiresApproval = userType === "collective" || userType === "promoter";
+  const isApproved = !requiresApproval;
+
   // Create user with auto-confirm via admin API (no email confirmation needed)
   const { data: newUser, error: createError } = await admin.auth.admin.createUser({
     email: formData.email,
     password: formData.password,
     email_confirm: true,
-    user_metadata: { full_name: formData.fullName, user_type: userType },
+    user_metadata: { full_name: formData.fullName, user_type: userType, is_approved: isApproved },
   });
 
   if (createError) {
@@ -27,8 +31,7 @@ export async function signUpUser(formData: {
 
   const userId = newUser.user.id;
 
-  // Insert public.users row (without user_type — PostgREST schema cache is stale for that column).
-  // The user_type defaults to 'collective' in DB. Auth metadata stores the real type.
+  // Insert public.users row
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error: usersInsertError } = await (admin.from("users") as any)
     .upsert(
@@ -36,6 +39,7 @@ export async function signUpUser(formData: {
         id: userId,
         email: formData.email,
         full_name: formData.fullName,
+        is_approved: isApproved,
       },
       { onConflict: "id" }
     );
@@ -80,6 +84,11 @@ export async function signUpUser(formData: {
 
   // Send welcome email (non-blocking)
   sendWelcomeEmail(formData.email, formData.fullName, userType).catch(() => {});
+
+  // If requires approval, notify admin (Shawn)
+  if (requiresApproval) {
+    sendApprovalRequestEmail(userId, formData.email, formData.fullName, userType).catch(() => {});
+  }
 
   // Sign in the user so they get a session cookie
   const supabase = await createServerClient();
@@ -214,4 +223,59 @@ export async function createCollective(formData: {
   }
 
   return { error: null };
+}
+
+async function sendApprovalRequestEmail(userId: string, email: string, name: string, userType: string) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) return;
+
+  const approvalSecret = process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+  const approveUrl = `${baseUrl}/api/approve-user?user_id=${userId}&action=approve&secret=${encodeURIComponent(approvalSecret)}`;
+  const denyUrl = `${baseUrl}/api/approve-user?user_id=${userId}&action=deny&secret=${encodeURIComponent(approvalSecret)}`;
+  const safeName = escapeHtml(name);
+  const safeEmail = escapeHtml(email);
+
+  const adminEmail = process.env.ADMIN_EMAIL || "shawn@trynocturn.com";
+
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        from: "Nocturn <nocturn@trynocturn.com>",
+        to: adminEmail,
+        subject: `New ${userType} signup needs approval: ${name}`,
+        html: `
+          <div style="font-family: -apple-system, sans-serif; max-width: 520px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
+            <div style="margin-bottom: 32px;">
+              <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
+              <span style="color: #71717A; font-size: 14px; margin-left: 8px;">Account Approval</span>
+            </div>
+            <h1 style="font-size: 24px; font-weight: 800; margin: 0 0 16px;">
+              New ${userType} signup
+            </h1>
+            <div style="background: #18181B; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+              <p style="color: #FAFAFA; font-size: 16px; font-weight: 600; margin: 0 0 4px;">${safeName}</p>
+              <p style="color: #A1A1AA; font-size: 14px; margin: 0 0 4px;">${safeEmail}</p>
+              <p style="color: #71717A; font-size: 13px; margin: 0;">Type: ${userType}</p>
+            </div>
+            <div style="display: flex; gap: 12px;">
+              <a href="${approveUrl}" style="display: inline-block; background: #2DD4BF; color: #09090B; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px;">
+                Approve
+              </a>
+              <a href="${denyUrl}" style="display: inline-block; background: #FB7185; color: #09090B; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px;">
+                Deny
+              </a>
+            </div>
+            <p style="color: #71717A; font-size: 12px; margin-top: 32px;">
+              Click Approve to give them full access. Click Deny to remove their account.
+            </p>
+          </div>
+        `,
+      }),
+    });
+  } catch {
+    // Non-critical
+  }
 }

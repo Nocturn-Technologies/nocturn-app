@@ -42,5 +42,28 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Check approval gate for collective/promoter users
+  if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
+    const userType = user.user_metadata?.user_type;
+    const isApproved = user.user_metadata?.is_approved;
+
+    // Only gate collectives and promoters; marketplace types are auto-approved
+    if ((userType === "collective" || userType === "promoter") && isApproved === false) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/pending-approval";
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // If approved user visits pending-approval, redirect to dashboard
+  if (user && request.nextUrl.pathname === "/pending-approval") {
+    const isApproved = user.user_metadata?.is_approved;
+    if (isApproved !== false) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return supabaseResponse;
 }
