@@ -409,6 +409,9 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     }
   }
 
+  revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath("/dashboard/events");
+
   return { error: null };
 }
 
@@ -479,6 +482,9 @@ export async function publishEvent(eventId: string) {
     .eq("id", eventId);
 
   if (error) return { error: `Failed to publish: ${error.message}` };
+
+  revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath("/dashboard/events");
 
   import("@/lib/track-server").then(({ trackServerEvent }) =>
     trackServerEvent("event_published", { eventId })
@@ -640,6 +646,10 @@ export async function completeEvent(eventId: string) {
     .eq("id", eventId);
 
   if (error) return { error: `Failed to complete: ${error.message}` };
+
+  revalidatePath(`/dashboard/events/${eventId}`);
+  revalidatePath("/dashboard/events");
+  revalidatePath("/dashboard/finance");
 
   // Auto-generate settlement + CRM enrichment
   const settlementResult = await generateAutoSettlement(eventId);

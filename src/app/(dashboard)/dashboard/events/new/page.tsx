@@ -1284,10 +1284,10 @@ export default function NewEventPage() {
             </div>
             <div className="text-center">
               <h2 className="text-lg font-bold font-heading truncate max-w-full px-4">
-                {eventData.title} is live!
+                {eventData.title} — draft created!
               </h2>
               <p className="text-sm text-zinc-400 mt-1">
-                Taking you to the event dashboard...
+                Taking you to the event dashboard to finish setup...
               </p>
             </div>
           </div>
