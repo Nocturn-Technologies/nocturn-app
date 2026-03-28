@@ -36,7 +36,7 @@ export default async function DashboardLayout({
       .eq("id", user.id)
       .maybeSingle();
     const userType = (userRow as { user_type?: string } | null)?.user_type;
-    const skipOnboarding = ["promoter", "artist", "venue", "photographer", "videographer", "sound_production", "lighting_production", "sponsor"];
+    const skipOnboarding = ["promoter", "artist", "venue", "photographer", "videographer", "sound_production", "lighting_production", "sponsor", "artist_manager", "tour_manager", "booking_agent", "event_staff", "mc_host", "graphic_designer", "pr_publicist"];
     if (!skipOnboarding.includes(userType ?? "")) {
       redirect("/onboarding");
     }
