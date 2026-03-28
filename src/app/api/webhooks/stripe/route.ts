@@ -377,6 +377,16 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     pricePaid = Number(tier.price);
   }
 
+  // Re-check capacity before inserting (defense against overselling)
+  const { data: recheck } = await supabase.rpc("check_and_reserve_capacity", {
+    p_tier_id: tierId,
+    p_quantity: quantity,
+  });
+  if (!recheck?.success) {
+    console.error(`[webhook] Capacity exceeded for tier ${tierId} — payment ${paymentIntent.id} needs manual refund`);
+    return;
+  }
+
   const uuidRegex2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let referrerToken = metadata.referrerToken && uuidRegex2.test(metadata.referrerToken) ? metadata.referrerToken : null;
   if (referrerToken) {

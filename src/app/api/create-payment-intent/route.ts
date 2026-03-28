@@ -40,12 +40,20 @@ export async function POST(request: NextRequest) {
     // Look up event
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, title, collective_id")
+      .select("id, title, collective_id, status")
       .eq("id", eventId)
       .maybeSingle();
 
     if (eventError || !event) {
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
+    }
+
+    // Block purchases for non-active events
+    if (["draft", "cancelled", "completed"].includes(event.status)) {
+      return NextResponse.json(
+        { error: event.status === "draft" ? "This event is not yet published" : `This event is ${event.status}` },
+        { status: 400 }
+      );
     }
 
     // Look up ticket tier
