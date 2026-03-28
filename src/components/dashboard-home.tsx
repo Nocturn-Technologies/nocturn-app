@@ -259,7 +259,7 @@ export function DashboardHome(props: DashboardHomeProps) {
       {/* ── Needs Attention — action items / alerts ── */}
       {props.actionItems && props.actionItems.length > 0 && (
         <div className="animate-fade-in-up delay-50 relative z-10">
-          <Card className="border-white/[0.06] overflow-hidden">
+          <Card className="rounded-2xl overflow-hidden">
             <CardContent className="p-0">
               <div className="flex items-center gap-2 px-4 pt-4 pb-2">
                 <AlertTriangle className="h-4 w-4 text-amber-400" />
@@ -285,7 +285,7 @@ export function DashboardHome(props: DashboardHomeProps) {
                   >
                     <span className="text-base shrink-0">{item.emoji}</span>
                     <span
-                      className={`text-sm leading-snug flex-1 min-w-0 ${
+                      className={`text-sm leading-snug flex-1 min-w-0 line-clamp-2 ${
                         item.priority === "urgent"
                           ? "text-red-400"
                           : item.priority === "high"
@@ -334,69 +334,89 @@ export function DashboardHome(props: DashboardHomeProps) {
       </div>
 
       {/* ── Bento Grid: Financial Pulse (wide) + Stats (narrow) ── */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-up delay-100 relative z-10">
+      <div className={`grid grid-cols-1 ${props.financialPulse ? "md:grid-cols-3" : "md:grid-cols-3"} gap-4 animate-fade-in-up delay-100 relative z-10`}>
         {/* Financial Pulse — spans 2 cols on desktop */}
-        {props.financialPulse && <Link href="/dashboard/finance" className="block md:col-span-2">
-          <Card className="h-full border-white/[0.06] transition-all duration-300 hover:border-nocturn/30 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98]">
-            <CardContent className="p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn-teal/10">
-                    <TrendingUp className="h-5 w-5 text-nocturn-light" />
+        {props.financialPulse ? (
+          <Link href="/dashboard/finance" className="block md:col-span-2">
+            <Card className="h-full rounded-2xl transition-all duration-300 hover:ring-nocturn/30 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98]">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn-teal/10">
+                      <TrendingUp className="h-5 w-5 text-nocturn-light" />
+                    </div>
+                    <h2 className="text-sm font-bold tracking-wide uppercase text-muted-foreground">Financial Pulse</h2>
                   </div>
-                  <h2 className="text-sm font-bold tracking-wide uppercase text-muted-foreground">Financial Pulse</h2>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground" />
                 </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
-              </div>
 
-              {/* P&L headline */}
-              <p className={`text-2xl font-bold ${props.financialPulse.netPL >= 0 ? "text-nocturn-teal" : "text-nocturn-coral"}`}>
-                {props.financialPulse.netPL >= 0
-                  ? `+$${Math.abs(props.financialPulse.netPL).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                  : `-$${Math.abs(props.financialPulse.netPL).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
-                <span className="text-sm font-medium text-muted-foreground ml-2">this month</span>
-              </p>
+                {/* P&L headline */}
+                <p className={`text-2xl font-bold ${props.financialPulse.netPL >= 0 ? "text-nocturn-teal" : "text-nocturn-coral"}`}>
+                  {props.financialPulse.netPL >= 0
+                    ? `+$${Math.abs(props.financialPulse.netPL).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+                    : `-$${Math.abs(props.financialPulse.netPL).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`}
+                  <span className="text-sm font-medium text-muted-foreground ml-2">this month</span>
+                </p>
 
-              {/* Mini bar chart with gradient */}
-              {props.financialPulse.recentEvents.length > 0 && (
-                <div className="mt-4 flex items-end gap-1.5 h-12">
-                  {(() => {
-                    const events = props.financialPulse.recentEvents.slice(0, 5);
-                    const maxAbs = Math.max(...events.map((e) => Math.abs(e.profit)), 1);
-                    return events.map((e, i) => {
-                      const normalized = (e.profit / maxAbs) * 100;
-                      const height = Math.max(Math.abs(normalized) * 0.4 + 8, 8);
-                      const isPositive = e.profit >= 0;
-                      return (
-                        <div key={i} className="flex-1 flex flex-col items-center justify-end" title={e.title}>
-                          <div
-                            className={`w-full rounded-md transition-all ${
-                              isPositive
-                                ? "bg-gradient-to-t from-nocturn-teal/40 to-nocturn-teal"
-                                : "bg-gradient-to-t from-nocturn-coral/40 to-nocturn-coral"
-                            }`}
-                            style={{ height: `${height}px` }}
-                          />
-                        </div>
-                      );
-                    });
-                  })()}
+                {/* Mini bar chart with gradient */}
+                {props.financialPulse.recentEvents.length > 0 && (
+                  <div className="mt-4 flex items-end gap-1.5 h-12">
+                    {(() => {
+                      const events = props.financialPulse.recentEvents.slice(0, 5);
+                      const maxAbs = Math.max(...events.map((e) => Math.abs(e.profit)), 1);
+                      return events.map((e, i) => {
+                        const normalized = (e.profit / maxAbs) * 100;
+                        const height = Math.max(Math.abs(normalized) * 0.4 + 8, 8);
+                        const isPositive = e.profit >= 0;
+                        return (
+                          <div key={i} className="flex-1 flex flex-col items-center justify-end" title={e.title}>
+                            <div
+                              className={`w-full rounded-md transition-all ${
+                                isPositive
+                                  ? "bg-gradient-to-t from-nocturn-teal/40 to-nocturn-teal"
+                                  : "bg-gradient-to-t from-nocturn-coral/40 to-nocturn-coral"
+                              }`}
+                              style={{ height: `${height}px` }}
+                            />
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
+
+                {/* Outstanding settlements */}
+                <p className="text-xs text-muted-foreground mt-3">
+                  {props.financialPulse.outstandingSettlements > 0
+                    ? `${props.financialPulse.outstandingSettlements} outstanding settlement${props.financialPulse.outstandingSettlements !== 1 ? "s" : ""}`
+                    : "All settled \u2713"}
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+        ) : (
+          <Link href="/dashboard/events/new" className="block md:col-span-2">
+            <Card className="h-full rounded-2xl border-dashed ring-white/[0.04] transition-all duration-300 hover:ring-nocturn/20 hover:shadow-lg hover:shadow-nocturn/5 active:scale-[0.98]">
+              <CardContent className="flex flex-col items-center justify-center p-6 text-center min-h-[160px]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-nocturn/10 mb-3">
+                  <TrendingUp className="h-6 w-6 text-nocturn-light/60" />
                 </div>
-              )}
-
-              {/* Outstanding settlements */}
-              <p className="text-xs text-muted-foreground mt-3">
-                {props.financialPulse.outstandingSettlements > 0
-                  ? `${props.financialPulse.outstandingSettlements} outstanding settlement${props.financialPulse.outstandingSettlements !== 1 ? "s" : ""}`
-                  : "All settled ✓"}
-              </p>
-            </CardContent>
-          </Card>
-        </Link>}
+                <p className="text-sm font-semibold text-foreground/80">No financial data yet</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">
+                  Create and publish an event to start tracking revenue and expenses.
+                </p>
+                <Button variant="outline" size="sm" className="mt-4 rounded-full border-nocturn/20 text-nocturn-light hover:bg-nocturn/10 hover:border-nocturn/30 transition-all duration-200">
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                  Create Event
+                </Button>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
 
         {/* Stats column — stacked */}
         <div className="grid grid-cols-3 md:grid-cols-1 gap-4">
-          <Card className="transition-all duration-300 hover:border-nocturn/20 hover:shadow-md hover:shadow-nocturn/5">
+          <Card className="rounded-2xl transition-all duration-300 hover:ring-nocturn/20 hover:shadow-md hover:shadow-nocturn/5 active:scale-[0.98]">
             <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn/5">
                 <Calendar className="h-5 w-5 text-nocturn-light" />
@@ -407,7 +427,7 @@ export function DashboardHome(props: DashboardHomeProps) {
               </div>
             </CardContent>
           </Card>
-          <Card className="transition-all duration-300 hover:border-nocturn-teal/20 hover:shadow-md hover:shadow-nocturn-teal/5">
+          <Card className="rounded-2xl transition-all duration-300 hover:ring-nocturn-teal/20 hover:shadow-md hover:shadow-nocturn-teal/5 active:scale-[0.98]">
             <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn-teal/20 to-nocturn-teal/5">
                 <DollarSign className="h-5 w-5 text-nocturn-teal" />
@@ -420,7 +440,7 @@ export function DashboardHome(props: DashboardHomeProps) {
               </div>
             </CardContent>
           </Card>
-          <Card className="transition-all duration-300 hover:border-nocturn-coral/20 hover:shadow-md hover:shadow-nocturn-coral/5">
+          <Card className="rounded-2xl transition-all duration-300 hover:ring-nocturn-coral/20 hover:shadow-md hover:shadow-nocturn-coral/5 active:scale-[0.98]">
             <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn-coral/20 to-nocturn-coral/5">
                 <Users className="h-5 w-5 text-nocturn-coral" />
@@ -438,8 +458,8 @@ export function DashboardHome(props: DashboardHomeProps) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in-up delay-200 relative z-10">
         {actions.map((action, i) => (
           <Link key={action.href + i} href={action.href}>
-            <Card className={`h-full transition-all duration-300 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98] ${
-              action.priority === "primary" ? "border-nocturn/20 hover:border-nocturn/40" : "hover:border-white/[0.12]"
+            <Card className={`h-full rounded-2xl transition-all duration-300 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98] ${
+              action.priority === "primary" ? "ring-nocturn/20 hover:ring-nocturn/40" : "hover:ring-white/[0.12]"
             }`}>
               <CardContent className="flex items-start gap-3 p-4">
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${action.iconBg} ${action.color}`}>
@@ -459,7 +479,7 @@ export function DashboardHome(props: DashboardHomeProps) {
       </div>
 
       {/* ── AI Insights — accent border ── */}
-      <Card className="border-l-4 border-l-nocturn animate-fade-in-up delay-300 relative z-10">
+      <Card className="rounded-2xl border-l-4 border-l-nocturn animate-fade-in-up delay-300 relative z-10">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-sm font-bold">
             <Sparkles className="h-4 w-4 text-nocturn-glow animate-text-glow" />
@@ -515,7 +535,7 @@ function LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string
   if (loading) {
     return (
       <div className="animate-fade-in-up delay-50 relative z-10">
-        <Card className="border-nocturn/20 bg-nocturn/[0.06] backdrop-blur-sm">
+        <Card className="rounded-2xl ring-nocturn/20 bg-nocturn/[0.06] backdrop-blur-sm">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-nocturn/20">
@@ -538,7 +558,7 @@ function LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string
 
   return (
     <div className="animate-fade-in-up delay-50 relative z-10">
-      <Card className="border-nocturn/20 bg-nocturn/[0.06] backdrop-blur-sm glow-purple">
+      <Card className="rounded-2xl ring-nocturn/20 bg-nocturn/[0.06] backdrop-blur-sm glow-purple">
         <CardContent className="p-4">
           <div className="flex items-center gap-2 mb-3">
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-nocturn/20">
@@ -551,7 +571,7 @@ function LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string
               <Link
                 key={i}
                 href={item.link}
-                className={`flex items-start gap-2.5 rounded-lg p-2 -mx-2 transition-all duration-200 hover:bg-white/[0.04] ${
+                className={`flex items-start gap-2.5 rounded-lg p-2 -mx-2 transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06] ${
                   item.priority === "urgent"
                     ? "text-nocturn-coral"
                     : item.priority === "high"
