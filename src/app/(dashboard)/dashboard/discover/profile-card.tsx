@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { User, MapPin, Heart, MessageSquare } from "lucide-react";
 import { TYPE_BADGE_COLORS, TYPE_LABELS_SHORT } from "@/lib/marketplace-constants";
@@ -39,16 +39,14 @@ export function ProfileCard({
   const shownTags = tags.slice(0, 3);
   const extraCount = Math.max(0, tags.length - 3);
 
-  const rateMin = profile.rate_min ?? profile.rate_range?.split?.("-")?.[0];
-  const rateMax = profile.rate_max ?? profile.rate_range?.split?.("-")?.[1];
-  const hasRate = rateMin || rateMax || profile.rate_range;
+  const hasRate = profile.rate_range;
 
   return (
-    <Card className="overflow-hidden transition-all hover:border-white/[0.12] p-0 group">
+    <Card className="overflow-hidden transition-all hover:border-white/[0.15] p-0 group bg-card/50">
       <Link href={`/dashboard/discover/${profile.slug}`} className="block">
         {/* Cover photo area */}
         <div
-          className="relative h-28 bg-gradient-to-br from-nocturn/20 to-nocturn/5"
+          className="relative h-24 bg-gradient-to-br from-nocturn/30 via-nocturn/10 to-transparent"
           style={
             profile.cover_photo_url
               ? {
@@ -58,44 +56,44 @@ export function ProfileCard({
                 }
               : undefined
           }
-        />
+        >
+          {/* Type badge overlaid on cover */}
+          <span
+            className={`absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badgeColor}`}
+          >
+            {typeLabel}
+          </span>
+        </div>
 
         {/* Content */}
-        <div className="px-3 pb-3">
+        <div className="px-3 pb-2.5">
           {/* Avatar - overlapping cover and content */}
-          <div className="flex items-end -mt-6 mb-2">
-            <div className="h-12 w-12 shrink-0 rounded-full border-2 border-card bg-nocturn/10 flex items-center justify-center overflow-hidden">
+          <div className="flex items-end -mt-5 mb-1.5">
+            <div className="h-10 w-10 shrink-0 rounded-full border-2 border-card bg-nocturn/10 flex items-center justify-center overflow-hidden shadow-md">
               {profile.avatar_url ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={profile.avatar_url}
                   alt={profile.display_name}
                   className="h-full w-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = "none";
+                  }}
                 />
               ) : (
-                <User className="h-5 w-5 text-nocturn/60" />
+                <User className="h-4 w-4 text-nocturn/60" />
               )}
             </div>
           </div>
 
-          {/* Display name */}
-          <h3 className="font-medium truncate text-sm leading-tight">
+          {/* Name + City row */}
+          <h3 className="font-semibold truncate text-sm leading-tight">
             {profile.display_name}
           </h3>
 
-          {/* Type badge */}
-          <div className="mt-1.5">
-            <span
-              className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${badgeColor}`}
-            >
-              {typeLabel}
-            </span>
-          </div>
-
-          {/* City */}
           {profile.city && (
-            <div className="mt-1.5 flex items-center gap-1 text-xs text-muted-foreground">
-              <MapPin className="h-3 w-3 shrink-0" />
+            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <MapPin className="h-2.5 w-2.5 shrink-0" />
               <span className="truncate">{profile.city}</span>
             </div>
           )}
@@ -106,13 +104,13 @@ export function ProfileCard({
               {shownTags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                  className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-muted-foreground"
                 >
                   {tag.replace(/-/g, " ")}
                 </span>
               ))}
               {extraCount > 0 && (
-                <span className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   +{extraCount}
                 </span>
               )}
@@ -121,14 +119,8 @@ export function ProfileCard({
 
           {/* Rate range */}
           {hasRate && (
-            <p className="mt-1.5 text-xs text-muted-foreground">
-              {profile.rate_range
-                ? `$${profile.rate_range}`
-                : rateMin && rateMax
-                ? `$${rateMin} - $${rateMax}`
-                : rateMin
-                ? `From $${rateMin}`
-                : `Up to $${rateMax}`}
+            <p className="mt-1.5 text-xs font-medium text-nocturn">
+              ${profile.rate_range}
             </p>
           )}
 
@@ -148,24 +140,24 @@ export function ProfileCard({
         </div>
       </Link>
 
-      {/* Bottom action row - outside the Link */}
-      <div className="flex items-center gap-2 px-3 pb-3">
+      {/* Bottom action row */}
+      <div className="flex items-center gap-1.5 px-3 pb-3">
         <Button
           size="sm"
-          className="flex-1 bg-nocturn hover:bg-nocturn-light text-white min-h-[44px] text-xs"
+          className="flex-1 bg-nocturn hover:bg-nocturn-light text-white h-9 text-xs"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onContact();
           }}
         >
-          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+          <MessageSquare className="mr-1.5 h-3 w-3" />
           Contact
         </Button>
         <Button
-          size="icon-sm"
+          size="icon"
           variant="ghost"
-          className={`shrink-0 min-h-[44px] min-w-[44px] ${
+          className={`shrink-0 h-9 w-9 ${
             isSaved
               ? "text-red-400 hover:text-red-300"
               : "text-muted-foreground hover:text-foreground"
@@ -176,7 +168,7 @@ export function ProfileCard({
             isSaved ? onUnsave() : onSave();
           }}
         >
-          <Heart className={`h-4 w-4 ${isSaved ? "fill-red-400" : ""}`} />
+          <Heart className={`h-3.5 w-3.5 ${isSaved ? "fill-red-400" : ""}`} />
         </Button>
       </div>
     </Card>

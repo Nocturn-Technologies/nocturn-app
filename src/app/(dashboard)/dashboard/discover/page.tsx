@@ -194,40 +194,40 @@ export default function DiscoverPage() {
   // ── Render ─────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-5 overflow-x-hidden">
+    <div className="space-y-4 overflow-x-hidden">
       {/* Header */}
       <div className="px-4 md:px-0">
-        <h1 className="text-2xl font-bold">Discover</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-xl font-bold">Discover</h1>
+        <p className="text-xs text-muted-foreground">
           Find DJs, photographers, venues, and more for your next event
         </p>
       </div>
 
       {/* Tab toggle: Discover | Your Network */}
-      <div className="flex gap-1 rounded-lg bg-muted p-1 mx-4 md:mx-0">
+      <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5 mx-4 md:mx-0 w-fit">
         <button
           onClick={() => setActiveTab("discover")}
-          className={`flex-1 flex items-center justify-center gap-2 rounded-md py-2 text-sm font-semibold transition-all min-h-[44px] ${
+          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
             activeTab === "discover"
               ? "bg-nocturn text-white shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Compass className="h-4 w-4" />
+          <Compass className="h-3.5 w-3.5" />
           Discover
         </button>
         <button
           onClick={() => setActiveTab("network")}
-          className={`flex-1 flex items-center justify-center gap-2 rounded-md py-2 text-sm font-semibold transition-all min-h-[44px] ${
+          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
             activeTab === "network"
               ? "bg-nocturn text-white shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          <Users2 className="h-4 w-4" />
-          Your Network
+          <Users2 className="h-3.5 w-3.5" />
+          Network
           {networkProfiles.length > 0 && (
-            <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
+            <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold">
               {networkProfiles.length}
             </span>
           )}
@@ -237,7 +237,7 @@ export default function DiscoverPage() {
       {/* Category chips — horizontal scroll */}
       {activeTab === "discover" && (
         <div className="-mx-4 px-4 md:mx-0 md:px-0">
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
             {CATEGORY_TABS.map((tab) => (
               <button
                 key={tab.value}
@@ -245,10 +245,10 @@ export default function DiscoverPage() {
                   haptic("light");
                   setCategory(tab.value);
                 }}
-                className={`shrink-0 rounded-full px-4 min-h-[44px] text-sm font-medium transition-colors ${
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                   category === tab.value
                     ? "bg-nocturn text-white"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
+                    : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
                 }`}
               >
                 {tab.label}
@@ -324,7 +324,7 @@ export default function DiscoverPage() {
           </Card>
         ) : (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {displayProfiles.map((profile) => (
                 <ProfileCard
                   key={profile.id}
