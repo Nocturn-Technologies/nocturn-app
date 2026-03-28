@@ -15,9 +15,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Users, Music, MapPin, ArrowLeft, Megaphone, Camera, Video, Speaker, Lightbulb, BadgeDollarSign } from "lucide-react";
+import { Users, Music, MapPin, ArrowLeft, Megaphone, Camera, Video, Speaker, Lightbulb, BadgeDollarSign, Briefcase, Plane, CalendarCheck, UserCheck, Mic, Palette, Newspaper } from "lucide-react";
 
-type UserType = "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor";
+type UserType = "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
 
 const USER_TYPES: Array<{ type: UserType; icon: typeof Users; label: string; description: string }> = [
   {
@@ -45,6 +45,24 @@ const USER_TYPES: Array<{ type: UserType; icon: typeof Users; label: string; des
     description: "List your space, manage bookings, connect with promoters",
   },
   {
+    type: "artist_manager",
+    icon: Briefcase,
+    label: "Artist Manager",
+    description: "Manage bookings, deals, and career growth for artists",
+  },
+  {
+    type: "tour_manager",
+    icon: Plane,
+    label: "Tour Manager",
+    description: "Handle logistics, travel, and hospitality for touring acts",
+  },
+  {
+    type: "booking_agent",
+    icon: CalendarCheck,
+    label: "Booking Agent",
+    description: "Book talent for venues, clubs, and festivals",
+  },
+  {
     type: "photographer",
     icon: Camera,
     label: "Photographer",
@@ -57,6 +75,18 @@ const USER_TYPES: Array<{ type: UserType; icon: typeof Users; label: string; des
     description: "Event recaps, aftermovies, and livestreams",
   },
   {
+    type: "mc_host",
+    icon: Mic,
+    label: "MC / Host",
+    description: "Emcee events, hype crowds, host shows",
+  },
+  {
+    type: "graphic_designer",
+    icon: Palette,
+    label: "Graphic Designer",
+    description: "Flyers, branding, merch, and social media assets",
+  },
+  {
     type: "sound_production",
     icon: Speaker,
     label: "Sound & Production",
@@ -67,6 +97,18 @@ const USER_TYPES: Array<{ type: UserType; icon: typeof Users; label: string; des
     icon: Lightbulb,
     label: "Lighting & Visuals",
     description: "Stage lighting, lasers, LED walls, VJ",
+  },
+  {
+    type: "event_staff",
+    icon: UserCheck,
+    label: "Event Staff",
+    description: "Bartenders, security, door staff, barbacks",
+  },
+  {
+    type: "pr_publicist",
+    icon: Newspaper,
+    label: "PR / Publicist",
+    description: "Press coverage, media outreach, social strategy",
   },
   {
     type: "sponsor",

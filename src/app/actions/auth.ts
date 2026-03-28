@@ -7,7 +7,7 @@ export async function signUpUser(formData: {
   email: string;
   password: string;
   fullName: string;
-  userType?: "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor";
+  userType?: "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
 }) {
   const admin = createAdminClient();
   const userType = formData.userType ?? "collective";

@@ -15,6 +15,8 @@ interface ProfileCardProps {
   onSave: () => void;
   onUnsave: () => void;
   onContact: () => void;
+  /** Connection labels shown in network view (e.g. "saved", "contacted") */
+  connectionTags?: string[];
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -25,6 +27,7 @@ export function ProfileCard({
   onSave,
   onUnsave,
   onContact,
+  connectionTags,
 }: ProfileCardProps) {
   const type = profile.user_type ?? profile.type ?? "artist";
   const badgeColor = TYPE_BADGE_COLORS[type] ?? "bg-muted text-muted-foreground";
@@ -127,6 +130,20 @@ export function ProfileCard({
                 ? `From $${rateMin}`
                 : `Up to $${rateMax}`}
             </p>
+          )}
+
+          {/* Connection tags (network view) */}
+          {connectionTags && connectionTags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1">
+              {connectionTags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[10px] font-medium text-nocturn capitalize"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
           )}
         </div>
       </Link>

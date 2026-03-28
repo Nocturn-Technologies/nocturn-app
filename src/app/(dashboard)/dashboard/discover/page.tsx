@@ -9,11 +9,12 @@ import { ContactDialog } from "./contact-dialog";
 import {
   searchProfiles,
   getSavedProfiles,
+  getNetworkProfiles,
   saveProfile,
   unsaveProfile,
 } from "@/app/actions/marketplace";
 import { haptic } from "@/lib/haptics";
-import { Search, Compass, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Compass, ChevronLeft, ChevronRight, Users2 } from "lucide-react";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -23,10 +24,17 @@ const CATEGORY_TABS = [
   { label: "Venues", value: "venue" },
   { label: "Collectives", value: "collective" },
   { label: "Promoters", value: "promoter" },
+  { label: "Managers", value: "artist_manager" },
+  { label: "Tour Mgrs", value: "tour_manager" },
+  { label: "Agents", value: "booking_agent" },
   { label: "Photo", value: "photographer" },
   { label: "Video", value: "videographer" },
+  { label: "MC / Host", value: "mc_host" },
+  { label: "Designers", value: "graphic_designer" },
   { label: "Sound", value: "sound_production" },
   { label: "Lighting", value: "lighting_production" },
+  { label: "Staff", value: "event_staff" },
+  { label: "PR", value: "pr_publicist" },
   { label: "Sponsors", value: "sponsor" },
 ];
 
@@ -35,7 +43,7 @@ const CATEGORY_TABS = [
 const PER_PAGE = 20;
 
 export default function DiscoverPage() {
-  const [activeTab, setActiveTab] = useState<"discover" | "saved">("discover");
+  const [activeTab, setActiveTab] = useState<"discover" | "network">("discover");
   const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("");
@@ -47,6 +55,13 @@ export default function DiscoverPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [savedProfiles, setSavedProfiles] = useState<any[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  // Network state
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [networkProfiles, setNetworkProfiles] = useState<any[]>([]);
+  const [networkConnectionTypes, setNetworkConnectionTypes] = useState<Record<string, string[]>>({});
+  const [loadingNetwork, setLoadingNetwork] = useState(false);
+  const [networkQuery, setNetworkQuery] = useState("");
 
   const [loadingDiscover, setLoadingDiscover] = useState(true);
   const [loadingSaved, setLoadingSaved] = useState(false);
@@ -109,6 +124,22 @@ export default function DiscoverPage() {
     fetchSaved();
   }, [fetchSaved]);
 
+  // ── Fetch network profiles ──────────────────────────────────────────
+
+  const fetchNetwork = useCallback(async () => {
+    setLoadingNetwork(true);
+    const result = await getNetworkProfiles();
+    setNetworkProfiles(result.profiles);
+    setNetworkConnectionTypes(result.connectionTypes);
+    setLoadingNetwork(false);
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "network" && networkProfiles.length === 0 && !loadingNetwork) {
+      fetchNetwork();
+    }
+  }, [activeTab, networkProfiles.length, loadingNetwork, fetchNetwork]);
+
   // ── Save / unsave handlers ─────────────────────────────────────────────
 
   async function handleSave(profileId: string) {
@@ -143,8 +174,20 @@ export default function DiscoverPage() {
 
   // ── Active profiles to show ────────────────────────────────────────────
 
-  const displayProfiles = activeTab === "discover" ? profiles : savedProfiles;
-  const isLoading = activeTab === "discover" ? loadingDiscover : loadingSaved;
+  // Filter network by search
+  const filteredNetwork = networkQuery.trim()
+    ? networkProfiles.filter((p) => {
+        const q = networkQuery.toLowerCase();
+        return (
+          (p.display_name ?? "").toLowerCase().includes(q) ||
+          (p.city ?? "").toLowerCase().includes(q) ||
+          (p.user_type ?? "").toLowerCase().includes(q)
+        );
+      })
+    : networkProfiles;
+
+  const displayProfiles = activeTab === "discover" ? profiles : filteredNetwork;
+  const isLoading = activeTab === "discover" ? loadingDiscover : loadingNetwork;
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const showPagination = activeTab === "discover" && totalPages > 1;
 
@@ -160,30 +203,32 @@ export default function DiscoverPage() {
         </p>
       </div>
 
-      {/* Tab toggle: Discover | Saved */}
+      {/* Tab toggle: Discover | Your Network */}
       <div className="flex gap-1 rounded-lg bg-muted p-1 mx-4 md:mx-0">
         <button
           onClick={() => setActiveTab("discover")}
-          className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all min-h-[44px] ${
+          className={`flex-1 flex items-center justify-center gap-2 rounded-md py-2 text-sm font-semibold transition-all min-h-[44px] ${
             activeTab === "discover"
               ? "bg-nocturn text-white shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
+          <Compass className="h-4 w-4" />
           Discover
         </button>
         <button
-          onClick={() => setActiveTab("saved")}
-          className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all min-h-[44px] ${
-            activeTab === "saved"
+          onClick={() => setActiveTab("network")}
+          className={`flex-1 flex items-center justify-center gap-2 rounded-md py-2 text-sm font-semibold transition-all min-h-[44px] ${
+            activeTab === "network"
               ? "bg-nocturn text-white shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
-          Saved
-          {savedIds.size > 0 && (
-            <span className="ml-1.5 rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
-              {savedIds.size}
+          <Users2 className="h-4 w-4" />
+          Your Network
+          {networkProfiles.length > 0 && (
+            <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-xs">
+              {networkProfiles.length}
             </span>
           )}
         </button>
@@ -237,6 +282,22 @@ export default function DiscoverPage() {
         </div>
       )}
 
+      {/* Network search */}
+      {activeTab === "network" && (
+        <div className="px-4 md:px-0">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              value={networkQuery}
+              onChange={(e) => setNetworkQuery(e.target.value)}
+              placeholder="Search your network by name, city, or role..."
+              className="w-full pl-10"
+            />
+          </div>
+        </div>
+      )}
+
       {/* Profiles grid */}
       <div className="px-4 md:px-0">
         {isLoading ? (
@@ -250,10 +311,12 @@ export default function DiscoverPage() {
                 <Compass className="h-10 w-10 text-muted-foreground" />
               </div>
               <div className="text-center">
-                <p className="font-medium">No profiles found</p>
+                <p className="font-medium">
+                  {activeTab === "network" ? "No connections yet" : "No profiles found"}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  {activeTab === "saved"
-                    ? "Save profiles from Discover to see them here"
+                  {activeTab === "network"
+                    ? "Save profiles or send inquiries to build your network"
                     : "Try a different search or category"}
                 </p>
               </div>
@@ -277,6 +340,7 @@ export default function DiscoverPage() {
                       city: profile.city ?? "",
                     })
                   }
+                  connectionTags={activeTab === "network" ? networkConnectionTypes[profile.id] : undefined}
                 />
               ))}
             </div>

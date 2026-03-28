@@ -44,6 +44,56 @@ export const SERVICES_BY_TYPE: Record<string, string[]> = {
     "haze-fog",
   ],
   sponsor: ["beverage", "apparel", "tech", "media", "lifestyle"],
+  artist_manager: [
+    "booking",
+    "career-development",
+    "contract-negotiation",
+    "branding",
+    "tour-planning",
+  ],
+  tour_manager: [
+    "logistics",
+    "travel-coordination",
+    "hospitality",
+    "advance-work",
+    "day-of-management",
+  ],
+  booking_agent: [
+    "venue-booking",
+    "festival-booking",
+    "club-booking",
+    "private-events",
+    "routing",
+  ],
+  event_staff: [
+    "bartender",
+    "security",
+    "door-staff",
+    "barback",
+    "coat-check",
+    "stage-hand",
+  ],
+  mc_host: [
+    "emcee",
+    "event-host",
+    "hype",
+    "announcer",
+    "bilingual",
+  ],
+  graphic_designer: [
+    "flyer-design",
+    "branding",
+    "merch-design",
+    "social-media-assets",
+    "logo-design",
+  ],
+  pr_publicist: [
+    "press-outreach",
+    "media-coverage",
+    "social-media-management",
+    "influencer-relations",
+    "event-pr",
+  ],
 };
 
 export const TYPE_LABELS: Record<string, string> = {
@@ -56,6 +106,13 @@ export const TYPE_LABELS: Record<string, string> = {
   sound_production: "Sound & Production",
   lighting_production: "Lighting & Visuals",
   sponsor: "Sponsor / Brand",
+  artist_manager: "Artist Manager",
+  tour_manager: "Tour Manager",
+  booking_agent: "Booking Agent",
+  event_staff: "Event Staff",
+  mc_host: "MC / Host",
+  graphic_designer: "Graphic Designer",
+  pr_publicist: "PR / Publicist",
 };
 
 /** Short labels for compact UI (cards, chips) */
@@ -69,6 +126,13 @@ export const TYPE_LABELS_SHORT: Record<string, string> = {
   sound_production: "Sound",
   lighting_production: "Lighting",
   sponsor: "Sponsor",
+  artist_manager: "Manager",
+  tour_manager: "Tour Mgr",
+  booking_agent: "Agent",
+  event_staff: "Staff",
+  mc_host: "MC / Host",
+  graphic_designer: "Designer",
+  pr_publicist: "PR",
 };
 
 export const TYPE_BADGE_COLORS: Record<string, string> = {
@@ -81,4 +145,11 @@ export const TYPE_BADGE_COLORS: Record<string, string> = {
   sound_production: "bg-cyan-500/10 text-cyan-400",
   lighting_production: "bg-yellow-500/10 text-yellow-400",
   sponsor: "bg-green-500/10 text-green-400",
+  artist_manager: "bg-orange-500/10 text-orange-400",
+  tour_manager: "bg-indigo-500/10 text-indigo-400",
+  booking_agent: "bg-violet-500/10 text-violet-400",
+  event_staff: "bg-slate-500/10 text-slate-400",
+  mc_host: "bg-fuchsia-500/10 text-fuchsia-400",
+  graphic_designer: "bg-rose-500/10 text-rose-400",
+  pr_publicist: "bg-teal-500/10 text-teal-400",
 };
