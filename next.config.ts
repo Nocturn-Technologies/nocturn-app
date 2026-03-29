@@ -34,6 +34,7 @@ const nextConfig: NextConfig = {
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://maps.googleapis.com https://*.posthog.com https://*.i.posthog.com",
+              "worker-src 'self' blob:",
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https://*.supabase.co https://*.stripe.com https://*.googleapis.com https://*.gstatic.com https://*.replicate.delivery https://cdn.replicate.com",
               "connect-src 'self' data: blob: https://*.supabase.co wss://*.supabase.co https://api.stripe.com https://api.anthropic.com https://maps.googleapis.com https://*.posthog.com https://*.i.posthog.com https://*.replicate.delivery",

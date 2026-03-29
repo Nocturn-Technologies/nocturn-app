@@ -156,24 +156,44 @@ export async function getTicketByToken(ticketToken: string) {
 /**
  * Look up tickets by Stripe checkout session ID.
  */
-export async function getTicketsBySessionId(sessionId: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", tickets: null };
+export async function getTicketsBySessionId(sessionOrPaymentId: string) {
+  // This is called from the public success page — buyer may not be logged in.
+  // The session/payment ID itself acts as proof of purchase (only the buyer has it).
+  if (!sessionOrPaymentId || sessionOrPaymentId.length < 10) {
+    return { error: "Invalid session ID", tickets: null };
+  }
 
   const admin = createAdminClient();
 
-  const { data: tickets, error } = await admin
+  // Try checkout_session_id first (Stripe Checkout Sessions flow)
+  const { data: sessionTickets } = await admin
     .from("tickets")
-    .select("ticket_token, status, created_at, user_id")
-    .filter("metadata->>checkout_session_id", "eq", sessionId);
+    .select("ticket_token, status, created_at")
+    .filter("metadata->>checkout_session_id", "eq", sessionOrPaymentId);
 
-  if (error) {
-    return { error: "Failed to look up tickets", tickets: null };
+  if (sessionTickets && sessionTickets.length > 0) {
+    return { error: null, tickets: sessionTickets };
   }
 
-  // Verify ownership: only return tickets belonging to the authenticated user
-  const userTickets = (tickets ?? []).filter((t) => t.user_id === user.id);
+  // Try payment_intent_id in metadata (embedded PaymentElement flow)
+  const { data: piMetaTickets } = await admin
+    .from("tickets")
+    .select("ticket_token, status, created_at")
+    .filter("metadata->>payment_intent_id", "eq", sessionOrPaymentId);
 
-  return { error: null, tickets: userTickets };
+  if (piMetaTickets && piMetaTickets.length > 0) {
+    return { error: null, tickets: piMetaTickets };
+  }
+
+  // Try stripe_payment_intent_id column directly
+  const { data: piTickets } = await admin
+    .from("tickets")
+    .select("ticket_token, status, created_at")
+    .eq("stripe_payment_intent_id", sessionOrPaymentId);
+
+  if (piTickets && piTickets.length > 0) {
+    return { error: null, tickets: piTickets };
+  }
+
+  return { error: null, tickets: [] };
 }

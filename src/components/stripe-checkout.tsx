@@ -174,6 +174,15 @@ function CheckoutForm({
     setProcessing(true);
     setError(null);
 
+    // Step 1: Validate the PaymentElement fields first
+    const { error: validationError } = await elements.submit();
+    if (validationError) {
+      setError(validationError.message ?? "Please complete all payment fields.");
+      setProcessing(false);
+      return;
+    }
+
+    // Step 2: Confirm the payment (form is validated)
     const { error: submitError } = await stripe.confirmPayment({
       elements,
       confirmParams: {

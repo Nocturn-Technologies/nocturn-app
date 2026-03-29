@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { getTicketsBySessionId } from "@/app/actions/tickets";
+import { useConfetti } from "@/components/celebrations";
 
 interface TicketStub {
   ticket_token: string;
@@ -14,12 +15,28 @@ interface TicketStub {
 function SuccessContent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
+  const paymentIntentId = searchParams.get("payment_intent");
+  const redirectStatus = searchParams.get("redirect_status");
   const isFree = searchParams.get("free") === "true";
   const freeCount = searchParams.get("tickets");
   const freeTokens = searchParams.get("tokens");
   const [tickets, setTickets] = useState<TicketStub[]>([]);
   const [loading, setLoading] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
+  const [confettiFired, setConfettiFired] = useState(false);
+  const fireConfetti = useConfetti();
+
+  // Determine if we have a valid purchase
+  const hasValidPurchase =
+    sessionId || isFree || (paymentIntentId && redirectStatus === "succeeded");
+
+  // Fire confetti on successful purchase
+  useEffect(() => {
+    if (hasValidPurchase && !confettiFired) {
+      fireConfetti({ duration: 4000 });
+      setConfettiFired(true);
+    }
+  }, [hasValidPurchase, confettiFired, fireConfetti]);
 
   useEffect(() => {
     // For free tickets, build ticket stubs from the tokens query param
@@ -33,6 +50,36 @@ function SuccessContent() {
         }))
       );
       return;
+    }
+
+    // For payment intent redirects (3D Secure), fetch tickets by PI
+    // Tickets are created by the webhook, may take a moment
+    if (paymentIntentId && redirectStatus === "succeeded" && !sessionId) {
+      setLoading(true);
+      const timeout = setTimeout(() => {
+        setTimedOut(true);
+        setLoading(false);
+      }, 15000);
+
+      // Poll a few times since webhook may not have processed yet
+      let attempts = 0;
+      const poll = async () => {
+        attempts++;
+        const { tickets: found } = await getTicketsBySessionId(paymentIntentId);
+        if (found && found.length > 0) {
+          clearTimeout(timeout);
+          setTickets(found);
+          setLoading(false);
+        } else if (attempts < 5) {
+          setTimeout(poll, 2000);
+        } else {
+          clearTimeout(timeout);
+          setTimedOut(true);
+          setLoading(false);
+        }
+      };
+      poll();
+      return () => clearTimeout(timeout);
     }
 
     if (!sessionId) return;
@@ -54,9 +101,9 @@ function SuccessContent() {
       });
 
     return () => clearTimeout(timeout);
-  }, [sessionId, isFree, freeTokens]);
+  }, [sessionId, isFree, freeTokens, paymentIntentId, redirectStatus]);
 
-  if (!sessionId && !isFree) {
+  if (!hasValidPurchase) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <div className="max-w-md w-full text-center space-y-6">
