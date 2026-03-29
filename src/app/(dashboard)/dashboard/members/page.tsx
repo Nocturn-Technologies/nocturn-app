@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { inviteMember, getPendingInvitations, cancelInvitation } from "@/app/actions/members";
+import { inviteMember, getTeamMembers, getPendingInvitations, cancelInvitation } from "@/app/actions/members";
 import { searchCollectives, startCollabChat } from "@/app/actions/collab";
 import { getReferralCode } from "@/app/actions/referral-program";
 import { Button } from "@/components/ui/button";
@@ -122,54 +122,39 @@ export default function MembersPage() {
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Load members + pending invites
+  // Load members + pending invites via server action (bypasses RLS issues)
   const loadData = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setCurrentUserId(user.id);
-
-      const { data: memberships } = await supabase
-        .from("collective_members")
-        .select("collective_id")
-        .eq("user_id", user.id)
-        .limit(1);
-
-      if (!memberships || memberships.length === 0) return;
-      const cId = memberships[0].collective_id;
-      setCollectiveId(cId);
-
-      // Load members and pending invites in parallel
-      const [memberResult, invitesResult] = await Promise.all([
-        supabase
-          .from("collective_members")
-          .select("id, user_id, role, joined_at, users(full_name, email, avatar_url)")
-          .eq("collective_id", cId)
-          .order("joined_at"),
-        getPendingInvitations(cId),
-      ]);
-
-      if (memberResult.data) {
+      const teamResult = await getTeamMembers();
+      if (teamResult.error) {
+        setLoadError(teamResult.error);
+        return;
+      }
+      if (teamResult.userId) setCurrentUserId(teamResult.userId);
+      if (teamResult.collectiveId) {
+        setCollectiveId(teamResult.collectiveId);
         setMembers(
-          memberResult.data.map((m) => ({
+          teamResult.members.map((m) => ({
             id: m.id,
             user_id: m.user_id,
             role: m.role as Role,
             joined_at: m.joined_at,
-            user: m.users as unknown as Member["user"],
+            user: m.user as Member["user"],
           }))
         );
-      }
 
-      if (!invitesResult.error && invitesResult.data) {
-        setPendingInvites(invitesResult.data as PendingInvite[]);
+        // Load pending invites
+        const invitesResult = await getPendingInvitations(teamResult.collectiveId);
+        if (!invitesResult.error && invitesResult.data) {
+          setPendingInvites(invitesResult.data as PendingInvite[]);
+        }
       }
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : "Failed to load members");
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
+  }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
 

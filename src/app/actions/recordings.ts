@@ -13,6 +13,18 @@ export async function saveRecording(data: {
   if (!user) return { error: "Not authenticated" };
 
   const admin = createAdminClient();
+
+  // Verify caller is a member of the supplied collective
+  if (data.collective_id) {
+    const { count } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", data.collective_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!count) return { error: "Not authorized" };
+  }
+
   const { data: row, error } = await admin
     .from("recordings")
     .insert({
@@ -22,9 +34,10 @@ export async function saveRecording(data: {
       status: data.status ?? "recording",
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) return { error: error.message };
+  if (!row) return { error: "Failed to create recording" };
   return { id: row.id };
 }
 

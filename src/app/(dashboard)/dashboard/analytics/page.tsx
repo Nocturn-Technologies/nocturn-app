@@ -29,6 +29,7 @@ export default async function AnalyticsPage() {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  if (user.email !== 'shawn@trynocturn.com') redirect('/dashboard');
 
   const admin = createAdminClient();
 

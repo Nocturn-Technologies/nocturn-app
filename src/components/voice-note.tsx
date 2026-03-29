@@ -224,6 +224,7 @@ export function VoicePlayback({ voiceUrl, voiceDuration, isOwn }: VoicePlaybackP
       <button
         onClick={togglePlay}
         disabled={!hasRealAudio}
+        aria-label={playing ? "Pause voice message" : "Play voice message"}
         className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-opacity ${
           !hasRealAudio ? "opacity-40 cursor-not-allowed" : ""
         }`}
@@ -297,6 +298,7 @@ export function MicButton({ onSendVoice }: MicButtonProps) {
       {isRecording && <RecordingIndicator duration={duration} />}
       <button
         onClick={handlePress}
+        aria-label={isRecording ? "Stop recording" : "Start recording"}
         className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
           isRecording
             ? "bg-red-500"

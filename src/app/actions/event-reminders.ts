@@ -1,6 +1,16 @@
 // Internal cron utility — NOT a server action (only called by cron API route)
 import { sendEmail } from "@/lib/email/send";
 import { createAdminClient } from "@/lib/supabase/config";
+import { DEFAULT_TIMEZONE } from "@/lib/utils";
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 /**
  * Send reminder emails to all ticket holders for events happening in the next 24 hours.
@@ -32,8 +42,13 @@ export async function sendEventReminders() {
     // Skip if reminders already sent for this event
     if (meta.reminders_sent) continue;
 
-    const collective = event.collectives as unknown as { name: string; slug: string };
+    const collective = event.collectives as unknown as { name: string; slug: string } | null;
     const venue = event.venues as unknown as { name: string; address: string; city: string } | null;
+
+    if (!collective) {
+      console.warn(`[reminders] Event ${event.id} has no collective, skipping`);
+      continue;
+    }
 
     // Get all ticket holder emails
     const { data: tickets } = await sb
@@ -53,8 +68,9 @@ export async function sendEventReminders() {
 
     const eventDate = new Date(event.starts_at);
     const doorsTime = event.doors_at ? new Date(event.doors_at) : null;
+    const tz = (meta.timezone as string) || DEFAULT_TIMEZONE;
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
-    const eventUrl = `${appUrl}/e/${collective?.slug}/${event.slug}`;
+    const eventUrl = `${appUrl}/e/${collective.slug}/${event.slug}`;
 
     const html = `
       <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
@@ -63,11 +79,11 @@ export async function sendEventReminders() {
         <h2 style="margin: 16px 0 8px; font-size: 22px;">See you tomorrow night! 🎶</h2>
         
         <div style="background: #18181B; border-radius: 12px; padding: 20px; margin: 16px 0;">
-          <h3 style="margin: 0 0 12px; font-size: 18px; font-weight: 700;">${event.title}</h3>
-          <p style="color: #A1A1AA; margin: 4px 0;">📅 ${eventDate.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}</p>
-          ${doorsTime ? `<p style="color: #A1A1AA; margin: 4px 0;">🚪 Doors: ${doorsTime.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}</p>` : ""}
-          <p style="color: #A1A1AA; margin: 4px 0;">⏰ ${eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}</p>
-          ${venue ? `<p style="color: #A1A1AA; margin: 4px 0;">📍 ${venue.name}, ${venue.city}</p>` : ""}
+          <h3 style="margin: 0 0 12px; font-size: 18px; font-weight: 700;">${escapeHtml(event.title)}</h3>
+          <p style="color: #A1A1AA; margin: 4px 0;">📅 ${eventDate.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", timeZone: tz })}</p>
+          ${doorsTime ? `<p style="color: #A1A1AA; margin: 4px 0;">🚪 Doors: ${doorsTime.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz })}</p>` : ""}
+          <p style="color: #A1A1AA; margin: 4px 0;">⏰ ${eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz })}</p>
+          ${venue ? `<p style="color: #A1A1AA; margin: 4px 0;">📍 ${escapeHtml(venue.name)}, ${escapeHtml(venue.city)}</p>` : ""}
         </div>
 
         <p style="color: #A1A1AA; line-height: 1.6; font-size: 15px;">
@@ -79,7 +95,7 @@ export async function sendEventReminders() {
         </a>
 
         <p style="color: #71717A; font-size: 12px; margin-top: 24px;">
-          Hosted by ${collective?.name || "the organizer"} via Nocturn.
+          Hosted by ${escapeHtml(collective.name)} via Nocturn.
           <br/><span style="font-size: 11px;">This is a reminder for an event you have tickets for.</span>
         </p>
       </div>
@@ -89,7 +105,7 @@ export async function sendEventReminders() {
     const emailList = Array.from(emails);
     for (let i = 0; i < emailList.length; i += 10) {
       const batch = emailList.slice(i, i + 10);
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         batch.map((email) =>
           sendEmail({
             to: email,
@@ -98,6 +114,10 @@ export async function sendEventReminders() {
           })
         )
       );
+      const failures = results.filter((r) => r.status === "rejected");
+      if (failures.length > 0) {
+        console.error(`[reminders] ${failures.length}/${batch.length} emails failed for event ${event.id}`);
+      }
       if (i + 10 < emailList.length) {
         await new Promise((r) => setTimeout(r, 200));
       }

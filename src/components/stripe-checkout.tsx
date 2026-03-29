@@ -27,6 +27,7 @@ interface StripeCheckoutProps {
   eventDate?: string;
   eventVenue?: string;
   referrerToken?: string;
+  promoCode?: string;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -266,6 +267,7 @@ export function StripeCheckout({
   eventDate,
   eventVenue,
   referrerToken,
+  promoCode,
   onSuccess,
   onCancel,
 }: StripeCheckoutProps) {
@@ -274,12 +276,15 @@ export function StripeCheckout({
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function createIntent() {
       try {
         const res = await fetch("/api/create-payment-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ eventId, tierId, quantity, buyerEmail, ...(referrerToken && { referrerToken }) }),
+          body: JSON.stringify({ eventId, tierId, quantity, buyerEmail, ...(referrerToken && { referrerToken }), ...(promoCode && { promoCode }) }),
+          signal: controller.signal,
         });
 
         const data = await res.json();
@@ -292,14 +297,17 @@ export function StripeCheckout({
 
         setClientSecret(data.clientSecret);
         setLoading(false);
-      } catch {
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
         setError("Failed to connect to payment service");
         setLoading(false);
       }
     }
 
     createIntent();
-  }, [eventId, tierId, quantity, buyerEmail, referrerToken]);
+
+    return () => controller.abort();
+  }, [eventId, tierId, quantity, buyerEmail, referrerToken, promoCode]);
 
   if (loading) {
     return (

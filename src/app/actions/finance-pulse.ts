@@ -68,7 +68,7 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
   let expenses = 0;
   const { data: settlements } = await admin
     .from("settlements")
-    .select("total_expenses, total_artist_fees, stripe_fees, platform_fee, gross_revenue, profit, events(title)")
+    .select("total_costs, total_artist_fees, stripe_fees, platform_fee, gross_revenue, profit, events(title)")
     .in("collective_id", collectiveIds)
     .gte("created_at", monthStart);
 
@@ -76,7 +76,7 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
     expenses = settlements.reduce(
       (sum, s) =>
         sum +
-        (Number(s.total_expenses) || 0) +
+        (Number(s.total_costs) || 0) +
         (Number(s.total_artist_fees) || 0) +
         (Number(s.stripe_fees) || 0) +
         (Number(s.platform_fee) || 0),

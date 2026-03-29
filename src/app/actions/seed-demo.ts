@@ -26,6 +26,16 @@ export async function seedDemoData(collectiveId: string) {
 
   if (!collective) return { error: "Collective not found" };
 
+  // Verify user is a member of this collective
+  const { count: memberCount } = await sb
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) return { error: "Not a member of this collective" };
+
   // Create 3 demo venues
   const venues = [
     { name: "The Velvet Underground", slug: "velvet-underground-to", address: "508 Queen St W", city: "Toronto", capacity: 350, contact_email: "bookings@velvetunderground.com" },
@@ -192,7 +202,7 @@ export async function seedDemoData(collectiveId: string) {
       stripe_fees: stripeFees,
       platform_fee: platformFee,
       net_revenue: netRevenue,
-      total_expenses: 0,
+      total_costs: 0,
       total_artist_fees: totalArtistFees,
       profit: profit,
     });

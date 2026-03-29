@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateAutoSettlement } from "./auto-settlement";
 import { getStripe } from "@/lib/stripe";
+import { DEFAULT_TIMEZONE } from "@/lib/utils";
 
 function slugify(text: string): string {
   return text
@@ -123,7 +124,7 @@ export async function createEvent(input: CreateEventInput) {
   // Build timestamps from date + time inputs
   // Use America/Toronto timezone by default for nightlife events
   // The ISO string with offset ensures correct storage regardless of server timezone
-  const tz = input.timezone ?? "America/Toronto";
+  const tz = input.timezone ?? DEFAULT_TIMEZONE;
   function toTimestamp(date: string, time: string): string {
     // Create date string with explicit timezone offset
     // This ensures "10pm" in Toronto is stored as 10pm ET, not 10pm UTC
@@ -209,6 +210,7 @@ export async function createEvent(input: CreateEventInput) {
       status: "draft",
       vibe_tags: vibeTags.length > 0 ? vibeTags : undefined,
       metadata: {
+        timezone: tz,
         ...(dressCode ? { dress_code: dressCode } : {}),
         ...(hostMessage ? { host_message: hostMessage } : {}),
       },
@@ -316,7 +318,7 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
   }
 
   // Build timestamps with timezone awareness (same approach as createEvent)
-  const tz = input.timezone ?? "America/Toronto";
+  const tz = input.timezone ?? DEFAULT_TIMEZONE;
   function toTimestamp(date: string, time: string): string {
     const dt = new Date(`${date}T${time}:00`);
     const formatter = new Intl.DateTimeFormat("en-US", {
@@ -338,6 +340,11 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
   const doorsAt = input.doorsOpen
     ? toTimestamp(input.date, input.doorsOpen)
     : null;
+
+  // Validate tier prices before any DB writes
+  if (input.tiers.some((t) => t.price < 0)) {
+    return { error: "Tier prices cannot be negative" };
+  }
 
   // Update event
   const { error: eventError } = await admin
@@ -366,7 +373,8 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     const { error: deleteError } = await admin
       .from("ticket_tiers")
       .delete()
-      .in("id", input.removedTierIds);
+      .in("id", input.removedTierIds)
+      .eq("event_id", eventId);
 
     if (deleteError) {
       return { error: `Failed to remove tiers: ${deleteError.message}` };
@@ -386,7 +394,8 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
           capacity: tier.quantity,
           sort_order: i,
         })
-        .eq("id", tier.id);
+        .eq("id", tier.id)
+        .eq("event_id", eventId);
 
       if (tierError) {
         return { error: `Tier update error: ${tierError.message}` };

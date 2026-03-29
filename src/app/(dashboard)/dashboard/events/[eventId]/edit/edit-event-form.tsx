@@ -96,6 +96,12 @@ export function EditEventForm({ event }: { event: EventData }) {
       return;
     }
 
+    const invalidTier = tiers.find((t) => !t.name.trim() || Number(t.quantity) <= 0);
+    if (invalidTier) {
+      setError("All ticket tiers must have a name and a quantity greater than 0.");
+      return;
+    }
+
     setSaving(true);
     setError(null);
 

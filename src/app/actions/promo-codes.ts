@@ -148,7 +148,6 @@ export async function validatePromoCode(eventId: string, code: string) {
     valid: true,
     error: null,
     discount: {
-      id: promo.id,
       code: promo.code,
       discountType: promo.discount_type,
       discountValue: promo.discount_value,
@@ -157,11 +156,19 @@ export async function validatePromoCode(eventId: string, code: string) {
 }
 
 export async function applyPromoCode(codeId: string, quantity: number = 1) {
+  const supabase_auth = await createServerClient();
+  const { data: { user } } = await supabase_auth.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
   const supabase = createAdminClient();
 
-  // Atomic claim: read current state and conditionally update in one query.
-  // The .lte() filter ensures we only increment if there's capacity remaining,
-  // preventing race conditions from concurrent requests.
+  // Truly atomic: use RPC or a single conditional update without reading first.
+  // We increment current_uses by quantity and use .lte() on the PRE-update value
+  // to ensure we don't exceed max_uses. This avoids the read-then-write race.
+
+  // First, try the atomic increment via raw update with a capacity guard.
+  // The .lte() filter checks current_uses BEFORE the update is applied,
+  // so we check that current_uses + quantity <= max_uses.
   const { data: promo } = await supabase
     .from("promo_codes")
     .select("id, current_uses, max_uses")
@@ -170,15 +177,17 @@ export async function applyPromoCode(codeId: string, quantity: number = 1) {
 
   if (!promo) return { error: "Promo code not found" };
 
+  // Build atomic update: set current_uses = current_uses + quantity
+  // Guard: only update if current row's current_uses <= max_uses - quantity
   const newUses = (promo.current_uses ?? 0) + quantity;
 
-  // Build atomic update with capacity guard
   let updateQuery = supabase
     .from("promo_codes")
     .update({ current_uses: newUses })
-    .eq("id", codeId);
+    .eq("id", codeId)
+    .eq("current_uses", promo.current_uses ?? 0); // Optimistic lock: only update if value hasn't changed
 
-  // Only add capacity check if max_uses is set
+  // Also enforce max_uses cap
   if (promo.max_uses !== null) {
     updateQuery = updateQuery.lte("current_uses", promo.max_uses - quantity);
   }

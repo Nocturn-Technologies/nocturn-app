@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { PLATFORM_FEE_PERCENT } from "@/lib/stripe";
+import { PLATFORM_FEE_PERCENT } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
 
@@ -68,6 +68,15 @@ export async function generateEventForecast(eventId: string): Promise<{
   const event = eventRaw as { id: string; title: string; starts_at: string; collective_id: string; bar_minimum: number | null; venue_deposit: number | null; venue_cost: number | null; estimated_bar_revenue: number | null } | null;
 
   if (!event) return { error: "Event not found", forecast: null };
+
+  // Verify caller is a member of the event's collective
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount) return { error: "Not authorized", forecast: null };
 
   const daysUntilEvent = Math.ceil(
     (new Date(event.starts_at).getTime() - Date.now()) / 86400000
@@ -157,7 +166,7 @@ export async function generateEventForecast(eventId: string): Promise<{
 
   // Get known expenses
   const { data: expensesRaw } = await admin
-    .from("event_expenses")
+    .from("expenses")
     .select("amount")
     .eq("event_id", eventId);
   const expenses = expensesRaw as { amount: number }[] | null;
@@ -333,6 +342,15 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   const event = eventRaw2 as { id: string; title: string; starts_at: string; collective_id: string; status: string; venues: { name: string; city: string } | null } | null;
 
   if (!event) return { error: "Event not found", recap: null };
+
+  // Verify caller is a member of the event's collective
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount) return { error: "Not authorized", recap: null };
 
   const venue = event.venues;
 

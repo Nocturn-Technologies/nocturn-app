@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Replicate from "replicate";
+import { rateLimit } from "@/lib/rate-limit";
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
@@ -40,12 +41,20 @@ function extractUrl(output: unknown): string | null {
 
 export async function POST(request: NextRequest) {
   // Auth check
+  let authedUserId: string;
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    authedUserId = user.id;
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Rate limit: 10 poster generations per user per minute
+  const { success: rateLimitOk } = rateLimit(`generate-poster:${authedUserId}`, 10, 60_000);
+  if (!rateLimitOk) {
+    return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
   }
 
   if (!REPLICATE_API_TOKEN) {
@@ -117,7 +126,7 @@ export async function POST(request: NextRequest) {
     console.error("[generate-poster] Error:", detail);
 
     return NextResponse.json(
-      { error: `Poster generation failed: ${detail}` },
+      { error: "Poster generation failed. Please try again." },
       { status: 500 }
     );
   }

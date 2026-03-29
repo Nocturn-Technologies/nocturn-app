@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { createCollective } from "@/app/actions/auth";
 import { generateOnboardingSuggestions } from "@/app/actions/ai-onboarding";
 import { useTypewriter } from "@/lib/typewriter";
@@ -65,6 +66,7 @@ function TypewriterBubble({ text, onComplete }: { text: string; onComplete?: () 
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const supabase = createClient();
   const [step, setStep] = useState<Step>("welcome");
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -76,6 +78,13 @@ export default function OnboardingPage() {
   const [showExtras, setShowExtras] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [welcomeDone, setWelcomeDone] = useState(false);
+
+  // Auth guard — redirect to login if no user
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) router.push("/login");
+    });
+  }, [supabase, router]);
 
   // Auto-advance from welcome
   useEffect(() => {

@@ -41,9 +41,15 @@ export default function ChatRoomPage() {
   const [loading, setLoading] = useState(true);
   const [aiTyping, setAiTyping] = useState(false);
   const [userNames, setUserNames] = useState<Record<string, string>>({});
-  const [reconnectCount, setReconnectCount] = useState(0);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const reconnectCountRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+  const initialLoadDoneRef = useRef(false);
 
   // Get current user
   useEffect(() => {
@@ -57,79 +63,113 @@ export default function ChatRoomPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  // Load channel info + messages
+  // Load channel info + messages, then start realtime subscription
+  // Sequencing prevents the race condition where realtime fires before initial load completes
   useEffect(() => {
     if (!channelId) return;
+    mountedRef.current = true;
+    initialLoadDoneRef.current = false;
 
+    // Load channel metadata
     supabase
       .from("channels")
       .select("*")
       .eq("id", channelId)
       .maybeSingle()
       .then(({ data }) => {
-        if (data) setChannel(data as Channel);
+        if (data && mountedRef.current) setChannel(data as Channel);
       });
 
+    // Load messages, THEN start realtime subscription
     supabase
       .from("messages")
       .select("*")
       .eq("channel_id", channelId)
       .order("created_at", { ascending: true })
       .then(({ data }) => {
+        if (!mountedRef.current) return;
         setMessages((data ?? []) as Message[]);
         setLoading(false);
+        initialLoadDoneRef.current = true;
         setTimeout(scrollToBottom, 100);
+        // Start realtime only after initial load is done
+        startSubscription();
       });
-  }, [channelId, scrollToBottom, supabase]);
 
-  // Real-time subscription
-  useEffect(() => {
-    if (!channelId) return;
+    const startSubscription = () => {
+      // Clean up any existing subscription
+      if (subscriptionRef.current) {
+        try { supabase.removeChannel(subscriptionRef.current); } catch { /* already removed */ }
+        subscriptionRef.current = null;
+      }
 
-    const sub = supabase
-      .channel(`room:${channelId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `channel_id=eq.${channelId}`,
-        },
-        (payload) => {
-          setMessages((prev) => {
-            const existing = prev.find(
-              (m) => m.id === (payload.new as Message).id
-            );
-            if (existing) return prev;
-            return [...prev, payload.new as Message];
-          });
-          setTimeout(scrollToBottom, 50);
-        }
-      )
-      .subscribe((status) => {
-        if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-          console.warn("[chat] Realtime disconnected, will reconnect...");
-          // Exponential backoff: 3s, 6s, 12s, max 30s
-          const delay = Math.min(3000 * Math.pow(2, reconnectCount), 30000);
-          setTimeout(() => {
-            try { supabase.removeChannel(sub); } catch { /* already removed */ }
-            setReconnectCount(c => c + 1);
-          }, delay);
-        }
-      });
+      if (!mountedRef.current) return;
+      setConnectionStatus('connecting');
+
+      const sub = supabase
+        .channel(`room:${channelId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `channel_id=eq.${channelId}`,
+          },
+          (payload) => {
+            setMessages((prev) => {
+              const existing = prev.find(
+                (m) => m.id === (payload.new as Message).id
+              );
+              if (existing) return prev;
+              return [...prev, payload.new as Message];
+            });
+            setTimeout(scrollToBottom, 50);
+          }
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            if (mountedRef.current) {
+              setConnectionStatus('connected');
+              reconnectCountRef.current = 0;
+            }
+          } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+            console.warn("[chat] Realtime disconnected, will reconnect...");
+            if (!mountedRef.current) return;
+            setConnectionStatus('disconnected');
+            const delay = Math.min(1000 * Math.pow(2, reconnectCountRef.current), 30000);
+            reconnectCountRef.current += 1;
+            reconnectTimerRef.current = setTimeout(() => {
+              if (mountedRef.current) startSubscription();
+            }, delay);
+          }
+        });
+
+      subscriptionRef.current = sub;
+    };
 
     return () => {
-      try { supabase.removeChannel(sub); } catch { /* already removed */ }
+      mountedRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (subscriptionRef.current) {
+        try { supabase.removeChannel(subscriptionRef.current); } catch { /* already removed */ }
+        subscriptionRef.current = null;
+      }
+      reconnectCountRef.current = 0;
     };
-  }, [channelId, scrollToBottom, supabase, reconnectCount]);
+  }, [channelId, scrollToBottom, supabase]);
 
   // Fetch real user names for message authors
+  const fetchedUserIdsRef = useRef(new Set<string>());
   useEffect(() => {
     const unknownIds = [...new Set(messages.map((m) => m.user_id))]
-      .filter((id) => id && id !== "00000000-0000-0000-0000-000000000000" && !userNames[id]);
+      .filter((id) => id && id !== "00000000-0000-0000-0000-000000000000" && !fetchedUserIdsRef.current.has(id));
 
     if (unknownIds.length === 0) return;
+    unknownIds.forEach((id) => fetchedUserIdsRef.current.add(id));
 
     supabase
       .from("users")
@@ -145,7 +185,7 @@ export default function ChatRoomPage() {
           return next;
         });
       });
-  }, [messages, supabase, userNames]);
+  }, [messages, supabase]);
 
   // Scroll on new messages
   useEffect(() => {
@@ -232,20 +272,19 @@ export default function ChatRoomPage() {
       }));
 
       // Server action generates response AND inserts it into DB
-      const aiContent = await generateChatResponse(channelId, userMessage, recentMsgs);
+      const { content: aiContent, messageId: aiMessageId } = await generateChatResponse(channelId, userMessage, recentMsgs);
 
       // Also add to local state directly (don't rely solely on Realtime)
       if (aiContent) {
         setMessages((prev) => {
-          // Check if Realtime already delivered it
-          const alreadyHas = prev.some(
-            (m) => m.type === "ai" && m.content === aiContent && Date.now() - new Date(m.created_at).getTime() < 30000
-          );
-          if (alreadyHas) return prev;
+          // Check if Realtime already delivered it using the server-assigned ID
+          if (aiMessageId && prev.some((m) => m.id === aiMessageId)) {
+            return prev;
+          }
           return [
             ...prev,
             {
-              id: crypto.randomUUID(),
+              id: aiMessageId || crypto.randomUUID(),
               channel_id: channelId,
               user_id: null as unknown as string,
               content: aiContent,
@@ -290,19 +329,19 @@ export default function ChatRoomPage() {
       .from("recordings")
       .upload(fileName, blob, { contentType: "audio/webm", upsert: false });
 
-    let voiceUrl: string;
     if (uploadError) {
       console.error("[voice] Upload failed:", uploadError.message);
-      // Still save the message but with a placeholder URL
-      voiceUrl = `mock://voice/${Date.now()}`;
-    } else {
-      const { data: urlData } = supabase.storage
-        .from("recordings")
-        .getPublicUrl(fileName);
-      voiceUrl = urlData.publicUrl;
+      setVoiceError("Voice message failed to upload. Please try again.");
+      setTimeout(() => setVoiceError(null), 5000);
+      return;
     }
 
-    const { data } = await supabase
+    const { data: urlData } = supabase.storage
+      .from("recordings")
+      .getPublicUrl(fileName);
+    const voiceUrl = urlData.publicUrl;
+
+    const { data, error: insertError } = await supabase
       .from("messages")
       .insert({
         channel_id: channelId,
@@ -314,6 +353,13 @@ export default function ChatRoomPage() {
       })
       .select()
       .single();
+
+    if (insertError) {
+      console.error("[voice] Message insert failed:", insertError.message);
+      setVoiceError("Voice message failed to send. Please try again.");
+      setTimeout(() => setVoiceError(null), 5000);
+      return;
+    }
 
     if (data) {
       setMessages((prev) => {
@@ -376,6 +422,20 @@ export default function ChatRoomPage() {
           <Info size={20} className="text-muted-foreground" />
         </Button>
       </header>
+
+      {/* Connection status banner */}
+      {connectionStatus === 'disconnected' && (
+        <div className="shrink-0 bg-amber-500/15 border-b border-amber-500/20 px-4 py-1.5 text-center">
+          <span className="text-xs text-amber-400 font-medium">Reconnecting...</span>
+        </div>
+      )}
+
+      {/* Voice upload error */}
+      {voiceError && (
+        <div className="shrink-0 bg-red-500/15 border-b border-red-500/20 px-4 py-1.5 text-center">
+          <span className="text-xs text-red-400 font-medium">{voiceError}</span>
+        </div>
+      )}
 
       {/* Event Card (for event channels) */}
       {channel?.type === "event" && channel.event_id && (
@@ -482,6 +542,7 @@ export default function ChatRoomPage() {
           <button
             onClick={sendMessage}
             disabled={!input.trim()}
+            aria-label="Send message"
             className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
               input.trim()
                 ? "bg-nocturn hover:bg-nocturn/90"

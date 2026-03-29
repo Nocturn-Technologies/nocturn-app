@@ -52,14 +52,23 @@ export async function getAmbassadorConfig(eventId: string): Promise<{
 
   const admin = createAdminClient();
 
+  // Verify user has access to this event
   const { data: eventRaw } = await admin
     .from("events")
-    .select("metadata")
+    .select("metadata, collective_id")
     .eq("id", eventId)
     .maybeSingle();
-  const event = eventRaw as { metadata: Record<string, unknown> | null } | null;
+  const event = eventRaw as { metadata: Record<string, unknown> | null; collective_id: string } | null;
 
   if (!event) return { error: "Event not found", config: DEFAULT_CONFIG };
+
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount || memberCount === 0) return { error: "Not authorized", config: DEFAULT_CONFIG };
 
   const metadata = (event.metadata ?? {}) as Record<string, unknown>;
   const ambassadorConfig = metadata.ambassador_config as AmbassadorConfig | undefined;
@@ -82,15 +91,23 @@ export async function saveAmbassadorConfig(
 
   const admin = createAdminClient();
 
-  // Get current metadata
+  // Get current metadata + verify ownership
   const { data: eventRaw2 } = await admin
     .from("events")
-    .select("metadata")
+    .select("metadata, collective_id")
     .eq("id", eventId)
     .maybeSingle();
-  const event2 = eventRaw2 as { metadata: Record<string, unknown> | null } | null;
+  const event2 = eventRaw2 as { metadata: Record<string, unknown> | null; collective_id: string } | null;
 
   if (!event2) return { error: "Event not found" };
+
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event2.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount || memberCount === 0) return { error: "Not authorized" };
 
   const currentMetadata = (event2.metadata ?? {}) as Record<string, unknown>;
 

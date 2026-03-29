@@ -20,12 +20,14 @@ async function verifyEventAccess(eventId: string): Promise<{ error: string | nul
 
   if (!event) return { error: "Event not found", userId: null };
 
-  // Check membership
+  // Check membership with role verification
   const { data: membership } = await admin
     .from("collective_members")
     .select("role")
     .eq("user_id", user.id)
     .eq("collective_id", event.collective_id)
+    .in("role", ["admin", "promoter", "event_staff"])
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!membership) return { error: "You don't have access to this event", userId: null };
@@ -69,7 +71,7 @@ export async function addGuest(input: {
     plus_ones: input.plusOnes ?? 0,
     status: "pending",
     notes: input.notes?.trim() || null,
-    added_by: input.addedBy ?? userId,
+    added_by: userId,
   });
 
   if (error) return { error: error.message };

@@ -96,6 +96,15 @@ export async function generateMorningBriefing(collectiveId: string): Promise<Bri
 
   const sb = createAdminClient();
 
+  // Verify caller is a member of the supplied collective
+  const { count } = await sb
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!count) return [];
+
   // Check cache — avoid burning API calls on every dashboard load
   try {
     const { data: cachedRaw } = await sb

@@ -15,6 +15,7 @@ import { AlsoThisWeek } from "@/components/public-event/also-this-week";
 import type { Metadata } from "next";
 import Image from "next/image";
 import { createAdminClient } from "@/lib/supabase/config";
+import { DEFAULT_TIMEZONE } from "@/lib/utils";
 import Link from "next/link";
 
 // Revalidate public event pages every 60 seconds (ISR)
@@ -181,12 +182,11 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
   // Theme color from metadata or default nocturn purple
   const metadata = event.metadata ?? {};
-  const accentColor = metadata.themeColor || "#7B2FF7";
+  const rawAccent = metadata.themeColor || "#7B2FF7";
+  const accentColor = /^#[0-9a-fA-F]{3,8}$/.test(rawAccent) ? rawAccent : "#7B2FF7";
 
-  // Formatted date pieces — force ET timezone for consistent rendering on Vercel (UTC server)
-  // TODO: derive EVENT_TIMEZONE from venue/event data instead of hardcoding
-  const EVENT_TIMEZONE = "America/Toronto";
-  const tz = EVENT_TIMEZONE;
+  // Use event's stored timezone, fall back to default
+  const tz = (metadata.timezone as string) || DEFAULT_TIMEZONE;
   const dayName = eventDate.toLocaleDateString("en", { weekday: "short", timeZone: tz }).toUpperCase();
   const monthName = eventDate.toLocaleDateString("en", { month: "short", timeZone: tz }).toUpperCase();
   const dayNum = parseInt(eventDate.toLocaleDateString("en", { day: "numeric", timeZone: tz }));
@@ -256,7 +256,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     <div className="min-h-screen bg-[#09090B] antialiased selection:bg-purple-500/20" style={{ scrollBehavior: "smooth" }}>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
 
       {/* ═══ SCENE 1: THE POSTER — raw, asymmetric, bold ═══ */}
@@ -426,7 +426,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
         )}
 
         {/* ═══ THE STORY ═══ */}
-        {(event.description && event.description.includes(".")) && (
+        {event.description && event.description.trim().length > 0 && (
           <div className="py-8 border-t border-white/[0.04]">
             <ExpandableText text={event.description} />
           </div>
@@ -516,7 +516,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                   price: Number(t.price),
                   capacity: t.capacity,
                   sold: tierSoldCounts[t.id] || 0,
-                  remaining: t.capacity - (tierSoldCounts[t.id] || 0),
+                  remaining: Math.max(0, t.capacity - (tierSoldCounts[t.id] || 0)),
                 }))}
                 eventId={event.id}
                 accentColor={accentColor}
@@ -613,6 +613,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             venueCity: v?.city || null,
           };
         })}
+        city={venue?.city || undefined}
       />
 
       {/* Footer */}

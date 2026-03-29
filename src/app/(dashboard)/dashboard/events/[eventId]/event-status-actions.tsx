@@ -24,16 +24,18 @@ export function EventStatusActions({
     setLoading(actionName);
     setError(null);
 
-    const result = await action(eventId);
-
-    if (result.error) {
-      setError(result.error);
+    try {
+      const result = await action(eventId);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      router.refresh();
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
       setLoading(null);
-      return;
     }
-
-    setLoading(null);
-    router.refresh();
   }
 
   return (

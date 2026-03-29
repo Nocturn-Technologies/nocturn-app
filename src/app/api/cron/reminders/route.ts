@@ -93,17 +93,20 @@ export async function GET(request: Request) {
       );
 
       // Send in batches of 50
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
       const emailArr = Array.from(emails);
       for (let i = 0; i < emailArr.length; i += 50) {
         const batch = emailArr.slice(i, i + 50);
         await Promise.allSettled(
-          batch.map((to) =>
-            sendEmail({
+          batch.map((to) => {
+            // Append unsubscribe link for CAN-SPAM compliance
+            const htmlWithUnsub = html + `<p style="text-align:center;margin-top:24px;font-size:11px;color:#71717A;">To stop receiving emails, <a href="${appUrl}/unsubscribe?email=${encodeURIComponent(to)}" style="color:#7B2FF7;text-decoration:underline;">unsubscribe here</a>.</p>`;
+            return sendEmail({
               to,
               subject: `Tonight: ${event.title} 🔥`,
-              html,
-            })
-          )
+              html: htmlWithUnsub,
+            });
+          })
         );
       }
 

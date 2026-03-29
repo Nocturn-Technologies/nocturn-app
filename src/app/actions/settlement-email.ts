@@ -21,6 +21,17 @@ export async function generateSettlementReport(settlementId: string) {
 
   if (!settlement) return { error: "Settlement not found", report: null };
 
+  // Verify user is an admin or promoter of this collective
+  const { data: membership } = await admin
+    .from("collective_members")
+    .select("role")
+    .eq("collective_id", settlement.collective_id)
+    .eq("user_id", user.id)
+    .in("role", ["admin", "promoter"])
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!membership) return { error: "Not authorized", report: null };
+
   // Get line items
   const { data: lines } = await admin
     .from("settlement_lines")
@@ -39,9 +50,14 @@ export async function generateSettlementReport(settlementId: string) {
     title: string;
     starts_at: string;
     venues: { name: string; city: string } | null;
-  };
-  const collective = settlement.collectives as unknown as { name: string };
-  const venue = event?.venues;
+  } | null;
+  const collective = settlement.collectives as unknown as { name: string } | null;
+
+  if (!event) {
+    return { error: "Event associated with this settlement no longer exists", report: null };
+  }
+
+  const venue = event.venues;
   const eventDate = new Date(event.starts_at).toLocaleDateString("en", {
     weekday: "long",
     month: "long",
@@ -61,9 +77,10 @@ export async function generateSettlementReport(settlementId: string) {
     .map((l) => `  • ${l.label}: -$${Number(l.amount).toFixed(2)}`)
     .join("\n");
 
-  const subject = `Settlement Report: ${event.title} — ${collective.name}`;
+  const collectiveName = collective?.name ?? "Your Collective";
+  const subject = `Settlement Report: ${event.title} — ${collectiveName}`;
 
-  const body = `Hi ${collective.name} team,
+  const body = `Hi ${collectiveName} team,
 
 Here's the settlement report for ${event.title}.
 
@@ -81,8 +98,8 @@ Deductions:
 ${deductions || "  (none)"}
 
 ━━━━━━━━━━━━━━━━
-Net Profit:       $${Number(settlement.profit).toFixed(2)}
-Status:           ${settlement.status.toUpperCase()}
+Net Profit:       $${Number(settlement.profit ?? 0).toFixed(2)}
+Status:           ${(settlement.status ?? "pending").toUpperCase()}
 
 ${settlement.status === "paid" ? "✅ Payout has been processed via Stripe." : "⏳ Payout pending approval."}
 

@@ -64,6 +64,8 @@ export async function refundTicket(ticketId: string) {
         // Refund the ticket price portion only (service fee is non-refundable)
         amount: Math.round(pricePaid * 100),
         reason: "requested_by_customer",
+      }, {
+        idempotencyKey: `refund_${ticketId}`,
       });
     } catch (stripeErr) {
       const msg = stripeErr instanceof Error ? stripeErr.message : "Stripe refund failed";
@@ -72,8 +74,9 @@ export async function refundTicket(ticketId: string) {
     }
   }
 
-  // Update ticket status
-  const { error: updateError } = await sb
+  // Update ticket status — atomic guard: only update if still paid/checked_in
+  // Prevents double-refund race condition from concurrent requests
+  const { error: updateError, count: updateCount } = await sb
     .from("tickets")
     .update({
       status: "refunded",
@@ -84,10 +87,15 @@ export async function refundTicket(ticketId: string) {
         refund_amount: pricePaid,
       },
     })
-    .eq("id", ticketId);
+    .eq("id", ticketId)
+    .in("status", ["paid", "checked_in"]);
 
   if (updateError) {
     return { error: `Ticket status update failed: ${updateError.message}` };
+  }
+
+  if (updateCount === 0) {
+    return { error: "Ticket was already refunded or status changed. No action taken." };
   }
 
   // Notify next person on waitlist (non-blocking)
@@ -123,6 +131,8 @@ export async function refundTicket(ticketId: string) {
         .eq("id", ticket.event_id)
         .maybeSingle();
 
+      function escapeHtml(s: string) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+
       await sendEmail({
         to: buyerEmail,
         subject: `Refund confirmed — ${eventData?.title || "Event"}`,
@@ -131,7 +141,7 @@ export async function refundTicket(ticketId: string) {
             <p style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</p>
             <h2 style="margin: 16px 0 8px;">Your refund has been processed</h2>
             <p style="color: #A1A1AA; line-height: 1.6;">
-              Your ticket for <strong style="color: #FAFAFA;">${eventData?.title || "the event"}</strong> has been refunded.
+              Your ticket for <strong style="color: #FAFAFA;">${escapeHtml(eventData?.title || "the event")}</strong> has been refunded.
               ${pricePaid > 0 ? `<strong style="color: #FAFAFA;">$${pricePaid.toFixed(2)}</strong> will be returned to your original payment method within 5-10 business days.` : ""}
             </p>
             <p style="color: #71717A; font-size: 12px; margin-top: 24px;">Questions? Contact <a href="mailto:shawn@trynocturn.com" style="color: #7B2FF7;">shawn@trynocturn.com</a><br/><span style="font-size: 11px;">This is a transactional email about your purchase. No action needed to unsubscribe.</span></p>

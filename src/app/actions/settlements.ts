@@ -110,7 +110,7 @@ export async function generateSettlement(eventId: string) {
       stripe_fees: stripeFees,
       platform_fee: platformFee,
       net_revenue: netRevenue,
-      total_expenses: totalExpenses,
+      total_costs: totalExpenses,
       total_artist_fees: totalArtistFees,
       profit: profit,
     })

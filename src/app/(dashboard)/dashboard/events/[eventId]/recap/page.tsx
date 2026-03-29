@@ -184,7 +184,7 @@ export default function RecapPage() {
 
       {/* Quick links */}
       <div className="grid gap-3 sm:grid-cols-2 animate-fade-in-up delay-300">
-        <Link href={`/dashboard/finance/${eventId}`}>
+        <Link href={`/dashboard/events/${eventId}/financials`}>
           <Card className="transition-colors hover:border-nocturn/30">
             <CardContent className="flex items-center justify-between p-4">
               <div className="flex items-center gap-3">

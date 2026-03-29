@@ -1,12 +1,20 @@
 "use server";
 
 import { sendEmail } from "@/lib/email/send";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
 /**
  * Join the waitlist for a sold-out ticket tier.
  */
-export async function joinWaitlist(eventId: string, tierId: string, email: string) {
+export async function joinWaitlist(eventId: string, tierId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const email = user.email;
+  if (!email) return { error: "No email associated with your account" };
+
   const sb = createAdminClient();
 
   // Verify tier is actually sold out
@@ -47,6 +55,10 @@ export async function joinWaitlist(eventId: string, tierId: string, email: strin
  * Get waitlist count for a tier.
  */
 export async function getWaitlistCount(tierId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return 0;
+
   const sb = createAdminClient();
   const { count } = await sb
     .from("ticket_waitlist")
@@ -62,7 +74,27 @@ export async function getWaitlistCount(tierId: string) {
  * Notifies the first person on the waitlist.
  */
 export async function notifyNextOnWaitlist(eventId: string, tierId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { notified: false };
+
   const sb = createAdminClient();
+
+  // Verify user owns this event via collective membership
+  const { data: eventCheck } = await sb
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (!eventCheck) return { notified: false };
+
+  const { count: memberCount } = await sb
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", eventCheck.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount || memberCount === 0) return { notified: false };
 
   // Get the next person waiting
   const { data: next } = await sb
@@ -92,40 +124,54 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string) {
 
   if (!event) return { notified: false };
 
+  function escapeHtml(str: string): string {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   const collective = event.collectives as unknown as { slug: string } | null;
   const eventUrl = collective?.slug
     ? `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${collective.slug}/${event.slug}`
     : `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/dashboard/events/${eventId}`;
 
-  // Send notification email
-  await sendEmail({
-    to: next.email,
-    subject: `A spot just opened up — ${event.title} 🎟️`,
-    html: `
-      <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
-        <p style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</p>
-        <h2 style="margin: 16px 0 8px;">Good news — a spot just opened!</h2>
-        <p style="color: #A1A1AA; line-height: 1.6;">
-          A <strong style="color: #FAFAFA;">${tier?.name || "ticket"}</strong> just became available for 
-          <strong style="color: #FAFAFA;">${event.title}</strong>. 
-          You were next on the waitlist — grab it before it's gone!
-        </p>
-        <a href="${eventUrl}" style="display: inline-block; margin: 20px 0; padding: 14px 28px; background: #7B2FF7; color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 15px;">
-          Get Your Ticket →
-        </a>
-        <p style="color: #71717A; font-size: 12px; margin-top: 24px;">
-          This spot is first-come, first-served. If it sells out again, you'll stay on the waitlist.
-          <br/><span style="font-size: 11px;">Don't want these emails? Reply with "unsubscribe" to opt out.</span>
-        </p>
-      </div>
-    `,
-  });
+  // Send notification email — only mark as notified if email succeeds
+  try {
+    await sendEmail({
+      to: next.email,
+      subject: `A spot just opened up — ${event.title} 🎟️`,
+      html: `
+        <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
+          <p style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</p>
+          <h2 style="margin: 16px 0 8px;">Good news — a spot just opened!</h2>
+          <p style="color: #A1A1AA; line-height: 1.6;">
+            A <strong style="color: #FAFAFA;">${escapeHtml(tier?.name || "ticket")}</strong> just became available for
+            <strong style="color: #FAFAFA;">${escapeHtml(event.title)}</strong>.
+            You were next on the waitlist — grab it before it's gone!
+          </p>
+          <a href="${eventUrl}" style="display: inline-block; margin: 20px 0; padding: 14px 28px; background: #7B2FF7; color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 15px;">
+            Get Your Ticket →
+          </a>
+          <p style="color: #71717A; font-size: 12px; margin-top: 24px;">
+            This spot is first-come, first-served. If it sells out again, you'll stay on the waitlist.
+            <br/><span style="font-size: 11px;">Don't want these emails? Reply with "unsubscribe" to opt out.</span>
+          </p>
+        </div>
+      `,
+    });
 
-  // Mark as notified
-  await sb
-    .from("ticket_waitlist")
-    .update({ status: "notified", notified_at: new Date().toISOString() })
-    .eq("id", next.id);
+    // Only mark as notified after email successfully sent
+    await sb
+      .from("ticket_waitlist")
+      .update({ status: "notified", notified_at: new Date().toISOString() })
+      .eq("id", next.id);
 
-  return { notified: true, email: next.email };
+    return { notified: true, email: next.email };
+  } catch (emailErr) {
+    console.error("[waitlist] Failed to send notification email:", emailErr);
+    return { notified: false };
+  }
 }

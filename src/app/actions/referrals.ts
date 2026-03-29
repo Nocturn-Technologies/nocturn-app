@@ -115,7 +115,21 @@ export async function generateReferralLink(eventSlug: string, collectiveSlug: st
  * Called from the checkout flow.
  */
 export async function trackReferral(ticketId: string, referrerId: string): Promise<void> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
+
   const admin = createAdminClient();
+
+  // Verify the caller owns the ticket being updated
+  const { data: ticket } = await admin
+    .from("tickets")
+    .select("id, user_id")
+    .eq("id", ticketId)
+    .maybeSingle();
+
+  if (!ticket || ticket.user_id !== user.id) return;
+
   await admin
     .from("tickets")
     .update({ referred_by: referrerId })
@@ -135,6 +149,35 @@ export async function checkReferralReward(
   threshold: number;
   remaining: number;
 }> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { earned: false, count: 0, threshold, remaining: threshold };
+
+  // Verify the caller is the referrer or a member of the event's collective
+  if (referrerId !== user.id) {
+    const admin2 = createAdminClient();
+    const { data: event } = await admin2
+      .from("events")
+      .select("collective_id")
+      .eq("id", eventId)
+      .maybeSingle();
+
+    if (event) {
+      const { count: memberCount } = await admin2
+        .from("collective_members")
+        .select("*", { count: "exact", head: true })
+        .eq("collective_id", event.collective_id)
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+
+      if (!memberCount || memberCount === 0) {
+        return { earned: false, count: 0, threshold, remaining: threshold };
+      }
+    } else {
+      return { earned: false, count: 0, threshold, remaining: threshold };
+    }
+  }
+
   const admin = createAdminClient();
 
   const { count } = await admin

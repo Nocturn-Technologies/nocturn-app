@@ -5,6 +5,7 @@ import { Minus, Plus, Ticket, Check, AlertCircle, Bell, Loader2 } from "lucide-r
 import dynamic from "next/dynamic";
 const StripeCheckout = dynamic(() => import("@/components/stripe-checkout").then(m => m.StripeCheckout), { ssr: false, loading: () => <div className="flex items-center justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-[#7B2FF7] border-t-transparent" /></div> });
 import { joinWaitlist } from "@/app/actions/ticket-waitlist";
+import { validatePromoCode } from "@/app/actions/promo-codes";
 import { haptic } from "@/lib/haptics";
 
 interface Tier {
@@ -38,8 +39,27 @@ export function TicketSection({
   const [waitlistJoined, setWaitlistJoined] = useState(false);
   const [waitlistTierId, setWaitlistTierId] = useState<string | null>(null);
 
+  // Promo code state
+  const [promoCode, setPromoCode] = useState("");
+  const [promoApplied, setPromoApplied] = useState<{
+    code: string;
+    discountType: string;
+    discountValue: number;
+  } | null>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoValidating, setPromoValidating] = useState(false);
+
   const selected = tiers.find((t) => t.id === selectedTier);
-  const ticketPrice = selected ? Number(selected.price) : 0;
+  const baseTicketPrice = selected ? Number(selected.price) : 0;
+
+  // Apply promo discount to ticket price
+  const promoDiscount = promoApplied
+    ? promoApplied.discountType === "percentage"
+      ? Math.round(baseTicketPrice * (Math.min(promoApplied.discountValue, 100) / 100) * 100) / 100
+      : Math.min(promoApplied.discountValue, baseTicketPrice)
+    : 0;
+  const ticketPrice = Math.max(baseTicketPrice - promoDiscount, 0);
+
   const isFree = ticketPrice === 0;
   const serviceFeePerTicket = isFree ? 0 : Math.round((ticketPrice * 0.07 + 0.50) * 100) / 100;
   const subtotal = ticketPrice * quantity;
@@ -81,6 +101,7 @@ export function TicketSection({
             buyerEmail={email}
             totalAmount={total}
             referrerToken={referrerToken}
+            promoCode={promoApplied?.code}
             onSuccess={() => {
               // Success handled inside StripeCheckout component
             }}
@@ -109,7 +130,7 @@ export function TicketSection({
           return sortedTiers.map((tier, idx) => {
             const isSelected = selectedTier === tier.id;
             const price = Number(tier.price);
-            const remaining = tier.remaining ?? tier.capacity;
+            const remaining = Math.max(0, tier.remaining ?? tier.capacity);
             const isSoldOut = remaining <= 0;
 
             // A tier is "locked" if it's not sold out AND a cheaper tier before it still has availability
@@ -213,7 +234,7 @@ export function TicketSection({
                             onClick={async () => {
                               if (!waitlistEmail || joiningWaitlist) return;
                               setJoiningWaitlist(true);
-                              const result = await joinWaitlist(eventId, tier.id, waitlistEmail);
+                              const result = await joinWaitlist(eventId, tier.id);
                               if (!result.error) {
                                 setWaitlistJoined(true);
                               }
@@ -236,7 +257,11 @@ export function TicketSection({
       </div>
 
       {/* Expanded section when tier selected */}
-      {selectedTier && (
+      {selectedTier && (() => {
+        const selectedTierData = tiers.find(t => t.id === selectedTier);
+        const remaining = selectedTierData ? (selectedTierData.remaining ?? selectedTierData.capacity) : 10;
+        const maxQuantity = Math.min(10, remaining);
+        return (
         <div className="space-y-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-5 animate-fade-in-up">
           {/* Quantity selector */}
           <div className="flex items-center justify-between">
@@ -245,6 +270,7 @@ export function TicketSection({
               <button
                 onClick={() => { haptic('light'); setQuantity(Math.max(1, quantity - 1)); }}
                 disabled={quantity <= 1}
+                aria-label="Decrease quantity"
                 className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
               >
                 <Minus className="h-4 w-4" />
@@ -253,8 +279,9 @@ export function TicketSection({
                 {quantity}
               </span>
               <button
-                onClick={() => { haptic('light'); setQuantity(Math.min(10, quantity + 1)); }}
-                disabled={quantity >= 10}
+                onClick={() => { haptic('light'); setQuantity(Math.min(maxQuantity, quantity + 1)); }}
+                disabled={quantity >= maxQuantity}
+                aria-label="Increase quantity"
                 className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
               >
                 <Plus className="h-4 w-4" />
@@ -290,8 +317,88 @@ export function TicketSection({
               )}
             </div>
           </div>
+
+          {/* Promo code */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-white/60" htmlFor="promo-code">
+              Promo code
+            </label>
+            {promoApplied ? (
+              <div className="flex items-center justify-between rounded-xl border border-green-500/30 bg-green-500/5 px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-400" />
+                  <span className="text-sm font-medium text-green-400">
+                    {promoApplied.code} —{" "}
+                    {promoApplied.discountType === "percentage"
+                      ? `${promoApplied.discountValue}% off`
+                      : `$${promoApplied.discountValue.toFixed(2)} off`}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setPromoApplied(null);
+                    setPromoCode("");
+                    setPromoError(null);
+                  }}
+                  className="text-xs text-white/40 hover:text-white/60 transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input
+                  id="promo-code"
+                  type="text"
+                  placeholder="Enter code"
+                  value={promoCode}
+                  onChange={(e) => {
+                    setPromoCode(e.target.value.toUpperCase());
+                    setPromoError(null);
+                  }}
+                  className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-[16px] text-white placeholder:text-white/25 outline-none focus:border-white/20 focus:ring-1 focus:ring-white/5 transition-all duration-200"
+                />
+                <button
+                  onClick={async () => {
+                    if (!promoCode.trim() || promoValidating) return;
+                    setPromoValidating(true);
+                    setPromoError(null);
+                    try {
+                      const result = await validatePromoCode(eventId, promoCode.trim());
+                      if (result.valid && result.discount) {
+                        haptic("confirm");
+                        setPromoApplied(result.discount);
+                      } else {
+                        setPromoError(result.error || "Invalid code");
+                      }
+                    } catch {
+                      setPromoError("Failed to validate code");
+                    } finally {
+                      setPromoValidating(false);
+                    }
+                  }}
+                  disabled={!promoCode.trim() || promoValidating}
+                  aria-label="Apply promo code"
+                  className="shrink-0 rounded-xl border border-white/[0.08] bg-white/[0.04] px-5 py-3 text-sm font-semibold text-white hover:bg-white/[0.08] transition-colors disabled:opacity-40"
+                >
+                  {promoValidating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Apply"
+                  )}
+                </button>
+              </div>
+            )}
+            {promoError && (
+              <p className="text-xs text-red-400 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {promoError}
+              </p>
+            )}
+          </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Sticky CTA */}
       {selectedTier && !showCheckout && (

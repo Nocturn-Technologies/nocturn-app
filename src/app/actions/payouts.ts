@@ -72,6 +72,24 @@ export async function getPayoutStatus(settlementId: string) {
 
   const admin = createAdminClient();
 
+  // Verify user owns this settlement's collective
+  const { data: settlement } = await admin
+    .from("settlements")
+    .select("collective_id")
+    .eq("id", settlementId)
+    .maybeSingle();
+
+  if (!settlement) return [];
+
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", settlement.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return [];
+
   const { data: lines } = await admin
     .from("settlement_lines")
     .select("id, label, amount, payout_status, type")

@@ -18,6 +18,17 @@ export async function transcribeFromStorage(storagePath: string) {
   try {
     const admin = createAdminClient();
 
+    // Verify ownership: the recording must belong to the authenticated user
+    const { data: recording } = await admin
+      .from("recordings")
+      .select("user_id")
+      .eq("storage_path", storagePath)
+      .maybeSingle();
+
+    if (!recording || recording.user_id !== user.id) {
+      return { error: "Not authorized", transcript: "", summary: "", action_items: [], key_decisions: [] };
+    }
+
     // Download the audio file from Supabase Storage
     const { data: fileData, error: dlError } = await admin.storage
       .from("recordings")
@@ -130,6 +141,10 @@ export async function transcribeAudio(audioBase64: string, mimeType: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", transcript: "", summary: "", action_items: [], key_decisions: [] };
+
+  if (audioBase64.length > 35_000_000) {
+    return { error: "Audio file too large", transcript: "", summary: "", action_items: [], key_decisions: [] };
+  }
 
   try {
     const buffer = Buffer.from(audioBase64, "base64");

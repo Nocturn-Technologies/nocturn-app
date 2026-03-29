@@ -24,6 +24,17 @@ export async function generateAutoSettlement(eventId: string) {
       return { error: eventError?.message ?? "Event not found." };
     }
 
+    // Verify caller is a member of the event's collective
+    const { count: memberCount } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", event.collective_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!memberCount) {
+      return { error: "Not authorized" };
+    }
+
     // Check for existing settlement (prevent duplicates)
     const { data: existingSettlement } = await admin
       .from("settlements")
@@ -119,7 +130,7 @@ export async function generateAutoSettlement(eventId: string) {
         gross_revenue: Math.round(grossRevenue * 100) / 100,
         refunds_total: Math.round(refundsTotal * 100) / 100,
         total_artist_fees: Math.round(artistFeesTotal * 100) / 100,
-        total_expenses: Math.round(totalExpenses * 100) / 100,
+        total_costs: Math.round(totalExpenses * 100) / 100,
         platform_fee: Math.round(platformFee * 100) / 100,
         stripe_fees: Math.round(stripeFees * 100) / 100,
         net_revenue: Math.round(netRevenue * 100) / 100,
@@ -127,7 +138,7 @@ export async function generateAutoSettlement(eventId: string) {
         status: "draft",
       })
       .select("id")
-      .single();
+      .maybeSingle();
 
     if (settlementError) {
       // Handle unique constraint violation (race — another process created it)
@@ -135,6 +146,10 @@ export async function generateAutoSettlement(eventId: string) {
         return { error: null }; // Already exists, that's fine
       }
       return { error: `Settlement insert failed: ${settlementError.message}` };
+    }
+
+    if (!settlement) {
+      return { error: "Settlement insert returned no data" };
     }
 
     // 9. Trigger CRM enrichment for attendees

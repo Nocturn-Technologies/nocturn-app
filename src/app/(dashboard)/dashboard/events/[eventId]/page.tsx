@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { safeBgUrl } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,6 @@ import {
   ExternalLink,
   Music,
   Pencil,
-  DollarSign,
   Users,
   Ticket,
   ScanLine,
@@ -27,6 +27,7 @@ import {
   RotateCcw,
   Share2,
   MessageSquare,
+  Sheet,
 } from "lucide-react";
 import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
@@ -34,6 +35,7 @@ import { LiveModeBanner } from "./live-mode-banner";
 import { EventShareCard } from "./event-share-card";
 import { ExternalTicketsForm } from "./external-tickets";
 import { getExternalTicketData } from "@/app/actions/external-tickets";
+import { TicketTierEditor } from "@/components/ticket-tier-editor";
 
 interface Props {
   params: Promise<{ eventId: string }>;
@@ -93,7 +95,8 @@ export default async function EventDetailPage({ params }: Props) {
   const { data: memberships } = await admin
     .from("collective_members")
     .select("collective_id")
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
 
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
 
@@ -117,12 +120,36 @@ export default async function EventDetailPage({ params }: Props) {
     .eq("id", event.collective_id)
     .maybeSingle();
 
-  // Fetch ticket tiers
-  const { data: tiers } = await admin
+  // Fetch ticket tiers with sold counts
+  const { data: rawTiers } = await admin
     .from("ticket_tiers")
     .select("id, name, price, capacity, sort_order")
     .eq("event_id", eventId)
     .order("sort_order");
+
+  // Get sold ticket counts per tier
+  let tierSoldCounts: Record<string, number> = {};
+  if (rawTiers && rawTiers.length > 0) {
+    const tierIds = rawTiers.map((t) => t.id);
+    const { data: soldData } = await admin
+      .from("tickets")
+      .select("ticket_tier_id")
+      .in("ticket_tier_id", tierIds)
+      .in("status", ["paid", "checked_in"]);
+
+    if (soldData) {
+      for (const ticket of soldData) {
+        tierSoldCounts[ticket.ticket_tier_id] =
+          (tierSoldCounts[ticket.ticket_tier_id] ?? 0) + 1;
+      }
+    }
+  }
+
+  const tiers = rawTiers?.map((t) => ({
+    ...t,
+    price: Number(t.price),
+    sold: tierSoldCounts[t.id] ?? 0,
+  })) ?? [];
 
   const venue = event.venues as unknown as {
     name: string;
@@ -258,6 +285,12 @@ export default async function EventDetailPage({ params }: Props) {
             Referrals
           </Button>
         </Link>
+        <Link href={`/dashboard/events/${event.id}/financials`}>
+          <Button variant="outline" size="sm" className="border-green-400/30 text-green-400 hover:bg-green-400/10 active:scale-95 transition-all duration-200">
+            <Sheet className="mr-2 h-3 w-3" />
+            P&L
+          </Button>
+        </Link>
         <Link href={`/dashboard/events/${event.id}/forecast`}>
           <Button variant="outline" size="sm" className="border-nocturn-teal/30 text-nocturn-teal hover:bg-nocturn-teal/10 active:scale-95 transition-all duration-200">
             <BarChart3 className="mr-2 h-3 w-3" />
@@ -378,46 +411,18 @@ export default async function EventDetailPage({ params }: Props) {
         </CardContent>
       </Card>
 
-      {/* Ticket Tiers */}
-      {tiers && tiers.length > 0 && (
-        <Card className="rounded-2xl transition-colors duration-200">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2 text-lg font-bold">
-              <Ticket className="h-4 w-4 text-nocturn" />
-              Ticket Tiers
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {tiers.map((tier) => (
-                <div
-                  key={tier.id}
-                  className="flex items-center justify-between rounded-xl border border-border p-4 hover:border-nocturn/30 transition-colors duration-200"
-                >
-                  <div className="min-w-0 flex-1 mr-4">
-                    <p className="text-sm font-medium truncate">{tier.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      <Users className="mr-1 inline h-3 w-3" />
-                      {tier.capacity} available
-                    </p>
-                  </div>
-                  <span className="flex shrink-0 items-center text-sm font-semibold text-nocturn">
-                    <DollarSign className="h-3.5 w-3.5" />
-                    {Number(tier.price).toFixed(2)}
-                  </span>
-                </div>
-              ))}
-              {/* Summary */}
-              <div className="flex justify-between border-t border-border pt-4 text-sm">
-                <span className="text-muted-foreground">Total capacity</span>
-                <span className="font-bold">
-                  {tiers.reduce((sum, t) => sum + (t.capacity ?? 0), 0)} tickets
-                </span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Ticket Tiers — Inline Editor */}
+      <Card className="rounded-2xl transition-colors duration-200">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg font-bold">
+            <Ticket className="h-4 w-4 text-nocturn" />
+            Ticket Tiers
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TicketTierEditor eventId={event.id} initialTiers={tiers} />
+        </CardContent>
+      </Card>
 
       {/* External Ticket Data */}
       <ExternalTicketsFormWrapper eventId={event.id} />
@@ -431,7 +436,7 @@ export default async function EventDetailPage({ params }: Props) {
           <CardContent>
             <div
               className="h-48 rounded-xl bg-cover bg-center"
-              style={{ backgroundImage: `url(${event.flyer_url})` }}
+              style={{ backgroundImage: safeBgUrl(event.flyer_url) }}
             />
           </CardContent>
         </Card>

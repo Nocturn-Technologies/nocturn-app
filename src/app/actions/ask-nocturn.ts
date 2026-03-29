@@ -32,6 +32,18 @@ export async function askNocturn(
 
   const sb = createAdminClient();
 
+  // Verify user belongs to this collective
+  const { count: memberCount } = await sb
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) {
+    return "You don't have access to this collective's data.";
+  }
+
   try {
     // Query relevant data in parallel
     const now = new Date();
@@ -144,7 +156,7 @@ export async function askNocturn(
     // Audience stats — email stored in metadata jsonb
     const allTickets = (audienceRes.data || []) as any[];
     const getEmail = (t: { metadata?: Record<string, unknown> | null }) =>
-      (t.metadata?.email as string) ?? (t.metadata?.customer_email as string) ?? null;
+      (t.metadata?.customer_email as string) ?? null;
     const uniqueEmails = new Set(allTickets.map(getEmail).filter(Boolean));
     const emailCounts: Record<string, number> = {};
     for (const t of allTickets) {

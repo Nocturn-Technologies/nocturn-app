@@ -6,6 +6,26 @@ import { Share2, Copy, Check } from "lucide-react";
 export function ShareButton({ url, title }: { url: string; title: string }) {
   const [copied, setCopied] = useState(false);
 
+  async function copyToClipboard() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for browsers that deny clipboard access
+      const textArea = document.createElement("textarea");
+      textArea.value = url;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }
+
   async function handleShare() {
     if (navigator.share) {
       try {
@@ -15,15 +35,7 @@ export function ShareButton({ url, title }: { url: string; title: string }) {
         // User cancelled or share failed, fall through to copy
       }
     }
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  async function handleCopy() {
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    await copyToClipboard();
   }
 
   return (
@@ -33,7 +45,7 @@ export function ShareButton({ url, title }: { url: string; title: string }) {
       </h2>
       <div className="flex gap-2">
         <button
-          onClick={handleCopy}
+          onClick={copyToClipboard}
           className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10"
         >
           {copied ? (

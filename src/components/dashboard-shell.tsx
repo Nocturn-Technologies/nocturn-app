@@ -25,6 +25,7 @@ import {
   Menu,
   X,
   UsersRound,
+  Users,
   Compass,
   Megaphone,
   UserCircle,
@@ -52,6 +53,7 @@ const sidebarNavItems = [
   { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
+  { href: "/dashboard/members", label: "Team", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -68,6 +70,7 @@ const moreDrawerItems = [
   { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
+  { href: "/dashboard/members", label: "Team", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -76,6 +79,7 @@ const promoterSidebarItems = [
   { href: "/dashboard/promote", label: "Promote", icon: Megaphone },
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard/members", label: "Team", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -83,6 +87,11 @@ const promoterMobileTabItems = [
   { href: "/dashboard/promote", label: "Promote", icon: Megaphone },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
+];
+
+const promoterMoreItems = [
+  { href: "/dashboard/discover", label: "Discover", icon: Compass },
+  { href: "/dashboard/members", label: "Team", icon: Users },
 ];
 
 /* ── Marketplace user nav (artists, photographers, venues, etc.) ── */
@@ -94,6 +103,7 @@ const marketplaceSidebarItems = [
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard/members", label: "Team", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -106,6 +116,7 @@ const marketplaceMobileTabItems = [
 
 const marketplaceMoreItems = [
   { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
+  { href: "/dashboard/members", label: "Team", icon: Users },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -140,12 +151,13 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
     localStorage.setItem("nocturn-beta-dismissed", "true");
   };
 
-  const initials = user.fullName
+  const initials = (user.fullName || user.email || "?")
     .split(" ")
+    .filter(Boolean)
     .map((n) => n[0])
     .join("")
     .toUpperCase()
-    .slice(0, 2);
+    .slice(0, 2) || "?";
 
   // Shake to Record — only on mobile
   const handleShake = useCallback(() => {
@@ -172,13 +184,13 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
   }
 
   const activeColl = collectives[0];
-  const isPromoter = activeColl?.role === "promoter";
+  const isPromoter = userType === "promoter";
   const isMarketplace = MARKETPLACE_TYPES.includes(userType ?? "");
 
   // Select nav items based on user type
   const currentSidebarItems = isMarketplace ? marketplaceSidebarItems : isPromoter ? promoterSidebarItems : sidebarNavItems;
   const currentMobileItems = isMarketplace ? marketplaceMobileTabItems : isPromoter ? promoterMobileTabItems : mobileTabItems;
-  const currentMoreItems = isMarketplace ? marketplaceMoreItems : isPromoter ? [] : moreDrawerItems;
+  const currentMoreItems = isMarketplace ? marketplaceMoreItems : isPromoter ? promoterMoreItems : moreDrawerItems;
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";

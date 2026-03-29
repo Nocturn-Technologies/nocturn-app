@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   if (!STRIPE_WEBHOOK_SECRET) {
     console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not configured");
     return NextResponse.json(
-      { error: "Webhook secret is not configured" },
+      { error: "Internal server error" },
       { status: 500 }
     );
   }
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : "Unknown error";
     console.error("[stripe-webhook] Signature verification failed:", message);
     return NextResponse.json(
-      { error: `Webhook signature verification failed: ${message}` },
+      { error: "Webhook signature verification failed" },
       { status: 400 }
     );
   }
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     }
     // Non-retryable error — acknowledge receipt so Stripe doesn't retry
     return NextResponse.json(
-      { error: "Webhook handler failed (non-retryable)", detail: err instanceof Error ? err.message : "Unknown" },
+      { error: "Webhook handler failed (non-retryable)" },
       { status: 200 }
     );
   }
@@ -165,9 +165,24 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     p_quantity: quantity,
   });
   if (!recheck?.success) {
-    console.error(`[webhook] Capacity exceeded for tier ${tierId} — payment ${paymentIntentId} needs manual refund`);
-    // Don't insert tickets but still return 200 to acknowledge webhook
-    // The payment will need manual review/refund
+    console.error(`[webhook] Capacity exceeded for tier ${tierId} — auto-refunding payment ${paymentIntentId}`);
+    // Auto-refund the payment since we can't fulfill the tickets
+    if (paymentIntentId) {
+      try {
+        await getStripe().refunds.create({
+          payment_intent: paymentIntentId,
+          reason: "requested_by_customer",
+          metadata: {
+            reason: "capacity_exceeded",
+            event_id: eventId,
+            tier_id: tierId,
+          },
+        });
+        console.info(`[webhook] Auto-refund issued for PI ${paymentIntentId} (capacity exceeded)`);
+      } catch (refundErr) {
+        console.error(`[webhook] Auto-refund FAILED for PI ${paymentIntentId}:`, refundErr);
+      }
+    }
     return;
   }
 
@@ -279,7 +294,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
           if (event) {
             const venue = event.venues as unknown as { name: string } | null;
-            const { sendTicketConfirmation } = await import("@/app/actions/email");
+            const { sendTicketConfirmation } = await import("@/lib/email/actions");
             await sendTicketConfirmation({
               to: customerEmail,
               eventTitle: event.title || "Event",
@@ -321,6 +336,34 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
+  // If this PaymentIntent originated from a Checkout Session, skip entirely.
+  // The checkout.session.completed handler already created tickets and stored
+  // checkout_session_id in ticket metadata. Processing here would be a duplicate.
+  const checkoutSessionId = metadata.checkoutSessionId ?? null;
+  if (checkoutSessionId) {
+    console.info(
+      `[stripe-webhook] PI ${paymentIntent.id} originated from checkout session ${checkoutSessionId}, skipping (handled by checkout.session.completed)`
+    );
+    return;
+  }
+
+  // Also check if the Stripe PaymentIntent itself is linked to a checkout session
+  // (even if metadata wasn't set, the PI object may reference one)
+  if (paymentIntent.latest_charge) {
+    try {
+      const pi = await getStripe().paymentIntents.retrieve(paymentIntent.id);
+      // Stripe attaches invoice/checkout info — check for any session linkage
+      if ((pi as unknown as Record<string, unknown>).invoice || metadata.checkout_session_id) {
+        console.info(
+          `[stripe-webhook] PI ${paymentIntent.id} linked to a checkout flow, skipping`
+        );
+        return;
+      }
+    } catch {
+      // If retrieval fails, proceed with idempotency check below
+    }
+  }
+
   const eventId = metadata.eventId;
   const tierId = metadata.tierId;
   const quantity = parseInt(metadata.quantity, 10);
@@ -333,25 +376,17 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   const supabase = createAdminClient();
 
-  // Retrieve checkout_session_id if this PI originated from a Checkout Session
-  const checkoutSessionId = metadata.checkoutSessionId ?? null;
-
-  // IDEMPOTENCY CHECK: Prevent duplicate ticket creation using BOTH identifiers
-  const idempotencyFilter = checkoutSessionId
-    ? `stripe_payment_intent_id.eq.${paymentIntent.id},metadata->>checkout_session_id.eq.${checkoutSessionId}`
-    : `stripe_payment_intent_id.eq.${paymentIntent.id}`;
-
+  // IDEMPOTENCY CHECK: Prevent duplicate ticket creation.
+  // Check specifically for this payment_intent_id (no OR logic that could match unrelated tickets).
   const { count: existingCount } = await supabase
     .from("tickets")
     .select("*", { count: "exact", head: true })
     .eq("event_id", eventId)
-    .or(idempotencyFilter);
+    .eq("stripe_payment_intent_id", paymentIntent.id);
 
   if (existingCount && existingCount > 0) {
     console.info(
-      `[stripe-webhook] Idempotency: tickets already exist for PI ${paymentIntent.id}` +
-      (checkoutSessionId ? ` / session ${checkoutSessionId}` : "") +
-      `, skipping duplicate creation`
+      `[stripe-webhook] Idempotency: tickets already exist for PI ${paymentIntent.id}, skipping duplicate creation`
     );
     return;
   }
@@ -383,7 +418,22 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     p_quantity: quantity,
   });
   if (!recheck?.success) {
-    console.error(`[webhook] Capacity exceeded for tier ${tierId} — payment ${paymentIntent.id} needs manual refund`);
+    console.error(`[webhook] Capacity exceeded for tier ${tierId} — auto-refunding PI ${paymentIntent.id}`);
+    // Auto-refund the payment since we can't fulfill the tickets
+    try {
+      await getStripe().refunds.create({
+        payment_intent: paymentIntent.id,
+        reason: "requested_by_customer",
+        metadata: {
+          reason: "capacity_exceeded",
+          event_id: eventId,
+          tier_id: tierId,
+        },
+      });
+      console.info(`[webhook] Auto-refund issued for PI ${paymentIntent.id} (capacity exceeded)`);
+    } catch (refundErr) {
+      console.error(`[webhook] Auto-refund FAILED for PI ${paymentIntent.id}:`, refundErr);
+    }
     return;
   }
 
@@ -405,7 +455,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     referred_by: referrerToken,
     metadata: {
       payment_intent_id: paymentIntent.id,
-      ...(checkoutSessionId && { checkout_session_id: checkoutSessionId }),
+      // No checkout_session_id — this handler only runs for non-checkout PIs
       customer_email: buyerEmail,
       ...(referrerToken && { referrer_token: referrerToken }),
     },
@@ -423,6 +473,9 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   }
 
   console.info(`[stripe-webhook] Created ${quantity} ticket(s) for PI ${paymentIntent.id}`);
+
+  // NOTE: Promo code usage is already incremented atomically during checkout (checkout/route.ts).
+  // Do NOT increment again here — webhook retries would cause double-counting.
 
   // Return background work to run AFTER the response is sent to Stripe
   return {
@@ -461,7 +514,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
           if (event) {
             const venue = event.venues as unknown as { name: string } | null;
-            const { sendTicketConfirmation } = await import("@/app/actions/email");
+            const { sendTicketConfirmation } = await import("@/lib/email/actions");
             await sendTicketConfirmation({
               to: buyerEmail,
               eventTitle: event.title || "Event",

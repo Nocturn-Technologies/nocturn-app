@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
   MessageSquare,
@@ -213,6 +214,7 @@ function SectionHeader({
 
 export default function ChatPage() {
   const supabase = createClient();
+  const router = useRouter();
   const [userId, setUserId] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelWithMeta[]>([]);
   const [collabChannels, setCollabChannels] = useState<ChannelWithMeta[]>([]);
@@ -473,7 +475,7 @@ export default function ChatPage() {
       setSheetOpen(false);
       setCollabQuery("");
       setCollabResults([]);
-      window.location.href = `/dashboard/chat/${result.channelId}`;
+      router.push(`/dashboard/chat/${result.channelId}`);
     }
     setStartingCollab(null);
   }

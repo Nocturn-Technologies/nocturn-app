@@ -39,10 +39,14 @@ export async function enrichEventContent(input: {
   let venueAddress: string | null = null;
 
   if (input.venueName) {
+    const safeName = input.venueName
+      .replace(/\\/g, "\\\\")
+      .replace(/%/g, "\\%")
+      .replace(/_/g, "\\_");
     const { data: venueRaw } = await admin
       .from("venues")
       .select("description, capacity, address, city, metadata")
-      .ilike("name", `%${input.venueName}%`)
+      .ilike("name", `%${safeName}%`)
       .maybeSingle();
     const venue = venueRaw as { description: string | null; capacity: number | null; address: string | null; city: string | null; metadata: Record<string, unknown> | null } | null;
 

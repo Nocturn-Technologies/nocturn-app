@@ -286,6 +286,16 @@ export async function getPostEventInsights(eventId: string): Promise<{
 
   if (!event) return { error: "Event not found", insights: [] };
 
+  // Verify user is a member of this event's collective
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) return { error: "Not a member of this collective", insights: [] };
+
   // Get all events for this collective
   const { data: collectiveEvents } = await admin
     .from("events")

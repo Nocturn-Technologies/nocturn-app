@@ -298,12 +298,17 @@ export default function RecordPage() {
       setIsRecording(true);
 
       if (userId) {
-        const { data: row } = await supabase
+        const { data: row, error: insertError } = await supabase
           .from("recordings")
           .insert({ user_id: userId, status: "recording" })
           .select("id")
-          .single();
-        if (row) currentRecordingIdRef.current = row.id;
+          .maybeSingle();
+        if (insertError) {
+          console.error("[record] Failed to create recording row:", insertError.message);
+          setPermissionError("Failed to start recording. Please try again.");
+        } else if (row) {
+          currentRecordingIdRef.current = row.id;
+        }
       }
     } catch (err: unknown) {
       const msg =

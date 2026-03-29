@@ -59,6 +59,15 @@ export async function generateContentPlaybook(eventId: string): Promise<{
 
   if (!event) return { error: "Event not found", playbook: null };
 
+  // Verify caller is a member of the event's collective
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!count) return { error: "Not authorized", playbook: null };
+
   const eventDate = new Date(event.starts_at);
   const now = new Date();
   const daysUntil = Math.ceil((eventDate.getTime() - now.getTime()) / 86400000);

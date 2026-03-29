@@ -49,6 +49,15 @@ export function FlippableTicket(props: FlippableTicketProps) {
         className="relative w-full cursor-pointer"
         style={{ perspective: "1200px" }}
         onClick={handleFlip}
+        tabIndex={0}
+        role="button"
+        aria-label="Flip ticket"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleFlip();
+          }
+        }}
       >
         <div
           className="relative w-full transition-transform duration-600 ease-in-out"

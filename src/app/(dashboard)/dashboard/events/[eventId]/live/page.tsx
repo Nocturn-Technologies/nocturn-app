@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -93,7 +93,8 @@ function LiveBadge() {
 export default function LiveEventPage() {
   const params = useParams();
   const eventId = params.eventId as string;
-  const supabase = createClient();
+  const supabaseRef = React.useRef(createClient());
+  const supabase = supabaseRef.current;
 
   const [event, setEvent] = useState<EventData | null>(null);
   const [tiers, setTiers] = useState<TicketTier[]>([]);
@@ -166,7 +167,7 @@ export default function LiveEventPage() {
     }
 
     setLoading(false);
-  }, [eventId, supabase]);
+  }, [eventId]);
 
   useEffect(() => {
     fetchData();
@@ -234,7 +235,8 @@ export default function LiveEventPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [eventId, supabase, tiers]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId]);
 
   // ── Capacity calculations ─────────────────────────────────────────────────
 

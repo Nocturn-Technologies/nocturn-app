@@ -82,13 +82,23 @@ export async function getExternalTicketData(eventId: string): Promise<{
 
   const admin = createAdminClient();
 
+  // Verify collective membership
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: event } = await (admin.from("events") as any)
-    .select("metadata")
+    .select("metadata, collective_id")
     .eq("id", eventId)
     .maybeSingle();
 
   if (!event) return null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: membership } = await (admin.from("collective_members") as any)
+    .select("id")
+    .eq("collective_id", (event as { collective_id: string }).collective_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (!membership) return null;
 
   const meta = (event as { metadata: Record<string, unknown> | null }).metadata;
   const ext = meta?.external_tickets as {

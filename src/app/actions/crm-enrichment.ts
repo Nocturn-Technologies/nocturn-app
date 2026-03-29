@@ -13,6 +13,21 @@ export async function enrichAttendeeCRM(eventId: string) {
 
   const admin = createAdminClient();
 
+  // Verify ownership
+  const { data: ev } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (!ev) return { error: "Event not found" };
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", ev.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount) return { error: "Not authorized" };
+
   try {
     // 1. Get all paid/checked-in tickets for this event
     const { data: tickets, error: ticketsError } = await admin
@@ -41,24 +56,35 @@ export async function enrichAttendeeCRM(eventId: string) {
       if (meta.customer_email) emails.push(meta.customer_email);
     }
 
-    // 3. Fetch ALL existing attendee profiles in ONE query (using parameterized .in())
-    let profileQuery = admin
-      .from("attendee_profiles")
-      .select("id, user_id, email, total_events, total_spend, first_event_at, vip_status");
+    // 3. Fetch existing attendee profiles using separate parameterized queries to avoid PostgREST injection
+    let existingProfiles: { id: string; user_id: string | null; email: string | null; total_events: number; total_spend: number; first_event_at: string | null; vip_status: boolean }[] = [];
 
-    // Use Supabase SDK's parameterized .in() to avoid PostgREST filter injection
-    if (userIds.length > 0 && emails.length > 0) {
-      profileQuery = profileQuery.or(`user_id.in.(${userIds.map(id => id.replace(/[(),]/g, "")).join(",")}),email.in.(${emails.map(e => e.replace(/[(),]/g, "")).join(",")})`);
-    } else if (userIds.length > 0) {
-      profileQuery = profileQuery.in("user_id", userIds);
-    } else if (emails.length > 0) {
-      profileQuery = profileQuery.in("email", emails);
+    if (userIds.length > 0) {
+      const { data: profilesByUserId, error: err1 } = await admin
+        .from("attendee_profiles")
+        .select("id, user_id, email, total_events, total_spend, first_event_at, vip_status")
+        .in("user_id", userIds);
+
+      if (err1) return { error: `Profiles query failed: ${err1.message}` };
+      if (profilesByUserId) existingProfiles = profilesByUserId;
     }
 
-    const { data: existingProfiles, error: profilesError } = await profileQuery;
+    if (emails.length > 0) {
+      const { data: profilesByEmail, error: err2 } = await admin
+        .from("attendee_profiles")
+        .select("id, user_id, email, total_events, total_spend, first_event_at, vip_status")
+        .in("email", emails);
 
-    if (profilesError) {
-      return { error: `Profiles query failed: ${profilesError.message}` };
+      if (err2) return { error: `Profiles query failed: ${err2.message}` };
+      if (profilesByEmail) {
+        // Merge, deduplicating by id
+        const existingIds = new Set(existingProfiles.map((p) => p.id));
+        for (const p of profilesByEmail) {
+          if (!existingIds.has(p.id)) {
+            existingProfiles.push(p);
+          }
+        }
+      }
     }
 
     // 4. Index existing profiles by user_id and email for fast lookup

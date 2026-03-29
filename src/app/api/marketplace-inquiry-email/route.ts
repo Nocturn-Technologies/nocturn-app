@@ -68,6 +68,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(to)) {
+    return NextResponse.json(
+      { error: "Invalid recipient email format" },
+      { status: 400 }
+    );
+  }
+
   const escapedSender = escapeHtml(senderName);
   const escapedMessage = escapeHtml(message);
   const escapedProfileName = escapeHtml(profileName);

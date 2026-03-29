@@ -48,13 +48,13 @@ interface EventCardLiveProps {
 }
 
 export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
-  const supabase = createClient();
   const [card, setCard] = useState<EventCardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
+    const supabase = createClient();
     supabase
       .from("event_cards")
       .select("*")
@@ -69,7 +69,7 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
         }
         setLoading(false);
       });
-  }, [channelId, eventId, supabase]);
+  }, [channelId, eventId]);
 
   if (loading) return null;
 

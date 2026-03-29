@@ -266,9 +266,9 @@ async function sendApprovalRequestEmail(userId: string, email: string, name: str
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return;
 
-  const approvalSecret = process.env.CRON_SECRET || "";
+  const approvalSecret = process.env.ADMIN_APPROVAL_SECRET || process.env.CRON_SECRET || "";
   if (!approvalSecret) {
-    console.error("[signup] CRON_SECRET not set — skipping approval request email");
+    console.error("[signup] ADMIN_APPROVAL_SECRET/CRON_SECRET not set — skipping approval request email");
     return;
   }
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";

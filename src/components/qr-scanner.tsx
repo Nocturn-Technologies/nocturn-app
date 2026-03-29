@@ -14,11 +14,16 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
   const pausedRef = useRef(paused);
+  const onScanRef = useRef(onScan);
 
-  // Keep pausedRef in sync so the callback reads the latest value
+  // Keep refs in sync so the callback reads the latest values
   useEffect(() => {
     pausedRef.current = paused;
   }, [paused]);
+
+  useEffect(() => {
+    onScanRef.current = onScan;
+  }, [onScan]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -40,7 +45,7 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
         },
         (decodedText: string) => {
           if (!pausedRef.current) {
-            onScan(decodedText);
+            onScanRef.current(decodedText);
           }
         },
         () => {

@@ -61,6 +61,7 @@ export default function DiscoverPage() {
   const [networkProfiles, setNetworkProfiles] = useState<any[]>([]);
   const [networkConnectionTypes, setNetworkConnectionTypes] = useState<Record<string, string[]>>({});
   const [loadingNetwork, setLoadingNetwork] = useState(false);
+  const [networkLoaded, setNetworkLoaded] = useState(false);
   const [networkQuery, setNetworkQuery] = useState("");
 
   const [loadingDiscover, setLoadingDiscover] = useState(true);
@@ -120,21 +121,30 @@ export default function DiscoverPage() {
     setLoadingNetwork(true);
     setNetworkError(null);
     try {
-      const result = await getNetworkProfiles();
+      // Add timeout to prevent infinite spinner
+      const result = await Promise.race([
+        getNetworkProfiles(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 15000)
+        ),
+      ]);
       setNetworkProfiles(result.profiles);
       setNetworkConnectionTypes(result.connectionTypes);
-    } catch {
+    } catch (err) {
+      console.error("[discover] Network fetch failed:", err);
       setNetworkError("Failed to load your network. Please try again.");
     } finally {
       setLoadingNetwork(false);
+      setNetworkLoaded(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (activeTab === "network" && networkProfiles.length === 0 && !loadingNetwork) {
+    if (activeTab === "network" && !networkLoaded) {
       fetchNetwork();
     }
-  }, [activeTab, networkProfiles.length, loadingNetwork, fetchNetwork]);
+  }, [activeTab, networkLoaded, fetchNetwork]);
 
   // ── Save / unsave handlers ─────────────────────────────────────────────
 

@@ -195,6 +195,16 @@ Three cloud agents run daily (weekdays):
 ## Techstars Deadline
 NYC accelerator application deadline: June 10, 2026. All demo-ready features should be polished by then.
 
+## MCP Tools — When to Use
+- **Context7**: ALWAYS use when working with any library/framework (Next.js, Supabase, Stripe, Tailwind, shadcn, etc.) — fetch up-to-date docs instead of relying on training data
+- **Tavily**: Use for any web research — competitor analysis, market data, finding examples, checking current API docs
+- **Codebase Memory**: Use `search_graph` BEFORE grepping for functions/classes/routes — the knowledge graph is faster and shows relationships. Run `index_repository` if the graph is empty
+- **Playwright MCP**: Use for end-to-end testing and browser automation when verifying UI flows
+- **markdownify**: Use to convert any URL to clean markdown — useful for reading external docs, blog posts, or reference material
+- **Task Master AI**: Use for breaking down complex features into structured task lists with dependencies
+- **Supabase MCP**: Use for all database operations — migrations, SQL queries, type generation, project management
+- **Vercel MCP**: Use for deployment checks, build logs, runtime logs, and project configuration
+
 ## Running Locally
 ```bash
 git clone https://github.com/Nocturn-Technologies/nocturn-app.git

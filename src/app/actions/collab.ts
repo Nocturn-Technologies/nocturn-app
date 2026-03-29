@@ -13,6 +13,15 @@ export async function searchCollectives(query: string, myCollectiveId: string) {
 
   const sb = createAdminClient();
 
+  // Verify caller is a member of myCollectiveId
+  const { count } = await sb
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", myCollectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!count) return [];
+
   let builder = sb
     .from("collectives")
     .select("id, name, slug, logo_url, city, description")
@@ -21,7 +30,7 @@ export async function searchCollectives(query: string, myCollectiveId: string) {
 
   if (query.trim()) {
     // Sanitize input to prevent PostgREST filter injection
-    const sanitized = query.replace(/[%_.,()]/g, "").trim();
+    const sanitized = query.replace(/\\/g, "").replace(/[%_.,()'"`]/g, "").trim();
     if (sanitized) {
       builder = builder.or(`name.ilike.%${sanitized}%,city.ilike.%${sanitized}%,slug.ilike.%${sanitized}%`);
     }
@@ -51,6 +60,11 @@ export async function startCollabChat(myCollectiveId: string, partnerCollectiveI
     .maybeSingle();
 
   if (!membership) return { error: "Not a member of this collective", channelId: null };
+
+  // Only admins and promoters can create collab chats
+  if (membership.role !== "admin" && membership.role !== "promoter") {
+    return { error: "Only admins and promoters can start collab chats", channelId: null };
+  }
 
   // Check if a collab channel already exists between these two
   const { data: existing } = await sb
@@ -128,6 +142,16 @@ export async function getCollabChannels(collectiveId: string) {
   if (!user) return [];
 
   const sb = createAdminClient();
+
+  // Verify user is a member of this collective
+  const { count: memberCount } = await sb
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) return [];
 
   // Channels where we're the owner
   const { data: owned } = await sb

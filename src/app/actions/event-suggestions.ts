@@ -24,6 +24,15 @@ export async function getEventSuggestions(
   try {
   const admin = createAdminClient();
 
+  // Verify caller is a member of the supplied collective
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!count) return [];
+
   // Fetch past events for this collective to analyze patterns
   const { data: pastEvents } = await admin
     .from("events")

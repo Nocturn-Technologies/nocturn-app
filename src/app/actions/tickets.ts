@@ -1,6 +1,7 @@
 "use server";
 
 import QRCode from "qrcode";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
@@ -10,17 +11,37 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"
  * The QR encodes the check-in URL: {APP_URL}/check-in/{ticket_token}
  */
 export async function generateTicketQRCode(ticketToken: string) {
-  const supabase = createAdminClient();
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", qrCode: null };
+
+  const admin = createAdminClient();
 
   // Verify the ticket exists
-  const { data: ticket, error: fetchError } = await supabase
+  const { data: ticket, error: fetchError } = await admin
     .from("tickets")
-    .select("id, qr_code")
+    .select("id, qr_code, user_id, event_id")
     .eq("ticket_token", ticketToken)
     .maybeSingle();
 
   if (fetchError || !ticket) {
     return { error: "Ticket not found", qrCode: null };
+  }
+
+  // Verify caller owns the ticket or is a collective member (check-in staff)
+  if (ticket.user_id !== user.id) {
+    const { data: event } = await admin
+      .from("events")
+      .select("collective_id")
+      .eq("id", ticket.event_id)
+      .maybeSingle();
+    const { count } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", event?.collective_id ?? "")
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!count) return { error: "Not authorized", qrCode: null };
   }
 
   // If QR code already exists, return it
@@ -42,7 +63,7 @@ export async function generateTicketQRCode(ticketToken: string) {
   });
 
   // Persist the QR code to the ticket record
-  const { error: updateError } = await supabase
+  const { error: updateError } = await admin
     .from("tickets")
     .update({ qr_code: qrDataUrl })
     .eq("id", ticket.id);
@@ -78,14 +99,19 @@ export async function generateQRCodesForTokens(tokens: string[]) {
  * Fetch a ticket with its event and tier details by token.
  */
 export async function getTicketByToken(ticketToken: string) {
-  const supabase = createAdminClient();
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", ticket: null };
 
-  const { data: ticket, error } = await supabase
+  const admin = createAdminClient();
+
+  const { data: ticket, error } = await admin
     .from("tickets")
     .select(
       `
       id,
       ticket_token,
+      user_id,
       status,
       price_paid,
       currency,
@@ -119,6 +145,11 @@ export async function getTicketByToken(ticketToken: string) {
     return { error: "Ticket not found", ticket: null };
   }
 
+  // Verify the caller owns this ticket
+  if (ticket.user_id && ticket.user_id !== user.id) {
+    return { error: "Not authorized to view this ticket", ticket: null };
+  }
+
   return { error: null, ticket };
 }
 
@@ -126,16 +157,23 @@ export async function getTicketByToken(ticketToken: string) {
  * Look up tickets by Stripe checkout session ID.
  */
 export async function getTicketsBySessionId(sessionId: string) {
-  const supabase = createAdminClient();
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", tickets: null };
 
-  const { data: tickets, error } = await supabase
+  const admin = createAdminClient();
+
+  const { data: tickets, error } = await admin
     .from("tickets")
-    .select("ticket_token, status, created_at")
+    .select("ticket_token, status, created_at, user_id")
     .filter("metadata->>checkout_session_id", "eq", sessionId);
 
   if (error) {
     return { error: "Failed to look up tickets", tickets: null };
   }
 
-  return { error: null, tickets };
+  // Verify ownership: only return tickets belonging to the authenticated user
+  const userTickets = (tickets ?? []).filter((t) => t.user_id === user.id);
+
+  return { error: null, tickets: userTickets };
 }

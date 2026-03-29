@@ -24,7 +24,8 @@ async function verifyCheckInAccess(eventId: string) {
     .from("collective_members")
     .select("*", { count: "exact", head: true })
     .eq("collective_id", event.collective_id)
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
 
   if (!count || count === 0) return { error: "You don't have access to this event" };
 
@@ -109,21 +110,31 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
     };
   }
 
-  // Perform the check-in
+  // Perform the check-in — atomic guard: only update if still "paid"
+  // Prevents double check-in race condition from concurrent scans
   const now = new Date().toISOString();
-  const { error: updateError } = await supabase
+  const { error: updateError, count: updateCount } = await supabase
     .from("tickets")
     .update({
       status: "checked_in",
       checked_in_at: now,
     })
-    .eq("id", ticket.id);
+    .eq("id", ticket.id)
+    .eq("status", "paid");
 
   if (updateError) {
     console.error("[check-in] Failed to update ticket:", updateError);
     return {
       success: false,
       error: "Failed to check in ticket. Please try again.",
+      ticket: null,
+    };
+  }
+
+  if (updateCount === 0) {
+    return {
+      success: false,
+      error: "Ticket was already checked in by another scanner.",
       ticket: null,
     };
   }

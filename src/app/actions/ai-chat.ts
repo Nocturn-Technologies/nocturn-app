@@ -7,33 +7,61 @@ import { getEventContext, getCollectiveContext } from "@/lib/ai-context";
 
 import { SYSTEM_PROMPTS } from "@/lib/ai-prompts";
 
-const SYSTEM_PROMPT_BASE = SYSTEM_PROMPTS.ops;
+/** Pick the right agent based on channel name and message content */
+function pickAgent(channelName: string, message: string): string {
+  const name = channelName.toLowerCase();
+  const msg = message.toLowerCase();
+
+  // Channel name takes priority
+  if (name.includes("money") || name.includes("finance") || name.includes("settlement")) return SYSTEM_PROMPTS.money;
+  if (name.includes("promo") || name.includes("marketing") || name.includes("flyer")) return SYSTEM_PROMPTS.promo;
+
+  // Fall back to message content heuristics
+  if (msg.includes("revenue") || msg.includes("settlement") || msg.includes("payout") || msg.includes("budget") || msg.includes("bar minimum") || msg.includes("break-even") || msg.includes("profit")) return SYSTEM_PROMPTS.money;
+  if (msg.includes("flyer") || msg.includes("caption") || msg.includes("email campaign") || msg.includes("instagram") || msg.includes("social")) return SYSTEM_PROMPTS.promo;
+
+  return SYSTEM_PROMPTS.ops;
+}
 
 export async function generateChatResponse(
   channelId: string,
   userMessage: string,
   recentMessages?: { role: string; content: string }[]
-): Promise<string> {
+): Promise<{ content: string; messageId: string | null }> {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return "Not authenticated";
+  if (!user) return { content: "Not authenticated", messageId: null };
 
   const sb = createAdminClient();
-  let aiContent: string;
+  let aiContent: string = fallbackResponse(userMessage);
 
   try {
-    // 1. Fetch channel to determine context type
+    // 1. Fetch channel to determine context type + agent
     const { data: channelRaw, error: channelError } = await sb
       .from("channels")
-      .select("id, event_id, collective_id")
+      .select("id, event_id, collective_id, name")
       .eq("id", channelId)
       .maybeSingle();
-    const channel = channelRaw as { id: string; event_id: string | null; collective_id: string | null } | null;
+    const channel = channelRaw as { id: string; event_id: string | null; collective_id: string | null; name: string } | null;
 
     if (channelError || !channel) {
       console.error("Failed to fetch channel:", channelError);
       aiContent = fallbackResponse(userMessage);
     } else {
+      // Verify user is a member of this channel's collective
+      if (channel.collective_id) {
+        const { count: memberCount } = await sb
+          .from("collective_members")
+          .select("*", { count: "exact", head: true })
+          .eq("collective_id", channel.collective_id)
+          .eq("user_id", user.id)
+          .is("deleted_at", null);
+
+        if (!memberCount || memberCount === 0) {
+          return { content: "You don't have access to this channel.", messageId: null };
+        }
+      }
+
       // 2. Fetch the appropriate context
       let contextData: string;
       if (channel.event_id) {
@@ -44,8 +72,9 @@ export async function generateChatResponse(
         contextData = "No event or collective data available for this channel.";
       }
 
-      // 3. Build system prompt with real data
-      const systemPrompt = `${SYSTEM_PROMPT_BASE}\n\n--- DATA ---\n${contextData}`;
+      // 3. Build system prompt with the right agent + real data
+      const agentPrompt = pickAgent(channel.name || "", userMessage);
+      const systemPrompt = `${agentPrompt}\n\n--- DATA ---\n${contextData}`;
 
       // 4. Build conversation history for prompt caching
       const history = (recentMessages ?? [])
@@ -62,19 +91,21 @@ export async function generateChatResponse(
   }
 
   // 6. Insert AI response server-side using admin client (bypasses RLS)
+  let messageId: string | null = null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (sb.from("messages") as any).insert({
+    const { data: insertedMsg } = await (sb.from("messages") as any).insert({
       channel_id: channelId,
       user_id: null,
       content: aiContent,
       type: "ai",
-    });
+    }).select("id").single();
+    if (insertedMsg) messageId = insertedMsg.id;
   } catch (insertErr) {
     console.error("[ai-chat] Failed to insert AI message:", insertErr);
   }
 
-  return aiContent;
+  return { content: aiContent, messageId };
 }
 
 function fallbackResponse(message: string): string {

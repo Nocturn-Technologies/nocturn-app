@@ -62,7 +62,7 @@ export default async function EventChatPage({ params }: Props) {
       type: "event",
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (!newChannel) notFound();
 

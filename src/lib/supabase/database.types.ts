@@ -1051,7 +1051,7 @@ export type Database = {
           stripe_fees: number
           platform_fee: number
           net_revenue: number
-          total_expenses: number
+          total_costs: number
           total_artist_fees: number
           profit: number
           approved_by: string | null
@@ -1068,7 +1068,7 @@ export type Database = {
           stripe_fees?: number
           platform_fee?: number
           net_revenue?: number
-          total_expenses?: number
+          total_costs?: number
           total_artist_fees?: number
           profit?: number
           approved_by?: string | null
@@ -1085,7 +1085,7 @@ export type Database = {
           stripe_fees?: number
           platform_fee?: number
           net_revenue?: number
-          total_expenses?: number
+          total_costs?: number
           total_artist_fees?: number
           profit?: number
           approved_by?: string | null

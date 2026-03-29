@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/send";
 import { createAdminClient } from "@/lib/supabase/config";
+import { rateLimit } from "@/lib/rate-limit";
 
 /**
  * Send an email campaign to all attendees of an event.
@@ -16,6 +17,9 @@ export async function sendCampaignEmail(input: {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", sent: 0 };
+
+  const { success } = rateLimit(`campaign:${user.id}`, 3, 60_000);
+  if (!success) return { error: "Rate limit exceeded. Please wait before sending another campaign.", sent: 0 };
 
   const sb = createAdminClient();
 
@@ -34,6 +38,7 @@ export async function sendCampaignEmail(input: {
     .select("role")
     .eq("user_id", user.id)
     .eq("collective_id", event.collective_id)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!membership) return { error: "Not a member of this collective", sent: 0 };
@@ -56,6 +61,9 @@ export async function sendCampaignEmail(input: {
   if (emails.size === 0) {
     return { error: "No attendees found for this event", sent: 0 };
   }
+
+  // Sanitize subject line: remove newlines and control characters
+  const sanitizedSubject = input.subject.replace(/[\r\n\t\x00-\x1F\x7F]/g, " ").trim();
 
   // Escape HTML to prevent XSS in email content
   function escapeHtml(str: string): string {
@@ -86,7 +94,7 @@ export async function sendCampaignEmail(input: {
         <a href="${appUrl}" style="color: #7B2FF7;">Powered by Nocturn</a>
       </p>
       <p style="color: #71717A; font-size: 11px; margin-top: 32px; text-align: center;">
-        To stop receiving emails, <a href="${appUrl}/unsubscribe?email=${encodeURIComponent(recipientEmail)}" style="color: #7B2FF7; text-decoration: underline;">unsubscribe here</a>.
+        To stop receiving emails, <a href="mailto:support@trynocturn.com?subject=Unsubscribe&body=Please%20unsubscribe%20${encodeURIComponent(recipientEmail)}" style="color: #7B2FF7; text-decoration: underline;">unsubscribe here</a>.
       </p>
     </div>
   `;
@@ -105,7 +113,7 @@ export async function sendCampaignEmail(input: {
       batch.map(async (email) => {
         const result = await sendEmail({
           to: email,
-          subject: input.subject,
+          subject: sanitizedSubject,
           html: buildHtml(email),
         });
         if (!result.error) sent++;

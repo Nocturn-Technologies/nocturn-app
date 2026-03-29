@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
 
       // Send confirmation email
       try {
-        const { sendTicketConfirmation } = await import("@/app/actions/email");
+        const { sendTicketConfirmation } = await import("@/lib/email/actions");
         const { data: eventData } = await supabaseAdmin
           .from("events")
           .select("title, starts_at, venues(name)")
@@ -287,9 +287,10 @@ export async function POST(request: NextRequest) {
         trackServerEvent("ticket_free_registered", { eventId, quantity, buyerEmail })
       ).catch(() => {});
 
-      // Redirect to success page
+      // Redirect to success page with ticket tokens so links are shown
+      const tokenList = insertedTickets?.map((t) => t.ticket_token).join(",") ?? "";
       return NextResponse.json({
-        url: `${APP_URL}/e/success?free=true&tickets=${quantity}`,
+        url: `${APP_URL}/e/success?free=true&tickets=${quantity}&tokens=${encodeURIComponent(tokenList)}`,
       });
     }
 

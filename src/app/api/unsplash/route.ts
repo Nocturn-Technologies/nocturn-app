@@ -82,6 +82,15 @@ export async function GET(req: NextRequest) {
 
 // Track download per Unsplash API guidelines
 export async function POST(req: NextRequest) {
+  // Auth check — prevent unauthenticated API abuse
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   if (!UNSPLASH_ACCESS_KEY) {
     return NextResponse.json({ error: "Not configured" }, { status: 500 });
   }

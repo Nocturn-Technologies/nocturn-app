@@ -106,7 +106,7 @@ export default function VenueMePage() {
         })
         .eq("id", venueId);
     } else {
-      const { data: newVenue } = await supabase
+      const { data: newVenue, error: insertError } = await supabase
         .from("venues")
         .insert({
           name,
@@ -118,7 +118,13 @@ export default function VenueMePage() {
           metadata,
         })
         .select("id")
-        .single();
+        .maybeSingle();
+
+      if (insertError) {
+        console.error("[venue] Insert failed:", insertError.message);
+        setSaving(false);
+        return;
+      }
 
       if (newVenue) {
         setVenueId(newVenue.id);

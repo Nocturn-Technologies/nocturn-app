@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { X } from "lucide-react";
 
 export interface Notification {
@@ -15,37 +15,43 @@ interface NotificationToastProps {
 }
 
 export function NotificationToast({ notifications, onDismiss }: NotificationToastProps) {
-  const [visible, setVisible] = useState<string[]>([]);
-
-  useEffect(() => {
-    // Show up to 3 notifications
-    const toShow = notifications.slice(0, 3).map((n) => n.id);
-    setVisible(toShow);
-  }, [notifications]);
-
-  // Auto-dismiss after 5 seconds
-  useEffect(() => {
-    if (visible.length === 0) return;
-
-    const timers = visible.map((id) =>
-      setTimeout(() => {
-        handleDismiss(id);
-      }, 5000)
-    );
-
-    return () => timers.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+  const timersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   const handleDismiss = useCallback(
     (id: string) => {
-      setVisible((prev) => prev.filter((v) => v !== id));
+      setDismissed((prev) => new Set(prev).add(id));
       onDismiss(id);
+      const timer = timersRef.current.get(id);
+      if (timer) {
+        clearTimeout(timer);
+        timersRef.current.delete(id);
+      }
     },
     [onDismiss]
   );
 
-  const visibleNotifications = notifications.filter((n) => visible.includes(n.id));
+  // Auto-dismiss after 5 seconds — keyed by notification ID, not visible array
+  useEffect(() => {
+    const toShow = notifications.slice(0, 3);
+    for (const n of toShow) {
+      if (dismissed.has(n.id) || timersRef.current.has(n.id)) continue;
+      const timer = setTimeout(() => {
+        handleDismiss(n.id);
+        timersRef.current.delete(n.id);
+      }, 5000);
+      timersRef.current.set(n.id, timer);
+    }
+
+    return () => {
+      timersRef.current.forEach(clearTimeout);
+      timersRef.current.clear();
+    };
+  }, [notifications, dismissed, handleDismiss]);
+
+  const visibleNotifications = notifications
+    .slice(0, 3)
+    .filter((n) => !dismissed.has(n.id));
 
   if (visibleNotifications.length === 0) return null;
 

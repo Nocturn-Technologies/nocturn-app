@@ -3,6 +3,11 @@ import { seedDemoData } from "@/app/actions/seed-demo";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
+  // Block in production — seed data should never be created on the live app
+  if (process.env.NODE_ENV === "production" && !process.env.ALLOW_SEED) {
+    return NextResponse.json({ error: "Seeding is disabled in production" }, { status: 403 });
+  }
+
   // Auth check — only logged-in users can seed
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

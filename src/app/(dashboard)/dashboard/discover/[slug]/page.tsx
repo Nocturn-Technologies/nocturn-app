@@ -1,3 +1,4 @@
+import { safeBgUrl } from "@/lib/utils";
 import { getProfileBySlug } from "@/app/actions/marketplace";
 import { getProfilePerformanceWithCollective } from "@/app/actions/marketplace-analytics";
 import { notFound } from "next/navigation";
@@ -106,7 +107,7 @@ export default async function ProfileDetailPage({
         style={
           profile.cover_photo_url
             ? {
-                backgroundImage: `url(${profile.cover_photo_url})`,
+                backgroundImage: safeBgUrl(profile.cover_photo_url),
                 backgroundSize: "cover",
                 backgroundPosition: "center",
               }

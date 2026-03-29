@@ -50,6 +50,24 @@ export async function getAttendees(collectiveId?: string): Promise<{
 
   const admin = createAdminClient();
 
+  // If explicit collectiveId provided, verify membership
+  if (collectiveId) {
+    const { count: memberCount } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", collectiveId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+
+    if (!memberCount || memberCount === 0) {
+      return {
+        error: "Not a member of this collective",
+        attendees: [],
+        stats: { totalAttendees: 0, repeatAttendees: 0, totalRevenue: 0 },
+      };
+    }
+  }
+
   // Get user's collectives
   const collectiveIds = collectiveId
     ? [collectiveId]
@@ -88,7 +106,8 @@ export async function getAttendees(collectiveId?: string): Promise<{
     .from("tickets")
     .select("id, event_id, price_paid, metadata, created_at")
     .in("event_id", eventIds)
-    .in("status", ["paid", "checked_in"]);
+    .in("status", ["paid", "checked_in"])
+    .limit(10000);
   const tickets = ticketsRaw as { id: string; event_id: string; price_paid: number | null; metadata: Record<string, unknown> | null; created_at: string }[] | null;
 
   if (ticketError) {
@@ -179,6 +198,15 @@ export async function exportAttendeesCSV(collectiveId?: string): Promise<{
     return { error: result.error, csv: "" };
   }
 
+  // Sanitize CSV fields to prevent formula injection
+  function csvSafe(field: string): string {
+    let escaped = field.replace(/"/g, '""');
+    if (/^[=+\-@]/.test(escaped)) {
+      escaped = "'" + escaped;
+    }
+    return `"${escaped}"`;
+  }
+
   const headers = [
     "Email",
     "Events Attended",
@@ -190,17 +218,21 @@ export async function exportAttendeesCSV(collectiveId?: string): Promise<{
   ];
 
   const rows = result.attendees.map((a) => [
-    a.email,
-    a.totalEvents.toString(),
-    a.ticketCount.toString(),
-    `$${a.totalSpent.toFixed(2)}`,
-    a.firstEventDate
-      ? new Date(a.firstEventDate).toLocaleDateString("en-US")
-      : "",
-    a.lastEventDate
-      ? new Date(a.lastEventDate).toLocaleDateString("en-US")
-      : "",
-    `"${a.eventTitles.join(", ")}"`,
+    csvSafe(a.email),
+    csvSafe(a.totalEvents.toString()),
+    csvSafe(a.ticketCount.toString()),
+    csvSafe(`$${a.totalSpent.toFixed(2)}`),
+    csvSafe(
+      a.firstEventDate
+        ? new Date(a.firstEventDate).toLocaleDateString("en-US")
+        : ""
+    ),
+    csvSafe(
+      a.lastEventDate
+        ? new Date(a.lastEventDate).toLocaleDateString("en-US")
+        : ""
+    ),
+    csvSafe(a.eventTitles.join(", ")),
   ]);
 
   const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");

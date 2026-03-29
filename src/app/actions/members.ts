@@ -2,6 +2,38 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { sendEmail } from "@/lib/email/send";
+import { invitationEmail } from "@/lib/email/templates";
+
+async function sendInvitationEmail(
+  collectiveId: string,
+  email: string,
+  role: string,
+  inviterUserId: string
+) {
+  try {
+    const admin = createAdminClient();
+    const [{ data: collective }, { data: inviter }, { data: invitation }] = await Promise.all([
+      admin.from("collectives").select("name").eq("id", collectiveId).maybeSingle(),
+      admin.from("users").select("full_name").eq("id", inviterUserId).maybeSingle(),
+      admin.from("invitations").select("token").eq("collective_id", collectiveId).eq("email", email.toLowerCase().trim()).eq("status", "pending").eq("type", "member").maybeSingle(),
+    ]);
+
+    if (!invitation?.token) return;
+
+    const inviteLink = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/invite/${invitation.token}`;
+    const inviterName = inviter?.full_name || "Someone";
+    const collectiveName = collective?.name || "a collective";
+
+    await sendEmail({
+      to: email,
+      subject: `${inviterName} invited you to ${collectiveName} on Nocturn`,
+      html: invitationEmail(inviterName, collectiveName, role, inviteLink),
+    });
+  } catch (err) {
+    console.error("[members] Failed to send invitation email:", err);
+  }
+}
 
 export async function inviteMember(
   collectiveId: string,
@@ -18,6 +50,18 @@ export async function inviteMember(
   }
 
   const admin = createAdminClient();
+
+  // Verify caller is a member of this collective
+  const { count: callerMemberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!callerMemberCount || callerMemberCount === 0) {
+    return { error: "You don't have permission to invite members to this collective." };
+  }
 
   // Check if user already exists in the users table
   const { data: existingUser } = await admin
@@ -56,11 +100,13 @@ export async function inviteMember(
   }
 
   // User doesn't exist — create a pending invitation
+  // Filter by type='member' since the unique constraint includes type
   const { data: existingInvite } = await admin
     .from("invitations")
     .select("id, status")
     .eq("collective_id", collectiveId)
     .eq("email", email.toLowerCase().trim())
+    .eq("type", "member")
     .maybeSingle();
 
   if (existingInvite) {
@@ -85,6 +131,9 @@ export async function inviteMember(
       return { error: updateError.message };
     }
 
+    // Send invitation email (non-blocking)
+    sendInvitationEmail(collectiveId, email.toLowerCase().trim(), role, user.id);
+
     return { error: null, status: "invited" as const };
   }
 
@@ -99,17 +148,103 @@ export async function inviteMember(
     return { error: inviteError.message };
   }
 
+  // Send invitation email (non-blocking)
+  sendInvitationEmail(collectiveId, email.toLowerCase().trim(), role, user.id);
+
   return { error: null, status: "invited" as const };
 }
 
-export async function getPendingInvitations(collectiveId: string) {
+export async function getTeamMembers() {
+  const supabase = await createServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user)
+    return { error: "Not authenticated", userId: null, collectiveId: null, members: [] };
+
   const admin = createAdminClient();
+
+  // Get user's collective
+  const { data: memberships } = await admin
+    .from("collective_members")
+    .select("collective_id")
+    .eq("user_id", user.id)
+    .is("deleted_at", null)
+    .limit(1);
+
+  if (!memberships || memberships.length === 0)
+    return { error: null, userId: user.id, collectiveId: null, members: [] };
+
+  const collectiveId = memberships[0].collective_id;
+
+  // Load members with user info via admin client (bypasses RLS)
+  const { data: memberRows, error } = await admin
+    .from("collective_members")
+    .select("id, user_id, role, joined_at")
+    .eq("collective_id", collectiveId)
+    .is("deleted_at", null)
+    .order("joined_at");
+
+  if (error)
+    return { error: error.message, userId: user.id, collectiveId, members: [] };
+
+  // Fetch user details separately via admin client
+  const userIds = (memberRows ?? []).map((m) => m.user_id);
+  const { data: users } = userIds.length > 0
+    ? await admin
+        .from("users")
+        .select("id, full_name, email, avatar_url")
+        .in("id", userIds)
+    : { data: [] };
+
+  const userMap = new Map(
+    (users ?? []).map((u) => [u.id, u])
+  );
+
+  const members = (memberRows ?? []).map((m) => ({
+    id: m.id,
+    user_id: m.user_id,
+    role: m.role,
+    joined_at: m.joined_at,
+    user: userMap.get(m.user_id) ?? {
+      full_name: "Unknown",
+      email: "",
+      avatar_url: null,
+    },
+  }));
+
+  return {
+    error: null,
+    userId: user.id,
+    collectiveId,
+    members,
+  };
+}
+
+export async function getPendingInvitations(collectiveId: string) {
+  // Auth check: only collective members can view invitations
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", data: null };
+
+  const admin = createAdminClient();
+
+  // Verify user belongs to this collective
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { error: "Access denied", data: null };
 
   const { data, error } = await admin
     .from("invitations")
-    .select("id, email, role, status, created_at, expires_at, token")
+    .select("id, email, role, status, created_at, expires_at")
     .eq("collective_id", collectiveId)
     .eq("status", "pending")
+    .eq("type", "member")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -130,6 +265,24 @@ export async function cancelInvitation(invitationId: string) {
   }
 
   const admin = createAdminClient();
+
+  // Verify user owns the invitation's collective
+  const { data: invitation } = await admin
+    .from("invitations")
+    .select("collective_id")
+    .eq("id", invitationId)
+    .maybeSingle();
+
+  if (!invitation) return { error: "Invitation not found." };
+
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", invitation.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { error: "You don't have permission." };
 
   const { error } = await admin
     .from("invitations")

@@ -26,6 +26,14 @@ export async function getTicketPricingSuggestion(input: {
 
   const admin = createAdminClient();
 
+  // Verify user belongs to at least one collective
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount || memberCount === 0) return { error: "Not authorized", pricing: null };
+
   // Find events in the same city within ±7 days of the target date
   const targetDate = new Date(input.date);
   const weekBefore = new Date(targetDate.getTime() - 7 * 86400000).toISOString();

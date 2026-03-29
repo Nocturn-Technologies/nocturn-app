@@ -1,5 +1,15 @@
 // Nocturn branded email templates
 
+// Escape HTML entities to prevent XSS in email templates
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function baseTemplate(content: string): string {
   return `<!DOCTYPE html>
 <html>
@@ -54,9 +64,11 @@ export function passwordResetEmail(link: string): string {
 }
 
 export function welcomeEmail(name: string, collectiveName: string): string {
+  const safeName = escapeHtml(name);
+  const safeCollective = escapeHtml(collectiveName);
   return baseTemplate(`
-    <h2>Welcome to Nocturn, ${name}! 🎵</h2>
-    <p>You've just set up <span class="highlight">${collectiveName}</span> on Nocturn — AI that runs the business while you run the night.</p>
+    <h2>Welcome to Nocturn, ${safeName}! 🎵</h2>
+    <p>You've just set up <span class="highlight">${safeCollective}</span> on Nocturn — AI that runs the business while you run the night.</p>
     <div class="card">
       <p style="color: #FAFAFA; margin: 0 0 8px 0; font-weight: 600;">What's next?</p>
       <p style="margin: 0;">→ Create your first event<br>→ Add your team members<br>→ Connect Stripe for payments</p>
@@ -72,12 +84,15 @@ export function invitationEmail(
   role: string,
   inviteLink: string
 ): string {
+  const safeInviter = escapeHtml(inviterName);
+  const safeCollective = escapeHtml(collectiveName);
+  const safeRole = escapeHtml(role);
   return baseTemplate(`
     <h2>You've been invited! 🌙</h2>
-    <p><span class="highlight">${inviterName}</span> invited you to join <span class="highlight">${collectiveName}</span> on Nocturn as a <strong>${role}</strong>.</p>
+    <p><span class="highlight">${safeInviter}</span> invited you to join <span class="highlight">${safeCollective}</span> on Nocturn as a <strong>${safeRole}</strong>.</p>
     <div class="card">
-      <p style="color: #FAFAFA; margin: 0; font-weight: 600;">${collectiveName}</p>
-      <p style="margin: 4px 0 0 0;">Role: ${role}</p>
+      <p style="color: #FAFAFA; margin: 0; font-weight: 600;">${safeCollective}</p>
+      <p style="margin: 4px 0 0 0;">Role: ${safeRole}</p>
     </div>
     <a href="${inviteLink}" class="btn">Accept Invitation →</a>
     <p>This invitation expires in 7 days.</p>
@@ -95,12 +110,12 @@ export function ticketConfirmationEmail(
 ): string {
   return baseTemplate(`
     <h2>You're in! 🎉</h2>
-    <p>Your tickets for <span class="highlight">${eventTitle}</span> are confirmed.</p>
+    <p>Your tickets for <span class="highlight">${escapeHtml(eventTitle)}</span> are confirmed.</p>
     <div class="card">
-      <p style="color: #FAFAFA; margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">${eventTitle}</p>
-      <p style="margin: 0;">📅 ${eventDate}</p>
-      <p style="margin: 4px 0;">📍 ${venueName}</p>
-      <p style="margin: 4px 0;">🎫 ${quantity}× ${tierName}</p>
+      <p style="color: #FAFAFA; margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">${escapeHtml(eventTitle)}</p>
+      <p style="margin: 0;">📅 ${escapeHtml(eventDate)}</p>
+      <p style="margin: 4px 0;">📍 ${escapeHtml(venueName)}</p>
+      <p style="margin: 4px 0;">🎫 ${quantity}× ${escapeHtml(tierName)}</p>
       <p style="margin: 8px 0 0 0; color: #7B2FF7; font-weight: 600; font-size: 18px;">${totalPrice}</p>
     </div>
     <a href="${ticketLink}" class="btn">View Your Ticket & QR Code →</a>
@@ -118,9 +133,9 @@ export function settlementReportEmail(
 ): string {
   return baseTemplate(`
     <h2>Settlement Report 💰</h2>
-    <p>Here's the financial breakdown for <span class="highlight">${eventTitle}</span>.</p>
+    <p>Here's the financial breakdown for <span class="highlight">${escapeHtml(eventTitle)}</span>.</p>
     <div class="card">
-      <p style="color: #FAFAFA; margin: 0 0 12px 0; font-weight: 600;">${eventTitle} — ${eventDate}</p>
+      <p style="color: #FAFAFA; margin: 0 0 12px 0; font-weight: 600;">${escapeHtml(eventTitle)} — ${escapeHtml(eventDate)}</p>
       <p style="margin: 0;">🎫 Tickets sold: <strong>${ticketsSold}</strong></p>
       <p style="margin: 4px 0;">💵 Gross revenue: <strong>${grossRevenue}</strong></p>
       <p style="margin: 8px 0 0 0; color: #7B2FF7; font-weight: 600; font-size: 20px;">Net profit: ${netProfit}</p>
@@ -136,12 +151,12 @@ export function postEventRecapEmail(
   customBody: string
 ): string {
   return baseTemplate(`
-    <h2>${eventTitle} — What a night! 🌙</h2>
-    <p>${customBody}</p>
+    <h2>${escapeHtml(eventTitle)} — What a night! 🌙</h2>
+    <p>${escapeHtml(customBody)}</p>
     <div class="card">
       <p style="color: #FAFAFA; margin: 0;">🎉 ${attendeeCount} people came through</p>
     </div>
-    <p>Follow <span class="highlight">${collectiveName}</span> for the next one.</p>
+    <p>Follow <span class="highlight">${escapeHtml(collectiveName)}</span> for the next one.</p>
     <a href="https://app.trynocturn.com" class="btn">See What's Next →</a>
   `);
 }
@@ -157,13 +172,13 @@ export function dayOfHypeEmail(
 ): string {
   return baseTemplate(`
     <h2>Tonight. 🔥</h2>
-    <p><span class="highlight">${eventTitle}</span> is happening today. Here's everything you need.</p>
+    <p><span class="highlight">${escapeHtml(eventTitle)}</span> is happening today. Here's everything you need.</p>
     <div class="card">
-      <p style="color: #FAFAFA; margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">${eventTitle}</p>
-      <p style="margin: 0;">📍 ${venueName}</p>
-      <p style="margin: 4px 0;">🚪 Doors: ${doorsTime}</p>
-      <p style="margin: 4px 0;">🎵 Show: ${showTime}</p>
-      ${dressCode ? `<p style="margin: 4px 0;">👔 Dress code: ${dressCode}</p>` : ""}
+      <p style="color: #FAFAFA; margin: 0 0 12px 0; font-size: 18px; font-weight: 600;">${escapeHtml(eventTitle)}</p>
+      <p style="margin: 0;">📍 ${escapeHtml(venueName)}</p>
+      <p style="margin: 4px 0;">🚪 Doors: ${escapeHtml(doorsTime)}</p>
+      <p style="margin: 4px 0;">🎵 Show: ${escapeHtml(showTime)}</p>
+      ${dressCode ? `<p style="margin: 4px 0;">👔 Dress code: ${escapeHtml(dressCode)}</p>` : ""}
     </div>
     <a href="${ticketLink}" class="btn">View Your Ticket →</a>
     <p style="color: #71717A; font-size: 13px;">Have your QR code ready at the door. See you tonight. 🌙</p>
@@ -178,13 +193,13 @@ export function referralNudgeEmail(
   collectiveName: string
 ): string {
   return baseTemplate(`
-    <h2>You're in, ${buyerName}! One more thing.</h2>
-    <p>Know someone who'd be into <span class="highlight">${eventTitle}</span>? Share your personal link — every friend who buys through you gets tracked.</p>
+    <h2>You're in, ${escapeHtml(buyerName)}! One more thing.</h2>
+    <p>Know someone who'd be into <span class="highlight">${escapeHtml(eventTitle)}</span>? Share your personal link — every friend who buys through you gets tracked.</p>
     <div class="card">
       <p style="color: #FAFAFA; margin: 0 0 8px 0; font-weight: 600;">Your referral link</p>
       <p style="margin: 0; color: #7B2FF7; word-break: break-all; font-size: 13px;">${referralLink}</p>
     </div>
-    <p style="color: #A1A1AA;">Bring 5 friends and you earn Ambassador status from <span class="highlight">${collectiveName}</span>. Just share the link — we handle the rest.</p>
+    <p style="color: #A1A1AA;">Bring 5 friends and you earn Ambassador status from <span class="highlight">${escapeHtml(collectiveName)}</span>. Just share the link — we handle the rest.</p>
   `);
 }
 
@@ -200,7 +215,7 @@ export function organizerCountdownEmail(
   const percent = totalCapacity > 0 ? Math.round((ticketsSold / totalCapacity) * 100) : 0;
   return baseTemplate(`
     <h2>48 hours out. 📊</h2>
-    <p><span class="highlight">${eventTitle}</span> is ${eventDate}. Here's where you stand.</p>
+    <p><span class="highlight">${escapeHtml(eventTitle)}</span> is ${escapeHtml(eventDate)}. Here's where you stand.</p>
     <div class="card">
       <p style="color: #FAFAFA; margin: 0 0 4px 0; font-weight: 600;">🎫 ${ticketsSold} / ${totalCapacity} tickets sold (${percent}%)</p>
       <p style="margin: 0; color: #7B2FF7; font-weight: 600; font-size: 18px;">💰 ${revenue} revenue</p>
@@ -221,7 +236,7 @@ export function ticketMilestoneEmail(
 ): string {
   return baseTemplate(`
     <h2>${milestone} 🎉</h2>
-    <p><span class="highlight">${eventTitle}</span> just hit <strong>${ticketsSold}</strong> tickets sold out of ${totalCapacity}.</p>
+    <p><span class="highlight">${escapeHtml(eventTitle)}</span> just hit <strong>${ticketsSold}</strong> tickets sold out of ${totalCapacity}.</p>
     <div class="card">
       <p style="color: #FAFAFA; margin: 0; font-size: 32px; font-weight: 800; text-align: center;">${Math.round((ticketsSold / totalCapacity) * 100)}%</p>
       <p style="margin: 8px 0 0 0; text-align: center;">capacity sold</p>
@@ -237,7 +252,7 @@ export function inactiveNudgeEmail(
   lastEventDate: string | null
 ): string {
   return baseTemplate(`
-    <h2>Hey ${operatorName} — we miss ${collectiveName}. 🌙</h2>
+    <h2>Hey ${escapeHtml(operatorName)} — we miss ${escapeHtml(collectiveName)}. 🌙</h2>
     <p>${lastEventDate ? `Your last event was ${lastEventDate}.` : "You haven't created an event yet."} The scene needs you.</p>
     <div class="card">
       <p style="color: #FAFAFA; margin: 0 0 8px 0; font-weight: 600;">Quick ideas to get back in:</p>

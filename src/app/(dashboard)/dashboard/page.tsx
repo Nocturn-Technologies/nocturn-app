@@ -110,11 +110,11 @@ export default async function DashboardPage() {
         .in("events.collective_id", collectiveIds)
         .in("status", ["paid", "checked_in"]),
 
-      // Financial pulse
-      getFinancialPulse(),
+      // Financial pulse (catch individually to prevent entire page crash)
+      getFinancialPulse().catch((err) => { console.error("[dashboard] getFinancialPulse failed:", err); return null; }),
 
-      // Action items / alerts
-      getActionItems(),
+      // Action items / alerts (catch individually to prevent entire page crash)
+      getActionItems().catch((err) => { console.error("[dashboard] getActionItems failed:", err); return [] as Awaited<ReturnType<typeof getActionItems>>; }),
     ]);
 
     upcomingCount = upcomingResult.count ?? 0;

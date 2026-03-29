@@ -43,11 +43,13 @@ export default function MarketplaceOnboardingPage() {
   // Fetch user info on mount
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) {
-        setFullName(user.user_metadata?.full_name ?? "");
-        setDisplayName(user.user_metadata?.full_name ?? "");
-        setUserType(user.user_metadata?.user_type ?? "artist");
+      if (!user) {
+        router.push("/login");
+        return;
       }
+      setFullName(user.user_metadata?.full_name ?? "");
+      setDisplayName(user.user_metadata?.full_name ?? "");
+      setUserType(user.user_metadata?.user_type ?? "artist");
     });
   }, [supabase]);
 
@@ -79,6 +81,8 @@ export default function MarketplaceOnboardingPage() {
   }
 
   async function handleCreate() {
+    if (!displayName.trim() || !city.trim()) return;
+
     setSaving(true);
     setError(null);
 
@@ -366,7 +370,7 @@ export default function MarketplaceOnboardingPage() {
                 </Button>
 
                 <button
-                  onClick={handleCreate}
+                  onClick={() => router.push("/dashboard")}
                   disabled={saving}
                   className="w-full text-xs text-muted-foreground hover:underline"
                 >

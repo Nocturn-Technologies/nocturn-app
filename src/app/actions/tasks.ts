@@ -3,35 +3,39 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
-// Verify user owns the event via collective membership
-async function verifyEventAccess(eventId: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", userId: null };
-
+/** Verify user has access to an event via collective membership */
+async function verifyEventAccess(userId: string, eventId: string): Promise<boolean> {
   const admin = createAdminClient();
   const { data: event } = await admin
     .from("events")
     .select("collective_id")
     .eq("id", eventId)
     .maybeSingle();
-
-  if (!event) return { error: "Event not found", userId: null };
-
+  if (!event) return false;
   const { count } = await admin
     .from("collective_members")
     .select("*", { count: "exact", head: true })
     .eq("collective_id", event.collective_id)
-    .eq("user_id", user.id)
+    .eq("user_id", userId)
     .is("deleted_at", null);
+  return (count ?? 0) > 0;
+}
 
-  if (!count || count === 0) return { error: "You don't have access to this event", userId: null };
-
-  return { error: null, userId: user.id };
+/** Auth + ownership check. Returns userId if authorized, null otherwise. */
+async function authAndVerifyEvent(eventId: string): Promise<string | null> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  if (!(await verifyEventAccess(user.id, eventId))) return null;
+  return user.id;
 }
 
 // Get playbook templates
 export async function getPlaybookTemplates() {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
   const admin = createAdminClient();
   const { data } = await admin
     .from("playbook_templates")
@@ -45,6 +49,8 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
+
+  if (!(await verifyEventAccess(user.id, eventId))) return { error: "Not authorized" };
 
   const admin = createAdminClient();
 
@@ -118,8 +124,8 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
 
 // Get tasks for an event
 export async function getEventTasks(eventId: string) {
-  const access = await verifyEventAccess(eventId);
-  if (access.error) return [];
+  const userId = await authAndVerifyEvent(eventId);
+  if (!userId) return [];
 
   const admin = createAdminClient();
 
@@ -146,6 +152,8 @@ export async function createEventTask(input: {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
+
+  if (!(await verifyEventAccess(user.id, input.eventId))) return { error: "Not authorized" };
 
   const admin = createAdminClient();
 
@@ -179,6 +187,10 @@ export async function updateTaskStatus(taskId: string, status: string) {
   if (!user) return { error: "Not authenticated" };
 
   const admin = createAdminClient();
+
+  // Verify ownership via task's event
+  const { data: taskCheck } = await admin.from("event_tasks").select("event_id").eq("id", taskId).maybeSingle();
+  if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
 
   const updates: Record<string, unknown> = {
     status,
@@ -217,6 +229,10 @@ export async function assignTask(taskId: string, userId: string | null) {
 
   const admin = createAdminClient();
 
+  // Verify ownership via task's event
+  const { data: taskCheck } = await admin.from("event_tasks").select("event_id").eq("id", taskId).maybeSingle();
+  if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
+
   const { data: task, error } = await admin
     .from("event_tasks")
     .update({ assigned_to: userId, updated_at: new Date().toISOString() })
@@ -249,13 +265,17 @@ export async function postEventMessage(eventId: string, content: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
+  if (!(await verifyEventAccess(user.id, eventId))) return { error: "Not authorized" };
+
   const admin = createAdminClient();
+
+  const sanitizedContent = content.trim().slice(0, 5000);
 
   const { error } = await admin.from("event_activity").insert({
     event_id: eventId,
     user_id: user.id,
     type: "message",
-    content,
+    content: sanitizedContent,
   });
 
   if (error) return { error: error.message };
@@ -264,8 +284,8 @@ export async function postEventMessage(eventId: string, content: string) {
 
 // Get event activity feed
 export async function getEventActivity(eventId: string) {
-  const access = await verifyEventAccess(eventId);
-  if (access.error) return [];
+  const userId = await authAndVerifyEvent(eventId);
+  if (!userId) return [];
 
   const admin = createAdminClient();
 
@@ -281,6 +301,12 @@ export async function getEventActivity(eventId: string) {
 
 // Generate AI task suggestions based on event state
 export async function getAITaskSuggestions(eventId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  if (!(await verifyEventAccess(user.id, eventId))) return [];
+
   const admin = createAdminClient();
 
   const { data: event } = await admin

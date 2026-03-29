@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { User, MapPin, Heart, MessageSquare } from "lucide-react";
 import { TYPE_BADGE_COLORS, TYPE_LABELS_SHORT } from "@/lib/marketplace-constants";
+import { safeBgUrl } from "@/lib/utils";
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ export function ProfileCard({
           style={
             profile.cover_photo_url
               ? {
-                  backgroundImage: `url(${profile.cover_photo_url})`,
+                  backgroundImage: safeBgUrl(profile.cover_photo_url as string),
                   backgroundSize: "cover",
                   backgroundPosition: "center",
                 }

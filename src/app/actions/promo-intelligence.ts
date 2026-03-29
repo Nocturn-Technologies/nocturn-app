@@ -54,6 +54,15 @@ export async function analyzeTicketSalesPatterns(
 
   const admin = createAdminClient();
 
+  // Verify caller is a member of the supplied collective
+  const { count: memberCheck } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCheck) return { error: "Not authorized", data: null };
+
   // Get all events for this collective
   const { data: events, error: eventsError } = await admin
     .from("events")
@@ -166,6 +175,15 @@ export async function generatePromoSchedule(
     return { error: "Event not found.", data: null };
   }
 
+  // Verify caller is a member of the event's collective
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount) return { error: "Not authorized", data: null };
+
   // Get sales patterns for optimal posting time
   const patternsResult = await analyzeTicketSalesPatterns(event.collective_id);
   const bestHour = patternsResult.data?.bestHourToPost ?? 19; // default 7 PM
@@ -261,6 +279,15 @@ export async function getAudienceInsights(
   }
 
   const admin = createAdminClient();
+
+  // Verify caller is a member of the supplied collective
+  const { count } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!count) return { error: "Not authorized", data: null };
 
   // Get all events for this collective, ordered by date
   const { data: events, error: eventsError } = await admin

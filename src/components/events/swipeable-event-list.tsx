@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { SwipeableCard } from "@/components/swipeable-card";
-import { publishEvent } from "@/app/actions/events";
+import { publishEvent, cancelEvent } from "@/app/actions/events";
 import { haptic } from "@/lib/haptics";
 import { MapPin, Clock } from "lucide-react";
 
@@ -69,7 +69,8 @@ export function SwipeableEventList({ events }: { events: EventItem[] }) {
                 Cancel
               </button>
               <button
-                onClick={() => {
+                onClick={async () => {
+                  await cancelEvent(archiveConfirm);
                   setArchiveConfirm(null);
                   router.refresh();
                 }}

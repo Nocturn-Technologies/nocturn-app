@@ -162,7 +162,7 @@ export async function getProfileBySlug(slug: string) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data } = await (admin.from("marketplace_profiles") as any)
-    .select("*, users(email, full_name)")
+    .select("id, slug, user_type, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, created_at, users(full_name)")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -193,7 +193,7 @@ export async function searchProfiles(filters: {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query = (admin.from("marketplace_profiles") as any)
-    .select("*", { count: "exact" })
+    .select("id, slug, user_type, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, created_at", { count: "exact" })
     .eq("is_active", true)
     .order("created_at", { ascending: false })
     .range(from, to);
@@ -217,6 +217,7 @@ export async function searchProfiles(filters: {
   const { data, count, error } = await query;
 
   if (error) {
+    console.error("[marketplace] searchProfiles error:", error.message, error.details);
     return { profiles: [], total: 0 };
   }
 
@@ -306,10 +307,15 @@ export async function getSavedProfiles(): Promise<{
   const admin = createAdminClient();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (admin.from("marketplace_saved") as any)
+  const { data, error } = await (admin.from("marketplace_saved") as any)
     .select("profile_id, marketplace_profiles(*)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[marketplace] getSavedProfiles error:", error.message);
+    return { profiles: [], savedIds: [] };
+  }
 
   const rows = (data ?? []) as {
     profile_id: string;
@@ -333,93 +339,85 @@ export async function getNetworkProfiles(): Promise<{
   profiles: Record<string, unknown>[];
   connectionTypes: Record<string, string[]>;
 }> {
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { profiles: [], connectionTypes: {} };
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { profiles: [], connectionTypes: {} };
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
 
-  // 1. Saved profiles
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: savedRows } = await (admin.from("marketplace_saved") as any)
-    .select("profile_id")
-    .eq("user_id", user.id);
+    // Run all initial queries in parallel
+    const [savedResult, sentResult, myProfileResult] = await Promise.all([
+      admin.from("marketplace_saved").select("profile_id").eq("user_id", user.id),
+      admin.from("marketplace_inquiries").select("to_profile_id").eq("from_user_id", user.id),
+      admin.from("marketplace_profiles").select("id").eq("user_id", user.id).maybeSingle(),
+    ]);
 
-  const savedProfileIds = new Set<string>(
-    (savedRows ?? []).map((r: { profile_id: string }) => r.profile_id)
-  );
+    const savedProfileIds = new Set<string>(
+      (savedResult.data ?? []).map((r: { profile_id: string }) => r.profile_id)
+    );
 
-  // 2. Inquiries sent by user (people you've contacted)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: sentInquiries } = await (admin.from("marketplace_inquiries") as any)
-    .select("to_profile_id")
-    .eq("from_user_id", user.id);
+    const contactedProfileIds = new Set<string>(
+      (sentResult.data ?? []).map((r: { to_profile_id: string }) => r.to_profile_id)
+    );
 
-  const contactedProfileIds = new Set<string>(
-    (sentInquiries ?? []).map((r: { to_profile_id: string }) => r.to_profile_id)
-  );
+    // Inquiries received by user
+    const receivedFromProfileIds = new Set<string>();
+    if (myProfileResult.data) {
+      const { data: receivedInquiries } = await admin
+        .from("marketplace_inquiries")
+        .select("from_user_id")
+        .eq("to_profile_id", myProfileResult.data.id);
 
-  // 3. Inquiries received by user (people who contacted you)
-  // First get user's profile id
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: myProfile } = await (admin.from("marketplace_profiles") as any)
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
+      const fromUserIds = (receivedInquiries ?? []).map((r: { from_user_id: string }) => r.from_user_id);
+      if (fromUserIds.length > 0) {
+        const { data: fromProfiles } = await admin
+          .from("marketplace_profiles")
+          .select("id")
+          .in("user_id", fromUserIds);
 
-  const receivedFromUserIds = new Set<string>();
-  if (myProfile) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: receivedInquiries } = await (admin.from("marketplace_inquiries") as any)
-      .select("from_user_id")
-      .eq("to_profile_id", myProfile.id);
-
-    // Get profile ids for those users
-    const fromUserIds = (receivedInquiries ?? []).map((r: { from_user_id: string }) => r.from_user_id);
-    if (fromUserIds.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: fromProfiles } = await (admin.from("marketplace_profiles") as any)
-        .select("id")
-        .in("user_id", fromUserIds);
-
-      (fromProfiles ?? []).forEach((p: { id: string }) => receivedFromUserIds.add(p.id));
+        (fromProfiles ?? []).forEach((p: { id: string }) => receivedFromProfileIds.add(p.id));
+      }
     }
-  }
 
-  // Combine all unique profile IDs
-  const allProfileIds = new Set<string>([
-    ...savedProfileIds,
-    ...contactedProfileIds,
-    ...receivedFromUserIds,
-  ]);
+    // Combine all unique profile IDs
+    const allProfileIds = new Set<string>([
+      ...savedProfileIds,
+      ...contactedProfileIds,
+      ...receivedFromProfileIds,
+    ]);
 
-  if (allProfileIds.size === 0) {
+    if (allProfileIds.size === 0) {
+      return { profiles: [], connectionTypes: {} };
+    }
+
+    // Fetch full profiles
+    const { data: profiles } = await admin
+      .from("marketplace_profiles")
+      .select("*")
+      .in("id", Array.from(allProfileIds))
+      .order("display_name");
+
+    // Build connection type labels
+    const connectionTypes: Record<string, string[]> = {};
+    for (const id of allProfileIds) {
+      const types: string[] = [];
+      if (savedProfileIds.has(id)) types.push("saved");
+      if (contactedProfileIds.has(id)) types.push("contacted");
+      if (receivedFromProfileIds.has(id)) types.push("contacted you");
+      connectionTypes[id] = types;
+    }
+
+    return {
+      profiles: (profiles ?? []) as Record<string, unknown>[],
+      connectionTypes,
+    };
+  } catch (err) {
+    console.error("[marketplace] getNetworkProfiles failed:", err);
     return { profiles: [], connectionTypes: {} };
   }
-
-  // Fetch full profiles
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profiles } = await (admin.from("marketplace_profiles") as any)
-    .select("*")
-    .in("id", Array.from(allProfileIds))
-    .order("display_name");
-
-  // Build connection type labels
-  const connectionTypes: Record<string, string[]> = {};
-  for (const id of allProfileIds) {
-    const types: string[] = [];
-    if (savedProfileIds.has(id)) types.push("saved");
-    if (contactedProfileIds.has(id)) types.push("contacted");
-    if (receivedFromUserIds.has(id)) types.push("contacted you");
-    connectionTypes[id] = types;
-  }
-
-  return {
-    profiles: (profiles ?? []) as Record<string, unknown>[],
-    connectionTypes,
-  };
 }
 
 export async function sendInquiry(data: {

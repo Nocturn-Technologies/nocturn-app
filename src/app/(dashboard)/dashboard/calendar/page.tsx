@@ -56,7 +56,7 @@ function getDayScore(
 
 export default function CalendarHeatMap() {
   const supabase = createClient();
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(() => new Date());
   const [events, setEvents] = useState<EventDay[]>([]);
   const [yourCollectiveIds, setYourCollectiveIds] = useState<string[]>([]);
   const [allEvents, setAllEvents] = useState<Array<{ starts_at: string; title: string; collective_id: string; collectives: { name: string } | null }>>([]);
@@ -101,7 +101,8 @@ export default function CalendarHeatMap() {
     // Group by date
     const byDate: Record<string, EventDay> = {};
     for (const ev of eventData ?? []) {
-      const dateKey = ev.starts_at.slice(0, 10);
+      const eventDate = new Date(ev.starts_at);
+      const dateKey = `${eventDate.getFullYear()}-${String(eventDate.getMonth() + 1).padStart(2, "0")}-${String(eventDate.getDate()).padStart(2, "0")}`;
       if (!byDate[dateKey]) {
         byDate[dateKey] = { date: dateKey, count: 0, events: [] };
       }

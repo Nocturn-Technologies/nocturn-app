@@ -51,6 +51,13 @@ export default function CheckInScannerPage() {
     return () => clearInterval(interval);
   }, [eventId]);
 
+  // Clean up scan result timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
   const handleScan = useCallback(
     async (decodedText: string) => {
       // Prevent duplicate scans of the same code in quick succession

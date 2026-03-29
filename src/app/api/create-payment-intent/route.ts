@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { eventId, tierId, quantity, buyerEmail } = body;
+    const { eventId, tierId, quantity, buyerEmail, promoCode } = body;
     // Validate referrerToken as UUID to prevent FK violations downstream
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const referrerToken = body.referrerToken && uuidRegex.test(body.referrerToken) ? body.referrerToken : undefined;
@@ -93,7 +93,55 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const unitAmountCents = Math.round(Number(tier.price) * 100);
+    // Apply promo code discount if provided
+    const basePriceCents = Math.round(Number(tier.price) * 100);
+    let discountCents = 0;
+    let promoId: string | null = null;
+    let validatedPromoCode: string | null = null;
+
+    if (promoCode) {
+      const { data: promo } = await supabase
+        .from("promo_codes")
+        .select("id, code, discount_type, discount_value, max_uses, current_uses, expires_at")
+        .eq("event_id", eventId)
+        .eq("is_active", true)
+        .ilike("code", promoCode)
+        .maybeSingle();
+
+      if (promo) {
+        const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
+
+        if (!isExpired) {
+          // Atomic claim: increment current_uses and check max_uses in one query
+          const claimQuery = promo.max_uses !== null
+            ? supabase
+                .from("promo_codes")
+                .update({ current_uses: (promo.current_uses ?? 0) + quantity })
+                .eq("id", promo.id)
+                .lte("current_uses", promo.max_uses - quantity)
+                .select("id")
+            : supabase
+                .from("promo_codes")
+                .update({ current_uses: (promo.current_uses ?? 0) + quantity })
+                .eq("id", promo.id)
+                .select("id");
+
+          const { data: claimResult } = await claimQuery;
+
+          if (claimResult && claimResult.length > 0) {
+            promoId = promo.id;
+            validatedPromoCode = promo.code;
+            if (promo.discount_type === "percentage") {
+              discountCents = Math.round(basePriceCents * (Number(promo.discount_value) / 100));
+            } else {
+              discountCents = Math.round(Number(promo.discount_value) * 100);
+            }
+          }
+        }
+      }
+    }
+
+    const unitAmountCents = Math.max(basePriceCents - discountCents, 0);
     if (unitAmountCents < 50) {
       return NextResponse.json(
         { error: "Ticket price must be at least $0.50" },
@@ -115,7 +163,10 @@ export async function POST(request: NextRequest) {
         tierId,
         quantity: String(quantity),
         buyerEmail,
+        ticketPriceCents: String(unitAmountCents),
         ...(referrerToken && { referrerToken }),
+        ...(promoId && { promoId, promoCode: validatedPromoCode ?? "" }),
+        ...(discountCents > 0 && { discountCents: String(discountCents) }),
       },
       automatic_payment_methods: { enabled: true },
     });

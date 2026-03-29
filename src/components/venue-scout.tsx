@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { X, Star, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { saveVenueScoutNotes } from "@/app/actions/venue-scout";
@@ -17,6 +17,16 @@ export function VenueScout({ venuePlaceId, venueName, onClose }: VenueScoutProps
   const [vibeNotes, setVibeNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  const handleClose = useCallback(() => onClose(), [onClose]);
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") handleClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleClose]);
 
   async function handleSave() {
     if (saving) return;
@@ -44,6 +54,8 @@ export function VenueScout({ venuePlaceId, venueName, onClose }: VenueScoutProps
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
         className="relative w-full max-w-md rounded-t-2xl bg-card p-6 shadow-2xl sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -55,6 +67,7 @@ export function VenueScout({ venuePlaceId, venueName, onClose }: VenueScoutProps
           </div>
           <button
             onClick={onClose}
+            aria-label="Close scout report"
             className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />

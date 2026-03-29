@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { safeBgUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -505,7 +506,7 @@ export default function EventDesignPage() {
               <div className="space-y-3">
                 <div
                   className="mx-auto h-64 w-full max-w-sm rounded-xl bg-cover bg-center border border-border"
-                  style={{ backgroundImage: `url(${flyerUrl})` }}
+                  style={{ backgroundImage: safeBgUrl(flyerUrl) }}
                 />
                 <button
                   onClick={() => setFlyerUrl("")}
@@ -909,7 +910,7 @@ export default function EventDesignPage() {
                 {flyerUrl ? (
                   <div
                     className="relative h-44 w-full bg-cover bg-center"
-                    style={{ backgroundImage: `url(${flyerUrl})` }}
+                    style={{ backgroundImage: safeBgUrl(flyerUrl) }}
                   >
                     <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/40 to-transparent" />
                   </div>

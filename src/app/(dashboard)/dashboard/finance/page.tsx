@@ -4,8 +4,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DollarSign,
-  TrendingUp,
-  TrendingDown,
   AlertTriangle,
   CheckCircle2,
   Clock,
@@ -16,22 +14,26 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/config";
-
-function formatMoney(amount: number): string {
-  if (amount >= 10000) return `$${(amount / 1000).toFixed(1)}k`;
-  return `$${Math.round(amount).toLocaleString()}`;
-}
-
-function formatPercent(value: number): string {
-  return `${Math.round(value)}%`;
-}
+import {
+  getCompanyFinancials,
+  getEventFinancialSummaries,
+  getRevenueForecast,
+} from "@/app/actions/company-financials";
+import { CompanyOverview } from "@/components/finance/company-overview";
+import { EventFinancialsTable } from "@/components/finance/event-financials-table";
+import { RevenueForecast } from "@/components/finance/revenue-forecast";
+import { formatMoney } from "@/lib/utils";
 
 export default async function FinancePage() {
   const supabase = await createServerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) { const { redirect } = await import("next/navigation"); redirect("/login"); return; }
+  if (!user) {
+    const { redirect } = await import("next/navigation");
+    redirect("/login");
+    return;
+  }
   const admin = createAdminClient();
 
   // Get user's collectives
@@ -41,9 +43,53 @@ export default async function FinancePage() {
     .eq("user_id", user.id)
     .is("deleted_at", null);
 
-  const collectiveIds = (memberships as { collective_id: string }[] | null)?.map((m) => m.collective_id) ?? [];
+  const collectiveIds =
+    (memberships as { collective_id: string }[] | null)?.map(
+      (m) => m.collective_id
+    ) ?? [];
 
-  // --- Data Fetching ---
+  // --- Parallel data fetching (with error resilience) ---
+  const [
+    financialsResult,
+    eventSummariesResult,
+    forecastResult,
+    settlementsResult,
+    unsettledResult,
+  ] = await Promise.all([
+    getCompanyFinancials().catch((err: unknown) => {
+      console.error("[finance] getCompanyFinancials failed:", err);
+      return { error: String(err), data: null } as { error: string; data: null };
+    }),
+    getEventFinancialSummaries().catch((err: unknown) => {
+      console.error("[finance] getEventFinancialSummaries failed:", err);
+      return { error: String(err), data: [] as import("@/app/actions/company-financials").EventFinancialSummary[] };
+    }),
+    getRevenueForecast().catch((err: unknown) => {
+      console.error("[finance] getRevenueForecast failed:", err);
+      return { error: String(err), data: [] as import("@/app/actions/company-financials").RevenueForecastItem[] };
+    }),
+    // Settlements for payout status + alerts
+    collectiveIds.length > 0
+      ? admin
+          .from("settlements")
+          .select("*, events(title, starts_at, venue_id)")
+          .in("collective_id", collectiveIds)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: null }),
+    // Completed events without settlements
+    collectiveIds.length > 0
+      ? admin
+          .from("events")
+          .select("id, title, starts_at")
+          .in("collective_id", collectiveIds)
+          .eq("status", "completed")
+          .order("starts_at", { ascending: false })
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const financials = financialsResult.data;
+  const eventSummaries = eventSummariesResult.data;
+  const forecasts = forecastResult.data;
 
   type Settlement = {
     id: string;
@@ -55,251 +101,29 @@ export default async function FinancePage() {
     platform_fee: number;
     stripe_fees: number;
     total_artist_fees: number;
-    total_expenses: number;
+    total_costs: number;
     created_at: string;
-    events: { title: string; starts_at: string; venue_id: string | null } | null;
-  };
-
-  type UnsettledEvent = { id: string; title: string; starts_at: string };
-
-  type UpcomingEvent = {
-    id: string;
-    title: string;
-    starts_at: string;
-    status: string;
-  };
-
-  type TicketTier = {
-    id: string;
-    event_id: string;
-    name: string;
-    price: number;
-    capacity: number;
-  };
-
-  type Ticket = {
-    event_id: string;
-    ticket_tier_id: string;
-    status: string;
-    price_paid: number;
-  };
-
-  type EventArtist = {
-    event_id: string;
-    fee: number;
-    artists: { name: string } | null;
-  };
-
-  let settlements: Settlement[] = [];
-  let unsettledEvents: UnsettledEvent[] = [];
-  let upcomingEvents: UpcomingEvent[] = [];
-  let ticketTiers: TicketTier[] = [];
-  let tickets: Ticket[] = [];
-  let eventArtists: EventArtist[] = [];
-
-  if (collectiveIds.length > 0) {
-    const now = new Date().toISOString();
-
-    const [
-      { data: settlementsData },
-      { data: completedData },
-      { data: upcomingData },
-      { data: tiersData },
-      { data: ticketsData },
-      { data: artistsData },
-    ] = await Promise.all([
-      // All settlements with event info
-      admin
-        .from("settlements")
-        .select("*, events(title, starts_at, venue_id)")
-        .in("collective_id", collectiveIds)
-        .order("created_at", { ascending: false }),
-      // Completed events without settlements
-      admin
-        .from("events")
-        .select("id, title, starts_at")
-        .in("collective_id", collectiveIds)
-        .eq("status", "completed")
-        .order("starts_at", { ascending: false }),
-      // Upcoming published events
-      admin
-        .from("events")
-        .select("id, title, starts_at, status")
-        .in("collective_id", collectiveIds)
-        .in("status", ["published", "draft"])
-        .gte("starts_at", now)
-        .order("starts_at", { ascending: true })
-        .limit(5),
-      // All ticket tiers for upcoming events (we'll filter in JS)
-      admin
-        .from("ticket_tiers")
-        .select("id, event_id, name, price, capacity")
-        .in(
-          "event_id",
-          // Can't nest — we'll fetch all and filter
-          collectiveIds
-        ),
-      // All paid tickets
-      admin
-        .from("tickets")
-        .select("event_id, ticket_tier_id, status, price_paid")
-        .in("status", ["paid", "checked_in"]),
-      // Event artists with fees
-      admin
-        .from("event_artists")
-        .select("event_id, fee, artists(name)")
-        .gt("fee", 0),
-    ]);
-
-    settlements = (settlementsData ?? []) as unknown as Settlement[];
-    const settledEventIds = settlements.map((s) => s.event_id);
-    unsettledEvents = ((completedData ?? []) as UnsettledEvent[]).filter(
-      (e) => !settledEventIds.includes(e.id)
-    );
-    upcomingEvents = (upcomingData ?? []) as UpcomingEvent[];
-
-    // For upcoming events, fetch their tiers and tickets specifically
-    const upcomingEventIds = upcomingEvents.map((e) => e.id);
-    if (upcomingEventIds.length > 0) {
-      const [{ data: upTiers }, { data: upTickets }, { data: upArtists }] =
-        await Promise.all([
-          admin
-            .from("ticket_tiers")
-            .select("id, event_id, name, price, capacity")
-            .in("event_id", upcomingEventIds),
-          admin
-            .from("tickets")
-            .select("event_id, ticket_tier_id, status, price_paid")
-            .in("event_id", upcomingEventIds)
-            .in("status", ["paid", "checked_in"]),
-          admin
-            .from("event_artists")
-            .select("event_id, fee, artists(name)")
-            .in("event_id", upcomingEventIds),
-        ]);
-      ticketTiers = (upTiers ?? []) as TicketTier[];
-      tickets = (upTickets ?? []) as Ticket[];
-      eventArtists = (upArtists ?? []) as unknown as EventArtist[];
-    }
-  }
-
-  // --- Computed Values ---
-
-  const totalRevenue = settlements.reduce(
-    (s, r) => s + Number(r.gross_revenue),
-    0
-  );
-  const totalProfit = settlements.reduce((s, r) => s + Number(r.profit), 0);
-  const avgMargin =
-    totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-  const settledEventCount = settlements.length;
-
-  // Per-event breakdowns for settled events
-  const eventBreakdowns = settlements.map((s) => {
-    const event = s.events as unknown as {
+    events: {
       title: string;
       starts_at: string;
       venue_id: string | null;
     } | null;
-    const gross = Number(s.gross_revenue);
-    const artistFees = Number(s.total_artist_fees);
-    const stripe = Number(s.stripe_fees);
-    const platform = Number(s.platform_fee);
-    const expenses = Number(s.total_expenses);
-    const profit = Number(s.profit);
-    const totalCosts = artistFees + stripe + platform + expenses;
-    const margin = gross > 0 ? (profit / gross) * 100 : 0;
-    const revenuePercent = gross > 0 ? (gross / (gross + totalCosts)) * 100 : 50;
+  };
 
-    // Build expense breakdown
-    const expenseItems: { label: string; amount: number }[] = [];
-    if (artistFees > 0)
-      expenseItems.push({ label: "Artists", amount: artistFees });
-    if (stripe > 0)
-      expenseItems.push({ label: "Stripe fees", amount: stripe });
-    if (platform > 0)
-      expenseItems.push({ label: "Platform fee", amount: platform });
-    if (expenses > 0)
-      expenseItems.push({ label: "Other expenses", amount: expenses });
+  type UnsettledEvent = { id: string; title: string; starts_at: string };
 
-    return {
-      id: s.id,
-      eventId: s.event_id,
-      title: event?.title ?? "Unknown Event",
-      date: event?.starts_at ?? s.created_at,
-      status: s.status,
-      gross,
-      profit,
-      totalCosts,
-      margin,
-      revenuePercent,
-      expenseItems,
-    };
-  });
+  const settlements = (
+    (settlementsResult.data ?? []) as unknown as Settlement[]
+  );
+  const settledEventIds = settlements.map((s) => s.event_id);
+  const unsettledEvents = (
+    (unsettledResult.data ?? []) as UnsettledEvent[]
+  ).filter((e) => !settledEventIds.includes(e.id));
 
-  // Upcoming event projections
-  const upcomingProjections = upcomingEvents.map((event) => {
-    const tiers = ticketTiers.filter((t) => t.event_id === event.id);
-    const eventTickets = tickets.filter((t) => t.event_id === event.id);
-    const artists = eventArtists.filter(
-      (a) => a.event_id === event.id
-    ) as EventArtist[];
-
-    const ticketsSold = eventTickets.length;
-    const totalCapacity = tiers.reduce((s, t) => s + t.capacity, 0);
-    const currentRevenue = eventTickets.reduce(
-      (s, t) => s + Number(t.price_paid),
-      0
-    );
-    const artistCosts = artists.reduce((s, a) => s + Number(a.fee), 0);
-    // Project sell-out revenue
-    const sellOutRevenue = tiers.reduce(
-      (s, t) => s + t.price * t.capacity,
-      0
-    );
-    const projectedStripe =
-      sellOutRevenue > 0
-        ? sellOutRevenue * 0.029 + totalCapacity * 0.3
-        : 0;
-    const projectedProfit = sellOutRevenue - projectedStripe - artistCosts;
-    const breakEvenTickets =
-      artistCosts > 0 && tiers.length > 0
-        ? Math.ceil(
-            artistCosts /
-              (tiers.reduce((s, t) => s + t.price, 0) / tiers.length -
-                0.3 -
-                (tiers.reduce((s, t) => s + t.price, 0) / tiers.length) *
-                  0.029)
-          )
-        : 0;
-    const ticketsNeededForBreakeven = Math.max(
-      0,
-      breakEvenTickets - ticketsSold
-    );
-
-    return {
-      id: event.id,
-      title: event.title,
-      startsAt: event.starts_at,
-      ticketsSold,
-      totalCapacity,
-      currentRevenue,
-      artistCosts,
-      sellOutRevenue,
-      projectedProfit,
-      ticketsNeededForBreakeven,
-      breakEvenTickets,
-      artistNames: artists
-        .map((a) => (a.artists as { name: string } | null)?.name)
-        .filter(Boolean),
-    };
-  });
-
-  // Determine headline for money summary
-  const hasSettlements = settlements.length > 0;
-  const hasUpcoming = upcomingProjections.length > 0;
-  const nextEvent =
-    upcomingProjections.length > 0 ? upcomingProjections[0] : null;
+  const hasData =
+    (financials && financials.totalEvents > 0) ||
+    eventSummaries.length > 0 ||
+    forecasts.length > 0;
 
   // Payout status pipeline
   const payoutStatuses = [
@@ -309,20 +133,19 @@ export default async function FinancePage() {
   ];
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-8 pb-24">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Money</h1>
         <p className="text-sm text-muted-foreground">
-          Your financial advisor for every event
+          Company-wide financials, P&L by event, and revenue forecasts
         </p>
       </div>
 
-      {/* ===== SECTION 1: Money Summary ===== */}
-      <Card className="border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
-        <CardContent className="p-5 md:p-6">
-          {!hasSettlements && !hasUpcoming ? (
-            // No events at all
+      {/* ===== Empty State ===== */}
+      {!hasData && (
+        <Card className="border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
+          <CardContent className="p-5 md:p-6">
             <div className="flex flex-col items-center gap-4 py-6 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
                 <DollarSign className="h-8 w-8 text-nocturn" />
@@ -342,108 +165,16 @@ export default async function FinancePage() {
                 </Button>
               </Link>
             </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Main headline */}
-              {hasSettlements && (
-                <div>
-                  <p className="text-lg font-semibold leading-relaxed md:text-xl">
-                    {totalProfit >= 0 ? (
-                      <>
-                        <span className="text-nocturn-teal">
-                          You&apos;ve made {formatMoney(totalProfit)}
-                        </span>{" "}
-                        across {settledEventCount} event
-                        {settledEventCount !== 1 ? "s" : ""}.
-                      </>
-                    ) : (
-                      <>
-                        <span className="text-red-400">
-                          You&apos;re down {formatMoney(Math.abs(totalProfit))}
-                        </span>{" "}
-                        across {settledEventCount} event
-                        {settledEventCount !== 1 ? "s" : ""}.
-                      </>
-                    )}
-                  </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Total revenue: {formatMoney(totalRevenue)} — Average margin:{" "}
-                    <span
-                      className={
-                        avgMargin >= 0 ? "text-nocturn-teal" : "text-red-400"
-                      }
-                    >
-                      {formatPercent(avgMargin)}
-                    </span>
-                  </p>
-                </div>
-              )}
+          </CardContent>
+        </Card>
+      )}
 
-              {/* Upcoming event forecast */}
-              {nextEvent && nextEvent.ticketsSold > 0 && (
-                <div className="rounded-lg border border-nocturn/20 bg-nocturn/5 p-4">
-                  <div className="flex items-start gap-3">
-                    <Target className="mt-0.5 h-5 w-5 shrink-0 text-nocturn" />
-                    <div>
-                      <p className="font-medium">
-                        {nextEvent.title} has{" "}
-                        <span className="text-nocturn-teal">
-                          {nextEvent.ticketsSold} tickets sold
-                        </span>
-                        .
-                      </p>
-                      {nextEvent.projectedProfit > 0 ? (
-                        <p className="mt-0.5 text-sm text-muted-foreground">
-                          If you sell out, you keep{" "}
-                          <span className="font-medium text-nocturn-teal">
-                            {formatMoney(nextEvent.projectedProfit)}
-                          </span>{" "}
-                          after expenses.
-                        </p>
-                      ) : (
-                        <p className="mt-0.5 text-sm text-muted-foreground">
-                          {nextEvent.totalCapacity - nextEvent.ticketsSold}{" "}
-                          tickets remaining out of {nextEvent.totalCapacity}.
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+      {/* ===== SECTION 1: Company-Wide Overview ===== */}
+      {financials && financials.totalEvents > 0 && (
+        <CompanyOverview financials={financials} />
+      )}
 
-              {/* Quick stats row */}
-              {hasSettlements && (
-                <div className="grid grid-cols-3 gap-3 pt-1">
-                  <div className="rounded-lg bg-card p-3 text-center">
-                    <p className="text-xs text-muted-foreground">Revenue</p>
-                    <p className="text-lg font-bold">
-                      {formatMoney(totalRevenue)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-card p-3 text-center">
-                    <p className="text-xs text-muted-foreground">Profit</p>
-                    <p
-                      className={`text-lg font-bold ${totalProfit >= 0 ? "text-nocturn-teal" : "text-red-400"}`}
-                    >
-                      {formatMoney(totalProfit)}
-                    </p>
-                  </div>
-                  <div className="rounded-lg bg-card p-3 text-center">
-                    <p className="text-xs text-muted-foreground">Margin</p>
-                    <p
-                      className={`text-lg font-bold ${avgMargin >= 0 ? "text-nocturn-teal" : "text-red-400"}`}
-                    >
-                      {formatPercent(avgMargin)}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ===== SECTION 3: Smart Alerts ===== */}
+      {/* ===== SECTION 2: Smart Alerts ===== */}
       {(() => {
         const alerts: {
           icon: typeof AlertTriangle;
@@ -451,25 +182,6 @@ export default async function FinancePage() {
           message: string;
           cta?: { label: string; href: string };
         }[] = [];
-
-        // Break-even alerts for upcoming events
-        upcomingProjections.forEach((proj) => {
-          if (
-            proj.ticketsNeededForBreakeven > 0 &&
-            proj.ticketsSold > 0 &&
-            proj.breakEvenTickets > 0
-          ) {
-            alerts.push({
-              icon: Target,
-              color: "text-yellow-500",
-              message: `You need ${proj.ticketsNeededForBreakeven} more ticket${proj.ticketsNeededForBreakeven !== 1 ? "s" : ""} to cover costs for ${proj.title}.`,
-              cta: {
-                label: "View Event",
-                href: `/dashboard/events/${proj.id}`,
-              },
-            });
-          }
-        });
 
         // Unsettled event reminders
         unsettledEvents.forEach((event) => {
@@ -494,7 +206,7 @@ export default async function FinancePage() {
             alerts.push({
               icon: AlertTriangle,
               color: "text-orange-500",
-              message: `${event?.title ?? "An event"} settlement is in draft — review and approve it.`,
+              message: `${event?.title ?? "An event"} settlement is in draft \u2014 review and approve it.`,
               cta: {
                 label: "Review",
                 href: `/dashboard/finance/${s.event_id}`,
@@ -542,112 +254,15 @@ export default async function FinancePage() {
         );
       })()}
 
-      {/* ===== SECTION 2: Per-Event Breakdown ===== */}
-      {eventBreakdowns.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Event Breakdown</h2>
-          <div className="space-y-3">
-            {eventBreakdowns.map((eb) => {
-              const isProfitable = eb.profit >= 0;
-              return (
-                <Link
-                  key={eb.id}
-                  href={`/dashboard/finance/${eb.eventId}`}
-                >
-                  <Card className="transition-colors hover:border-nocturn/30">
-                    <CardContent className="space-y-3 p-4 md:p-5">
-                      {/* Event header */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold line-clamp-1">
-                            {eb.title}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(eb.date).toLocaleDateString("en", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                            })}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p
-                            className={`text-xl font-bold ${isProfitable ? "text-nocturn-teal" : "text-red-400"}`}
-                          >
-                            {isProfitable ? "+" : "-"}
-                            {formatMoney(Math.abs(eb.profit))}
-                          </p>
-                          <Badge
-                            className={`text-[10px] ${
-                              isProfitable
-                                ? "bg-nocturn-teal/10 text-nocturn-teal border-nocturn-teal/20"
-                                : "bg-red-400/10 text-red-400 border-red-400/20"
-                            }`}
-                          >
-                            {formatPercent(eb.margin)} margin
-                          </Badge>
-                        </div>
-                      </div>
-
-                      {/* Revenue vs Expenses bar */}
-                      <div className="space-y-1.5">
-                        <div className="flex h-4 w-full overflow-hidden rounded-full bg-muted/30">
-                          <div
-                            className="h-full rounded-l-full bg-nocturn-teal/80 transition-all"
-                            style={{
-                              width: `${Math.min(100, Math.max(5, eb.revenuePercent))}%`,
-                            }}
-                          />
-                          <div
-                            className="h-full rounded-r-full bg-red-400/60 transition-all"
-                            style={{
-                              width: `${Math.min(100, Math.max(5, 100 - eb.revenuePercent))}%`,
-                            }}
-                          />
-                        </div>
-                        <div className="flex justify-between text-[11px] text-muted-foreground">
-                          <span className="text-nocturn-teal">
-                            Revenue {formatMoney(eb.gross)}
-                          </span>
-                          <span className="text-red-400">
-                            Costs {formatMoney(eb.totalCosts)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Plain English expense breakdown */}
-                      {eb.expenseItems.length > 0 && (
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          You kept{" "}
-                          <span
-                            className={
-                              isProfitable
-                                ? "font-medium text-nocturn-teal"
-                                : "font-medium text-red-400"
-                            }
-                          >
-                            {formatMoney(Math.abs(eb.profit))}
-                          </span>{" "}
-                          after paying{" "}
-                          {eb.expenseItems
-                            .map(
-                              (item) =>
-                                `${item.label} (${formatMoney(item.amount)})`
-                            )
-                            .join(", ")}
-                          .
-                        </p>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
-          </div>
-        </div>
+      {/* ===== SECTION 3: Per-Event P&L Table ===== */}
+      {eventSummaries.length > 0 && (
+        <EventFinancialsTable events={eventSummaries} />
       )}
 
-      {/* ===== SECTION 4: Payout Status ===== */}
+      {/* ===== SECTION 4: Revenue Forecast ===== */}
+      {forecasts.length > 0 && <RevenueForecast forecasts={forecasts} />}
+
+      {/* ===== SECTION 5: Payout Status ===== */}
       {settlements.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-lg font-semibold">Payout Status</h2>
@@ -663,7 +278,10 @@ export default async function FinancePage() {
               const currentStep = statusIndex >= 0 ? statusIndex : 0;
 
               return (
-                <Link key={s.id} href={`/dashboard/finance/${s.event_id}`}>
+                <Link
+                  key={s.id}
+                  href={`/dashboard/finance/${s.event_id}`}
+                >
                   <Card className="transition-colors hover:border-nocturn/30">
                     <CardContent className="p-4">
                       <div className="mb-3 flex items-center justify-between">
@@ -673,13 +291,12 @@ export default async function FinancePage() {
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {event?.starts_at
-                              ? new Date(event.starts_at).toLocaleDateString(
-                                  "en",
-                                  {
-                                    month: "short",
-                                    day: "numeric",
-                                  }
-                                )
+                              ? new Date(
+                                  event.starts_at
+                                ).toLocaleDateString("en", {
+                                  month: "short",
+                                  day: "numeric",
+                                })
                               : ""}
                           </p>
                         </div>
@@ -702,12 +319,16 @@ export default async function FinancePage() {
                           const isComplete = i <= currentStep;
                           const isCurrent = i === currentStep;
                           return (
-                            <div key={ps.key} className="flex flex-1 items-center">
-                              <div className="flex flex-col items-center gap-1 flex-1">
+                            <div
+                              key={ps.key}
+                              className="flex flex-1 items-center"
+                            >
+                              <div className="flex flex-1 flex-col items-center gap-1">
                                 <div
                                   className={`flex h-6 w-6 items-center justify-center rounded-full ${
                                     isComplete
-                                      ? isCurrent && s.status !== "paid"
+                                      ? isCurrent &&
+                                        s.status !== "paid"
                                         ? "bg-yellow-500/20"
                                         : "bg-nocturn-teal/20"
                                       : "bg-muted/30"
@@ -716,7 +337,8 @@ export default async function FinancePage() {
                                   {isComplete ? (
                                     <CheckCircle2
                                       className={`h-3.5 w-3.5 ${
-                                        isCurrent && s.status !== "paid"
+                                        isCurrent &&
+                                        s.status !== "paid"
                                           ? "text-yellow-500"
                                           : "text-nocturn-teal"
                                       }`}

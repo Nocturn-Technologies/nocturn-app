@@ -16,6 +16,16 @@ export async function getReferralCode(collectiveId: string): Promise<{
 
   const admin = createAdminClient();
 
+  // Verify user is a member of this collective
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) return { error: "Not a member of this collective", code: null };
+
   // Check if collective already has a code
   const { data: collective } = await admin
     .from("collectives")
@@ -69,7 +79,6 @@ export async function lookupReferralCode(code: string): Promise<{
  * Stores the referral in the user's metadata.
  */
 export async function trackReferralSignup(
-  userId: string,
   referralCode: string,
   collectiveId: string
 ): Promise<{ error: string | null }> {
@@ -83,7 +92,7 @@ export async function trackReferralSignup(
   const { data: existingUser } = await admin
     .from("users")
     .select("metadata")
-    .eq("id", userId)
+    .eq("id", user.id)
     .maybeSingle();
 
   const existingMetadata = (existingUser?.metadata as Record<string, unknown>) || {};
@@ -98,7 +107,7 @@ export async function trackReferralSignup(
         referred_at: new Date().toISOString(),
       },
     })
-    .eq("id", userId);
+    .eq("id", user.id);
 
   if (error) return { error: error.message };
   return { error: null };
@@ -117,6 +126,16 @@ export async function getReferralProgramStats(collectiveId: string): Promise<{
   if (!user) return { error: "Not authenticated", totalSignups: 0, code: null };
 
   const admin = createAdminClient();
+
+  // Verify user is a member of this collective
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", collectiveId)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!memberCount || memberCount === 0) return { error: "Not a member of this collective", totalSignups: 0, code: null };
 
   const { data: collective } = await admin
     .from("collectives")

@@ -68,6 +68,22 @@ export async function addArtistToEvent(formData: {
 
   const admin = createAdminClient();
 
+  // Verify user owns this event via collective membership
+  const { data: event } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", formData.eventId)
+    .maybeSingle();
+  if (!event) return { error: "Event not found" };
+
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount || memberCount === 0) return { error: "Not authorized" };
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (admin.from("event_artists") as any).insert({
     event_id: formData.eventId,
@@ -95,6 +111,29 @@ export async function updateBookingStatus(formData: {
   if (!user) return { error: "Not logged in" };
 
   const admin = createAdminClient();
+
+  // Look up the event_artist to get event_id, then verify ownership
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: ea } = await (admin.from("event_artists") as any)
+    .select("event_id")
+    .eq("id", formData.eventArtistId)
+    .maybeSingle();
+  if (!ea) return { error: "Booking not found" };
+
+  const { data: event } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", ea.event_id)
+    .maybeSingle();
+  if (!event) return { error: "Event not found" };
+
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+  if (!memberCount || memberCount === 0) return { error: "Not authorized" };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { error } = await (admin.from("event_artists") as any)

@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
-const APPROVAL_SECRET = process.env.CRON_SECRET || "";
+const APPROVAL_SECRET = (() => {
+  const adminSecret = process.env.ADMIN_APPROVAL_SECRET;
+  if (adminSecret) return adminSecret;
+  if (process.env.CRON_SECRET) {
+    console.warn(
+      "[approve-user] ADMIN_APPROVAL_SECRET not set, falling back to CRON_SECRET. " +
+      "Set ADMIN_APPROVAL_SECRET to a separate value for better security."
+    );
+    return process.env.CRON_SECRET;
+  }
+  return "";
+})();
 
 function escapeHtml(str: string): string {
   return str
@@ -15,7 +26,7 @@ function escapeHtml(str: string): string {
 export async function GET(request: NextRequest) {
   if (!APPROVAL_SECRET) {
     return NextResponse.json(
-      { error: "Server misconfiguration: CRON_SECRET not set" },
+      { error: "Server misconfiguration: ADMIN_APPROVAL_SECRET (or CRON_SECRET) not set" },
       { status: 500 }
     );
   }
@@ -94,7 +105,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (!APPROVAL_SECRET) {
     return NextResponse.json(
-      { error: "Server misconfiguration: CRON_SECRET not set" },
+      { error: "Server misconfiguration: ADMIN_APPROVAL_SECRET (or CRON_SECRET) not set" },
       { status: 500 }
     );
   }

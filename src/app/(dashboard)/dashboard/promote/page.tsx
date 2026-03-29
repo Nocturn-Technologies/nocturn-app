@@ -1,11 +1,17 @@
 import { getPromoterDashboard } from "@/app/actions/promoter";
 import { getPromoterExternalEvents } from "@/app/actions/external-events";
+import { createClient as createServerClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Ticket, Megaphone, CalendarDays, Link2, ExternalLink, MousePointerClick } from "lucide-react";
 import { CopyLinkButton } from "./copy-link-button";
 import { ExternalEventsSection } from "./external-events-section";
 
 export default async function PromotePage() {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
   const [{ stats, myEvents, browseEvents }, externalEvents] = await Promise.all([
     getPromoterDashboard(),
     getPromoterExternalEvents(),

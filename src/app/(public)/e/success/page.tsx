@@ -16,11 +16,25 @@ function SuccessContent() {
   const sessionId = searchParams.get("session_id");
   const isFree = searchParams.get("free") === "true";
   const freeCount = searchParams.get("tickets");
+  const freeTokens = searchParams.get("tokens");
   const [tickets, setTickets] = useState<TicketStub[]>([]);
   const [loading, setLoading] = useState(false);
   const [timedOut, setTimedOut] = useState(false);
 
   useEffect(() => {
+    // For free tickets, build ticket stubs from the tokens query param
+    if (isFree && freeTokens) {
+      const tokens = decodeURIComponent(freeTokens).split(",").filter(Boolean);
+      setTickets(
+        tokens.map((token) => ({
+          ticket_token: token,
+          status: "paid",
+          created_at: new Date().toISOString(),
+        }))
+      );
+      return;
+    }
+
     if (!sessionId) return;
     setLoading(true);
 
@@ -40,7 +54,7 @@ function SuccessContent() {
       });
 
     return () => clearTimeout(timeout);
-  }, [sessionId]);
+  }, [sessionId, isFree, freeTokens]);
 
   if (!sessionId && !isFree) {
     return (

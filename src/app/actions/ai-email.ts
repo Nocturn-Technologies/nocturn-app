@@ -21,6 +21,20 @@ export async function generatePostEventEmail(eventId: string) {
 
   if (!event) return { error: "Event not found", email: null };
 
+  // Verify ownership
+  const collectiveId = event.collectives ? (event.collectives as { name: string; slug: string } & Record<string, unknown>).id ?? null : null;
+  const { data: evForCol } = await admin.from("events").select("collective_id").eq("id", eventId).maybeSingle();
+  const colId = evForCol?.collective_id;
+  if (colId) {
+    const { count: memberCount } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", colId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!memberCount) return { error: "Not authorized", email: null };
+  }
+
   // Get ticket stats
   const { count: ticketsSold } = await admin
     .from("tickets")
