@@ -16,6 +16,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { createAdminClient } from "@/lib/supabase/config";
 import { DEFAULT_TIMEZONE } from "@/lib/utils";
+import { trackEventPageView } from "@/lib/analytics";
 import Link from "next/link";
 
 // Revalidate public event pages every 60 seconds (ISR)
@@ -119,6 +120,9 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const event = eventRaw2 as { id: string; title: string; slug: string; description: string | null; starts_at: string; ends_at: string | null; doors_at: string | null; status: string; flyer_url: string | null; vibe_tags: string[] | null; min_age: number | null; metadata: Record<string, string> | null; collective_id: string; venues: { name: string; address: string; city: string; capacity: number } | null } | null;
 
   if (!event || event.status === "draft") notFound();
+
+  // Track page view (non-blocking — never delays the render)
+  trackEventPageView(event.id);
 
   // Fetch all supplementary data in parallel (7 queries → 1 round-trip)
   const now = new Date();

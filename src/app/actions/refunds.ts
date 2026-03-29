@@ -119,6 +119,12 @@ export async function refundTicket(ticketId: string) {
     });
   } catch {}
 
+  // Analytics tracking
+  try {
+    const { trackTicketRefunded } = await import("@/lib/analytics");
+    trackTicketRefunded(ticket.event_id, 1, pricePaid);
+  } catch { /* non-critical */ }
+
   // Send refund notification email
   try {
     const meta = ticket.metadata as Record<string, unknown>;

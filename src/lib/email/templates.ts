@@ -106,8 +106,22 @@ export function ticketConfirmationEmail(
   tierName: string,
   quantity: number,
   totalPrice: string,
-  ticketLink: string
+  ticketLink: string,
+  qrCodes?: string[]
 ): string {
+  // Build QR code section — one per ticket
+  const qrSection = qrCodes && qrCodes.length > 0
+    ? qrCodes.map((qr, i) => `
+      <div style="text-align: center; margin: 16px 0; padding: 20px; background: #FFFFFF; border-radius: 12px;">
+        <img src="${qr}" alt="Ticket ${i + 1} QR Code" width="250" height="250" style="display: block; margin: 0 auto;" />
+        <p style="margin: 8px 0 0 0; color: #27272A; font-size: 12px; font-weight: 600;">
+          ${quantity > 1 ? `Ticket ${i + 1} of ${quantity}` : "Your Ticket"}
+        </p>
+        <p style="margin: 2px 0 0 0; color: #71717A; font-size: 11px;">Show this at the door for entry</p>
+      </div>
+    `).join("")
+    : "";
+
   return baseTemplate(`
     <h2>You're in! 🎉</h2>
     <p>Your tickets for <span class="highlight">${escapeHtml(eventTitle)}</span> are confirmed.</p>
@@ -118,8 +132,9 @@ export function ticketConfirmationEmail(
       <p style="margin: 4px 0;">🎫 ${quantity}× ${escapeHtml(tierName)}</p>
       <p style="margin: 8px 0 0 0; color: #7B2FF7; font-weight: 600; font-size: 18px;">${totalPrice}</p>
     </div>
-    <a href="${ticketLink}" class="btn">View Your Ticket & QR Code →</a>
-    <p>Tap the button above to see your QR code. Show it at the door for entry. See you there! 🌙</p>
+    ${qrSection || `<p style="color: #A1A1AA; font-size: 13px;">Your QR code is being generated. Tap below to view it.</p>`}
+    <a href="${ticketLink}" class="btn">View Your Ticket →</a>
+    <p>Show your QR code at the door for entry. See you there! 🌙</p>
   `);
 }
 

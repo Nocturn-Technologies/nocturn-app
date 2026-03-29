@@ -5,6 +5,7 @@ import Stripe from "stripe";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
 import { createAdminClient } from "@/lib/supabase/config";
+import { logPaymentEvent } from "@/lib/payment-events";
 
 export async function POST(request: NextRequest) {
   const body = await request.text();
@@ -132,6 +133,19 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
+  // Log payment_succeeded now that we know this is a new fulfillment
+  void logPaymentEvent({
+    event_type: "payment_succeeded",
+    payment_intent_id: paymentIntentId,
+    event_id: eventId,
+    tier_id: tierId,
+    quantity,
+    amount_cents: session.amount_total ?? null,
+    currency: session.currency ?? "usd",
+    buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
+    metadata: { checkout_session_id: session.id, flow: "checkout_session" },
+  });
+
   // Look up the tier to get the price
   const { data: tier, error: tierError } = await supabase
     .from("ticket_tiers")
@@ -166,6 +180,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   });
   if (!recheck?.success) {
     console.error(`[webhook] Capacity exceeded for tier ${tierId} — auto-refunding payment ${paymentIntentId}`);
+    void logPaymentEvent({
+      event_type: "capacity_exceeded",
+      payment_intent_id: paymentIntentId,
+      event_id: eventId,
+      tier_id: tierId,
+      quantity,
+      amount_cents: session.amount_total ?? null,
+      currency: session.currency ?? "usd",
+      buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
+      metadata: { checkout_session_id: session.id, flow: "checkout_session" },
+    });
     // Auto-refund the payment since we can't fulfill the tickets
     if (paymentIntentId) {
       try {
@@ -179,8 +204,32 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           },
         });
         console.info(`[webhook] Auto-refund issued for PI ${paymentIntentId} (capacity exceeded)`);
+        void logPaymentEvent({
+          event_type: "refund_issued",
+          payment_intent_id: paymentIntentId,
+          event_id: eventId,
+          tier_id: tierId,
+          quantity,
+          amount_cents: session.amount_total ?? null,
+          currency: session.currency ?? "usd",
+          buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
+          metadata: { reason: "capacity_exceeded", checkout_session_id: session.id },
+        });
       } catch (refundErr) {
+        const refundErrMsg = refundErr instanceof Error ? refundErr.message : String(refundErr);
         console.error(`[webhook] Auto-refund FAILED for PI ${paymentIntentId}:`, refundErr);
+        void logPaymentEvent({
+          event_type: "refund_failed",
+          payment_intent_id: paymentIntentId,
+          event_id: eventId,
+          tier_id: tierId,
+          quantity,
+          amount_cents: session.amount_total ?? null,
+          currency: session.currency ?? "usd",
+          buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
+          error_message: refundErrMsg,
+          metadata: { reason: "capacity_exceeded", checkout_session_id: session.id },
+        });
       }
     }
     return;
@@ -228,6 +277,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     `[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`
   );
 
+  void logPaymentEvent({
+    event_type: "tickets_fulfilled",
+    payment_intent_id: paymentIntentId,
+    event_id: eventId,
+    tier_id: tierId,
+    quantity,
+    amount_cents: session.amount_total ?? null,
+    currency: session.currency ?? "usd",
+    buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
+    metadata: { checkout_session_id: session.id, flow: "checkout_session" },
+  });
+
   // Return background work to run AFTER the response is sent to Stripe.
   // QR generation + email sending can take 10-30s and would cause Stripe timeouts.
   return {
@@ -243,40 +304,58 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         });
       } catch { /* non-critical */ }
 
-      // Generate QR codes for each ticket
+      // Analytics tracking
+      try {
+        const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+        trackTicketSold(eventId, quantity, pricePaid * quantity);
+        const customerEmailForAnalytics = session.customer_email ?? session.customer_details?.email;
+        if (customerEmailForAnalytics) {
+          const { data: eventForAnalytics } = await supabase
+            .from("events")
+            .select("collective_id")
+            .eq("id", eventId)
+            .maybeSingle();
+          if (eventForAnalytics?.collective_id) {
+            upsertAttendeeProfile(eventForAnalytics.collective_id, customerEmailForAnalytics, eventId, pricePaid * quantity);
+          }
+        }
+      } catch { /* non-critical */ }
+
+      // Generate QR codes for each ticket FIRST, then include in email
+      const qrCodes: string[] = [];
       if (insertedTickets && insertedTickets.length > 0) {
         const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
-        await Promise.allSettled(
+        const qrResults = await Promise.allSettled(
           insertedTickets.map(async (ticket) => {
-            try {
-              const checkInUrl = `${BASE_URL}/check-in/${ticket.ticket_token}`;
-              const qrDataUrl = await QRCode.toDataURL(checkInUrl, {
-                width: 400,
-                margin: 2,
-                color: { dark: "#000000", light: "#ffffff" },
-                errorCorrectionLevel: "H",
-              });
+            const checkInUrl = `${BASE_URL}/check-in/${ticket.ticket_token}`;
+            const qrDataUrl = await QRCode.toDataURL(checkInUrl, {
+              width: 400,
+              margin: 2,
+              color: { dark: "#000000", light: "#ffffff" },
+              errorCorrectionLevel: "H",
+            });
 
-              await supabase
-                .from("tickets")
-                .update({ qr_code: qrDataUrl })
-                .eq("id", ticket.id);
-            } catch (qrErr) {
-              console.error(
-                `[stripe-webhook] QR generation failed for ticket ${ticket.id}:`,
-                qrErr
-              );
-            }
+            await supabase
+              .from("tickets")
+              .update({ qr_code: qrDataUrl })
+              .eq("id", ticket.id);
+
+            return qrDataUrl;
           })
         );
 
+        for (const r of qrResults) {
+          if (r.status === "fulfilled") qrCodes.push(r.value);
+          else console.error("[stripe-webhook] QR generation failed:", r.reason);
+        }
+
         console.info(
-          `[stripe-webhook] Generated QR codes for ${insertedTickets.length} ticket(s)`
+          `[stripe-webhook] Generated ${qrCodes.length}/${insertedTickets.length} QR codes`
         );
       }
 
-      // Send branded confirmation email
+      // Send branded confirmation email with QR codes
       try {
         const customerEmail = session.customer_email ?? session.customer_details?.email;
         if (customerEmail) {
@@ -306,8 +385,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
               quantity,
               totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
               ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+              qrCodes: qrCodes.length > 0 ? qrCodes : undefined,
             });
-            console.info("[stripe-webhook] Confirmation email sent");
+            console.info("[stripe-webhook] Confirmation email sent with QR codes");
 
             // Post-purchase hooks: referral nudge + milestone check
             try {
@@ -391,6 +471,19 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     return;
   }
 
+  // Log payment_succeeded now that we know this is a new fulfillment
+  void logPaymentEvent({
+    event_type: "payment_succeeded",
+    payment_intent_id: paymentIntent.id,
+    event_id: eventId,
+    tier_id: tierId,
+    quantity,
+    amount_cents: paymentIntent.amount,
+    currency: paymentIntent.currency,
+    buyer_email: buyerEmail ?? null,
+    metadata: { flow: "payment_intent" },
+  });
+
   const { data: tier } = await supabase
     .from("ticket_tiers")
     .select("price")
@@ -419,6 +512,17 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   });
   if (!recheck?.success) {
     console.error(`[webhook] Capacity exceeded for tier ${tierId} — auto-refunding PI ${paymentIntent.id}`);
+    void logPaymentEvent({
+      event_type: "capacity_exceeded",
+      payment_intent_id: paymentIntent.id,
+      event_id: eventId,
+      tier_id: tierId,
+      quantity,
+      amount_cents: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      buyer_email: buyerEmail ?? null,
+      metadata: { flow: "payment_intent" },
+    });
     // Auto-refund the payment since we can't fulfill the tickets
     try {
       await getStripe().refunds.create({
@@ -431,8 +535,32 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
         },
       });
       console.info(`[webhook] Auto-refund issued for PI ${paymentIntent.id} (capacity exceeded)`);
+      void logPaymentEvent({
+        event_type: "refund_issued",
+        payment_intent_id: paymentIntent.id,
+        event_id: eventId,
+        tier_id: tierId,
+        quantity,
+        amount_cents: paymentIntent.amount,
+        currency: paymentIntent.currency,
+        buyer_email: buyerEmail ?? null,
+        metadata: { reason: "capacity_exceeded", flow: "payment_intent" },
+      });
     } catch (refundErr) {
+      const refundErrMsg = refundErr instanceof Error ? refundErr.message : String(refundErr);
       console.error(`[webhook] Auto-refund FAILED for PI ${paymentIntent.id}:`, refundErr);
+      void logPaymentEvent({
+        event_type: "refund_failed",
+        payment_intent_id: paymentIntent.id,
+        event_id: eventId,
+        tier_id: tierId,
+        quantity,
+        amount_cents: paymentIntent.amount,
+        currency: paymentIntent.currency,
+        buyer_email: buyerEmail ?? null,
+        error_message: refundErrMsg,
+        metadata: { reason: "capacity_exceeded", flow: "payment_intent" },
+      });
     }
     return;
   }
@@ -481,30 +609,60 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
 
   console.info(`[stripe-webhook] Created ${quantity} ticket(s) for PI ${paymentIntent.id}`);
 
+  void logPaymentEvent({
+    event_type: "tickets_fulfilled",
+    payment_intent_id: paymentIntent.id,
+    event_id: eventId,
+    tier_id: tierId,
+    quantity,
+    amount_cents: paymentIntent.amount,
+    currency: paymentIntent.currency,
+    buyer_email: buyerEmail ?? null,
+    metadata: { flow: "payment_intent" },
+  });
+
   // NOTE: Promo code usage is already incremented atomically during checkout (checkout/route.ts).
   // Do NOT increment again here — webhook retries would cause double-counting.
 
   // Return background work to run AFTER the response is sent to Stripe
   return {
     backgroundWork: async () => {
-      // Generate QR codes
+      // Analytics tracking
+      try {
+        const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+        trackTicketSold(eventId, quantity, pricePaid * quantity);
+        if (buyerEmail) {
+          const { data: eventForAnalytics } = await supabase
+            .from("events")
+            .select("collective_id")
+            .eq("id", eventId)
+            .maybeSingle();
+          if (eventForAnalytics?.collective_id) {
+            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
+          }
+        }
+      } catch { /* non-critical */ }
+
+      // Generate QR codes FIRST, then include in email
+      const piQrCodes: string[] = [];
       if (insertedTickets && insertedTickets.length > 0) {
-        await Promise.allSettled(
+        const qrResults = await Promise.allSettled(
           insertedTickets.map(async (ticket) => {
-            try {
-              const qrDataUrl = await QRCode.toDataURL(
-                `${BASE_URL}/check-in/${ticket.ticket_token}`,
-                { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
-              );
-              await supabase.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
-            } catch (qrErr) {
-              console.error(`[stripe-webhook] QR failed for ${ticket.id}:`, qrErr);
-            }
+            const qrDataUrl = await QRCode.toDataURL(
+              `${BASE_URL}/check-in/${ticket.ticket_token}`,
+              { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
+            );
+            await supabase.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
+            return qrDataUrl;
           })
         );
+        for (const r of qrResults) {
+          if (r.status === "fulfilled") piQrCodes.push(r.value);
+          else console.error("[stripe-webhook] QR failed:", r.reason);
+        }
       }
 
-      // Send confirmation email
+      // Send confirmation email with QR codes
       try {
         if (buyerEmail) {
           const { data: event } = await supabase
@@ -533,6 +691,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
               quantity,
               totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
               ticketLink: `${BASE_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+              qrCodes: piQrCodes.length > 0 ? piQrCodes : undefined,
             });
           }
         }

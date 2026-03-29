@@ -229,30 +229,31 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Generate QR codes
+      // Generate QR codes FIRST, then include in email
+      const freeQrCodes: string[] = [];
       if (insertedTickets && insertedTickets.length > 0) {
-        await Promise.allSettled(
+        const qrResults = await Promise.allSettled(
           insertedTickets.map(async (ticket) => {
-            try {
-              const checkInUrl = `${APP_URL}/check-in/${ticket.ticket_token}`;
-              const qrDataUrl = await QRCode.toDataURL(checkInUrl, {
-                width: 400,
-                margin: 2,
-                color: { dark: "#000000", light: "#ffffff" },
-                errorCorrectionLevel: "H",
-              });
-              await supabaseAdmin
-                .from("tickets")
-                .update({ qr_code: qrDataUrl })
-                .eq("id", ticket.id);
-            } catch (qrErr) {
-              console.error(`[checkout] QR failed for free ticket ${ticket.id}:`, qrErr);
-            }
+            const checkInUrl = `${APP_URL}/check-in/${ticket.ticket_token}`;
+            const qrDataUrl = await QRCode.toDataURL(checkInUrl, {
+              width: 400,
+              margin: 2,
+              color: { dark: "#000000", light: "#ffffff" },
+              errorCorrectionLevel: "H",
+            });
+            await supabaseAdmin
+              .from("tickets")
+              .update({ qr_code: qrDataUrl })
+              .eq("id", ticket.id);
+            return qrDataUrl;
           })
         );
+        for (const r of qrResults) {
+          if (r.status === "fulfilled") freeQrCodes.push(r.value);
+        }
       }
 
-      // Send confirmation email
+      // Send confirmation email with QR codes
       try {
         const { sendTicketConfirmation } = await import("@/lib/email/actions");
         const { data: eventData } = await supabaseAdmin
@@ -274,6 +275,7 @@ export async function POST(request: NextRequest) {
             quantity,
             totalPrice: "Free",
             ticketLink: `${APP_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+            qrCodes: freeQrCodes.length > 0 ? freeQrCodes : undefined,
           });
         }
       } catch (emailErr) {

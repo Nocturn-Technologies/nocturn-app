@@ -9,12 +9,12 @@ import { ContactDialog } from "./contact-dialog";
 import {
   searchProfiles,
   getSavedProfiles,
-  getNetworkProfiles,
   saveProfile,
   unsaveProfile,
 } from "@/app/actions/marketplace";
 import { haptic } from "@/lib/haptics";
 import { Search, Compass, ChevronLeft, ChevronRight, Users2 } from "lucide-react";
+import { NetworkCRM } from "./network-crm";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -52,20 +52,9 @@ export default function DiscoverPage() {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [profiles, setProfiles] = useState<any[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [savedProfiles, setSavedProfiles] = useState<any[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
-  // Network state
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [networkProfiles, setNetworkProfiles] = useState<any[]>([]);
-  const [networkConnectionTypes, setNetworkConnectionTypes] = useState<Record<string, string[]>>({});
-  const [loadingNetwork, setLoadingNetwork] = useState(false);
-  const [networkLoaded, setNetworkLoaded] = useState(false);
-  const [networkQuery, setNetworkQuery] = useState("");
-
   const [loadingDiscover, setLoadingDiscover] = useState(true);
-  const [networkError, setNetworkError] = useState<string | null>(null);
 
   const [contactProfile, setContactProfile] = useState<{
     id: string;
@@ -103,7 +92,6 @@ export default function DiscoverPage() {
 
   const fetchSaved = useCallback(async () => {
     const result = await getSavedProfiles();
-    setSavedProfiles(result.profiles);
     // savedIds is a string[] from the server action
     const ids = new Set<string>(result.savedIds ?? []);
     // Also include profile IDs as fallback
@@ -114,37 +102,6 @@ export default function DiscoverPage() {
   useEffect(() => {
     fetchSaved();
   }, [fetchSaved]);
-
-  // ── Fetch network profiles ──────────────────────────────────────────
-
-  const fetchNetwork = useCallback(async () => {
-    setLoadingNetwork(true);
-    setNetworkError(null);
-    try {
-      // Add timeout to prevent infinite spinner
-      const result = await Promise.race([
-        getNetworkProfiles(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("timeout")), 15000)
-        ),
-      ]);
-      setNetworkProfiles(result.profiles);
-      setNetworkConnectionTypes(result.connectionTypes);
-    } catch (err) {
-      console.error("[discover] Network fetch failed:", err);
-      setNetworkError("Failed to load your network. Please try again.");
-    } finally {
-      setLoadingNetwork(false);
-      setNetworkLoaded(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === "network" && !networkLoaded) {
-      fetchNetwork();
-    }
-  }, [activeTab, networkLoaded, fetchNetwork]);
 
   // ── Save / unsave handlers ─────────────────────────────────────────────
 
@@ -178,24 +135,12 @@ export default function DiscoverPage() {
     }
   }
 
-  // ── Active profiles to show ────────────────────────────────────────────
+  // ── Active profiles to show (discover tab only) ────────────────────────
 
-  // Filter network by search
-  const filteredNetwork = networkQuery.trim()
-    ? networkProfiles.filter((p) => {
-        const q = networkQuery.toLowerCase();
-        return (
-          (p.display_name ?? "").toLowerCase().includes(q) ||
-          (p.city ?? "").toLowerCase().includes(q) ||
-          (p.user_type ?? "").toLowerCase().includes(q)
-        );
-      })
-    : networkProfiles;
-
-  const displayProfiles = activeTab === "discover" ? profiles : filteredNetwork;
-  const isLoading = activeTab === "discover" ? loadingDiscover : loadingNetwork;
+  const displayProfiles = profiles;
+  const isLoading = loadingDiscover;
   const totalPages = Math.ceil(totalCount / PER_PAGE);
-  const showPagination = activeTab === "discover" && totalPages > 1;
+  const showPagination = totalPages > 1;
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -232,11 +177,6 @@ export default function DiscoverPage() {
         >
           <Users2 className="h-3.5 w-3.5" />
           Network
-          {networkProfiles.length > 0 && (
-            <span className="rounded-full bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold">
-              {networkProfiles.length}
-            </span>
-          )}
         </button>
       </div>
 
@@ -288,42 +228,15 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* Network search */}
+      {/* Network CRM — replaces the old network profile list */}
       {activeTab === "network" && (
         <div className="px-4 md:px-0">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              value={networkQuery}
-              onChange={(e) => setNetworkQuery(e.target.value)}
-              placeholder="Search your network by name, city, or role..."
-              className="w-full pl-10"
-            />
-          </div>
+          <NetworkCRM />
         </div>
       )}
 
-      {/* Network error */}
-      {activeTab === "network" && networkError && (
-        <div className="px-4 md:px-0">
-          <Card>
-            <CardContent className="flex flex-col items-center gap-3 py-8">
-              <p className="text-sm text-destructive">{networkError}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchNetwork}
-                className="min-h-[44px]"
-              >
-                Retry
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Profiles grid */}
+      {/* Profiles grid — discover tab only */}
+      {activeTab === "discover" && (
       <div className="px-4 md:px-0">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
@@ -333,36 +246,14 @@ export default function DiscoverPage() {
           <Card>
             <CardContent className="flex flex-col items-center gap-4 py-12">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
-                {activeTab === "network" ? (
-                  <Users2 className="h-8 w-8 text-muted-foreground" />
-                ) : (
-                  <Compass className="h-8 w-8 text-muted-foreground" />
-                )}
+                <Compass className="h-8 w-8 text-muted-foreground" />
               </div>
               <div className="text-center max-w-xs">
-                <p className="font-semibold">
-                  {activeTab === "network"
-                    ? "Your network is empty"
-                    : "No profiles found"}
-                </p>
+                <p className="font-semibold">No profiles found</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {activeTab === "network"
-                    ? "Browse the Discover tab to find DJs, photographers, venues, and more. Save profiles or send inquiries to build your network."
-                    : "Try a different search or category"}
+                  Try a different search or category
                 </p>
               </div>
-              {activeTab === "network" && (
-                <Button
-                  onClick={() => {
-                    setActiveTab("discover");
-                    haptic("light");
-                  }}
-                  className="bg-nocturn hover:bg-nocturn-light min-h-[44px]"
-                >
-                  <Compass className="mr-2 h-4 w-4" />
-                  Browse Profiles
-                </Button>
-              )}
             </CardContent>
           </Card>
         ) : (
@@ -383,16 +274,14 @@ export default function DiscoverPage() {
                       city: profile.city ?? "",
                     })
                   }
-                  connectionTags={activeTab === "network" ? networkConnectionTypes[profile.id] : undefined}
+                  connectionTags={undefined}
                 />
               ))}
             </div>
 
             {/* Result count */}
             <p className="text-xs text-muted-foreground text-center pt-2">
-              {activeTab === "discover"
-                ? `${totalCount} ${totalCount === 1 ? "profile" : "profiles"} found${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`
-                : `${filteredNetwork.length} ${filteredNetwork.length === 1 ? "connection" : "connections"}`}
+              {`${totalCount} ${totalCount === 1 ? "profile" : "profiles"} found${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}
             </p>
 
             {/* Pagination */}
@@ -456,6 +345,7 @@ export default function DiscoverPage() {
           </>
         )}
       </div>
+      )}  {/* end activeTab === "discover" */}
 
       {/* Contact Dialog */}
       <ContactDialog

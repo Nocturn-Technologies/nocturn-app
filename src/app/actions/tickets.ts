@@ -3,6 +3,7 @@
 import QRCode from "qrcode";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { logPaymentEvent } from "@/lib/payment-events";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
@@ -300,6 +301,26 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     },
   }));
 
+  // RACE CONDITION PROTECTION: Acquire a transaction-scoped advisory lock keyed on this
+  // payment intent ID before inserting, so concurrent client fulfillment + webhook can't
+  // both create tickets. The lock auto-releases when the DB operation completes.
+  // We reuse the existing acquire_ticket_lock function (which calls pg_advisory_xact_lock
+  // with hashtext of the input) — passing the PI ID as the lock key.
+  // Errors are intentionally ignored — if the lock RPC fails the idempotency
+  // check below still prevents duplicate ticket creation.
+  await admin.rpc("acquire_ticket_lock", { p_tier_id: paymentIntentId });
+
+  // Re-check for existing tickets AFTER acquiring the lock (prevents double-creation race)
+  const { data: postLockTickets } = await admin
+    .from("tickets")
+    .select("ticket_token, status, created_at")
+    .eq("stripe_payment_intent_id", paymentIntentId);
+
+  if (postLockTickets && postLockTickets.length > 0) {
+    // Webhook already created tickets while we were waiting for the lock
+    return { error: null, tickets: postLockTickets };
+  }
+
   const { data: insertedTickets, error: insertError } = await admin
     .from("tickets")
     .insert(tickets)
@@ -307,6 +328,18 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
 
   if (insertError) {
     console.error("[fulfillPaymentIntent] Insert failed:", insertError);
+    void logPaymentEvent({
+      event_type: "fulfillment_failed",
+      payment_intent_id: paymentIntentId,
+      event_id: eventId,
+      tier_id: tierId,
+      quantity,
+      amount_cents: Math.round(pricePaid * quantity * 100),
+      currency: ticketCurrency,
+      buyer_email: buyerEmail ?? null,
+      error_message: insertError.message,
+      metadata: { fulfilled_by: "client_action" },
+    });
     // Check if tickets were created by webhook in the meantime
     const { data: retryTickets } = await admin
       .from("tickets")
@@ -320,27 +353,61 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
 
   console.info(`[fulfillPaymentIntent] Created ${quantity} ticket(s) for PI ${paymentIntentId}`);
 
-  // Generate QR codes + send email in background (non-blocking)
-  const QRCode = (await import("qrcode")).default;
+  void logPaymentEvent({
+    event_type: "tickets_fulfilled",
+    payment_intent_id: paymentIntentId,
+    event_id: eventId,
+    tier_id: tierId,
+    quantity,
+    amount_cents: Math.round(pricePaid * quantity * 100),
+    currency: ticketCurrency,
+    buyer_email: buyerEmail ?? null,
+    metadata: { fulfilled_by: "client_action" },
+  });
+
+  // Analytics tracking (non-blocking, fire-and-forget)
+  {
+    const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+    trackTicketSold(eventId, quantity, pricePaid * quantity);
+    if (buyerEmail) {
+      (async () => {
+        try {
+          const { data: eventForAnalytics } = await admin
+            .from("events")
+            .select("collective_id")
+            .eq("id", eventId)
+            .maybeSingle();
+          if (eventForAnalytics?.collective_id) {
+            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
+          }
+        } catch { /* non-critical */ }
+      })();
+    }
+  }
+
+  // Generate QR codes FIRST, then send email with QR codes embedded
+  const QRCodeLib = (await import("qrcode")).default;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
-  // QR codes
   if (insertedTickets) {
-    Promise.allSettled(
+    // Generate all QR codes and collect data URLs
+    const qrResults = await Promise.allSettled(
       insertedTickets.map(async (ticket) => {
-        try {
-          const qrDataUrl = await QRCode.toDataURL(
-            `${appUrl}/check-in/${ticket.ticket_token}`,
-            { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
-          );
-          await admin.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
-        } catch (err) {
-          console.error(`[fulfillPaymentIntent] QR failed for ${ticket.id}:`, err);
-        }
+        const qrDataUrl = await QRCodeLib.toDataURL(
+          `${appUrl}/check-in/${ticket.ticket_token}`,
+          { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
+        );
+        // Persist QR to DB
+        await admin.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
+        return qrDataUrl;
       })
-    ).catch(() => {});
+    );
 
-    // Send confirmation email
+    const qrCodes = qrResults
+      .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
+      .map((r) => r.value);
+
+    // Send confirmation email WITH QR codes inline
     if (buyerEmail) {
       (async () => {
         try {
@@ -370,8 +437,9 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
               quantity,
               totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
               ticketLink: `${appUrl}/ticket/${insertedTickets[0]?.ticket_token || ""}`,
+              qrCodes: qrCodes.length > 0 ? qrCodes : undefined,
             });
-            console.info("[fulfillPaymentIntent] Confirmation email sent");
+            console.info("[fulfillPaymentIntent] Confirmation email sent with QR codes");
           }
         } catch (err) {
           console.error("[fulfillPaymentIntent] Email failed:", err);

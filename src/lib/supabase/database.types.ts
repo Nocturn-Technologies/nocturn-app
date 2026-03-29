@@ -1878,6 +1878,67 @@ export type Database = {
           },
         ]
       }
+
+      payment_events: {
+        Row: {
+          id: string
+          event_type: string
+          payment_intent_id: string | null
+          event_id: string | null
+          tier_id: string | null
+          quantity: number | null
+          amount_cents: number | null
+          currency: string
+          buyer_email: string | null
+          error_message: string | null
+          metadata: Record<string, unknown>
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event_type: string
+          payment_intent_id?: string | null
+          event_id?: string | null
+          tier_id?: string | null
+          quantity?: number | null
+          amount_cents?: number | null
+          currency?: string
+          buyer_email?: string | null
+          error_message?: string | null
+          metadata?: Record<string, unknown>
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          event_type?: string
+          payment_intent_id?: string | null
+          event_id?: string | null
+          tier_id?: string | null
+          quantity?: number | null
+          amount_cents?: number | null
+          currency?: string
+          buyer_email?: string | null
+          error_message?: string | null
+          metadata?: Record<string, unknown>
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_events_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_events_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_tiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
 
     Views: Record<string, never>

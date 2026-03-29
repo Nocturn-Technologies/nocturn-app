@@ -18,6 +18,7 @@ export async function sendTicketConfirmation(input: {
   quantity: number;
   totalPrice: string;
   ticketLink: string;
+  qrCodes?: string[];
 }) {
   const html = ticketConfirmationEmail(
     input.eventTitle,
@@ -26,7 +27,8 @@ export async function sendTicketConfirmation(input: {
     input.tierName,
     input.quantity,
     input.totalPrice,
-    input.ticketLink
+    input.ticketLink,
+    input.qrCodes
   );
 
   return sendEmail({

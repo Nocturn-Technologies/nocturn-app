@@ -4,6 +4,7 @@ import { calculateServiceFeeCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimit } from "@/lib/rate-limit";
 import { getCurrencyForCountry, convertAmount, formatLocalAmount } from "@/lib/currency";
+import { logPaymentEvent } from "@/lib/payment-events";
 
 export async function POST(request: NextRequest) {
   const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -181,6 +182,24 @@ export async function POST(request: NextRequest) {
         ...(discountCents > 0 && { discountCents: String(discountCents) }),
       },
       automatic_payment_methods: { enabled: true },
+    });
+
+    // Log the payment creation for audit trail
+    void logPaymentEvent({
+      event_type: "payment_created",
+      payment_intent_id: paymentIntent.id,
+      event_id: eventId,
+      tier_id: tierId,
+      quantity,
+      amount_cents: chargeAmount,
+      currency: chargeCurrency,
+      buyer_email: buyerEmail,
+      metadata: {
+        base_amount_cents: totalUsdCents,
+        fx_rate: fxRate,
+        promo_id: promoId ?? undefined,
+        discount_cents: discountCents > 0 ? discountCents : undefined,
+      },
     });
 
     return NextResponse.json({

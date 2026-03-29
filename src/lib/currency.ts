@@ -60,16 +60,6 @@ const ZERO_DECIMAL_CURRENCIES = new Set([
   "mga", "pyg", "rwf", "ugx", "vuf", "xaf", "xof", "xpf",
 ]);
 
-// Stripe minimum amounts (in smallest unit) per currency
-const MINIMUM_AMOUNTS: Record<string, number> = {
-  usd: 50, eur: 50, gbp: 30, cad: 50, aud: 50, nzd: 50,
-  sgd: 50, hkd: 400, jpy: 50, sek: 300, nok: 300, dkk: 250,
-  chf: 50, pln: 200, czk: 1500, huf: 17500, ron: 200,
-  bgn: 100, brl: 50, mxn: 1000, inr: 50, myr: 200,
-  thb: 1000, php: 10000, krw: 50, aed: 200, ils: 50,
-  zar: 50, cop: 200000, ars: 50, clp: 50,
-};
-
 // Currency symbols for display
 export const CURRENCY_SYMBOLS: Record<string, string> = {
   usd: "$", eur: "\u20AC", gbp: "\u00A3", cad: "CA$", aud: "A$",
@@ -170,12 +160,6 @@ export async function convertAmount(
   } else {
     // Convert to smallest unit (cents equivalent)
     amount = Math.round(localDollars * 100);
-  }
-
-  // Enforce Stripe minimum
-  const min = MINIMUM_AMOUNTS[currency] ?? 50;
-  if (amount < min) {
-    amount = min;
   }
 
   return { amount, rate, currency };
