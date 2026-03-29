@@ -73,7 +73,7 @@ export function CompanyOverview({ financials }: CompanyOverviewProps) {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground">
-                Across {totalEvents} settled event{totalEvents !== 1 ? "s" : ""}
+                Across {totalEvents} event{totalEvents !== 1 ? "s" : ""}
               </p>
               <p className="mt-1 text-2xl font-bold md:text-3xl">
                 <span className={isProfitable ? "text-nocturn-teal" : "text-red-400"}>

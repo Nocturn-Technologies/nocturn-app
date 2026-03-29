@@ -333,18 +333,36 @@ export default function DiscoverPage() {
           <Card>
             <CardContent className="flex flex-col items-center gap-4 py-12">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
-                <Compass className="h-10 w-10 text-muted-foreground" />
+                {activeTab === "network" ? (
+                  <Users2 className="h-8 w-8 text-muted-foreground" />
+                ) : (
+                  <Compass className="h-8 w-8 text-muted-foreground" />
+                )}
               </div>
-              <div className="text-center">
-                <p className="font-medium">
-                  {activeTab === "network" ? "No connections yet" : "No profiles found"}
-                </p>
-                <p className="text-sm text-muted-foreground">
+              <div className="text-center max-w-xs">
+                <p className="font-semibold">
                   {activeTab === "network"
-                    ? "Save profiles or send inquiries to build your network"
+                    ? "Your network is empty"
+                    : "No profiles found"}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {activeTab === "network"
+                    ? "Browse the Discover tab to find DJs, photographers, venues, and more. Save profiles or send inquiries to build your network."
                     : "Try a different search or category"}
                 </p>
               </div>
+              {activeTab === "network" && (
+                <Button
+                  onClick={() => {
+                    setActiveTab("discover");
+                    haptic("light");
+                  }}
+                  className="bg-nocturn hover:bg-nocturn-light min-h-[44px]"
+                >
+                  <Compass className="mr-2 h-4 w-4" />
+                  Browse Profiles
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (

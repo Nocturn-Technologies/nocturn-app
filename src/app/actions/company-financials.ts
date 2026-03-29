@@ -151,7 +151,8 @@ export async function getCompanyFinancials(): Promise<{
     (sum, s) => sum + Number(s.profit),
     0
   );
-  const totalEvents = (settlements ?? []).length;
+  // Count ALL events (not just settlements) so the overview shows even pre-revenue
+  const totalEvents = (allEvents ?? []).length;
 
   return {
     error: null,
@@ -293,13 +294,15 @@ export async function getRevenueForecast(): Promise<{
   const admin = createAdminClient();
   const now = new Date();
 
-  // Get upcoming published events
+  // Get upcoming published events (include events starting today)
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
   const { data: upcomingEvents } = await admin
     .from("events")
     .select("id, title, starts_at, status, created_at")
     .in("collective_id", collectiveIds)
     .in("status", ["published"])
-    .gte("starts_at", now.toISOString())
+    .gte("starts_at", todayStart.toISOString())
     .order("starts_at", { ascending: true });
 
   if (!upcomingEvents || upcomingEvents.length === 0) {

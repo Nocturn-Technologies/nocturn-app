@@ -120,10 +120,14 @@ export default async function FinancePage() {
     (unsettledResult.data ?? []) as UnsettledEvent[]
   ).filter((e) => !settledEventIds.includes(e.id));
 
-  const hasData =
+  const hasEvents =
     (financials && financials.totalEvents > 0) ||
     eventSummaries.length > 0 ||
-    forecasts.length > 0;
+    unsettledEvents.length > 0 ||
+    settlements.length > 0;
+  const hasRevenue =
+    (financials && financials.totalRevenue > 0) ||
+    eventSummaries.some((e) => e.grossRevenue > 0);
 
   // Payout status pipeline
   const payoutStatuses = [
@@ -142,8 +146,8 @@ export default async function FinancePage() {
         </p>
       </div>
 
-      {/* ===== Empty State ===== */}
-      {!hasData && (
+      {/* ===== Empty State (no events at all) ===== */}
+      {!hasEvents && (
         <Card className="border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
           <CardContent className="p-5 md:p-6">
             <div className="flex flex-col items-center gap-4 py-6 text-center">
@@ -169,8 +173,40 @@ export default async function FinancePage() {
         </Card>
       )}
 
+      {/* ===== Getting Started (events exist but no revenue yet) ===== */}
+      {hasEvents && !hasRevenue && (
+        <Card className="border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
+          <CardContent className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-nocturn/10">
+                <Target className="h-6 w-6 text-nocturn" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold">
+                  Your events are set up — now let&apos;s get tickets moving
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Publish your events, share your ticket links, and revenue will
+                  start flowing in here automatically.
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link href="/dashboard/events">
+                    <Button
+                      size="sm"
+                      className="bg-nocturn hover:bg-nocturn-light text-xs"
+                    >
+                      View Events
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ===== SECTION 1: Company-Wide Overview ===== */}
-      {financials && financials.totalEvents > 0 && (
+      {financials && hasEvents && (
         <CompanyOverview financials={financials} />
       )}
 
