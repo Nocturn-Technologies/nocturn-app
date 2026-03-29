@@ -47,9 +47,9 @@ export function EventSuggestions({
                     {suggestion.title}
                   </p>
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1 truncate min-w-0">
                       <MapPin className="h-3 w-3 shrink-0" />
-                      {suggestion.suggestedVenue}
+                      <span className="truncate">{suggestion.suggestedVenue}</span>
                     </span>
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3 shrink-0" />
@@ -77,7 +77,7 @@ export function EventSuggestions({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 px-3 text-xs text-nocturn hover:text-nocturn-light hover:bg-nocturn/10 transition-all duration-200"
+                  className="h-8 px-3 text-xs text-nocturn hover:text-nocturn-light hover:bg-nocturn/10 active:scale-95 transition-all duration-200"
                 >
                   Plan this event
                   <ArrowRight className="ml-1 h-3 w-3" />

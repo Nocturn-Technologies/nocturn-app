@@ -1,41 +1,51 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent } from "@/components/ui/card";
+
+function EventCardSkeleton() {
+  return (
+    <Card className="rounded-2xl">
+      <CardContent className="flex items-center gap-4 p-4">
+        <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
+        <Skeleton className="h-5 w-16 shrink-0 rounded-full" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function SectionSkeleton({ cards = 2 }: { cards?: number }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Skeleton className="h-2 w-2 rounded-full" />
+        <Skeleton className="h-5 w-20" />
+        <Skeleton className="h-5 w-6 rounded-full" />
+      </div>
+      <div className="grid gap-3">
+        {Array.from({ length: cards }).map((_, i) => (
+          <EventCardSkeleton key={i} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function EventsLoading() {
   return (
-    <div className="space-y-6 p-1">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <Skeleton className="h-8 w-32 bg-nocturn/10" />
-        <Skeleton className="h-10 w-36 rounded-md bg-nocturn/10" />
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0 space-y-2">
+          <Skeleton className="h-7 w-24" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <Skeleton className="h-9 w-28 shrink-0 rounded-md" />
       </div>
 
-      {/* Section 1: Upcoming */}
-      <div className="space-y-3">
-        <Skeleton className="h-5 w-40 bg-muted" />
-        {[1, 2].map((i) => (
-          <div key={i} className="rounded-lg border border-border p-4 space-y-2">
-            <Skeleton className="h-5 w-48 bg-nocturn/10" />
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-3 w-28 bg-muted" />
-              <Skeleton className="h-5 w-16 rounded-full bg-muted" />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Section 2: Past */}
-      <div className="space-y-3">
-        <Skeleton className="h-5 w-32 bg-muted" />
-        {[1, 2].map((i) => (
-          <div key={i} className="rounded-lg border border-border p-4 space-y-2">
-            <Skeleton className="h-5 w-48 bg-nocturn/10" />
-            <div className="flex items-center gap-3">
-              <Skeleton className="h-3 w-28 bg-muted" />
-              <Skeleton className="h-5 w-16 rounded-full bg-muted" />
-            </div>
-          </div>
-        ))}
-      </div>
+      <SectionSkeleton cards={3} />
+      <SectionSkeleton cards={2} />
     </div>
   );
 }
