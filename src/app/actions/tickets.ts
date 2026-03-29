@@ -278,6 +278,9 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     if (!referrerUser) referrerToken = null;
   }
 
+  // Use the base USD price for the ticket record (organizer always sees USD)
+  const ticketCurrency = metadata.baseCurrency || pi.currency || "usd";
+
   const { randomUUID } = await import("crypto");
   const tickets = Array.from({ length: quantity }, () => ({
     event_id: eventId,
@@ -285,7 +288,7 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     user_id: null,
     status: "paid" as const,
     price_paid: pricePaid,
-    currency: "usd",
+    currency: ticketCurrency,
     stripe_payment_intent_id: paymentIntentId,
     ticket_token: randomUUID(),
     referred_by: referrerToken,

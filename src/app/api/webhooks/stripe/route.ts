@@ -443,20 +443,27 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     const { data: referrerUser } = await supabase.from("users").select("id").eq("id", referrerToken).maybeSingle();
     if (!referrerUser) referrerToken = null;
   }
+  // Store base currency (USD) for organizer reporting, not the buyer's charge currency
+  const ticketCurrency = metadata.baseCurrency || "usd";
+
   const tickets = Array.from({ length: quantity }, () => ({
     event_id: eventId,
     ticket_tier_id: tierId,
     user_id: null,
     status: "paid" as const,
     price_paid: pricePaid,
-    currency: "usd",
+    currency: ticketCurrency,
     stripe_payment_intent_id: paymentIntent.id,
     ticket_token: randomUUID(),
     referred_by: referrerToken,
     metadata: {
       payment_intent_id: paymentIntent.id,
-      // No checkout_session_id — this handler only runs for non-checkout PIs
       customer_email: buyerEmail,
+      ...(metadata.chargeCurrency && metadata.chargeCurrency !== "usd" && {
+        charge_currency: metadata.chargeCurrency,
+        fx_rate: metadata.fxRate,
+        buyer_country: metadata.buyerCountry,
+      }),
       ...(referrerToken && { referrer_token: referrerToken }),
     },
   }));

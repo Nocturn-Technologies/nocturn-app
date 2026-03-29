@@ -145,6 +145,7 @@ function TicketSuccess({
 
 function CheckoutForm({
   totalAmount,
+  displayAmount,
   eventTitle,
   eventDate,
   eventVenue,
@@ -154,6 +155,7 @@ function CheckoutForm({
   onCancel,
 }: {
   totalAmount: number;
+  displayAmount?: string;
   eventTitle?: string;
   eventDate?: string;
   eventVenue?: string;
@@ -259,7 +261,7 @@ function CheckoutForm({
               Processing...
             </>
           ) : (
-            `Pay $${totalAmount.toFixed(2)}`
+            `Pay ${displayAmount || `$${totalAmount.toFixed(2)}`}`
           )}
         </Button>
       </div>
@@ -291,6 +293,7 @@ export function StripeCheckout({
   onCancel,
 }: StripeCheckoutProps) {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [displayAmount, setDisplayAmount] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -315,6 +318,7 @@ export function StripeCheckout({
         }
 
         setClientSecret(data.clientSecret);
+        if (data.displayAmount) setDisplayAmount(data.displayAmount);
         setLoading(false);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
@@ -373,6 +377,7 @@ export function StripeCheckout({
     >
       <CheckoutForm
         totalAmount={totalAmount}
+        displayAmount={displayAmount ?? undefined}
         eventTitle={eventTitle}
         eventDate={eventDate}
         eventVenue={eventVenue}

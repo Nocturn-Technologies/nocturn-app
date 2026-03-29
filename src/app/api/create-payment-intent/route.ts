@@ -3,6 +3,7 @@ import { getStripe } from "@/lib/stripe";
 import { calculateServiceFeeCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimit } from "@/lib/rate-limit";
+import { getCurrencyForCountry, convertAmount, formatLocalAmount } from "@/lib/currency";
 
 export async function POST(request: NextRequest) {
   const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -151,12 +152,18 @@ export async function POST(request: NextRequest) {
 
     const serviceFeePerTicketCents = calculateServiceFeeCents(unitAmountCents);
     const totalPerTicketCents = unitAmountCents + serviceFeePerTicketCents;
-    const totalCents = totalPerTicketCents * quantity;
+    const totalUsdCents = totalPerTicketCents * quantity;
 
-    // Create PaymentIntent (includes ticket price + service fee)
+    // Detect buyer's country from Vercel header → convert to local currency
+    const buyerCountry = request.headers.get("x-vercel-ip-country") || null;
+    const targetCurrency = getCurrencyForCountry(buyerCountry);
+    const { amount: chargeAmount, rate: fxRate, currency: chargeCurrency } =
+      await convertAmount(totalUsdCents, targetCurrency);
+
+    // Create PaymentIntent in buyer's local currency
     const paymentIntent = await getStripe().paymentIntents.create({
-      amount: totalCents,
-      currency: "usd",
+      amount: chargeAmount,
+      currency: chargeCurrency,
       receipt_email: buyerEmail,
       metadata: {
         eventId,
@@ -164,6 +171,11 @@ export async function POST(request: NextRequest) {
         quantity: String(quantity),
         buyerEmail,
         ticketPriceCents: String(unitAmountCents),
+        baseCurrency: "usd",
+        baseAmountCents: String(totalUsdCents),
+        chargeCurrency,
+        fxRate: String(fxRate),
+        ...(buyerCountry && { buyerCountry }),
         ...(referrerToken && { referrerToken }),
         ...(promoId && { promoId, promoCode: validatedPromoCode ?? "" }),
         ...(discountCents > 0 && { discountCents: String(discountCents) }),
@@ -173,7 +185,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
-      amount: totalCents,
+      amount: chargeAmount,
+      currency: chargeCurrency,
+      displayAmount: formatLocalAmount(chargeAmount, chargeCurrency),
     });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : "Unknown error";
