@@ -6,96 +6,88 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
   Users,
-  Crown,
-  TrendingUp,
-  DollarSign,
+  Music2,
+  Bookmark,
+  MapPin,
   Search,
-  ChevronLeft,
-  ChevronRight,
+  Instagram,
+  Globe,
+  Heart,
+  MessageSquare,
+  User,
 } from "lucide-react";
-import { getNetworkCRM, type CRMContact, type CRMStats, type ContactSegment } from "@/app/actions/network-crm";
+import {
+  getNetworkCRM,
+  type IndustryContact,
+  type NetworkCRMStats,
+  type RelationshipTag,
+} from "@/app/actions/network-crm";
+import { saveProfile, unsaveProfile } from "@/app/actions/marketplace";
+import { ContactDialog } from "./contact-dialog";
+import { haptic } from "@/lib/haptics";
+import { TYPE_BADGE_COLORS, TYPE_LABELS_SHORT } from "@/lib/marketplace-constants";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
-const PER_PAGE = 20;
+type RelFilter = "all" | RelationshipTag;
+type CategoryFilter =
+  | "all"
+  | "artist"
+  | "venue"
+  | "photographer"
+  | "videographer"
+  | "collective"
+  | "other";
 
-type SegmentFilter = "all" | ContactSegment;
+const RELATIONSHIP_FILTERS: { label: string; value: RelFilter }[] = [
+  { label: "All", value: "all" },
+  { label: "Booked", value: "Booked" },
+  { label: "Saved", value: "Saved" },
+  { label: "Connected", value: "Connected" },
+];
 
-const SEGMENT_LABELS: Record<ContactSegment, string> = {
-  vip: "VIP",
-  repeat: "Repeat",
-  new: "New",
-  lapsed: "Lapsed",
-};
+const CATEGORY_FILTERS: { label: string; value: CategoryFilter }[] = [
+  { label: "All", value: "all" },
+  { label: "DJs", value: "artist" },
+  { label: "Venues", value: "venue" },
+  { label: "Photo", value: "photographer" },
+  { label: "Video", value: "videographer" },
+  { label: "Collectives", value: "collective" },
+  { label: "Other", value: "other" },
+];
 
-// ── Segment badge styles ───────────────────────────────────────────────────────
+const OTHER_TYPES = new Set([
+  "promoter",
+  "sound_production",
+  "lighting_production",
+  "sponsor",
+  "artist_manager",
+  "tour_manager",
+  "booking_agent",
+  "event_staff",
+  "mc_host",
+  "graphic_designer",
+  "pr_publicist",
+]);
 
-function segmentBadgeClass(segment: ContactSegment): string {
-  switch (segment) {
-    case "vip":
-      return "bg-[#7B2FF7]/20 text-[#9D5CFF] border border-[#7B2FF7]/30";
-    case "repeat":
-      return "bg-blue-500/15 text-blue-400 border border-blue-500/25";
-    case "new":
-      return "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25";
-    case "lapsed":
-      return "bg-orange-500/15 text-orange-400 border border-orange-500/25";
-  }
-}
+// ── Relationship badge ─────────────────────────────────────────────────────────
 
-function segmentDotClass(segment: ContactSegment): string {
-  switch (segment) {
-    case "vip":
-      return "bg-[#7B2FF7]";
-    case "repeat":
-      return "bg-blue-400";
-    case "new":
-      return "bg-emerald-400";
-    case "lapsed":
-      return "bg-orange-400";
-  }
-}
-
-// ── Mini sparkline ─────────────────────────────────────────────────────────────
-
-function Sparkline({ data, segment }: { data: number[]; segment: ContactSegment }) {
-  if (!data || data.length < 2) {
-    return (
-      <div className="flex items-end gap-[2px] h-6">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div
-            key={i}
-            className="w-1 rounded-sm bg-muted/40"
-            style={{ height: "4px" }}
-          />
-        ))}
-      </div>
-    );
-  }
-
-  const max = Math.max(...data, 0.01);
-  const colorClass =
-    segment === "vip"
-      ? "bg-[#7B2FF7]"
-      : segment === "repeat"
-      ? "bg-blue-400"
-      : segment === "new"
-      ? "bg-emerald-400"
-      : "bg-orange-400";
+function RelBadge({ tag }: { tag: RelationshipTag }) {
+  const styles: Record<RelationshipTag, string> = {
+    Booked:
+      "bg-[#7B2FF7]/15 text-[#9D5CFF] border border-[#7B2FF7]/25",
+    Saved:
+      "bg-rose-500/10 text-rose-400 border border-rose-500/20",
+    Connected:
+      "bg-blue-500/10 text-blue-400 border border-blue-500/20",
+  };
 
   return (
-    <div className="flex items-end gap-[2px] h-6">
-      {data.map((val, i) => {
-        const heightPct = Math.max((val / max) * 100, 8);
-        return (
-          <div
-            key={i}
-            className={`w-1 rounded-sm ${colorClass} opacity-80`}
-            style={{ height: `${heightPct}%` }}
-          />
-        );
-      })}
-    </div>
+    <span
+      className={`rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wide uppercase ${styles[tag]}`}
+    >
+      {tag}
+    </span>
   );
 }
 
@@ -110,14 +102,16 @@ function StatCard({
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value: string | number;
   iconBg: string;
   iconColor: string;
 }) {
   return (
     <Card className="border-border/50">
       <CardContent className="flex items-center gap-3 p-4">
-        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconBg}`}>
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${iconBg}`}
+        >
           <span className={iconColor}>{icon}</span>
         </div>
         <div className="min-w-0">
@@ -129,123 +123,262 @@ function StatCard({
   );
 }
 
+// ── Soundcloud icon (not in lucide) ───────────────────────────────────────────
+
+function SoundcloudIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M11.56 8.87V17h8.76c.82-.09 1.49-.8 1.49-1.65s-.68-1.57-1.51-1.64c.2-.48.31-.99.31-1.53 0-2.17-1.76-3.93-3.93-3.93-.84 0-1.62.26-2.26.71-.5-1.84-2.18-3.2-4.19-3.2-2.4 0-4.34 1.94-4.34 4.34 0 .28.03.55.07.82C4.08 11.41 3 12.64 3 14.1c0 1.59 1.3 2.9 2.9 2.9h1.73V8.87a.93.93 0 0 1 1.86 0v8.13h1.86V8.87a.93.93 0 0 1 1.21-.87z" />
+    </svg>
+  );
+}
+
 // ── Contact card ──────────────────────────────────────────────────────────────
 
-function ContactCard({ contact }: { contact: CRMContact }) {
-  const [expanded, setExpanded] = useState(false);
+interface ContactCardProps {
+  contact: IndustryContact;
+  savedIds: Set<string>;
+  onSave: (id: string) => void;
+  onUnsave: (id: string) => void;
+  onContact: (contact: IndustryContact) => void;
+}
 
-  const displayName = contact.name ?? contact.email.split("@")[0];
-  const emailDomain = contact.email.split("@")[1] ?? "";
+function ContactCard({
+  contact,
+  savedIds,
+  onSave,
+  onUnsave,
+  onContact,
+}: ContactCardProps) {
+  const type = contact.type ?? "artist";
+  const badgeColor =
+    TYPE_BADGE_COLORS[type] ?? "bg-muted/60 text-muted-foreground";
+  const typeLabel = TYPE_LABELS_SHORT[type] ?? type;
 
-  const lastSeenDate = contact.lastSeen
-    ? new Date(contact.lastSeen).toLocaleDateString("en", {
+  const isSaved = savedIds.has(contact.profileId ?? contact.id);
+
+  const lastDate = contact.lastCollabDate
+    ? new Date(contact.lastCollabDate).toLocaleDateString("en", {
         month: "short",
-        day: "numeric",
         year: "numeric",
       })
-    : "—";
+    : null;
+
+  const initials = contact.name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
 
   return (
-    <Card
-      className="border-border/50 hover:border-border transition-colors cursor-pointer group"
-      onClick={() => setExpanded((p) => !p)}
-    >
-      <CardContent className="p-4 space-y-3">
-        {/* Top row */}
-        <div className="flex items-start justify-between gap-2">
-          {/* Avatar + name */}
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-bold uppercase">
-              {displayName.charAt(0)}
-            </div>
-            <div className="min-w-0">
-              <p className="font-semibold text-sm truncate">{displayName}</p>
-              <p className="text-xs text-muted-foreground truncate">
-                {contact.name ? contact.email : `@${emailDomain}`}
-              </p>
-            </div>
-          </div>
+    <Card className="overflow-hidden border-border/50 hover:border-border/80 transition-all group bg-card/60">
+      {/* Gradient header strip */}
+      <div className="relative h-16 bg-gradient-to-br from-nocturn/20 via-nocturn/5 to-transparent">
+        {/* Type badge */}
+        <span
+          className={`absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badgeColor}`}
+        >
+          {typeLabel}
+        </span>
+      </div>
 
-          {/* Segment badge */}
-          <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${segmentBadgeClass(contact.segment)}`}
-          >
-            {contact.segment === "vip" && "★ "}
-            {SEGMENT_LABELS[contact.segment]}
-          </span>
-        </div>
-
-        {/* Metrics row */}
-        <div className="grid grid-cols-3 gap-2 text-center">
-          <div className="rounded-lg bg-muted/40 p-2">
-            <p className="text-[10px] text-muted-foreground mb-0.5">Events</p>
-            <p className="text-sm font-bold">{contact.eventsAttended}</p>
-          </div>
-          <div className="rounded-lg bg-muted/40 p-2">
-            <p className="text-[10px] text-muted-foreground mb-0.5">Spent</p>
-            <p className="text-sm font-bold text-nocturn">
-              ${contact.totalSpent.toFixed(0)}
-            </p>
-          </div>
-          <div className="rounded-lg bg-muted/40 p-2">
-            <p className="text-[10px] text-muted-foreground mb-0.5">Referrals</p>
-            <p className="text-sm font-bold">{contact.referralCount}</p>
+      {/* Avatar + name */}
+      <div className="px-3 pb-1">
+        {/* Avatar overlapping header */}
+        <div className="flex items-end -mt-5 mb-2">
+          <div className="h-10 w-10 shrink-0 rounded-full border-2 border-card bg-nocturn/10 flex items-center justify-center overflow-hidden shadow-md">
+            {contact.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={contact.avatarUrl}
+                alt={contact.name}
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
+            ) : (
+              <span className="text-xs font-bold text-nocturn/60 select-none">
+                {initials || <User className="h-4 w-4 text-nocturn/50" />}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Sparkline + last seen */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex flex-col gap-0.5">
-            <p className="text-[9px] uppercase tracking-wide text-muted-foreground/60 font-medium">
-              Spend trend
-            </p>
-            <Sparkline data={contact.spendHistory} segment={contact.segment} />
-          </div>
-          <div className="text-right">
-            <p className="text-[9px] uppercase tracking-wide text-muted-foreground/60 font-medium">
-              Last seen
-            </p>
-            <p className="text-xs text-muted-foreground mt-0.5">{lastSeenDate}</p>
-          </div>
-        </div>
+        {/* Name */}
+        <h3 className="font-semibold text-sm leading-tight truncate">
+          {contact.name}
+        </h3>
 
-        {/* Expanded: event history */}
-        {expanded && contact.eventTitles.length > 0 && (
-          <div className="border-t border-border/40 pt-3 space-y-1.5 mt-1">
-            <p className="text-[10px] uppercase tracking-wide text-muted-foreground/60 font-medium mb-2">
-              Events attended
-            </p>
-            {contact.eventTitles.map((title, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <div
-                  className={`h-1.5 w-1.5 rounded-full shrink-0 ${segmentDotClass(contact.segment)}`}
-                />
-                <p className="text-xs text-muted-foreground truncate">{title}</p>
-              </div>
-            ))}
+        {/* City */}
+        {contact.city && (
+          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+            <MapPin className="h-2.5 w-2.5 shrink-0" />
+            <span className="truncate">{contact.city}</span>
           </div>
         )}
-      </CardContent>
+
+        {/* Events together */}
+        {contact.eventsWorked > 0 && (
+          <p className="mt-1.5 text-[11px] text-nocturn font-medium">
+            {contact.eventsWorked} event{contact.eventsWorked !== 1 ? "s" : ""} together
+          </p>
+        )}
+
+        {/* Last collab */}
+        {lastDate && (
+          <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+            Last: {lastDate}
+          </p>
+        )}
+
+        {/* Relationship badges */}
+        <div className="mt-2 flex flex-wrap gap-1">
+          {contact.relationships.map((tag) => (
+            <RelBadge key={tag} tag={tag} />
+          ))}
+        </div>
+
+        {/* Social links */}
+        <div className="mt-2 flex items-center gap-2">
+          {contact.instagramHandle && (
+            <a
+              href={`https://instagram.com/${contact.instagramHandle.replace(/^@/, "")}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-pink-400 transition-colors"
+              title="Instagram"
+            >
+              <Instagram className="h-3 w-3" />
+              <span className="truncate max-w-[80px]">
+                @{contact.instagramHandle.replace(/^@/, "")}
+              </span>
+            </a>
+          )}
+          {contact.soundcloudUrl && (
+            <a
+              href={contact.soundcloudUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-muted-foreground hover:text-orange-400 transition-colors"
+              title="SoundCloud"
+            >
+              <SoundcloudIcon className="h-3.5 w-3.5" />
+            </a>
+          )}
+          {contact.spotifyUrl && (
+            <a
+              href={contact.spotifyUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-muted-foreground hover:text-green-400 transition-colors"
+              title="Spotify"
+            >
+              <svg
+                className="h-3.5 w-3.5"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+              >
+                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
+              </svg>
+            </a>
+          )}
+          {contact.websiteUrl && (
+            <a
+              href={contact.websiteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              title="Website"
+            >
+              <Globe className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div className="flex items-center gap-1.5 px-3 pb-3 pt-2">
+        {contact.profileId ? (
+          <Button
+            size="sm"
+            className="flex-1 bg-nocturn hover:bg-nocturn-light text-white h-9 text-xs"
+            onClick={() => {
+              haptic("light");
+              onContact(contact);
+            }}
+          >
+            <MessageSquare className="mr-1.5 h-3 w-3" />
+            Contact
+          </Button>
+        ) : (
+          <div className="flex-1" />
+        )}
+
+        {contact.profileId && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className={`shrink-0 h-9 w-9 ${
+              isSaved
+                ? "text-rose-400 hover:text-rose-300"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            onClick={() => {
+              haptic("light");
+              if (contact.profileId) {
+                isSaved ? onUnsave(contact.profileId) : onSave(contact.profileId);
+              }
+            }}
+          >
+            <Heart className={`h-3.5 w-3.5 ${isSaved ? "fill-rose-400" : ""}`} />
+          </Button>
+        )}
+      </div>
     </Card>
   );
 }
 
-// ── Main CRM Component ─────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
 
 export function NetworkCRM() {
-  const [contacts, setContacts] = useState<CRMContact[]>([]);
-  const [stats, setStats] = useState<CRMStats>({
+  const [contacts, setContacts] = useState<IndustryContact[]>([]);
+  const [stats, setStats] = useState<NetworkCRMStats>({
     totalContacts: 0,
-    vipCount: 0,
-    repeatRate: 0,
-    avgLTV: 0,
+    bookedArtists: 0,
+    savedProfiles: 0,
+    cities: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Local saved IDs for optimistic UI
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+
+  // Filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [segmentFilter, setSegmentFilter] = useState<SegmentFilter>("all");
-  const [page, setPage] = useState(1);
+  const [relFilter, setRelFilter] = useState<RelFilter>("all");
+  const [catFilter, setCatFilter] = useState<CategoryFilter>("all");
+
+  // Contact dialog
+  const [contactTarget, setContactTarget] = useState<{
+    id: string;
+    name: string;
+    type: string;
+    city: string;
+  } | null>(null);
+
+  // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -262,9 +395,16 @@ export function NetworkCRM() {
       } else {
         setContacts(result.contacts);
         setStats(result.stats);
+        // Seed saved IDs from contacts
+        const saved = new Set(
+          result.contacts
+            .filter((c) => c.isSaved && c.profileId)
+            .map((c) => c.profileId as string)
+        );
+        setSavedIds(saved);
       }
     } catch {
-      setError("Failed to load contacts. Please try again.");
+      setError("Failed to load your network. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -274,58 +414,98 @@ export function NetworkCRM() {
     fetchData();
   }, [fetchData]);
 
-  // Reset page when filters change
-  useEffect(() => {
-    setPage(1);
-  }, [searchQuery, segmentFilter]);
+  // ── Save / unsave ──────────────────────────────────────────────────────────
 
-  // Filter contacts
+  async function handleSave(profileId: string) {
+    setSavedIds((prev) => new Set(prev).add(profileId));
+    const { error: err } = await saveProfile(profileId);
+    if (err) {
+      setSavedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(profileId);
+        return next;
+      });
+    }
+  }
+
+  async function handleUnsave(profileId: string) {
+    setSavedIds((prev) => {
+      const next = new Set(prev);
+      next.delete(profileId);
+      return next;
+    });
+    const { error: err } = await unsaveProfile(profileId);
+    if (err) {
+      setSavedIds((prev) => new Set(prev).add(profileId));
+    }
+  }
+
+  // ── Filter ─────────────────────────────────────────────────────────────────
+
   const filtered = useMemo(() => {
     return contacts.filter((c) => {
-      const matchesSegment =
-        segmentFilter === "all" || c.segment === segmentFilter;
+      // Relationship filter
+      if (relFilter !== "all" && !c.relationships.includes(relFilter as RelationshipTag)) {
+        return false;
+      }
 
+      // Category filter
+      if (catFilter !== "all") {
+        if (catFilter === "other") {
+          if (!OTHER_TYPES.has(c.type)) return false;
+        } else {
+          if (c.type !== catFilter) return false;
+        }
+      }
+
+      // Search
       const q = searchQuery.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
-        c.email.toLowerCase().includes(q) ||
-        (c.name ?? "").toLowerCase().includes(q);
+      if (q && !c.name.toLowerCase().includes(q)) return false;
 
-      return matchesSegment && matchesSearch;
+      return true;
     });
-  }, [contacts, searchQuery, segmentFilter]);
+  }, [contacts, relFilter, catFilter, searchQuery]);
 
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
-  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
-
-  // Segment counts for filter chips
-  const segmentCounts = useMemo(() => {
-    const counts: Record<ContactSegment, number> = { vip: 0, repeat: 0, new: 0, lapsed: 0 };
-    for (const c of contacts) counts[c.segment]++;
+  // Filter counts for chips
+  const relCounts = useMemo(() => {
+    const counts: Record<RelFilter, number> = {
+      all: contacts.length,
+      Booked: 0,
+      Saved: 0,
+      Connected: 0,
+    };
+    for (const c of contacts) {
+      for (const r of c.relationships) counts[r]++;
+    }
     return counts;
   }, [contacts]);
 
-  // ── Render: loading ──────────────────────────────────────────────────────────
+  // ── Loading state ──────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="flex flex-col items-center gap-3">
           <div className="h-7 w-7 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
-          <p className="text-xs text-muted-foreground">Loading contacts...</p>
+          <p className="text-xs text-muted-foreground">Loading your network...</p>
         </div>
       </div>
     );
   }
 
-  // ── Render: error ────────────────────────────────────────────────────────────
+  // ── Error state ────────────────────────────────────────────────────────────
 
   if (error) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center gap-3 py-10">
           <p className="text-sm text-destructive">{error}</p>
-          <Button variant="outline" size="sm" onClick={fetchData} className="min-h-[44px]">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={fetchData}
+            className="min-h-[44px]"
+          >
             Retry
           </Button>
         </CardContent>
@@ -333,7 +513,7 @@ export function NetworkCRM() {
     );
   }
 
-  // ── Render: empty state ──────────────────────────────────────────────────────
+  // ── Empty state ────────────────────────────────────────────────────────────
 
   if (contacts.length === 0) {
     return (
@@ -343,10 +523,10 @@ export function NetworkCRM() {
             <Users className="h-8 w-8 text-nocturn" />
           </div>
           <div className="text-center max-w-xs">
-            <p className="font-semibold text-lg">No contacts yet</p>
+            <p className="font-semibold text-lg">Your network is empty</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Once people buy tickets to your events, they&apos;ll appear here
-              as CRM contacts — automatically segmented and tracked.
+              Discover and save profiles, or book artists for your events — they&apos;ll
+              appear here as your industry contacts.
             </p>
           </div>
         </CardContent>
@@ -354,7 +534,7 @@ export function NetworkCRM() {
     );
   }
 
-  // ── Render: main ─────────────────────────────────────────────────────────────
+  // ── Main render ────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-4">
@@ -363,28 +543,28 @@ export function NetworkCRM() {
         <StatCard
           icon={<Users className="h-5 w-5" />}
           label="Total Contacts"
-          value={stats.totalContacts.toLocaleString()}
+          value={stats.totalContacts}
           iconBg="bg-nocturn/10"
           iconColor="text-nocturn"
         />
         <StatCard
-          icon={<Crown className="h-5 w-5" />}
-          label="VIPs (5+ events)"
-          value={stats.vipCount.toLocaleString()}
+          icon={<Music2 className="h-5 w-5" />}
+          label="Booked Artists"
+          value={stats.bookedArtists}
           iconBg="bg-[#7B2FF7]/10"
           iconColor="text-[#9D5CFF]"
         />
         <StatCard
-          icon={<TrendingUp className="h-5 w-5" />}
-          label="Repeat Rate"
-          value={`${stats.repeatRate}%`}
-          iconBg="bg-blue-500/10"
-          iconColor="text-blue-400"
+          icon={<Bookmark className="h-5 w-5" />}
+          label="Saved Profiles"
+          value={stats.savedProfiles}
+          iconBg="bg-rose-500/10"
+          iconColor="text-rose-400"
         />
         <StatCard
-          icon={<DollarSign className="h-5 w-5" />}
-          label="Avg LTV"
-          value={`$${stats.avgLTV.toFixed(0)}`}
+          icon={<MapPin className="h-5 w-5" />}
+          label="Cities"
+          value={stats.cities}
           iconBg="bg-emerald-500/10"
           iconColor="text-emerald-400"
         />
@@ -397,38 +577,35 @@ export function NetworkCRM() {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search by name or email..."
+          placeholder="Search by name..."
           className="pl-10"
         />
       </div>
 
-      {/* Segment filter chips */}
+      {/* Relationship filter chips */}
       <div className="flex gap-1.5 flex-wrap">
-        {(["all", "vip", "repeat", "new", "lapsed"] as const).map((seg) => {
-          const isActive = segmentFilter === seg;
-          const count =
-            seg === "all"
-              ? contacts.length
-              : segmentCounts[seg];
+        {RELATIONSHIP_FILTERS.map(({ label, value }) => {
+          const isActive = relFilter === value;
+          const count = relCounts[value];
 
           let chipClass = "";
           if (isActive) {
-            if (seg === "all") chipClass = "bg-nocturn text-white";
-            else if (seg === "vip") chipClass = "bg-[#7B2FF7] text-white";
-            else if (seg === "repeat") chipClass = "bg-blue-500 text-white";
-            else if (seg === "new") chipClass = "bg-emerald-500 text-white";
-            else chipClass = "bg-orange-500 text-white";
+            if (value === "all") chipClass = "bg-nocturn text-white";
+            else if (value === "Booked") chipClass = "bg-[#7B2FF7] text-white";
+            else if (value === "Saved") chipClass = "bg-rose-500 text-white";
+            else chipClass = "bg-blue-500 text-white";
           } else {
-            chipClass = "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted";
+            chipClass =
+              "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted";
           }
 
           return (
             <button
-              key={seg}
-              onClick={() => setSegmentFilter(seg)}
+              key={value}
+              onClick={() => setRelFilter(value)}
               className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${chipClass}`}
             >
-              {seg === "all" ? "All" : SEGMENT_LABELS[seg]}
+              {label}
               <span
                 className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
                   isActive ? "bg-white/20" : "bg-muted"
@@ -441,32 +618,32 @@ export function NetworkCRM() {
         })}
       </div>
 
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground/70 px-0.5">
-        <span className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#7B2FF7]" />
-          VIP = 5+ events
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
-          Repeat = 2–4 events
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-          New = 1 event
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-          Lapsed = 90+ days inactive
-        </span>
+      {/* Category filter chips */}
+      <div className="flex gap-1.5 flex-wrap">
+        {CATEGORY_FILTERS.map(({ label, value }) => {
+          const isActive = catFilter === value;
+          return (
+            <button
+              key={value}
+              onClick={() => setCatFilter(value)}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                isActive
+                  ? "bg-white/10 text-foreground border border-white/20"
+                  : "bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Results count */}
+      {/* Result count */}
       <p className="text-xs text-muted-foreground">
         {filtered.length} contact{filtered.length !== 1 ? "s" : ""}
-        {segmentFilter !== "all" && ` · ${SEGMENT_LABELS[segmentFilter]}`}
+        {relFilter !== "all" && ` · ${relFilter}`}
+        {catFilter !== "all" && ` · ${CATEGORY_FILTERS.find((f) => f.value === catFilter)?.label}`}
         {searchQuery && ` · matching "${searchQuery}"`}
-        {totalPages > 1 && ` · Page ${page} of ${totalPages}`}
       </p>
 
       {/* Contact grid */}
@@ -474,76 +651,45 @@ export function NetworkCRM() {
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-sm text-muted-foreground">
-              No contacts match your search or filter.
+              No contacts match your filters.
             </p>
           </CardContent>
         </Card>
       ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {paginated.map((contact) => (
-              <ContactCard key={contact.email} contact={contact} />
-            ))}
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 pt-2 pb-4">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page <= 1}
-                onClick={() => {
-                  setPage((p) => Math.max(1, p - 1));
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                className="min-h-[44px] min-w-[44px]"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 5) pageNum = i + 1;
-                else if (page <= 3) pageNum = i + 1;
-                else if (page >= totalPages - 2) pageNum = totalPages - 4 + i;
-                else pageNum = page - 2 + i;
-                return (
-                  <Button
-                    key={pageNum}
-                    variant={page === pageNum ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => {
-                      setPage(pageNum);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                    className={`min-h-[44px] min-w-[44px] ${
-                      page === pageNum ? "bg-nocturn hover:bg-nocturn-light" : ""
-                    }`}
-                  >
-                    {pageNum}
-                  </Button>
-                );
-              })}
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page >= totalPages}
-                onClick={() => {
-                  setPage((p) => Math.min(totalPages, p + 1));
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                className="min-h-[44px] min-w-[44px]"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
-        </>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {filtered.map((contact) => (
+            <ContactCard
+              key={`${contact.profileId ?? "artist"}-${contact.id}`}
+              contact={contact}
+              savedIds={savedIds}
+              onSave={handleSave}
+              onUnsave={handleUnsave}
+              onContact={(c) => {
+                if (c.profileId) {
+                  setContactTarget({
+                    id: c.profileId,
+                    name: c.name,
+                    type: c.type,
+                    city: c.city ?? "",
+                  });
+                }
+              }}
+            />
+          ))}
+        </div>
       )}
+
+      {/* Contact dialog */}
+      <ContactDialog
+        profileId={contactTarget?.id ?? ""}
+        profileName={contactTarget?.name ?? ""}
+        open={!!contactTarget}
+        onOpenChange={(open) => {
+          if (!open) setContactTarget(null);
+        }}
+      />
     </div>
   );
 }
 
-// ── Export alias used in discover page ────────────────────────────────────────
-// (re-exported for clarity)
 export default NetworkCRM;

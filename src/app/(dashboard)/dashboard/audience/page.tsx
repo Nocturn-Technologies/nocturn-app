@@ -47,11 +47,14 @@ import {
   Repeat,
   ExternalLink,
   CalendarDays,
+  Search,
+  X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 // ── Section Tab Config ──
 
-type SectionKey = "audience" | "insights" | "venues" | "artists" | "calendar";
+type SectionKey = "audience" | "insights" | "venues" | "artists" | "calendar" | "crm";
 
 const sectionConfig: {
   key: SectionKey;
@@ -59,6 +62,7 @@ const sectionConfig: {
   icon: typeof UsersRound;
 }[] = [
   { key: "audience", label: "Audience", icon: UsersRound },
+  { key: "crm", label: "CRM", icon: Users },
   { key: "insights", label: "Insights", icon: TrendingUp },
   { key: "venues", label: "Venues", icon: MapPin },
   { key: "artists", label: "Artists", icon: Music },
@@ -220,10 +224,15 @@ export default function AudiencePage() {
   // ── Loading ──
   const [loading, setLoading] = useState(true);
 
+  // ── CRM state ──
+  const [crmSearch, setCrmSearch] = useState("");
+  const [crmSegmentFilter, setCrmSegmentFilter] = useState<AudienceMember["segment"] | "all">("all");
+
   // ── Section refs + active section ──
   const [activeSection, setActiveSection] = useState<SectionKey>("audience");
   const sectionRefs = useRef<Record<SectionKey, HTMLDivElement | null>>({
     audience: null,
+    crm: null,
     insights: null,
     venues: null,
     artists: null,
@@ -340,6 +349,7 @@ export default function AudiencePage() {
 
     const keys: SectionKey[] = [
       "audience",
+      "crm",
       "insights",
       "venues",
       "artists",
@@ -417,6 +427,53 @@ export default function AudiencePage() {
     }
     return body;
   }
+
+  // ── Derived CRM state ──
+  const allCrmMembers = useMemo(() => {
+    const seen = new Set<string>();
+    const all: AudienceMember[] = [];
+    for (const arr of [segments.core50, segments.ambassadors, segments.repeatFans, segments.firstTimers]) {
+      for (const m of arr) {
+        if (!seen.has(m.email)) {
+          seen.add(m.email);
+          all.push(m);
+        }
+      }
+    }
+    return all.sort((a, b) => b.totalSpent - a.totalSpent || b.eventsAttended - a.eventsAttended);
+  }, [segments]);
+
+  const filteredCrmMembers = useMemo(() => {
+    let list = allCrmMembers;
+    if (crmSegmentFilter !== "all") {
+      list = list.filter((m) => m.segment === crmSegmentFilter);
+    }
+    if (crmSearch.trim()) {
+      const q = crmSearch.toLowerCase().trim();
+      list = list.filter(
+        (m) =>
+          m.email.toLowerCase().includes(q) ||
+          (m.name ?? "").toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [allCrmMembers, crmSegmentFilter, crmSearch]);
+
+  const crmStats = useMemo(() => {
+    const total = allCrmMembers.length;
+    const vips = allCrmMembers.filter((m) => m.totalSpent >= 200 || m.eventsAttended >= 5).length;
+    const repeats = allCrmMembers.filter((m) => m.eventsAttended >= 2).length;
+    const repeatRate = total > 0 ? Math.round((repeats / total) * 100) : 0;
+    const totalLtv = allCrmMembers.reduce((s, m) => s + m.totalSpent, 0);
+    const avgLtv = total > 0 ? totalLtv / total : 0;
+    return { total, vips, repeatRate, avgLtv };
+  }, [allCrmMembers]);
+
+  const crmSegmentCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: allCrmMembers.length, core: 0, ambassador: 0, repeat: 0, first_timer: 0 };
+    for (const m of allCrmMembers) counts[m.segment] = (counts[m.segment] ?? 0) + 1;
+    return counts;
+  }, [allCrmMembers]);
 
   // ── Derived audience state ──
   const activeSegment = segments[activeTab];
@@ -922,7 +979,220 @@ export default function AudiencePage() {
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════════
-          SECTION 2: Insights
+          SECTION 2: CRM
+      ════════════════════════════════════════════════════════════════════════ */}
+      <div
+        ref={(el) => { sectionRefs.current.crm = el; }}
+        className="scroll-mt-16 space-y-4"
+      >
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-nocturn" />
+          <h2 className="text-lg font-semibold">CRM</h2>
+        </div>
+
+        {/* CRM Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <Card>
+            <CardContent className="p-3 text-center">
+              <p className="text-xl font-bold">{crmStats.total}</p>
+              <p className="text-[11px] text-muted-foreground">Total Contacts</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <p className="text-xl font-bold text-amber-400">{crmStats.vips}</p>
+              <p className="text-[11px] text-muted-foreground">VIPs</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <p className="text-xl font-bold text-green-400">{crmStats.repeatRate}%</p>
+              <p className="text-[11px] text-muted-foreground">Repeat Rate</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 text-center">
+              <p className="text-xl font-bold text-nocturn">
+                ${crmStats.avgLtv.toFixed(0)}
+              </p>
+              <p className="text-[11px] text-muted-foreground">Avg LTV</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Search + Filter */}
+        <div className="space-y-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by name or email..."
+              value={crmSearch}
+              onChange={(e) => setCrmSearch(e.target.value)}
+              className="pl-9 pr-9 bg-card"
+            />
+            {crmSearch && (
+              <button
+                onClick={() => setCrmSearch("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {/* Segment filter chips */}
+          <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+            {(
+              [
+                { key: "all", label: "All" },
+                { key: "core", label: "Core" },
+                { key: "ambassador", label: "Ambassadors" },
+                { key: "repeat", label: "Repeat" },
+                { key: "first_timer", label: "New" },
+              ] as { key: AudienceMember["segment"] | "all"; label: string }[]
+            ).map(({ key, label }) => {
+              const count = crmSegmentCounts[key] ?? 0;
+              const isActive = crmSegmentFilter === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setCrmSegmentFilter(key)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all border ${
+                    isActive
+                      ? "bg-nocturn/10 border-nocturn/40 text-nocturn"
+                      : "border-border text-muted-foreground hover:text-foreground hover:bg-card/50"
+                  }`}
+                >
+                  {label}
+                  <span className={`text-[10px] ${isActive ? "text-nocturn" : "text-muted-foreground"}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Contact Cards */}
+        <Card>
+          <CardContent className="p-0">
+            {filteredCrmMembers.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-12">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-nocturn/10">
+                  <Users className="h-7 w-7 text-nocturn" />
+                </div>
+                <p className="text-sm text-muted-foreground text-center">
+                  {crmSearch || crmSegmentFilter !== "all"
+                    ? "No contacts match your search."
+                    : "No attendees yet. Sell tickets to build your CRM."}
+                </p>
+                {(crmSearch || crmSegmentFilter !== "all") && (
+                  <button
+                    onClick={() => { setCrmSearch(""); setCrmSegmentFilter("all"); }}
+                    className="text-xs text-nocturn hover:underline"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {filteredCrmMembers.map((member) => {
+                  const segmentLabel =
+                    member.segment === "core"
+                      ? "Core"
+                      : member.segment === "ambassador"
+                      ? "Ambassador"
+                      : member.segment === "repeat"
+                      ? "Repeat"
+                      : "New";
+                  const segmentColor =
+                    member.segment === "core"
+                      ? "bg-amber-400/10 text-amber-400 border-amber-400/20"
+                      : member.segment === "ambassador"
+                      ? "bg-nocturn/10 text-nocturn border-nocturn/20"
+                      : member.segment === "repeat"
+                      ? "bg-green-400/10 text-green-400 border-green-400/20"
+                      : "bg-blue-400/10 text-blue-400 border-blue-400/20";
+                  const isVip = member.totalSpent >= 200 || member.eventsAttended >= 5;
+                  const lastSeen = member.lastEventDate
+                    ? new Date(member.lastEventDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                    : null;
+
+                  return (
+                    <div key={member.email} className="p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium truncate">
+                              {member.name ?? member.email}
+                            </p>
+                            {isVip && (
+                              <Badge variant="outline" className="text-[10px] bg-amber-400/10 text-amber-400 border-amber-400/20">
+                                VIP
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className={`text-[10px] ${segmentColor}`}>
+                              {segmentLabel}
+                            </Badge>
+                          </div>
+                          {member.name && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                              {member.email}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              {member.eventsAttended} event{member.eventsAttended !== 1 ? "s" : ""}
+                            </span>
+                            <span className="flex items-center gap-1 text-green-400">
+                              <DollarSign className="h-3 w-3" />
+                              ${member.totalSpent.toFixed(0)} spent
+                            </span>
+                            {member.friendsReferred > 0 && (
+                              <span className="flex items-center gap-1 text-nocturn">
+                                <Share2 className="h-3 w-3" />
+                                {member.friendsReferred} referred
+                              </span>
+                            )}
+                            {lastSeen && (
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                Last seen {lastSeen}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => copyToClipboard(member.email, `crm-email-${member.email}`)}
+                          className="shrink-0 flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                          title="Copy email"
+                        >
+                          {copiedId === `crm-email-${member.email}` ? (
+                            <Check className="h-3.5 w-3.5 text-green-400" />
+                          ) : (
+                            <Mail className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {filteredCrmMembers.length > 0 && (
+          <p className="text-[11px] text-muted-foreground text-center">
+            Showing {filteredCrmMembers.length} of {allCrmMembers.length} contacts
+          </p>
+        )}
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          SECTION 3: Insights
       ════════════════════════════════════════════════════════════════════════ */}
       <div
         ref={(el) => { sectionRefs.current.insights = el; }}

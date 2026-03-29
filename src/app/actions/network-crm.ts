@@ -5,49 +5,41 @@ import { createAdminClient } from "@/lib/supabase/config";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type ContactSegment = "vip" | "repeat" | "new" | "lapsed";
+export type RelationshipTag = "Booked" | "Saved" | "Connected";
 
-export interface CRMContact {
-  email: string;
-  name: string | null;
-  eventsAttended: number;
-  totalSpent: number;
-  ticketCount: number;
-  firstSeen: string;
-  lastSeen: string;
-  referralCount: number;
-  segment: ContactSegment;
-  eventTitles: string[];
-  // Sparkline data: spent per event (last 6)
-  spendHistory: number[];
+export interface IndustryContact {
+  id: string;
+  name: string;
+  type: string; // matches marketplace user_type values
+  avatarUrl: string | null;
+  city: string | null;
+  instagramHandle: string | null;
+  soundcloudUrl: string | null;
+  spotifyUrl: string | null;
+  websiteUrl: string | null;
+  eventsWorked: number;
+  lastCollabDate: string | null;
+  isSaved: boolean;
+  relationships: RelationshipTag[];
+  // For marketplace profile contacts — used to contact via dialog
+  profileId: string | null;
+  slug: string | null;
 }
 
-export interface CRMStats {
+export interface NetworkCRMStats {
   totalContacts: number;
-  vipCount: number;
-  repeatRate: number; // percentage of contacts with 2+ events
-  avgLTV: number;
+  bookedArtists: number;
+  savedProfiles: number;
+  cities: number;
 }
 
-export interface CRMResult {
+export interface NetworkCRMResult {
   error: string | null;
-  contacts: CRMContact[];
-  stats: CRMStats;
+  contacts: IndustryContact[];
+  stats: NetworkCRMStats;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function computeSegment(eventsAttended: number, lastSeen: string): ContactSegment {
-  if (!lastSeen) return "new";
-
-  const daysSinceLastSeen =
-    (Date.now() - new Date(lastSeen).getTime()) / (1000 * 60 * 60 * 24);
-
-  if (daysSinceLastSeen >= 90) return "lapsed";
-  if (eventsAttended >= 5) return "vip";
-  if (eventsAttended >= 2) return "repeat";
-  return "new";
-}
 
 async function getCollectiveIds(userId: string): Promise<string[]> {
   const admin = createAdminClient();
@@ -62,197 +54,288 @@ async function getCollectiveIds(userId: string): Promise<string[]> {
 
 // ── Main Action ────────────────────────────────────────────────────────────────
 
-export async function getNetworkCRM(): Promise<CRMResult> {
-  const empty: CRMResult = {
+export async function getNetworkCRM(): Promise<NetworkCRMResult> {
+  const empty: NetworkCRMResult = {
     error: null,
     contacts: [],
-    stats: { totalContacts: 0, vipCount: 0, repeatRate: 0, avgLTV: 0 },
+    stats: { totalContacts: 0, bookedArtists: 0, savedProfiles: 0, cities: 0 },
   };
 
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    return { ...empty, error: "Not logged in" };
-  }
+    if (!user) return { ...empty, error: "Not logged in" };
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
+    const collectiveIds = await getCollectiveIds(user.id);
 
-  // Get user's collectives
-  const collectiveIds = await getCollectiveIds(user.id);
-  if (collectiveIds.length === 0) return empty;
+    // ── Parallel data fetches ─────────────────────────────────────────────────
 
-  // Get all events for these collectives
-  const { data: eventsRaw } = await admin
-    .from("events")
-    .select("id, title, starts_at")
-    .in("collective_id", collectiveIds);
+    const [
+      savedResult,
+      contactedResult,
+      eventsResult,
+    ] = await Promise.all([
+      // 1. Saved marketplace profiles
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (admin.from("marketplace_saved") as any)
+        .select("profile_id, saved_at:created_at, marketplace_profiles(*)")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false }),
 
-  const events = eventsRaw as { id: string; title: string; starts_at: string }[] | null;
-  if (!events || events.length === 0) return empty;
+      // 2. Marketplace profiles the user has contacted (sent inquiry to)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (admin.from("marketplace_inquiries") as any)
+        .select("to_profile_id, created_at")
+        .eq("from_user_id", user.id)
+        .order("created_at", { ascending: false }),
 
-  const eventIds = events.map((e) => e.id);
-  const eventMap = new Map(events.map((e) => [e.id, e]));
+      // 3. Events for the user's collectives (to look up booked artists)
+      collectiveIds.length > 0
+        ? admin
+            .from("events")
+            .select("id, starts_at")
+            .in("collective_id", collectiveIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
 
-  // Fetch all paid/checked-in tickets
-  const { data: ticketsRaw, error: ticketError } = await admin
-    .from("tickets")
-    .select("id, event_id, price_paid, metadata, created_at")
-    .in("event_id", eventIds)
-    .in("status", ["paid", "checked_in"])
-    .limit(10000);
+    // ── Process saved profiles ─────────────────────────────────────────────────
 
-  if (ticketError) {
-    return { ...empty, error: `Failed to fetch tickets: ${ticketError.message}` };
-  }
+    type SavedRow = {
+      profile_id: string;
+      saved_at: string;
+      marketplace_profiles: Record<string, unknown> | null;
+    };
 
-  const tickets = ticketsRaw as {
-    id: string;
-    event_id: string;
-    price_paid: number | null;
-    metadata: Record<string, unknown> | null;
-    created_at: string;
-  }[] | null;
+    const savedRows = (savedResult.data ?? []) as SavedRow[];
+    const savedProfileIds = new Set(savedRows.map((r) => r.profile_id));
 
-  if (!tickets || tickets.length === 0) return empty;
-
-  // ── Aggregate by email ──────────────────────────────────────────────────────
-
-  type EmailEntry = {
-    name: string | null;
-    events: Map<string, { title: string; date: string; spent: number }>;
-    totalSpent: number;
-    ticketCount: number;
-    referralCount: number;
-    purchaseDates: string[];
-  };
-
-  const emailMap = new Map<string, EmailEntry>();
-
-  // First pass: count referrals (emails that appear in referred_by field)
-  const referralCounts = new Map<string, number>();
-  for (const ticket of tickets) {
-    const meta = ticket.metadata as Record<string, unknown> | null;
-    const referrer =
-      (meta?.referred_by as string) ||
-      (meta?.referral_code as string) ||
-      null;
-    if (referrer) {
-      const normalized = referrer.toLowerCase().trim();
-      referralCounts.set(normalized, (referralCounts.get(normalized) ?? 0) + 1);
+    // Build a map of profileId -> marketplace profile data
+    const mpProfileMap = new Map<string, Record<string, unknown>>();
+    for (const row of savedRows) {
+      if (row.marketplace_profiles) {
+        mpProfileMap.set(row.profile_id, row.marketplace_profiles);
+      }
     }
-  }
 
-  // Second pass: build contact map
-  for (const ticket of tickets) {
-    const meta = ticket.metadata as Record<string, unknown> | null;
-    const email =
-      (meta?.customer_email as string) ||
-      (meta?.buyer_email as string) ||
-      null;
+    // ── Process contacted profiles ─────────────────────────────────────────────
 
-    if (!email) continue;
+    type ContactedRow = { to_profile_id: string; created_at: string };
+    const contactedRows = (contactedResult.data ?? []) as ContactedRow[];
+    const contactedProfileIds = new Set(contactedRows.map((r) => r.to_profile_id));
 
-    const normalized = email.toLowerCase().trim();
-    const name =
-      (meta?.customer_name as string) ||
-      (meta?.buyer_name as string) ||
-      null;
+    // For contacted profiles that aren't already in our map, fetch them
+    const missingProfileIds = [...contactedProfileIds].filter(
+      (id) => !mpProfileMap.has(id)
+    );
 
-    if (!emailMap.has(normalized)) {
-      emailMap.set(normalized, {
-        name: name ?? null,
-        events: new Map(),
-        totalSpent: 0,
-        ticketCount: 0,
-        referralCount: referralCounts.get(normalized) ?? 0,
-        purchaseDates: [],
+    if (missingProfileIds.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: missingProfiles } = await (admin.from("marketplace_profiles") as any)
+        .select("*")
+        .in("id", missingProfileIds);
+
+      for (const p of (missingProfiles ?? []) as Record<string, unknown>[]) {
+        mpProfileMap.set(p.id as string, p);
+      }
+    }
+
+    // ── Process booked artists ─────────────────────────────────────────────────
+
+    const events = (eventsResult.data ?? []) as { id: string; starts_at: string }[];
+    const eventIds = events.map((e) => e.id);
+    const eventDateMap = new Map(events.map((e) => [e.id, e.starts_at]));
+
+    type EventArtistRow = {
+      artist_id: string;
+      event_id: string;
+      artists: {
+        id: string;
+        name: string;
+        slug: string | null;
+        instagram: string | null;
+        soundcloud: string | null;
+        spotify: string | null;
+        bio: string | null;
+        genre: string[] | null;
+        metadata: Record<string, unknown> | null;
+      } | null;
+    };
+
+    let eventArtistRows: EventArtistRow[] = [];
+    if (eventIds.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: eaData } = await (admin.from("event_artists") as any)
+        .select("artist_id, event_id, artists(id, name, slug, instagram, soundcloud, spotify, bio, genre, metadata)")
+        .in("event_id", eventIds)
+        .in("status", ["confirmed", "pending"]);
+
+      eventArtistRows = (eaData ?? []) as EventArtistRow[];
+    }
+
+    // Group event_artists by artist_id
+    type ArtistBookingAgg = {
+      artist: EventArtistRow["artists"];
+      eventIds: string[];
+      dates: string[];
+    };
+
+    const artistBookings = new Map<string, ArtistBookingAgg>();
+    for (const row of eventArtistRows) {
+      if (!row.artists) continue;
+      const existing = artistBookings.get(row.artist_id);
+      const date = eventDateMap.get(row.event_id) ?? null;
+      if (existing) {
+        existing.eventIds.push(row.event_id);
+        if (date) existing.dates.push(date);
+      } else {
+        artistBookings.set(row.artist_id, {
+          artist: row.artists,
+          eventIds: [row.event_id],
+          dates: date ? [date] : [],
+        });
+      }
+    }
+
+    // ── Build unified contact list ─────────────────────────────────────────────
+
+    // We'll deduplicate by a "contact key":
+    //   - Marketplace profiles: keyed by profile ID
+    //   - Artists (from event_artists): keyed by artist ID (if no matching marketplace profile found)
+    //
+    // Priority: if an artist has a marketplace profile (same user), unify them.
+
+    const contactMap = new Map<string, IndustryContact>();
+
+    // First, add all marketplace profile contacts (saved + contacted)
+    const allMpIds = new Set([...savedProfileIds, ...contactedProfileIds]);
+    for (const profileId of allMpIds) {
+      const profile = mpProfileMap.get(profileId);
+      if (!profile) continue;
+
+      const relationships: RelationshipTag[] = [];
+      if (savedProfileIds.has(profileId)) relationships.push("Saved");
+      if (contactedProfileIds.has(profileId)) relationships.push("Connected");
+
+      // Determine lastCollabDate from contacted rows
+      const latestContact = contactedRows
+        .filter((r) => r.to_profile_id === profileId)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+      contactMap.set(`mp:${profileId}`, {
+        id: profileId,
+        name: (profile.display_name as string) ?? "Unknown",
+        type: (profile.user_type as string) ?? "artist",
+        avatarUrl: (profile.avatar_url as string) ?? null,
+        city: (profile.city as string) ?? null,
+        instagramHandle: (profile.instagram_handle as string) ?? null,
+        soundcloudUrl: (profile.soundcloud_url as string) ?? null,
+        spotifyUrl: (profile.spotify_url as string) ?? null,
+        websiteUrl: (profile.website_url as string) ?? null,
+        eventsWorked: 0,
+        lastCollabDate: latestContact?.created_at ?? null,
+        isSaved: savedProfileIds.has(profileId),
+        relationships,
+        profileId,
+        slug: (profile.slug as string) ?? null,
       });
     }
 
-    const entry = emailMap.get(normalized)!;
+    // Then, add booked artists — merging with marketplace profile if found by user_id/slug
+    for (const [artistId, booking] of artistBookings.entries()) {
+      const { artist, eventIds: artistEventIds, dates } = booking;
+      if (!artist) continue;
 
-    // Update name if we have one
-    if (name && !entry.name) entry.name = name;
-
-    const event = eventMap.get(ticket.event_id);
-    if (event) {
-      const existing = entry.events.get(ticket.event_id);
-      const spent = Number(ticket.price_paid) || 0;
-
-      if (existing) {
-        existing.spent += spent;
-      } else {
-        entry.events.set(ticket.event_id, {
-          title: event.title,
-          date: event.starts_at,
-          spent,
-        });
-      }
-
-      entry.totalSpent += spent;
-      entry.ticketCount += 1;
-      entry.purchaseDates.push(ticket.created_at);
-    }
-  }
-
-  // ── Build contact rows ──────────────────────────────────────────────────────
-
-  const contacts: CRMContact[] = Array.from(emailMap.entries())
-    .map(([email, data]) => {
-      const sortedEvents = Array.from(data.events.values()).sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      const sortedDates = [...dates].sort(
+        (a, b) => new Date(b).getTime() - new Date(a).getTime()
       );
+      const lastCollabDate = sortedDates[0] ?? null;
 
-      const firstSeen = sortedEvents[0]?.date ?? "";
-      const lastSeen = sortedEvents[sortedEvents.length - 1]?.date ?? "";
-      const eventsAttended = data.events.size;
-      const segment = computeSegment(eventsAttended, lastSeen);
+      // Check if this artist has a marketplace profile we already know about
+      // We match by slug (artists.slug == marketplace_profiles.slug is possible)
+      // Simple approach: check if any marketplace profile has same display_name (best effort)
+      // For now, treat booked artists as separate contacts unless they have a marketplace profile
 
-      // Sparkline: last 6 events' spend
-      const spendHistory = sortedEvents.slice(-6).map((e) => e.spent);
+      const key = `artist:${artistId}`;
+      // Don't add if we already have this as a marketplace contact with matching name
+      // (rough dedup — marketplace profiles are the canonical source)
 
-      return {
-        email,
-        name: data.name,
-        eventsAttended,
-        totalSpent: data.totalSpent,
-        ticketCount: data.ticketCount,
-        firstSeen,
-        lastSeen,
-        referralCount: data.referralCount,
-        segment,
-        eventTitles: sortedEvents.map((e) => e.title),
-        spendHistory,
-      };
-    })
-    .sort((a, b) => {
-      // Sort: VIP → Repeat → New → Lapsed, then by totalSpent desc
-      const segmentOrder: Record<ContactSegment, number> = { vip: 0, repeat: 1, new: 2, lapsed: 3 };
-      const segDiff = segmentOrder[a.segment] - segmentOrder[b.segment];
-      if (segDiff !== 0) return segDiff;
-      return b.totalSpent - a.totalSpent;
+      if (!contactMap.has(key)) {
+        const location = (artist.metadata?.location as string) ?? null;
+
+        contactMap.set(key, {
+          id: artistId,
+          name: artist.name,
+          type: "artist",
+          avatarUrl: null,
+          city: location,
+          instagramHandle: artist.instagram ?? null,
+          soundcloudUrl: artist.soundcloud ?? null,
+          spotifyUrl: artist.spotify ?? null,
+          websiteUrl: null,
+          eventsWorked: artistEventIds.length,
+          lastCollabDate,
+          isSaved: false,
+          relationships: ["Booked"],
+          profileId: null,
+          slug: artist.slug ?? null,
+        });
+      } else {
+        // Already exists as marketplace profile — update booking info
+        const existing = contactMap.get(key)!;
+        existing.eventsWorked = artistEventIds.length;
+        if (!existing.relationships.includes("Booked")) {
+          existing.relationships.unshift("Booked");
+        }
+        if (
+          lastCollabDate &&
+          (!existing.lastCollabDate ||
+            new Date(lastCollabDate) > new Date(existing.lastCollabDate))
+        ) {
+          existing.lastCollabDate = lastCollabDate;
+        }
+      }
+    }
+
+    // ── Sort: Booked (most recent first) → Saved → Connected ─────────────────
+
+    const relationshipOrder = (c: IndustryContact): number => {
+      if (c.relationships.includes("Booked")) return 0;
+      if (c.relationships.includes("Saved")) return 1;
+      return 2;
+    };
+
+    const contacts = Array.from(contactMap.values()).sort((a, b) => {
+      const orderDiff = relationshipOrder(a) - relationshipOrder(b);
+      if (orderDiff !== 0) return orderDiff;
+
+      // Within same group, sort by most recent lastCollabDate
+      const aDate = a.lastCollabDate ? new Date(a.lastCollabDate).getTime() : 0;
+      const bDate = b.lastCollabDate ? new Date(b.lastCollabDate).getTime() : 0;
+      return bDate - aDate;
     });
 
-  // ── Stats ───────────────────────────────────────────────────────────────────
+    // ── Stats ─────────────────────────────────────────────────────────────────
 
-  const totalContacts = contacts.length;
-  const vipCount = contacts.filter((c) => c.segment === "vip").length;
-  const repeatOrHigher = contacts.filter(
-    (c) => c.eventsAttended >= 2
-  ).length;
-  const repeatRate = totalContacts > 0
-    ? Math.round((repeatOrHigher / totalContacts) * 100)
-    : 0;
-  const avgLTV = totalContacts > 0
-    ? contacts.reduce((sum, c) => sum + c.totalSpent, 0) / totalContacts
-    : 0;
+    const bookedArtists = contacts.filter((c) => c.relationships.includes("Booked")).length;
+    const savedProfilesCount = contacts.filter((c) => c.relationships.includes("Saved")).length;
+    const cities = new Set(contacts.map((c) => c.city).filter(Boolean)).size;
 
-  return {
-    error: null,
-    contacts,
-    stats: { totalContacts, vipCount, repeatRate, avgLTV },
-  };
+    return {
+      error: null,
+      contacts,
+      stats: {
+        totalContacts: contacts.length,
+        bookedArtists,
+        savedProfiles: savedProfilesCount,
+        cities,
+      },
+    };
+  } catch (err) {
+    console.error("[network-crm] getNetworkCRM failed:", err);
+    return { ...empty, error: "Failed to load network." };
+  }
 }
