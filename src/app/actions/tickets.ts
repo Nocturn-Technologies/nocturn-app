@@ -197,3 +197,192 @@ export async function getTicketsBySessionId(sessionOrPaymentId: string) {
 
   return { error: null, tickets: [] };
 }
+
+/**
+ * Fulfill tickets after a successful embedded payment (PaymentElement flow).
+ * This is the PRIMARY ticket creation path — called directly from the client
+ * after stripe.confirmPayment() succeeds. The webhook serves as a backup.
+ *
+ * Security: Verifies the PaymentIntent with Stripe before creating tickets,
+ * so a client can't forge a request.
+ */
+export async function fulfillPaymentIntent(paymentIntentId: string) {
+  if (!paymentIntentId || !paymentIntentId.startsWith("pi_")) {
+    return { error: "Invalid payment intent ID", tickets: null };
+  }
+
+  const admin = createAdminClient();
+
+  // IDEMPOTENCY: If tickets already exist for this PI, return them
+  const { data: existingTickets } = await admin
+    .from("tickets")
+    .select("ticket_token, status, created_at")
+    .eq("stripe_payment_intent_id", paymentIntentId);
+
+  if (existingTickets && existingTickets.length > 0) {
+    return { error: null, tickets: existingTickets };
+  }
+
+  // Verify the PaymentIntent with Stripe — this is the security check
+  const { getStripe } = await import("@/lib/stripe");
+  let pi;
+  try {
+    pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
+  } catch {
+    return { error: "Could not verify payment", tickets: null };
+  }
+
+  if (pi.status !== "succeeded") {
+    return { error: `Payment status is ${pi.status}, not succeeded`, tickets: null };
+  }
+
+  const metadata = pi.metadata;
+  if (!metadata?.eventId || !metadata?.tierId || !metadata?.quantity) {
+    return { error: "Missing ticket metadata on payment", tickets: null };
+  }
+
+  const eventId = metadata.eventId;
+  const tierId = metadata.tierId;
+  const quantity = parseInt(metadata.quantity, 10);
+  if (isNaN(quantity) || quantity < 1) {
+    return { error: "Invalid quantity", tickets: null };
+  }
+  const buyerEmail = metadata.buyerEmail || pi.receipt_email;
+
+  // Get tier price for record
+  const { data: tier } = await admin
+    .from("ticket_tiers")
+    .select("price")
+    .eq("id", tierId)
+    .maybeSingle();
+
+  if (!tier) {
+    return { error: "Ticket tier not found", tickets: null };
+  }
+
+  // Calculate price paid (accounting for discounts)
+  let pricePaid: number;
+  if (metadata.ticketPriceCents) {
+    pricePaid = Number(metadata.ticketPriceCents) / 100;
+  } else if (metadata.discountCents) {
+    pricePaid = Math.max(Number(tier.price) - Number(metadata.discountCents) / 100, 0);
+  } else {
+    pricePaid = Number(tier.price);
+  }
+
+  // Validate referrer
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let referrerToken = metadata.referrerToken && uuidRegex.test(metadata.referrerToken) ? metadata.referrerToken : null;
+  if (referrerToken) {
+    const { data: referrerUser } = await admin.from("users").select("id").eq("id", referrerToken).maybeSingle();
+    if (!referrerUser) referrerToken = null;
+  }
+
+  const { randomUUID } = await import("crypto");
+  const tickets = Array.from({ length: quantity }, () => ({
+    event_id: eventId,
+    ticket_tier_id: tierId,
+    user_id: null,
+    status: "paid" as const,
+    price_paid: pricePaid,
+    currency: "usd",
+    stripe_payment_intent_id: paymentIntentId,
+    ticket_token: randomUUID(),
+    referred_by: referrerToken,
+    metadata: {
+      payment_intent_id: paymentIntentId,
+      customer_email: buyerEmail,
+      fulfilled_by: "client_action",
+      ...(referrerToken && { referrer_token: referrerToken }),
+    },
+  }));
+
+  const { data: insertedTickets, error: insertError } = await admin
+    .from("tickets")
+    .insert(tickets)
+    .select("id, ticket_token, status, created_at");
+
+  if (insertError) {
+    console.error("[fulfillPaymentIntent] Insert failed:", insertError);
+    // Check if tickets were created by webhook in the meantime
+    const { data: retryTickets } = await admin
+      .from("tickets")
+      .select("ticket_token, status, created_at")
+      .eq("stripe_payment_intent_id", paymentIntentId);
+    if (retryTickets && retryTickets.length > 0) {
+      return { error: null, tickets: retryTickets };
+    }
+    return { error: "Failed to create tickets", tickets: null };
+  }
+
+  console.info(`[fulfillPaymentIntent] Created ${quantity} ticket(s) for PI ${paymentIntentId}`);
+
+  // Generate QR codes + send email in background (non-blocking)
+  const QRCode = (await import("qrcode")).default;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+
+  // QR codes
+  if (insertedTickets) {
+    Promise.allSettled(
+      insertedTickets.map(async (ticket) => {
+        try {
+          const qrDataUrl = await QRCode.toDataURL(
+            `${appUrl}/check-in/${ticket.ticket_token}`,
+            { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
+          );
+          await admin.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
+        } catch (err) {
+          console.error(`[fulfillPaymentIntent] QR failed for ${ticket.id}:`, err);
+        }
+      })
+    ).catch(() => {});
+
+    // Send confirmation email
+    if (buyerEmail) {
+      (async () => {
+        try {
+          const { data: event } = await admin
+            .from("events")
+            .select("title, starts_at, venues(name)")
+            .eq("id", eventId)
+            .maybeSingle();
+
+          const { data: tierInfo } = await admin
+            .from("ticket_tiers")
+            .select("name")
+            .eq("id", tierId)
+            .maybeSingle();
+
+          if (event) {
+            const venue = event.venues as unknown as { name: string } | null;
+            const { sendTicketConfirmation } = await import("@/lib/email/actions");
+            await sendTicketConfirmation({
+              to: buyerEmail,
+              eventTitle: event.title || "Event",
+              eventDate: new Date(event.starts_at).toLocaleDateString("en", {
+                weekday: "long", month: "long", day: "numeric", year: "numeric",
+              }),
+              venueName: venue?.name || "TBA",
+              tierName: tierInfo?.name || "General Admission",
+              quantity,
+              totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
+              ticketLink: `${appUrl}/ticket/${insertedTickets[0]?.ticket_token || ""}`,
+            });
+            console.info("[fulfillPaymentIntent] Confirmation email sent");
+          }
+        } catch (err) {
+          console.error("[fulfillPaymentIntent] Email failed:", err);
+        }
+      })();
+    }
+  }
+
+  return {
+    error: null,
+    tickets: (insertedTickets ?? []).map((t) => ({
+      ticket_token: t.ticket_token,
+      status: t.status,
+      created_at: t.created_at,
+    })),
+  };
+}

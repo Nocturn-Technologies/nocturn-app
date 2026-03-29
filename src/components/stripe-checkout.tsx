@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { useConfetti } from "@/components/celebrations";
+import { fulfillPaymentIntent } from "@/app/actions/tickets";
 
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
@@ -183,7 +184,7 @@ function CheckoutForm({
     }
 
     // Step 2: Confirm the payment (form is validated)
-    const { error: submitError } = await stripe.confirmPayment({
+    const { error: submitError, paymentIntent } = await stripe.confirmPayment({
       elements,
       confirmParams: {
         return_url: `${window.location.origin}/e/success`,
@@ -195,6 +196,15 @@ function CheckoutForm({
       setError(submitError.message ?? "Payment failed. Please try again.");
       setProcessing(false);
     } else {
+      // Payment succeeded — create tickets immediately (don't wait for webhook)
+      if (paymentIntent?.id) {
+        try {
+          await fulfillPaymentIntent(paymentIntent.id);
+        } catch (err) {
+          // Non-blocking — webhook will catch it as backup
+          console.error("[checkout] Ticket fulfillment failed:", err);
+        }
+      }
       setSucceeded(true);
       setProcessing(false);
       onSuccess();

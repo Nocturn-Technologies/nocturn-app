@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
-import { getTicketsBySessionId } from "@/app/actions/tickets";
+import { getTicketsBySessionId, fulfillPaymentIntent } from "@/app/actions/tickets";
 import { useConfetti } from "@/components/celebrations";
 
 interface TicketStub {
@@ -52,34 +52,40 @@ function SuccessContent() {
       return;
     }
 
-    // For payment intent redirects (3D Secure), fetch tickets by PI
-    // Tickets are created by the webhook, may take a moment
+    // For payment intent redirects (3D Secure), fulfill tickets directly
     if (paymentIntentId && redirectStatus === "succeeded" && !sessionId) {
       setLoading(true);
-      const timeout = setTimeout(() => {
-        setTimedOut(true);
-        setLoading(false);
-      }, 15000);
-
-      // Poll a few times since webhook may not have processed yet
-      let attempts = 0;
-      const poll = async () => {
-        attempts++;
-        const { tickets: found } = await getTicketsBySessionId(paymentIntentId);
-        if (found && found.length > 0) {
-          clearTimeout(timeout);
-          setTickets(found);
-          setLoading(false);
-        } else if (attempts < 5) {
-          setTimeout(poll, 2000);
-        } else {
-          clearTimeout(timeout);
-          setTimedOut(true);
-          setLoading(false);
+      (async () => {
+        try {
+          // Fulfill tickets directly — creates them if they don't exist yet
+          const { tickets: fulfilled } = await fulfillPaymentIntent(paymentIntentId);
+          if (fulfilled && fulfilled.length > 0) {
+            setTickets(fulfilled);
+            setLoading(false);
+            return;
+          }
+        } catch {
+          // Fulfillment failed, fall back to polling
         }
-      };
-      poll();
-      return () => clearTimeout(timeout);
+
+        // Fallback: poll for tickets (webhook may have created them)
+        let attempts = 0;
+        const poll = async () => {
+          attempts++;
+          const { tickets: found } = await getTicketsBySessionId(paymentIntentId);
+          if (found && found.length > 0) {
+            setTickets(found);
+            setLoading(false);
+          } else if (attempts < 5) {
+            setTimeout(poll, 2000);
+          } else {
+            setTimedOut(true);
+            setLoading(false);
+          }
+        };
+        poll();
+      })();
+      return;
     }
 
     if (!sessionId) return;
