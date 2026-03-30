@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { createAdminClient } from "@/lib/supabase/config";
 
 // Lazy-initialize Resend client to avoid crash when API key is missing at build time
 let _resend: Resend | null = null;
@@ -13,24 +14,14 @@ function getResend(): Resend | null {
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Nocturn <noreply@trynocturn.com>";
 
-export interface EmailAttachment {
-  filename: string;
-  content: Buffer;
-  contentType?: string;
-  /** Content-ID for inline embedding — reference in HTML with cid:{contentId} */
-  contentId?: string;
-}
-
 export async function sendEmail({
   to,
   subject,
   html,
-  attachments,
 }: {
   to: string;
   subject: string;
   html: string;
-  attachments?: EmailAttachment[];
 }) {
   // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -51,12 +42,6 @@ export async function sendEmail({
       to,
       subject,
       html,
-      attachments: attachments?.map((a) => ({
-        filename: a.filename,
-        content: a.content,
-        contentType: a.contentType,
-        contentId: a.contentId,
-      })),
     });
 
     if (error) {
@@ -73,41 +58,73 @@ export async function sendEmail({
 }
 
 /**
- * Convert data:image/png;base64,... QR codes into inline attachments
- * and replace img src with cid: references. Gmail/Outlook block data: URIs
- * but support cid: inline attachments.
+ * Upload a QR code data URI to Supabase Storage and return a public HTTPS URL.
+ * Gmail/Outlook block data: URIs and CID attachments are unreliable,
+ * so we host QR images and use regular <img src="https://..."> in emails.
  */
-export function prepareQRAttachments(
+export async function uploadQRToStorage(
+  dataUri: string,
+  ticketToken: string,
+  index: number = 0
+): Promise<string | null> {
+  try {
+    const base64Match = dataUri.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!base64Match) return null;
+
+    const mimeType = base64Match[1];
+    const base64Data = base64Match[2];
+    const buffer = Buffer.from(base64Data, "base64");
+
+    const admin = createAdminClient();
+    const fileName = `${ticketToken}${index > 0 ? `-${index}` : ""}.${mimeType}`;
+
+    const { error } = await admin.storage
+      .from("qr-codes")
+      .upload(fileName, buffer, {
+        contentType: `image/${mimeType}`,
+        upsert: true,
+      });
+
+    if (error) {
+      console.error("[email] QR upload failed:", error);
+      return null;
+    }
+
+    const { data: publicUrl } = admin.storage
+      .from("qr-codes")
+      .getPublicUrl(fileName);
+
+    return publicUrl.publicUrl;
+  } catch (err) {
+    console.error("[email] QR upload exception:", err);
+    return null;
+  }
+}
+
+/**
+ * Convert data:image QR codes to hosted HTTPS URLs via Supabase Storage.
+ * Returns the HTML with data: URIs replaced by public URLs, plus the URL list.
+ */
+export async function prepareQRUrls(
   html: string,
-  qrCodes: string[]
-): { html: string; attachments: EmailAttachment[] } {
-  const attachments: EmailAttachment[] = [];
+  qrCodes: string[],
+  ticketTokens: string[]
+): Promise<{ html: string; hostedUrls: string[] }> {
+  const hostedUrls: string[] = [];
   let processedHtml = html;
 
   for (let i = 0; i < qrCodes.length; i++) {
     const dataUri = qrCodes[i];
     if (!dataUri?.startsWith("data:image/")) continue;
 
-    const cid = `qr-ticket-${i + 1}`;
+    const token = ticketTokens[i] || `ticket-${i}`;
+    const publicUrl = await uploadQRToStorage(dataUri, token, 0);
 
-    // Extract base64 content from data URI
-    const base64Match = dataUri.match(/^data:image\/(\w+);base64,(.+)$/);
-    if (!base64Match) continue;
-
-    const mimeType = base64Match[1]; // png, jpeg, etc.
-    const base64Data = base64Match[2];
-
-    attachments.push({
-      filename: `ticket-qr-${i + 1}.${mimeType}`,
-      content: Buffer.from(base64Data, "base64"),
-      contentType: `image/${mimeType}`,
-      contentId: cid,
-    });
-
-    // Replace the data: URI in HTML with cid: reference
-    // The sanitizeUrl function may have passed through the data URI as-is
-    processedHtml = processedHtml.replace(dataUri, `cid:${cid}`);
+    if (publicUrl) {
+      hostedUrls.push(publicUrl);
+      processedHtml = processedHtml.replace(dataUri, publicUrl);
+    }
   }
 
-  return { html: processedHtml, attachments };
+  return { html: processedHtml, hostedUrls };
 }

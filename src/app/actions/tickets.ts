@@ -301,6 +301,7 @@ async function sendConfirmationEmail(params: {
       totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
       ticketLink: `${appUrl}/ticket/${ticketTokens[0] || ""}`,
       qrCodes: qrCodes.length > 0 ? qrCodes : undefined,
+      ticketTokens,
     });
     console.info("[fulfillPaymentIntent] Confirmation email sent with QR codes");
   } catch (err) {

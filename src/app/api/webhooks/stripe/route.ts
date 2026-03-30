@@ -362,6 +362,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
               totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
               ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
               qrCodes: qrCodes.length > 0 ? qrCodes : undefined,
+              ticketTokens: insertedTickets?.map((t) => t.ticket_token) || [],
             });
             console.info("[stripe-webhook] Confirmation email sent with QR codes");
 
@@ -675,6 +676,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
               totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
               ticketLink: `${BASE_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
               qrCodes: piQrCodes.length > 0 ? piQrCodes : undefined,
+              ticketTokens: insertedTickets?.map((t) => t.ticket_token) || [],
             });
           }
         }

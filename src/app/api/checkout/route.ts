@@ -307,6 +307,7 @@ export async function POST(request: NextRequest) {
             totalPrice: "Free",
             ticketLink: `${APP_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
             qrCodes: freeQrCodes.length > 0 ? freeQrCodes : undefined,
+            ticketTokens: insertedTickets?.map((t) => t.ticket_token) || [],
           });
         }
       } catch (emailErr) {

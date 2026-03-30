@@ -1,5 +1,5 @@
 // Internal email utilities — NOT a server action (not client-callable)
-import { sendEmail, prepareQRAttachments } from "@/lib/email/send";
+import { sendEmail, prepareQRUrls } from "@/lib/email/send";
 import {
   ticketConfirmationEmail,
   settlementReportEmail,
@@ -8,8 +8,9 @@ import {
   invitationEmail,
 } from "@/lib/email/templates";
 
-// Send ticket confirmation email with QR codes as inline CID attachments
-// (Gmail/Outlook block data: URIs, but support cid: inline attachments)
+// Send ticket confirmation email with QR codes hosted on Supabase Storage.
+// Gmail/Outlook block data: URIs and CID inline attachments are unreliable,
+// so we upload QR PNGs and use regular https:// img src URLs.
 export async function sendTicketConfirmation(input: {
   to: string;
   eventTitle: string;
@@ -20,6 +21,7 @@ export async function sendTicketConfirmation(input: {
   totalPrice: string;
   ticketLink: string;
   qrCodes?: string[];
+  ticketTokens?: string[];
 }) {
   let html = ticketConfirmationEmail(
     input.eventTitle,
@@ -32,19 +34,17 @@ export async function sendTicketConfirmation(input: {
     input.qrCodes
   );
 
-  // Convert data: URI QR codes to CID inline attachments
-  let attachments;
+  // Upload QR data URIs to Supabase Storage and replace with https:// URLs
   if (input.qrCodes && input.qrCodes.length > 0) {
-    const prepared = prepareQRAttachments(html, input.qrCodes);
+    const tokens = input.ticketTokens || input.qrCodes.map((_, i) => `qr-${Date.now()}-${i}`);
+    const prepared = await prepareQRUrls(html, input.qrCodes, tokens);
     html = prepared.html;
-    attachments = prepared.attachments;
   }
 
   return sendEmail({
     to: input.to,
     subject: `🎫 Your tickets for ${input.eventTitle}`,
     html,
-    attachments,
   });
 }
 
