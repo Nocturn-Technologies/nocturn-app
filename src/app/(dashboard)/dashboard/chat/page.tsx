@@ -144,7 +144,7 @@ function ChannelRow({
   return (
     <Link
       href={`/dashboard/chat/${ch.id}`}
-      className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.03] active:bg-white/[0.05] transition-colors border-b border-white/[0.04] last:border-b-0"
+      className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 border-b border-white/[0.04] last:border-b-0"
     >
       {/* Avatar */}
       {icon ?? <Avatar name={ch.name} />}
@@ -198,11 +198,11 @@ function SectionHeader({
 }) {
   if (count === 0) return null;
   return (
-    <div className="flex items-center gap-2 px-4 py-2.5">
+    <div className="flex items-center gap-2 px-4 py-2.5 select-none">
       <span className="text-muted-foreground/60">{icon}</span>
-      <p className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-widest">
+      <h2 className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-widest">
         {label}
-      </p>
+      </h2>
       <span className="text-[10px] font-medium text-muted-foreground/40 bg-white/[0.04] rounded-full px-1.5 py-0.5">
         {count}
       </span>
@@ -501,12 +501,12 @@ export default function ChatPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-2xl mx-auto pb-24 md:pb-0">
+    <div className="max-w-2xl mx-auto pb-24 md:pb-0 animate-in fade-in duration-300">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <MessageSquare className="h-5 w-5 text-[#7B2FF7]" />
-          <h1 className="text-xl font-bold tracking-tight font-heading">
+          <h1 className="text-2xl font-bold tracking-tight font-heading">
             Messages
           </h1>
         </div>
@@ -518,7 +518,7 @@ export default function ChatPage() {
             setInviteSent(false);
           }}
           size="sm"
-          className="bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-full h-9 px-4 text-sm font-semibold"
+          className="bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full h-9 px-4 text-sm font-semibold transition-all duration-200"
         >
           <Plus className="h-4 w-4 mr-1" />
           New Chat
@@ -537,7 +537,7 @@ export default function ChatPage() {
         {searchQuery && (
           <button
             onClick={() => setSearchQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground active:scale-90 transition-all duration-200"
           >
             <X className="h-4 w-4" />
           </button>
@@ -545,8 +545,25 @@ export default function ChatPage() {
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-20">
-          <div className="w-7 h-7 border-2 border-[#7B2FF7] border-t-transparent rounded-full animate-spin" />
+        <div className="rounded-2xl border border-white/[0.06] bg-card overflow-hidden">
+          {/* Skeleton section header */}
+          <div className="flex items-center gap-2 px-4 py-2.5">
+            <div className="w-3 h-3 rounded bg-white/[0.06] animate-pulse" />
+            <div className="w-16 h-3 rounded bg-white/[0.06] animate-pulse" />
+          </div>
+          {/* Skeleton channel rows */}
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.04] last:border-b-0">
+              <div className="w-12 h-12 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+              <div className="flex-1 min-w-0 space-y-2">
+                <div className="h-4 rounded bg-white/[0.06] animate-pulse w-2/3" />
+                <div className="h-3 rounded bg-white/[0.04] animate-pulse w-4/5" />
+              </div>
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                <div className="w-10 h-3 rounded bg-white/[0.04] animate-pulse" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : totalChannels === 0 ? (
         /* Empty state */
@@ -562,7 +579,7 @@ export default function ChatPage() {
           </p>
           <Button
             onClick={() => setSheetOpen(true)}
-            className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-full px-6"
+            className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 transition-all duration-200"
           >
             <Plus className="h-4 w-4 mr-1.5" />
             New Chat
@@ -681,7 +698,7 @@ export default function ChatPage() {
                     key={c.id}
                     onClick={() => handleStartCollab(c.id)}
                     disabled={startingCollab === c.id}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors text-left"
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 text-left"
                   >
                     <Avatar name={c.name} size="sm" />
                     <div className="flex-1 min-w-0">
@@ -712,7 +729,7 @@ export default function ChatPage() {
                 <button
                   onClick={() => handleInvite(collabQuery)}
                   disabled={inviting}
-                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-[#7B2FF7]/30 hover:bg-[#7B2FF7]/5 transition-colors text-left"
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-[#7B2FF7]/30 hover:bg-[#7B2FF7]/5 active:bg-[#7B2FF7]/10 transition-colors duration-200 text-left"
                 >
                   <div className="w-10 h-10 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center shrink-0">
                     <Mail size={18} className="text-[#7B2FF7]" />
@@ -782,7 +799,7 @@ export default function ChatPage() {
       {/* ── Record Call FAB ───────────────────────────────────────────────── */}
       <Link
         href="/dashboard/record"
-        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full bg-[#7B2FF7] text-white shadow-lg shadow-[#7B2FF7]/30 px-5 py-3.5 hover:bg-[#6B1FE7] active:scale-95 transition-all md:bottom-6"
+        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full bg-[#7B2FF7] text-white shadow-lg shadow-[#7B2FF7]/30 px-5 py-3.5 hover:bg-[#6B1FE7] active:scale-95 transition-all duration-200 md:bottom-6"
       >
         <Mic className="h-5 w-5" />
         <span className="text-sm font-semibold">Record Call</span>
