@@ -1,5 +1,5 @@
 // Internal email utilities — NOT a server action (not client-callable)
-import { sendEmail } from "@/lib/email/send";
+import { sendEmail, prepareQRAttachments } from "@/lib/email/send";
 import {
   ticketConfirmationEmail,
   settlementReportEmail,
@@ -8,7 +8,8 @@ import {
   invitationEmail,
 } from "@/lib/email/templates";
 
-// Send ticket confirmation email
+// Send ticket confirmation email with QR codes as inline CID attachments
+// (Gmail/Outlook block data: URIs, but support cid: inline attachments)
 export async function sendTicketConfirmation(input: {
   to: string;
   eventTitle: string;
@@ -20,7 +21,7 @@ export async function sendTicketConfirmation(input: {
   ticketLink: string;
   qrCodes?: string[];
 }) {
-  const html = ticketConfirmationEmail(
+  let html = ticketConfirmationEmail(
     input.eventTitle,
     input.eventDate,
     input.venueName,
@@ -31,10 +32,19 @@ export async function sendTicketConfirmation(input: {
     input.qrCodes
   );
 
+  // Convert data: URI QR codes to CID inline attachments
+  let attachments;
+  if (input.qrCodes && input.qrCodes.length > 0) {
+    const prepared = prepareQRAttachments(html, input.qrCodes);
+    html = prepared.html;
+    attachments = prepared.attachments;
+  }
+
   return sendEmail({
     to: input.to,
     subject: `🎫 Your tickets for ${input.eventTitle}`,
     html,
+    attachments,
   });
 }
 

@@ -13,14 +13,22 @@ function getResend(): Resend | null {
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Nocturn <noreply@trynocturn.com>";
 
+export interface EmailAttachment {
+  filename: string;
+  content: Buffer;
+  content_type?: string;
+}
+
 export async function sendEmail({
   to,
   subject,
   html,
+  attachments,
 }: {
   to: string;
   subject: string;
   html: string;
+  attachments?: EmailAttachment[];
 }) {
   // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -41,6 +49,11 @@ export async function sendEmail({
       to,
       subject,
       html,
+      attachments: attachments?.map((a) => ({
+        filename: a.filename,
+        content: a.content,
+        content_type: a.content_type,
+      })),
     });
 
     if (error) {
@@ -54,4 +67,43 @@ export async function sendEmail({
     console.error("[email] Exception:", message);
     return { error: message, messageId: null };
   }
+}
+
+/**
+ * Convert data:image/png;base64,... QR codes into inline attachments
+ * and replace img src with cid: references. Gmail/Outlook block data: URIs
+ * but support cid: inline attachments.
+ */
+export function prepareQRAttachments(
+  html: string,
+  qrCodes: string[]
+): { html: string; attachments: EmailAttachment[] } {
+  const attachments: EmailAttachment[] = [];
+  let processedHtml = html;
+
+  for (let i = 0; i < qrCodes.length; i++) {
+    const dataUri = qrCodes[i];
+    if (!dataUri?.startsWith("data:image/")) continue;
+
+    const cid = `qr-ticket-${i + 1}`;
+
+    // Extract base64 content from data URI
+    const base64Match = dataUri.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!base64Match) continue;
+
+    const mimeType = base64Match[1]; // png, jpeg, etc.
+    const base64Data = base64Match[2];
+
+    attachments.push({
+      filename: `ticket-qr-${i + 1}.${mimeType}`,
+      content: Buffer.from(base64Data, "base64"),
+      content_type: `image/${mimeType}`,
+    });
+
+    // Replace the data: URI in HTML with cid: reference
+    // The sanitizeUrl function may have passed through the data URI as-is
+    processedHtml = processedHtml.replace(dataUri, `cid:${cid}`);
+  }
+
+  return { html: processedHtml, attachments };
 }

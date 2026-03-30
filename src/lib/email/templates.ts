@@ -10,7 +10,7 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
-// Sanitize URLs for use in href attributes — only allow https: and mailto: protocols
+// Sanitize URLs for use in href/src attributes — only allow safe protocols
 function sanitizeUrl(url: string): string {
   try {
     const parsed = new URL(url);
@@ -19,6 +19,8 @@ function sanitizeUrl(url: string): string {
     }
     return "#";
   } catch {
+    // cid: references for inline email attachments (e.g. QR code images)
+    if (url.startsWith("cid:")) return url;
     // data: URLs (e.g. for QR codes) — allow only data:image/png and data:image/jpeg
     // Block data:image/svg+xml which can contain JavaScript (case-insensitive check)
     const lowerUrl = url.toLowerCase();
