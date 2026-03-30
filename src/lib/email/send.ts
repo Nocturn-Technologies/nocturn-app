@@ -16,7 +16,9 @@ const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Nocturn <noreply@trynocturn
 export interface EmailAttachment {
   filename: string;
   content: Buffer;
-  content_type?: string;
+  contentType?: string;
+  /** Content-ID for inline embedding — reference in HTML with cid:{contentId} */
+  contentId?: string;
 }
 
 export async function sendEmail({
@@ -52,7 +54,8 @@ export async function sendEmail({
       attachments: attachments?.map((a) => ({
         filename: a.filename,
         content: a.content,
-        content_type: a.content_type,
+        contentType: a.contentType,
+        contentId: a.contentId,
       })),
     });
 
@@ -97,7 +100,8 @@ export function prepareQRAttachments(
     attachments.push({
       filename: `ticket-qr-${i + 1}.${mimeType}`,
       content: Buffer.from(base64Data, "base64"),
-      content_type: `image/${mimeType}`,
+      contentType: `image/${mimeType}`,
+      contentId: cid,
     });
 
     // Replace the data: URI in HTML with cid: reference
