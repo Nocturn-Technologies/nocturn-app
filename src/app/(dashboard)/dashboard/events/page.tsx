@@ -23,7 +23,8 @@ export default async function EventsPage() {
   const { data: memberships } = await admin
     .from("collective_members")
     .select("collective_id")
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
 
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
 
@@ -46,6 +47,7 @@ export default async function EventsPage() {
           .from("events")
           .select("id, title, slug, starts_at, status, flyer_url, venues(name, city)")
           .in("collective_id", collectiveIds)
+          .is("deleted_at", null)
           .order("starts_at", { ascending: false })
       : Promise.resolve({ data: null }),
     primaryCollectiveId

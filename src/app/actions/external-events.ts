@@ -59,7 +59,7 @@ export async function addExternalEvent(data: {
       venue_name: data.venueName || null,
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (insertError || !extEvent) {
     return { error: insertError?.message || "Failed to create event", link: null };

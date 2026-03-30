@@ -115,6 +115,7 @@ export default function LiveEventPage() {
       .from("events")
       .select("id, title, starts_at, ends_at, doors_at, bar_minimum, venue_deposit, estimated_bar_revenue")
       .eq("id", eventId)
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (!eventData) {

@@ -3,6 +3,15 @@ import { sendEmail } from "@/lib/email/send";
 import { referralNudgeEmail, ticketMilestoneEmail } from "@/lib/email/templates";
 import { createAdminClient } from "@/lib/supabase/config";
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 /**
  * Run after every ticket purchase. Non-blocking — call with .catch(() => {}).
  * Handles: referral nudge, ticket milestone notifications.
@@ -40,7 +49,7 @@ export async function runPostPurchaseHooks(input: {
 
     await sendEmail({
       to: input.buyerEmail,
-      subject: `Share ${event.title} with your crew`,
+      subject: `Share ${event.title.replace(/[\r\n\x00-\x1f]/g, "")} with your crew`,
       html,
     });
   } catch (e) {
@@ -93,7 +102,8 @@ export async function runPostPurchaseHooks(input: {
         .from("collective_members")
         .select("users(email)")
         .eq("collective_id", event.collective_id)
-        .eq("role", "admin");
+        .eq("role", "admin")
+        .is("deleted_at", null);
 
       const dashLink = `${BASE_URL}/dashboard/events/${input.eventId}`;
 
@@ -104,7 +114,7 @@ export async function runPostPurchaseHooks(input: {
         const html = ticketMilestoneEmail(event.title, m.label, sold, totalCapacity, dashLink);
         await sendEmail({
           to: user.email,
-          subject: `${event.title} — ${m.label} 🎉`,
+          subject: `${event.title.replace(/[\r\n\x00-\x1f]/g, "")} — ${m.label} 🎉`,
           html,
         });
       }

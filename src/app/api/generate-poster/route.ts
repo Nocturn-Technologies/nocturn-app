@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import Replicate from "replicate";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Rate limit: 10 poster generations per user per minute
-  const { success: rateLimitOk } = rateLimit(`generate-poster:${authedUserId}`, 10, 60_000);
+  const { success: rateLimitOk } = await rateLimitStrict(`generate-poster:${authedUserId}`, 10, 60_000);
   if (!rateLimitOk) {
     return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
   }

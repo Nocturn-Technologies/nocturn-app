@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { createHmac, randomBytes, timingSafeEqual } from "crypto";
 
 const APPROVAL_SECRET = (() => {
   const adminSecret = process.env.ADMIN_APPROVAL_SECRET;
-  if (adminSecret) return adminSecret;
-  if (process.env.CRON_SECRET) {
+  if (adminSecret && adminSecret.length >= 16) return adminSecret;
+  if (process.env.CRON_SECRET && process.env.CRON_SECRET.length >= 16) {
     console.warn(
       "[approve-user] ADMIN_APPROVAL_SECRET not set, falling back to CRON_SECRET. " +
       "Set ADMIN_APPROVAL_SECRET to a separate value for better security."
     );
     return process.env.CRON_SECRET;
   }
+  // Empty/short secrets are treated as unset — HMAC with empty key is insecure
   return "";
 })();
 
@@ -23,25 +25,89 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/**
+ * Generate an HMAC-signed token for a specific action.
+ * Token format: <nonce>.<timestamp>.<hmac>
+ * Expires after 24 hours.
+ */
+function generateActionToken(userId: string, action: string): string {
+  const nonce = randomBytes(16).toString("hex");
+  const timestamp = Date.now().toString();
+  const payload = `${userId}:${action}:${nonce}:${timestamp}`;
+  const hmac = createHmac("sha256", APPROVAL_SECRET)
+    .update(payload)
+    .digest("hex");
+  return `${nonce}.${timestamp}.${hmac}`;
+}
+
+/**
+ * Verify an HMAC-signed action token.
+ * Returns true if valid and not expired (24hr window).
+ */
+function verifyActionToken(userId: string, action: string, token: string): boolean {
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+
+  const [nonce, timestamp, providedHmac] = parts;
+  const ts = parseInt(timestamp, 10);
+  if (isNaN(ts)) return false;
+
+  // Check expiry (24 hours)
+  if (Date.now() - ts > 24 * 60 * 60 * 1000) return false;
+
+  const payload = `${userId}:${action}:${nonce}:${timestamp}`;
+  const expectedHmac = createHmac("sha256", APPROVAL_SECRET)
+    .update(payload)
+    .digest("hex");
+
+  // Timing-safe comparison
+  try {
+    return timingSafeEqual(
+      Buffer.from(providedHmac, "hex"),
+      Buffer.from(expectedHmac, "hex")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Generate approval/deny URLs with HMAC-signed tokens (not raw secrets).
+ * Called from auth.ts when sending approval request emails.
+ */
+export function generateApprovalUrls(userId: string): { approveUrl: string; denyUrl: string } {
+  if (!APPROVAL_SECRET) {
+    throw new Error("Cannot generate approval URLs: ADMIN_APPROVAL_SECRET (or CRON_SECRET) not set");
+  }
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+  const approveToken = generateActionToken(userId, "approve");
+  const denyToken = generateActionToken(userId, "deny");
+  return {
+    approveUrl: `${baseUrl}/api/approve-user?user_id=${userId}&action=approve&token=${encodeURIComponent(approveToken)}`,
+    denyUrl: `${baseUrl}/api/approve-user?user_id=${userId}&action=deny&token=${encodeURIComponent(denyToken)}`,
+  };
+}
+
 export async function GET(request: NextRequest) {
   if (!APPROVAL_SECRET) {
     return NextResponse.json(
-      { error: "Server misconfiguration: ADMIN_APPROVAL_SECRET (or CRON_SECRET) not set" },
+      { error: "Server configuration error" },
       { status: 500 }
     );
   }
 
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("user_id");
-  const action = searchParams.get("action"); // "approve" or "deny"
-  const secret = searchParams.get("secret");
+  const action = searchParams.get("action") ?? "approve";
+  const token = searchParams.get("token");
 
-  if (!secret || secret !== APPROVAL_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!userId || !token) {
+    return NextResponse.json({ error: "Missing user_id or token" }, { status: 400 });
   }
 
-  if (!userId) {
-    return NextResponse.json({ error: "Missing user_id" }, { status: 400 });
+  // Verify HMAC-signed token (per-user, per-action, time-limited)
+  if (!verifyActionToken(userId, action, token)) {
+    return NextResponse.json({ error: "Invalid or expired approval link" }, { status: 401 });
   }
 
   // Fetch user info to display on the confirmation page
@@ -55,8 +121,11 @@ export async function GET(request: NextRequest) {
   const safeEmail = escapeHtml(email);
   const safeName = escapeHtml(name);
   const safeUserType = escapeHtml(userType);
-  const safeSecret = escapeHtml(secret);
-  const safeAction = escapeHtml(action ?? "approve");
+  const safeAction = escapeHtml(action);
+
+  // Generate per-action CSRF tokens (single-use, not the master secret)
+  const csrfApprove = generateActionToken(userId, "approve");
+  const csrfDeny = generateActionToken(userId, "deny");
 
   // Render an HTML confirmation page — no action is taken on GET
   return new NextResponse(
@@ -81,7 +150,7 @@ export async function GET(request: NextRequest) {
       <form method="POST" action="">
         <input type="hidden" name="user_id" value="${safeUserId}" />
         <input type="hidden" name="action" value="approve" />
-        <input type="hidden" name="secret" value="${safeSecret}" />
+        <input type="hidden" name="token" value="${escapeHtml(csrfApprove)}" />
         <button type="submit" style="background:#2DD4BF;color:#09090B;padding:14px 32px;border-radius:12px;border:none;font-weight:700;font-size:15px;cursor:pointer;">
           Approve
         </button>
@@ -89,7 +158,7 @@ export async function GET(request: NextRequest) {
       <form method="POST" action="">
         <input type="hidden" name="user_id" value="${safeUserId}" />
         <input type="hidden" name="action" value="deny" />
-        <input type="hidden" name="secret" value="${safeSecret}" />
+        <input type="hidden" name="token" value="${escapeHtml(csrfDeny)}" />
         <button type="submit" style="background:#FB7185;color:#09090B;padding:14px 32px;border-radius:12px;border:none;font-weight:700;font-size:15px;cursor:pointer;">
           Deny
         </button>
@@ -105,7 +174,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   if (!APPROVAL_SECRET) {
     return NextResponse.json(
-      { error: "Server misconfiguration: ADMIN_APPROVAL_SECRET (or CRON_SECRET) not set" },
+      { error: "Server configuration error" },
       { status: 500 }
     );
   }
@@ -113,14 +182,15 @@ export async function POST(request: NextRequest) {
   const formData = await request.formData();
   const userId = formData.get("user_id") as string | null;
   const action = formData.get("action") as string | null;
-  const secret = formData.get("secret") as string | null;
+  const token = formData.get("token") as string | null;
 
-  if (!secret || secret !== APPROVAL_SECRET) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!userId || !token) {
+    return NextResponse.json({ error: "Missing user_id or token" }, { status: 400 });
   }
 
-  if (!userId) {
-    return NextResponse.json({ error: "Missing user_id" }, { status: 400 });
+  // Verify HMAC-signed token (per-user, per-action, time-limited)
+  if (!verifyActionToken(userId, action ?? "approve", token)) {
+    return NextResponse.json({ error: "Invalid or expired approval token" }, { status: 401 });
   }
 
   const admin = createAdminClient();

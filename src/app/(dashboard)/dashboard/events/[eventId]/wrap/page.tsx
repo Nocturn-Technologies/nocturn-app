@@ -150,6 +150,7 @@ export default function WrapPage() {
             "id, title, starts_at, ends_at, doors_at, status, venue_id, collective_id, venues(name)"
           )
           .eq("id", eventId)
+          .is("deleted_at", null)
           .maybeSingle();
 
         if (!event) {

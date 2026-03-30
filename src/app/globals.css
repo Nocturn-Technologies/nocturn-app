@@ -127,13 +127,60 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* Prevent pull-to-refresh / overscroll on the page shell */
+    overscroll-behavior: none;
+    /* Smoother font rendering on mobile */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-body), "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    /* Prevent body bounce on iOS */
+    overscroll-behavior: none;
+    /* Prevent text size adjust on orientation change */
+    -webkit-text-size-adjust: 100%;
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading), "Outfit", ui-sans-serif, sans-serif;
   }
+}
+
+/* ═══════════════════════════════════════
+   NATIVE MOBILE SCROLL
+   ═══════════════════════════════════════ */
+
+/* iOS momentum scrolling on all scroll containers */
+[class*="overflow-y-auto"],
+[class*="overflow-auto"],
+main {
+  -webkit-overflow-scrolling: touch;
+  /* Keep scroll bounce within the container, not the whole page */
+  overscroll-behavior-y: contain;
+}
+
+/* Smooth scroll for in-page navigation */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
+/* Hide scrollbar on mobile for cleaner native feel */
+@media (max-width: 767px) {
+  main::-webkit-scrollbar { display: none; }
+  main { -ms-overflow-style: none; scrollbar-width: none; }
+}
+
+/* Prevent iOS tap highlight flash */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hardware-accelerated scroll containers */
+.scroll-native {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  will-change: scroll-position;
 }
 
 /* ═══════════════════════════════════════

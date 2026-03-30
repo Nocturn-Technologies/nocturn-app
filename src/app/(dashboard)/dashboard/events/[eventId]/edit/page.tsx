@@ -25,7 +25,8 @@ export default async function EditEventPage({ params }: Props) {
   const { data: memberships } = await admin
     .from("collective_members")
     .select("collective_id")
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
 
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
 
@@ -38,6 +39,7 @@ export default async function EditEventPage({ params }: Props) {
       "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_id, bar_minimum, venue_deposit, venue_cost, estimated_bar_revenue, venues(id, name, address, city, capacity)"
     )
     .eq("id", eventId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event || !collectiveIds.includes(event.collective_id)) notFound();

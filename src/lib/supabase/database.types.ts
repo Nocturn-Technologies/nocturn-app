@@ -1954,11 +1954,22 @@ export type Database = {
       }
       claim_promo_code: {
         Args: { p_code_id: string; p_quantity: number }
-        Returns: void
+        Returns: {
+          id: string
+          event_id: string
+          code: string
+          discount_type: string
+          discount_value: number
+          max_uses: number | null
+          current_uses: number
+          is_active: boolean
+          expires_at: string | null
+          created_at: string
+        }[]
       }
       acquire_ticket_lock: {
         Args: { p_tier_id: string }
-        Returns: void
+        Returns: boolean
       }
       check_and_reserve_capacity: {
         Args: { p_tier_id: string; p_quantity: number }

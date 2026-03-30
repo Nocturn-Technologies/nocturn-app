@@ -156,7 +156,7 @@ export default async function AdminPage({ searchParams }: Props) {
     // Marketplace profiles
     supabase.from("marketplace_profiles").select("id", { count: "exact", head: true }),
     // Events count
-    supabase.from("events").select("id", { count: "exact", head: true }),
+    supabase.from("events").select("id", { count: "exact", head: true }).is("deleted_at", null),
     // All paid/checked_in tickets with price for GMV
     supabase.from("tickets").select("price_paid, created_at, event_id").in("status", ["paid", "checked_in"]),
     // Users last 30 days
@@ -168,15 +168,15 @@ export default async function AdminPage({ searchParams }: Props) {
     // Tickets prev 30 days
     supabase.from("tickets").select("price_paid").in("status", ["paid", "checked_in"]).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
     // Events last 30 days
-    supabase.from("events").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
+    supabase.from("events").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo).is("deleted_at", null),
     // Events prev 30 days
-    supabase.from("events").select("id", { count: "exact", head: true }).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
+    supabase.from("events").select("id", { count: "exact", head: true }).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo).is("deleted_at", null),
     // 7-day signups raw
     supabase.from("users").select("created_at").gte("created_at", sevenDaysAgo),
     // 7-day ticket sales raw
     supabase.from("tickets").select("created_at").in("status", ["paid", "checked_in"]).gte("created_at", sevenDaysAgo),
     // 7-day events created raw
-    supabase.from("events").select("created_at").gte("created_at", sevenDaysAgo),
+    supabase.from("events").select("created_at").gte("created_at", sevenDaysAgo).is("deleted_at", null),
     // Pending approvals
     supabase
       .from("users")
@@ -195,6 +195,7 @@ export default async function AdminPage({ searchParams }: Props) {
     supabase
       .from("events")
       .select("id, title, slug, starts_at, status, collective_id, collectives(name)")
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(50),
     // All settlements

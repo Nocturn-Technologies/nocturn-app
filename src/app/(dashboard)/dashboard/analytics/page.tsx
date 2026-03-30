@@ -61,9 +61,9 @@ export default async function AnalyticsPage() {
     { count: waitlistEntries },
   ] = await Promise.all([
     admin.from("collectives").select("*", { count: "exact", head: true }),
-    admin.from("events").select("*", { count: "exact", head: true }),
-    admin.from("events").select("*", { count: "exact", head: true }).eq("status", "published"),
-    admin.from("events").select("*", { count: "exact", head: true }).eq("status", "completed"),
+    admin.from("events").select("*", { count: "exact", head: true }).is("deleted_at", null),
+    admin.from("events").select("*", { count: "exact", head: true }).eq("status", "published").is("deleted_at", null),
+    admin.from("events").select("*", { count: "exact", head: true }).eq("status", "completed").is("deleted_at", null),
     admin.from("tickets").select("*", { count: "exact", head: true }),
     admin.from("tickets").select("*", { count: "exact", head: true }).in("status", ["paid", "checked_in"]),
     admin.from("tickets").select("*", { count: "exact", head: true }).eq("status", "free"),
@@ -84,7 +84,7 @@ export default async function AnalyticsPage() {
     // Top collectives by event count
     admin.from("collectives").select("id, name, slug").limit(10),
     // Recent events
-    admin.from("events").select("id, title, starts_at, status, collective_id, collectives(name)").order("created_at", { ascending: false }).limit(10),
+    admin.from("events").select("id, title, starts_at, status, collective_id, collectives(name)").is("deleted_at", null).order("created_at", { ascending: false }).limit(10),
     // Waitlist
     admin.from("ticket_waitlist").select("*", { count: "exact", head: true }),
   ]);

@@ -75,12 +75,13 @@ export default async function PublicCheckInPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  let isAdmin = false;
+  let canCheckIn = false;
   if (user && event) {
     const { data: membershipsRaw } = await supabase
       .from("collective_members")
       .select("collective_id")
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
     const memberships = membershipsRaw as { collective_id: string }[] | null;
 
     if (memberships && memberships.length > 0) {
@@ -89,11 +90,12 @@ export default async function PublicCheckInPage({ params }: Props) {
         .from("events")
         .select("collective_id")
         .eq("id", event.id)
+        .is("deleted_at", null)
         .maybeSingle();
       const ev = evRaw as { collective_id: string } | null;
 
       if (ev && collectiveIds.includes(ev.collective_id)) {
-        isAdmin = true;
+        canCheckIn = true;
       }
     }
   }
@@ -172,10 +174,16 @@ export default async function PublicCheckInPage({ params }: Props) {
                     </svg>
                   </div>
                   <p className="text-base font-medium">Ready to Check In</p>
-                  <PublicCheckInButton
-                    ticketToken={token}
-                    eventId={event?.id ?? ""}
-                  />
+                  {canCheckIn ? (
+                    <PublicCheckInButton
+                      ticketToken={token}
+                      eventId={event?.id ?? ""}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Present this QR code at the door for entry
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-2 py-4">
@@ -267,7 +275,7 @@ export default async function PublicCheckInPage({ params }: Props) {
         </div>
 
         {/* Admin link — go to scanner */}
-        {isAdmin && event && (
+        {canCheckIn && event && (
           <Link
             href={`/dashboard/events/${event.id}/check-in`}
             className="block w-full rounded-xl border border-nocturn/30 bg-nocturn/5 p-4 text-center text-sm font-medium text-nocturn hover:bg-nocturn/10 transition-colors"
@@ -277,8 +285,8 @@ export default async function PublicCheckInPage({ params }: Props) {
         )}
 
         {/* Ticket reference */}
-        <p className="text-center text-xs text-muted-foreground break-all">
-          Ticket: {token}
+        <p className="text-center text-xs text-muted-foreground">
+          Ticket: ...{token.slice(-8)}
         </p>
 
         <div className="text-center pt-2">

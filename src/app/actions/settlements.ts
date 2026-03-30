@@ -115,7 +115,7 @@ export async function generateSettlement(eventId: string) {
       profit: profit,
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (settlementError) {
     // Handle unique constraint violation (race condition — another process created it first)
@@ -128,6 +128,10 @@ export async function generateSettlement(eventId: string) {
       return { error: "Settlement already exists", settlementId: raceSettlement?.id };
     }
     return { error: settlementError.message };
+  }
+
+  if (!settlement) {
+    return { error: "Failed to create settlement" };
   }
 
   // Create line items

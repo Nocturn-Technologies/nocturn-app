@@ -25,7 +25,8 @@ export default async function EventChatPage({ params }: Props) {
   const { data: memberships } = await admin
     .from("collective_members")
     .select("collective_id")
-    .eq("user_id", user.id);
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
 
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
   if (collectiveIds.length === 0) notFound();
@@ -35,6 +36,7 @@ export default async function EventChatPage({ params }: Props) {
     .from("events")
     .select("id, title, collective_id")
     .eq("id", eventId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event || !collectiveIds.includes(event.collective_id)) notFound();

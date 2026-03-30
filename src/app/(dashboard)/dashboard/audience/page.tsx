@@ -274,7 +274,8 @@ export default function AudiencePage() {
     const { data: memberships } = await supabase
       .from("collective_members")
       .select("collective_id")
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
 
     const collIds = (memberships?.map((m: { collective_id: string }) => m.collective_id) ?? []) as string[];
     setYourCollectiveIds(collIds);
@@ -309,6 +310,7 @@ export default function AudiencePage() {
           .from("events")
           .select("starts_at, title, collective_id")
           .in("status", ["published", "completed"])
+          .is("deleted_at", null)
           .gte("starts_at", monthStart.toISOString())
           .lte("starts_at", monthEnd.toISOString())
           .order("starts_at"),

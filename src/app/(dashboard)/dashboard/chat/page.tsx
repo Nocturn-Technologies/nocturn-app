@@ -255,7 +255,8 @@ export default function ChatPage() {
     const { data: memberships } = await supabase
       .from("collective_members")
       .select("collective_id")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .is("deleted_at", null);
 
     const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
     if (collectiveIds.length === 0) {
@@ -288,6 +289,7 @@ export default function ChatPage() {
       .from("events")
       .select("id, title, starts_at")
       .eq("collective_id", collectiveId)
+      .is("deleted_at", null)
       .order("starts_at", { ascending: true });
 
     if (events && events.length > 0) {

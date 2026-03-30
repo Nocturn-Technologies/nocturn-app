@@ -41,7 +41,9 @@ function SuccessContent() {
   useEffect(() => {
     // For free tickets, build ticket stubs from the tokens query param
     if (isFree && freeTokens) {
-      const tokens = decodeURIComponent(freeTokens).split(",").filter(Boolean);
+      let decoded = freeTokens;
+      try { decoded = decodeURIComponent(freeTokens); } catch { /* malformed encoding, use raw */ }
+      const tokens = decoded.split(",").filter(Boolean);
       setTickets(
         tokens.map((token) => ({
           ticket_token: token,
@@ -60,7 +62,11 @@ function SuccessContent() {
           // Fulfill tickets directly — creates them if they don't exist yet
           const { tickets: fulfilled } = await fulfillPaymentIntent(paymentIntentId);
           if (fulfilled && fulfilled.length > 0) {
-            setTickets(fulfilled);
+            setTickets(fulfilled.map(t => ({
+              ticket_token: t.ticket_token,
+              status: t.status ?? "paid",
+              created_at: t.created_at ?? new Date().toISOString(),
+            })));
             setLoading(false);
             return;
           }

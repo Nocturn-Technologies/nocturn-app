@@ -45,6 +45,7 @@ export function ContactDialog({
           .from("events")
           .select("id, title")
           .gt("starts_at", new Date().toISOString())
+          .is("deleted_at", null)
           .order("starts_at", { ascending: true })
           .limit(20);
 

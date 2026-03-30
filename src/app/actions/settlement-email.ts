@@ -4,6 +4,15 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { getResendClient } from "@/lib/resend";
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 // Generate a settlement report email and return it (for now, no Resend — just generates the content)
 export async function generateSettlementReport(settlementId: string) {
   const supabase = await createServerClient();
@@ -77,18 +86,20 @@ export async function generateSettlementReport(settlementId: string) {
     .map((l) => `  • ${l.label}: -$${Number(l.amount).toFixed(2)}`)
     .join("\n");
 
-  const collectiveName = collective?.name ?? "Your Collective";
-  const subject = `Settlement Report: ${event.title} — ${collectiveName}`;
+  const collectiveName = escapeHtml(collective?.name ?? "Your Collective");
+  const safeEventTitle = escapeHtml(event.title);
+  const safeVenueName = venue ? escapeHtml(venue.name) : null;
+  const subject = `Settlement Report: ${safeEventTitle} — ${collectiveName}`;
 
   const body = `Hi ${collectiveName} team,
 
-Here's the settlement report for ${event.title}.
+Here's the settlement report for ${safeEventTitle}.
 
 EVENT DETAILS
 ━━━━━━━━━━━━
-Event: ${event.title}
+Event: ${safeEventTitle}
 Date: ${eventDate}
-Venue: ${venue ? `${venue.name}, ${venue.city}` : "N/A"}
+Venue: ${safeVenueName ? `${safeVenueName}, ${venue!.city}` : "N/A"}
 
 FINANCIAL SUMMARY
 ━━━━━━━━━━━━━━━━

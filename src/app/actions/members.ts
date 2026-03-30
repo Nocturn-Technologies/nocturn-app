@@ -49,6 +49,12 @@ export async function inviteMember(
     return { error: "You must be logged in." };
   }
 
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email.trim())) {
+    return { error: "Please enter a valid email address." };
+  }
+
   const admin = createAdminClient();
 
   // Verify caller is a member of this collective
@@ -77,6 +83,7 @@ export async function inviteMember(
       .select("id")
       .eq("collective_id", collectiveId)
       .eq("user_id", existingUser.id)
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (existingMember) {
@@ -342,6 +349,7 @@ export async function acceptInvitation(token: string) {
     .select("id")
     .eq("collective_id", invitation.collective_id)
     .eq("user_id", user.id)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (existingMember) {

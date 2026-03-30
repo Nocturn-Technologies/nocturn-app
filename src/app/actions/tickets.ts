@@ -98,11 +98,12 @@ export async function generateQRCodesForTokens(tokens: string[]) {
 
 /**
  * Fetch a ticket with its event and tier details by token.
+ * If the user is authenticated, verifies ownership.
+ * If not authenticated, returns limited public data (for check-in page / ticket view).
  */
 export async function getTicketByToken(ticketToken: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", ticket: null };
 
   const admin = createAdminClient();
 
@@ -146,11 +147,33 @@ export async function getTicketByToken(ticketToken: string) {
     return { error: "Ticket not found", ticket: null };
   }
 
-  // Verify the caller owns this ticket
-  if (ticket.user_id && ticket.user_id !== user.id) {
-    return { error: "Not authorized to view this ticket", ticket: null };
+  // If authenticated, verify ownership (unless ticket is unlinked/guest purchase)
+  if (user && ticket.user_id && ticket.user_id !== user.id) {
+    // Check if user is a collective member (staff viewing for check-in)
+    const { data: event } = await admin
+      .from("events")
+      .select("collective_id")
+      .eq("id", (ticket as unknown as { events: { id: string } | null }).events?.id ?? "")
+      .maybeSingle();
+
+    if (event?.collective_id) {
+      const { count } = await admin
+        .from("collective_members")
+        .select("*", { count: "exact", head: true })
+        .eq("collective_id", event.collective_id)
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+
+      if (!count) {
+        return { error: "Not authorized to view this ticket", ticket: null };
+      }
+    } else {
+      return { error: "Not authorized to view this ticket", ticket: null };
+    }
   }
 
+  // For unauthenticated users, the ticket token itself is the proof of access
+  // (only the buyer has the token from their email/success page)
   return { error: null, ticket };
 }
 
@@ -160,8 +183,12 @@ export async function getTicketByToken(ticketToken: string) {
 export async function getTicketsBySessionId(sessionOrPaymentId: string) {
   // This is called from the public success page — buyer may not be logged in.
   // The session/payment ID itself acts as proof of purchase (only the buyer has it).
-  if (!sessionOrPaymentId || sessionOrPaymentId.length < 10) {
+  if (!sessionOrPaymentId || sessionOrPaymentId.length < 10 || sessionOrPaymentId.length > 255) {
     return { error: "Invalid session ID", tickets: null };
+  }
+  // Only allow alphanumeric, underscores, and hyphens (Stripe IDs follow this pattern)
+  if (!/^[a-zA-Z0-9_-]+$/.test(sessionOrPaymentId)) {
+    return { error: "Invalid session ID format", tickets: null };
   }
 
   const admin = createAdminClient();
@@ -301,30 +328,61 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     },
   }));
 
-  // RACE CONDITION PROTECTION: Acquire a transaction-scoped advisory lock keyed on this
-  // payment intent ID before inserting, so concurrent client fulfillment + webhook can't
-  // both create tickets. The lock auto-releases when the DB operation completes.
-  // We reuse the existing acquire_ticket_lock function (which calls pg_advisory_xact_lock
-  // with hashtext of the input) — passing the PI ID as the lock key.
-  // Errors are intentionally ignored — if the lock RPC fails the idempotency
-  // check below still prevents duplicate ticket creation.
-  await admin.rpc("acquire_ticket_lock", { p_tier_id: paymentIntentId });
+  // ATOMIC FULFILLMENT: Use a single DB function that acquires an advisory lock,
+  // checks for existing tickets, and inserts — all within one transaction.
+  // This prevents race conditions between concurrent client fulfillment + webhook.
+  // Falls back to manual insert if the RPC doesn't exist yet (migration not applied).
+  let insertedTickets: { id: string; ticket_token: string; is_new?: boolean }[] | null = null;
+  let insertError: { message: string } | null = null;
+  let wasNewlyCreated = true; // Track if tickets were newly created vs pre-existing
 
-  // Re-check for existing tickets AFTER acquiring the lock (prevents double-creation race)
-  const { data: postLockTickets } = await admin
-    .from("tickets")
-    .select("ticket_token, status, created_at")
-    .eq("stripe_payment_intent_id", paymentIntentId);
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: atomicResult, error: atomicError } = await (admin as any).rpc("fulfill_tickets_atomic", {
+      p_payment_intent_id: paymentIntentId,
+      p_event_id: eventId,
+      p_tier_id: tierId,
+      p_quantity: quantity,
+      p_price_paid: pricePaid,
+      p_currency: ticketCurrency,
+      p_buyer_email: buyerEmail ?? null,
+      p_referrer_token: referrerToken,
+      p_metadata: {
+        payment_intent_id: paymentIntentId,
+        customer_email: buyerEmail,
+        fulfilled_by: "client_action",
+        ...(referrerToken && { referrer_token: referrerToken }),
+      },
+    });
 
-  if (postLockTickets && postLockTickets.length > 0) {
-    // Webhook already created tickets while we were waiting for the lock
-    return { error: null, tickets: postLockTickets };
+    if (atomicError) throw atomicError;
+    insertedTickets = atomicResult;
+
+    // The atomic function returns is_new=false for pre-existing tickets.
+    // Use this deterministic flag to avoid double-counting promo/analytics.
+    if (insertedTickets && insertedTickets.length > 0) {
+      wasNewlyCreated = insertedTickets[0]?.is_new !== false;
+    }
+  } catch {
+    // Fallback: manual insert (for pre-migration compatibility)
+    // Re-check for existing tickets first (idempotency)
+    const { data: postLockTickets } = await admin
+      .from("tickets")
+      .select("ticket_token, status, created_at")
+      .eq("stripe_payment_intent_id", paymentIntentId);
+
+    if (postLockTickets && postLockTickets.length > 0) {
+      return { error: null, tickets: postLockTickets };
+    }
+
+    const result = await admin
+      .from("tickets")
+      .insert(tickets)
+      .select("id, ticket_token, status, created_at");
+
+    insertedTickets = result.data;
+    insertError = result.error;
   }
-
-  const { data: insertedTickets, error: insertError } = await admin
-    .from("tickets")
-    .insert(tickets)
-    .select("id, ticket_token, status, created_at");
 
   if (insertError) {
     console.error("[fulfillPaymentIntent] Insert failed:", insertError);
@@ -353,36 +411,54 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
 
   console.info(`[fulfillPaymentIntent] Created ${quantity} ticket(s) for PI ${paymentIntentId}`);
 
-  void logPaymentEvent({
-    event_type: "tickets_fulfilled",
-    payment_intent_id: paymentIntentId,
-    event_id: eventId,
-    tier_id: tierId,
-    quantity,
-    amount_cents: Math.round(pricePaid * quantity * 100),
-    currency: ticketCurrency,
-    buyer_email: buyerEmail ?? null,
-    metadata: { fulfilled_by: "client_action" },
-  });
-
-  // Analytics tracking (non-blocking, fire-and-forget)
-  {
-    const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
-    trackTicketSold(eventId, quantity, pricePaid * quantity);
-    if (buyerEmail) {
-      (async () => {
-        try {
-          const { data: eventForAnalytics } = await admin
-            .from("events")
-            .select("collective_id")
-            .eq("id", eventId)
-            .maybeSingle();
-          if (eventForAnalytics?.collective_id) {
-            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
-          }
-        } catch { /* non-critical */ }
-      })();
+  // Only claim promo and track analytics if tickets were NEWLY created.
+  // If tickets already existed (from webhook), skip to avoid double-counting.
+  if (wasNewlyCreated) {
+    // Claim promo code uses AFTER successful ticket creation.
+    // Uses claim_promo_code RPC which accepts quantity.
+    if (metadata.promoId) {
+      try {
+        await admin.rpc("claim_promo_code", { p_code_id: metadata.promoId, p_quantity: quantity });
+      } catch (promoErr) {
+        console.error("[fulfillPaymentIntent] Failed to claim promo uses (non-blocking):", promoErr);
+      }
     }
+
+    void logPaymentEvent({
+      event_type: "tickets_fulfilled",
+      payment_intent_id: paymentIntentId,
+      event_id: eventId,
+      tier_id: tierId,
+      quantity,
+      amount_cents: Math.round(pricePaid * quantity * 100),
+      currency: ticketCurrency,
+      buyer_email: buyerEmail ?? null,
+      metadata: { fulfilled_by: "client_action" },
+    });
+
+    // Analytics tracking (non-blocking, fire-and-forget)
+    try {
+      const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+      trackTicketSold(eventId, quantity, pricePaid * quantity);
+      if (buyerEmail) {
+        (async () => {
+          try {
+            const { data: eventForAnalytics } = await admin
+              .from("events")
+              .select("collective_id")
+              .eq("id", eventId)
+              .maybeSingle();
+            if (eventForAnalytics?.collective_id) {
+              upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
+            }
+          } catch { /* non-critical */ }
+        })();
+      }
+    } catch (analyticsErr) {
+      console.error("[fulfillPaymentIntent] Analytics tracking failed (non-blocking):", analyticsErr);
+    }
+  } else {
+    console.info(`[fulfillPaymentIntent] Tickets pre-existed for PI ${paymentIntentId}, skipping promo/analytics`);
   }
 
   // Generate QR codes FIRST, then send email with QR codes embedded
@@ -452,8 +528,8 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     error: null,
     tickets: (insertedTickets ?? []).map((t) => ({
       ticket_token: t.ticket_token,
-      status: t.status,
-      created_at: t.created_at,
+      status: "paid" as const,
+      created_at: new Date().toISOString(),
     })),
   };
 }

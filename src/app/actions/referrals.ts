@@ -106,7 +106,34 @@ export async function generateReferralLink(eventSlug: string, collectiveSlug: st
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", link: null };
 
-  const link = `https://app.trynocturn.com/e/${collectiveSlug}/${eventSlug}?ref=${user.id}`;
+  // Validate slug format — only alphanumeric + hyphens allowed
+  const slugRegex = /^[a-z0-9-]+$/i;
+  if (!slugRegex.test(eventSlug) || !slugRegex.test(collectiveSlug)) {
+    return { error: "Invalid event or collective slug", link: null };
+  }
+
+  // Verify the event actually exists under this collective
+  const admin = createAdminClient();
+  const { data: collective } = await admin
+    .from("collectives")
+    .select("id")
+    .eq("slug", collectiveSlug)
+    .maybeSingle();
+
+  if (!collective) return { error: "Collective not found", link: null };
+
+  const { data: event } = await admin
+    .from("events")
+    .select("id")
+    .eq("slug", eventSlug)
+    .eq("collective_id", collective.id)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found", link: null };
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+  const link = `${appUrl}/e/${collectiveSlug}/${eventSlug}?ref=${user.id}`;
   return { error: null, link };
 }
 
@@ -119,16 +146,35 @@ export async function trackReferral(ticketId: string, referrerId: string): Promi
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
+  // Validate referrerId is a proper UUID to prevent injection
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(referrerId) || !uuidRegex.test(ticketId)) return;
+
+  // Prevent self-referral
+  if (referrerId === user.id) return;
+
   const admin = createAdminClient();
+
+  // Verify the referrer actually exists in the users table
+  const { data: referrerUser } = await admin
+    .from("users")
+    .select("id")
+    .eq("id", referrerId)
+    .maybeSingle();
+
+  if (!referrerUser) return;
 
   // Verify the caller owns the ticket being updated
   const { data: ticket } = await admin
     .from("tickets")
-    .select("id, user_id")
+    .select("id, user_id, referred_by")
     .eq("id", ticketId)
     .maybeSingle();
 
   if (!ticket || ticket.user_id !== user.id) return;
+
+  // Don't overwrite an existing referral (prevents referral stealing)
+  if (ticket.referred_by) return;
 
   await admin
     .from("tickets")

@@ -22,6 +22,13 @@ export async function sendEmail({
   subject: string;
   html: string;
 }) {
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(to)) {
+    console.error("[email] Invalid email format:", to);
+    return { error: "Invalid email format", messageId: null };
+  }
+
   const resend = getResend();
   if (!resend) {
     console.log(`[email] Dev mode — skipped sending: ${subject}`);

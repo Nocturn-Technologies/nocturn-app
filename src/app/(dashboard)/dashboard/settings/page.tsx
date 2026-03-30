@@ -62,6 +62,7 @@ export default function SettingsPage() {
           .from("collective_members")
           .select("collective_id, collectives(*)")
           .eq("user_id", user.id)
+          .is("deleted_at", null)
           .limit(1);
 
         if (memberships && memberships.length > 0) {

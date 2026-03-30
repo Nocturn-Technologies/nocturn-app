@@ -109,6 +109,7 @@ export default async function EventDetailPage({ params }: Props) {
       "id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, collective_id, venues(name, address, city, capacity)"
     )
     .eq("id", eventId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event || !collectiveIds.includes(event.collective_id)) notFound();

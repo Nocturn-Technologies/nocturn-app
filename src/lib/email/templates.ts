@@ -10,6 +10,23 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
+// Sanitize URLs for use in href attributes — only allow https: and mailto: protocols
+function sanitizeUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol === "https:" || parsed.protocol === "mailto:") {
+      return escapeHtml(url);
+    }
+    return "#";
+  } catch {
+    // data: URLs (e.g. for QR codes) — allow only data:image/png and data:image/jpeg
+    // Block data:image/svg+xml which can contain JavaScript (case-insensitive check)
+    const lowerUrl = url.toLowerCase();
+    if (lowerUrl.startsWith("data:image/") && !lowerUrl.includes("svg")) return url;
+    return "#";
+  }
+}
+
 function baseTemplate(content: string): string {
   return `<!DOCTYPE html>
 <html>
@@ -49,7 +66,7 @@ export function magicLinkEmail(link: string): string {
   return baseTemplate(`
     <h2>Sign in to Nocturn</h2>
     <p>Click the button below to sign in to your account. This link expires in 1 hour.</p>
-    <a href="${link}" class="btn">Sign In →</a>
+    <a href="${sanitizeUrl(link)}" class="btn">Sign In →</a>
     <p>If you didn't request this, you can safely ignore this email.</p>
   `);
 }
@@ -58,7 +75,7 @@ export function passwordResetEmail(link: string): string {
   return baseTemplate(`
     <h2>Reset your password</h2>
     <p>Someone requested a password reset for your Nocturn account. Click below to set a new password.</p>
-    <a href="${link}" class="btn">Reset Password →</a>
+    <a href="${sanitizeUrl(link)}" class="btn">Reset Password →</a>
     <p>This link expires in 1 hour. If you didn't request this, no action is needed.</p>
   `);
 }
@@ -94,7 +111,7 @@ export function invitationEmail(
       <p style="color: #FAFAFA; margin: 0; font-weight: 600;">${safeCollective}</p>
       <p style="margin: 4px 0 0 0;">Role: ${safeRole}</p>
     </div>
-    <a href="${inviteLink}" class="btn">Accept Invitation →</a>
+    <a href="${sanitizeUrl(inviteLink)}" class="btn">Accept Invitation →</a>
     <p>This invitation expires in 7 days.</p>
   `);
 }
@@ -113,7 +130,7 @@ export function ticketConfirmationEmail(
   const qrSection = qrCodes && qrCodes.length > 0
     ? qrCodes.map((qr, i) => `
       <div style="text-align: center; margin: 16px 0; padding: 20px; background: #FFFFFF; border-radius: 12px;">
-        <img src="${qr}" alt="Ticket ${i + 1} QR Code" width="250" height="250" style="display: block; margin: 0 auto;" />
+        <img src="${sanitizeUrl(qr)}" alt="Ticket ${i + 1} QR Code" width="250" height="250" style="display: block; margin: 0 auto;" />
         <p style="margin: 8px 0 0 0; color: #27272A; font-size: 12px; font-weight: 600;">
           ${quantity > 1 ? `Ticket ${i + 1} of ${quantity}` : "Your Ticket"}
         </p>
@@ -130,10 +147,10 @@ export function ticketConfirmationEmail(
       <p style="margin: 0;">📅 ${escapeHtml(eventDate)}</p>
       <p style="margin: 4px 0;">📍 ${escapeHtml(venueName)}</p>
       <p style="margin: 4px 0;">🎫 ${quantity}× ${escapeHtml(tierName)}</p>
-      <p style="margin: 8px 0 0 0; color: #7B2FF7; font-weight: 600; font-size: 18px;">${totalPrice}</p>
+      <p style="margin: 8px 0 0 0; color: #7B2FF7; font-weight: 600; font-size: 18px;">${escapeHtml(totalPrice)}</p>
     </div>
     ${qrSection || `<p style="color: #A1A1AA; font-size: 13px;">Your QR code is being generated. Tap below to view it.</p>`}
-    <a href="${ticketLink}" class="btn">View Your Ticket →</a>
+    <a href="${sanitizeUrl(ticketLink)}" class="btn">View Your Ticket →</a>
     <p>Show your QR code at the door for entry. See you there! 🌙</p>
   `);
 }
@@ -152,10 +169,10 @@ export function settlementReportEmail(
     <div class="card">
       <p style="color: #FAFAFA; margin: 0 0 12px 0; font-weight: 600;">${escapeHtml(eventTitle)} — ${escapeHtml(eventDate)}</p>
       <p style="margin: 0;">🎫 Tickets sold: <strong>${ticketsSold}</strong></p>
-      <p style="margin: 4px 0;">💵 Gross revenue: <strong>${grossRevenue}</strong></p>
-      <p style="margin: 8px 0 0 0; color: #7B2FF7; font-weight: 600; font-size: 20px;">Net profit: ${netProfit}</p>
+      <p style="margin: 4px 0;">💵 Gross revenue: <strong>${escapeHtml(grossRevenue)}</strong></p>
+      <p style="margin: 8px 0 0 0; color: #7B2FF7; font-weight: 600; font-size: 20px;">Net profit: ${escapeHtml(netProfit)}</p>
     </div>
-    <a href="${settlementLink}" class="btn">View Full Report →</a>
+    <a href="${sanitizeUrl(settlementLink)}" class="btn">View Full Report →</a>
   `);
 }
 
@@ -195,7 +212,7 @@ export function dayOfHypeEmail(
       <p style="margin: 4px 0;">🎵 Show: ${escapeHtml(showTime)}</p>
       ${dressCode ? `<p style="margin: 4px 0;">👔 Dress code: ${escapeHtml(dressCode)}</p>` : ""}
     </div>
-    <a href="${ticketLink}" class="btn">View Your Ticket →</a>
+    <a href="${sanitizeUrl(ticketLink)}" class="btn">View Your Ticket →</a>
     <p style="color: #71717A; font-size: 13px;">Have your QR code ready at the door. See you tonight. 🌙</p>
   `);
 }
@@ -212,7 +229,7 @@ export function referralNudgeEmail(
     <p>Know someone who'd be into <span class="highlight">${escapeHtml(eventTitle)}</span>? Share your personal link — every friend who buys through you gets tracked.</p>
     <div class="card">
       <p style="color: #FAFAFA; margin: 0 0 8px 0; font-weight: 600;">Your referral link</p>
-      <p style="margin: 0; color: #7B2FF7; word-break: break-all; font-size: 13px;">${referralLink}</p>
+      <p style="margin: 0; color: #7B2FF7; word-break: break-all; font-size: 13px;">${escapeHtml(referralLink)}</p>
     </div>
     <p style="color: #A1A1AA;">Bring 5 friends and you earn Ambassador status from <span class="highlight">${escapeHtml(collectiveName)}</span>. Just share the link — we handle the rest.</p>
   `);
@@ -237,7 +254,7 @@ export function organizerCountdownEmail(
     </div>
     ${percent < 50 ? `<p style="color: #FB7185;">You're under 50% — consider a last-minute push. Post the lineup on IG tonight, drop a story countdown, or text your top 10 people directly.</p>` : ""}
     ${percent >= 75 ? `<p style="color: #2DD4BF;">You're at ${percent}% — looking strong. Consider holding your price or bumping the final tier up.</p>` : ""}
-    <a href="${dashboardLink}" class="btn">Open Dashboard →</a>
+    <a href="${sanitizeUrl(dashboardLink)}" class="btn">Open Dashboard →</a>
   `);
 }
 
@@ -256,7 +273,7 @@ export function ticketMilestoneEmail(
       <p style="color: #FAFAFA; margin: 0; font-size: 32px; font-weight: 800; text-align: center;">${Math.round((ticketsSold / totalCapacity) * 100)}%</p>
       <p style="margin: 8px 0 0 0; text-align: center;">capacity sold</p>
     </div>
-    <a href="${dashboardLink}" class="btn">View Event →</a>
+    <a href="${sanitizeUrl(dashboardLink)}" class="btn">View Event →</a>
   `);
 }
 

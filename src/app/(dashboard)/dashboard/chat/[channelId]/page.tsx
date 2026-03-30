@@ -225,7 +225,7 @@ export default function ChatRoomPage() {
         type: "text",
       })
       .select()
-      .single()
+      .maybeSingle()
       .then(({ data, error }) => {
         if (error) {
           console.error("[chat] Failed to send message:", error);
@@ -352,7 +352,7 @@ export default function ChatRoomPage() {
         voice_duration: duration,
       })
       .select()
-      .single();
+      .maybeSingle();
 
     if (insertError) {
       console.error("[voice] Message insert failed:", insertError.message);

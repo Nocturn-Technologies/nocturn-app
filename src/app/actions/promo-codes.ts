@@ -14,6 +14,7 @@ async function verifyEventAccess(eventId: string) {
     .from("events")
     .select("collective_id")
     .eq("id", eventId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event) return { error: "Event not found", userId: null };
@@ -57,8 +58,11 @@ export async function createPromoCode(input: {
   if (access.error) return { error: access.error };
 
   // Validate discount value bounds
+  if (!Number.isFinite(input.discountValue)) {
+    return { error: "Discount value must be a finite number" };
+  }
   if (input.discountType === "percentage") {
-    if (input.discountValue < 1 || input.discountValue > 100) {
+    if (input.discountValue <= 0 || input.discountValue > 100) {
       return { error: "Percentage discount must be between 1 and 100" };
     }
   } else if (input.discountType === "fixed") {
@@ -160,44 +164,30 @@ export async function applyPromoCode(codeId: string, quantity: number = 1) {
   const { data: { user } } = await supabase_auth.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
+  // Validate inputs
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(codeId)) return { error: "Invalid promo code ID" };
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) return { error: "Invalid quantity" };
+
   const supabase = createAdminClient();
 
-  // Truly atomic: use RPC or a single conditional update without reading first.
-  // We increment current_uses by quantity and use .lte() on the PRE-update value
-  // to ensure we don't exceed max_uses. This avoids the read-then-write race.
-
-  // First, try the atomic increment via raw update with a capacity guard.
-  // The .lte() filter checks current_uses BEFORE the update is applied,
-  // so we check that current_uses + quantity <= max_uses.
-  const { data: promo } = await supabase
-    .from("promo_codes")
-    .select("id, current_uses, max_uses")
-    .eq("id", codeId)
-    .maybeSingle();
-
-  if (!promo) return { error: "Promo code not found" };
-
-  // Build atomic update: set current_uses = current_uses + quantity
-  // Guard: only update if current row's current_uses <= max_uses - quantity
-  const newUses = (promo.current_uses ?? 0) + quantity;
-
-  let updateQuery = supabase
-    .from("promo_codes")
-    .update({ current_uses: newUses })
-    .eq("id", codeId)
-    .eq("current_uses", promo.current_uses ?? 0); // Optimistic lock: only update if value hasn't changed
-
-  // Also enforce max_uses cap
-  if (promo.max_uses !== null) {
-    updateQuery = updateQuery.lte("current_uses", promo.max_uses - quantity);
+  // Use the atomic claim_promo_code RPC which acquires a FOR UPDATE lock,
+  // checks capacity, and increments — all within a single transaction.
+  // This eliminates the read-then-write TOCTOU race condition.
+  try {
+    await supabase.rpc("claim_promo_code", { p_code_id: codeId, p_quantity: quantity });
+    return { error: null };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    if (msg.includes("capacity") || msg.includes("exceeded")) {
+      return { error: "Promo code has reached its usage limit" };
+    }
+    if (msg.includes("not found")) {
+      return { error: "Promo code not found" };
+    }
+    console.error("[promo-codes] applyPromoCode failed:", msg);
+    return { error: "Failed to apply promo code" };
   }
-
-  const { data: result, error: updateError } = await updateQuery.select("id");
-
-  if (updateError) return { error: updateError.message };
-  if (!result || result.length === 0) return { error: "Promo code has reached its usage limit" };
-
-  return { error: null };
 }
 
 export async function togglePromoCode(codeId: string, isActive: boolean) {
@@ -220,6 +210,7 @@ export async function togglePromoCode(codeId: string, isActive: boolean) {
     .from("events")
     .select("collective_id")
     .eq("id", promo.event_id)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event) return { error: "Event not found" };

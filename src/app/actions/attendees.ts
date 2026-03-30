@@ -86,7 +86,8 @@ export async function getAttendees(collectiveId?: string): Promise<{
   const { data: eventsRaw } = await admin
     .from("events")
     .select("id, title, starts_at")
-    .in("collective_id", collectiveIds);
+    .in("collective_id", collectiveIds)
+    .is("deleted_at", null);
   const events = eventsRaw as { id: string; title: string; starts_at: string }[] | null;
 
   if (!events || events.length === 0) {
@@ -200,10 +201,7 @@ export async function exportAttendeesCSV(collectiveId?: string): Promise<{
 
   // Sanitize CSV fields to prevent formula injection
   function csvSafe(field: string): string {
-    let escaped = field.replace(/"/g, '""');
-    if (/^[=+\-@]/.test(escaped)) {
-      escaped = "'" + escaped;
-    }
+    const escaped = field.replace(/"/g, '""');
     return `"${escaped}"`;
   }
 

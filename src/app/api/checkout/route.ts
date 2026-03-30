@@ -4,7 +4,7 @@ import { calculateServiceFeeCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
@@ -18,8 +18,8 @@ interface CheckoutBody {
 }
 
 export async function POST(request: NextRequest) {
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const { success } = rateLimit(`checkout:${clientIp}`, 10, 60000); // 10 requests per minute
+  const clientIp = request.headers.get("x-real-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { success } = await rateLimitStrict(`checkout:${clientIp}`, 10, 60000); // 10 requests per minute
   if (!success) {
     return NextResponse.json(
       { error: "Too many requests. Please try again in a moment." },
@@ -29,7 +29,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body: CheckoutBody = await request.json();
-    const { eventId, tierId, quantity, buyerEmail, promoCode } = body;
+    const { eventId, tierId, quantity, promoCode } = body;
+    // Normalize email to lowercase to prevent case-variant free ticket bypass
+    const buyerEmail = body.buyerEmail?.trim().toLowerCase();
     // referrerToken must be a valid UUID (user ID from ?ref= link)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     let referrerToken = body.referrerToken && uuidRegex.test(body.referrerToken) ? body.referrerToken : undefined;
@@ -41,14 +43,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate eventId and tierId as UUIDs to prevent injection/invalid queries
+    if (!uuidRegex.test(eventId) || !uuidRegex.test(tierId)) {
+      return NextResponse.json({ error: "Invalid event or tier ID" }, { status: 400 });
+    }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(buyerEmail)) {
       return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
     }
 
-    if (quantity < 1 || quantity > 10) {
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) {
       return NextResponse.json(
-        { error: "Quantity must be between 1 and 10" },
+        { error: "Quantity must be a whole number between 1 and 10" },
         { status: 400 }
       );
     }
@@ -66,6 +73,7 @@ export async function POST(request: NextRequest) {
       .from("events")
       .select("id, title, slug, collective_id, status")
       .eq("id", eventId)
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (eventError || !event) {
@@ -136,7 +144,7 @@ export async function POST(request: NextRequest) {
     let discountFixed = 0;
     let promoId: string | null = null;
 
-    if (promoCode) {
+    if (promoCode && typeof promoCode === "string" && promoCode.length <= 50) {
       const { data: promo } = await supabase
         .from("promo_codes")
         .select("id, code, discount_type, discount_value, max_uses, current_uses, expires_at")
@@ -151,52 +159,74 @@ export async function POST(request: NextRequest) {
         if (isExpired) {
           // Expired — skip silently (no discount applied)
         } else {
-          // Atomic claim: increment current_uses only if capacity remains.
-          // This prevents race conditions where two concurrent checkouts
-          // both read current_uses < max_uses and both claim.
-          const claimQuery = promo.max_uses !== null
-            ? supabase
-                .from("promo_codes")
-                .update({ current_uses: (promo.current_uses ?? 0) + quantity })
-                .eq("id", promo.id)
-                .lte("current_uses", promo.max_uses - quantity)
-                .select("id")
-            : supabase
-                .from("promo_codes")
-                .update({ current_uses: (promo.current_uses ?? 0) + quantity })
-                .eq("id", promo.id)
-                .select("id");
+          // Validate promo code availability (check uses) but DON'T claim yet.
+          // Claiming happens in the webhook/fulfillment after payment succeeds,
+          // so abandoned checkouts don't consume promo uses.
+          const hasCapacity = promo.max_uses === null ||
+            (promo.current_uses ?? 0) + quantity <= promo.max_uses;
 
-          const { data: claimResult } = await claimQuery;
-
-          if (claimResult && claimResult.length > 0) {
-            // Successfully claimed — apply the discount
+          if (hasCapacity) {
+            // Code is valid and has capacity — apply the discount
             promoId = promo.id;
             if (promo.discount_type === "percentage") {
-              discountPercent = Number(promo.discount_value) / 100;
+              const pct = Number(promo.discount_value);
+              if (pct < 0 || pct > 100) {
+                // Invalid percentage — skip promo, no discount
+                discountPercent = 0;
+              } else {
+                discountPercent = pct / 100;
+              }
             } else {
               discountFixed = Number(promo.discount_value) * 100; // convert to cents
             }
           }
-          // If claimResult is empty, the code is maxed out — no discount applied
+          // If no capacity, the code is maxed out — no discount applied
         }
       }
     }
 
     // Calculate price with discount
     const basePriceCents = Math.round(Number(tier.price) * 100);
-    const discountCents = discountPercent > 0
-      ? Math.round(basePriceCents * discountPercent)
-      : discountFixed;
-    const unitAmountCents = Math.max(basePriceCents - discountCents, 0);
 
     if (basePriceCents < 0) {
       return NextResponse.json({ error: "Invalid ticket price" }, { status: 400 });
     }
 
+    const discountCents = discountPercent > 0
+      ? Math.round(basePriceCents * discountPercent)
+      : discountFixed;
+    const unitAmountCents = Math.max(basePriceCents - discountCents, 0);
+
     // Free tickets — bypass Stripe, create directly
     // Insert BEFORE releasing the lock to prevent oversell race condition
     if (unitAmountCents === 0) {
+      // IDEMPOTENCY: Limit free tickets per email per tier to prevent replay attacks.
+      // Check if this email already has free tickets for this tier.
+      const { count: existingFreeCount } = await supabaseAdmin
+        .from("tickets")
+        .select("*", { count: "exact", head: true })
+        .eq("event_id", eventId)
+        .eq("ticket_tier_id", tierId)
+        .eq("status", "paid")
+        .filter("metadata->>customer_email", "eq", buyerEmail)
+        .is("stripe_payment_intent_id", null);
+
+      if (existingFreeCount && existingFreeCount > 0) {
+        // Already registered — return existing tickets instead of creating duplicates
+        const { data: existingTickets } = await supabaseAdmin
+          .from("tickets")
+          .select("ticket_token")
+          .eq("event_id", eventId)
+          .eq("ticket_tier_id", tierId)
+          .filter("metadata->>customer_email", "eq", buyerEmail)
+          .is("stripe_payment_intent_id", null);
+
+        const tokenList = existingTickets?.map((t) => t.ticket_token).join(",") ?? "";
+        return NextResponse.json({
+          url: `${APP_URL}/e/success?free=true&tickets=${existingFreeCount}&tokens=${encodeURIComponent(tokenList)}`,
+        });
+      }
+
       // Build ticket records
       const freeTickets = Array.from({ length: quantity }, () => ({
         event_id: eventId,
@@ -260,6 +290,7 @@ export async function POST(request: NextRequest) {
           .from("events")
           .select("title, starts_at, venues(name)")
           .eq("id", eventId)
+          .is("deleted_at", null)
           .maybeSingle();
 
         if (eventData) {
@@ -282,7 +313,21 @@ export async function POST(request: NextRequest) {
         console.error("[checkout] Free ticket email failed (non-blocking):", emailErr);
       }
 
-      // Promo code was already atomically claimed during validation above
+      // Claim promo code uses for free tickets (webhook is bypassed for $0 tickets)
+      if (promoId) {
+        try {
+          await supabaseAdmin.rpc("claim_promo_code", { p_code_id: promoId, p_quantity: quantity });
+        } catch (promoErr) {
+          console.error("[checkout] Free ticket promo claim failed (non-blocking):", promoErr);
+        }
+      }
+
+      // Track free registration in analytics (H6: free tickets were invisible to event_analytics)
+      import("@/lib/analytics").then(({ trackTicketSold }) =>
+        trackTicketSold(eventId, quantity, 0)
+      ).catch((err) => {
+        console.error("[checkout] Free ticket analytics tracking failed:", err);
+      });
 
       // Track free registration
       import("@/lib/track-server").then(({ trackServerEvent }) =>
@@ -295,6 +340,11 @@ export async function POST(request: NextRequest) {
         url: `${APP_URL}/e/success?free=true&tickets=${quantity}&tokens=${encodeURIComponent(tokenList)}`,
       });
     }
+
+    // Track checkout start for conversion rate analytics
+    import("@/lib/analytics").then(({ trackCheckoutStart }) =>
+      trackCheckoutStart(eventId)
+    ).catch(() => {});
 
     const serviceFeePerTicketCents = calculateServiceFeeCents(unitAmountCents);
     const totalPerTicketCents = unitAmountCents + serviceFeePerTicketCents;
@@ -311,9 +361,12 @@ export async function POST(request: NextRequest) {
     let cancelUrl = APP_URL;
     if (referer) {
       try {
-        const refererOrigin = new URL(referer).origin;
+        const refererUrl = new URL(referer);
         const appOrigin = new URL(APP_URL).origin;
-        if (refererOrigin === appOrigin) cancelUrl = referer;
+        if (refererUrl.origin === appOrigin) {
+          const cancelPath = refererUrl.pathname;
+          cancelUrl = APP_URL + cancelPath;
+        }
       } catch {}
     }
 
@@ -367,7 +420,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Promo code was already atomically claimed during validation above
+    // Promo code uses are claimed in the webhook/fulfillment after payment succeeds
 
     return NextResponse.json({ url: session.url });
   } catch (error) {

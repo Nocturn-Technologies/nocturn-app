@@ -11,6 +11,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -53,8 +55,6 @@ const sidebarNavItems = [
   { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
-  { href: "/dashboard/members", label: "Team", icon: Users },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 /* ── Mobile bottom tab bar items (4 tabs) ── */
@@ -70,8 +70,6 @@ const moreDrawerItems = [
   { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
   { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
-  { href: "/dashboard/members", label: "Team", icon: Users },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 /* ── Promoter-specific nav ── */
@@ -79,8 +77,6 @@ const promoterSidebarItems = [
   { href: "/dashboard/promote", label: "Promote", icon: Megaphone },
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard/members", label: "Team", icon: Users },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 const promoterMobileTabItems = [
@@ -91,7 +87,6 @@ const promoterMobileTabItems = [
 
 const promoterMoreItems = [
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
-  { href: "/dashboard/members", label: "Team", icon: Users },
 ];
 
 /* ── Marketplace user nav (artists, photographers, venues, etc.) ── */
@@ -103,8 +98,6 @@ const marketplaceSidebarItems = [
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
-  { href: "/dashboard/members", label: "Team", icon: Users },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 const marketplaceMobileTabItems = [
@@ -116,8 +109,6 @@ const marketplaceMobileTabItems = [
 
 const marketplaceMoreItems = [
   { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
-  { href: "/dashboard/members", label: "Team", icon: Users },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 export function DashboardShell({ user, collectives, userType, children }: DashboardShellProps) {
@@ -199,7 +190,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
   }
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col h-dvh">
       {/* ── Beta Banner ── */}
       {!betaDismissed && (
         <div className="relative w-full bg-nocturn/10 border-b border-nocturn/20 py-1.5 px-4 flex items-center justify-center shrink-0 z-50">
@@ -269,15 +260,36 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
         <div className="border-t border-white/[0.06] p-3 relative z-10">
           <DropdownMenu>
             <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-white/[0.04] transition-colors">
-              <Avatar className="h-7 w-7">
-                <AvatarFallback className="bg-gradient-to-br from-nocturn to-nocturn-light text-xs text-white">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative">
+                <Avatar className="h-7 w-7">
+                  <AvatarFallback className="bg-gradient-to-br from-nocturn to-nocturn-light text-xs text-white">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-[#12111a] flex items-center justify-center">
+                  <Settings className="h-2 w-2 text-muted-foreground" />
+                </div>
+              </div>
               <span className="truncate">{user.fullName || user.email}</span>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={handleLogout}>
+            <DropdownMenuContent align="start" side="top" className="w-56 mb-1">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{user.fullName || "Account"}</p>
+                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push("/dashboard/members")}>
+                <Users className="mr-2 h-4 w-4" />
+                Team
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-red-400 focus:text-red-400">
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign out
               </DropdownMenuItem>
@@ -295,19 +307,37 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
           </Link>
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-gradient-to-br from-nocturn to-nocturn-light text-xs text-white">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              {activeColl && (
-                <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                  {activeColl.name}
+              <div className="relative">
+                <Avatar className="h-8 w-8">
+                  <AvatarFallback className="bg-gradient-to-br from-nocturn to-nocturn-light text-xs text-white">
+                    {initials}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-background flex items-center justify-center">
+                  <Settings className="h-2.5 w-2.5 text-muted-foreground" />
                 </div>
-              )}
-              <DropdownMenuItem onClick={handleLogout}>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuLabel className="font-normal">
+                <div className="flex flex-col space-y-1">
+                  <p className="text-sm font-medium leading-none">{user.fullName || "Account"}</p>
+                  <p className="text-xs leading-none text-muted-foreground">
+                    {activeColl ? activeColl.name : user.email}
+                  </p>
+                </div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => router.push("/dashboard/members")}>
+                <Users className="mr-2 h-4 w-4" />
+                Team
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-red-400 focus:text-red-400">
                 <LogOut className="mr-2 h-4 w-4" />
                 Sign out
               </DropdownMenuItem>
@@ -315,8 +345,8 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
           </DropdownMenu>
         </header>
 
-        {/* Page content — pb-20 on mobile for bottom tab bar clearance, normal on desktop */}
-        <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6">{children}</main>
+        {/* Page content — pb-24 on mobile for bottom tab bar + safe area clearance */}
+        <main className="flex-1 overflow-y-auto p-4 pb-24 md:p-6 md:pb-6">{children}</main>
 
         {/* ── Mobile bottom tab bar (hidden on desktop) ── */}
         <nav className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-around border-t border-white/[0.06] bg-background/90 backdrop-blur-xl px-2 pt-2 pb-[max(env(safe-area-inset-bottom),8px)] md:hidden">

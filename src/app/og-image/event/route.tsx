@@ -3,13 +3,21 @@ import { NextRequest } from "next/server";
 
 export const runtime = "edge";
 
+// Sanitize text for OG image rendering — strip HTML/script tags
+function sanitizeText(str: string): string {
+  return str.replace(/[<>&"']/g, (c) => {
+    const map: Record<string, string> = { "<": "", ">": "", "&": "&", '"': "", "'": "" };
+    return map[c] ?? c;
+  }).trim();
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const title = (searchParams.get("title") || "Event").slice(0, 100);
-  const collective = (searchParams.get("collective") || "").slice(0, 50);
-  const date = searchParams.get("date") || "";
-  const venue = (searchParams.get("venue") || "").slice(0, 50);
-  const price = searchParams.get("price") || "";
+  const title = sanitizeText((searchParams.get("title") || "Event").slice(0, 100));
+  const collective = sanitizeText((searchParams.get("collective") || "").slice(0, 50));
+  const date = sanitizeText((searchParams.get("date") || "").slice(0, 50));
+  const venue = sanitizeText((searchParams.get("venue") || "").slice(0, 50));
+  const price = sanitizeText((searchParams.get("price") || "").slice(0, 20));
 
   return new ImageResponse(
     (

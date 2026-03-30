@@ -28,6 +28,7 @@ export async function getProfilePerformanceWithCollective(
     .select("collective_id")
     .eq("user_id", user.id)
     .in("role", ["admin", "owner"])
+    .is("deleted_at", null)
     .limit(1)
     .maybeSingle();
 
@@ -48,7 +49,8 @@ export async function getProfilePerformanceWithCollective(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: events } = await (admin.from("events") as any)
     .select("id")
-    .eq("collective_id", collectiveId);
+    .eq("collective_id", collectiveId)
+    .is("deleted_at", null);
 
   if (!events || (events as { id: string }[]).length === 0) return null;
   const eventIds = (events as { id: string }[]).map((e) => e.id);

@@ -94,7 +94,12 @@ export async function updateTicketTier(
 
   const admin = createAdminClient();
 
-  // Atomic check: sold count + update in a single query scope
+  // Advisory check: count sold tickets to give a helpful error message.
+  // NOTE: There is a small race window between this count and the update below —
+  // more tickets could be purchased in between. This is acceptable because the
+  // real capacity enforcement happens atomically in the `fulfill_tickets_atomic`
+  // RPC at purchase time, which uses SELECT ... FOR UPDATE to prevent overselling.
+  // This admin-side check is advisory and catches obvious mistakes.
   const { count: soldCount } = await admin
     .from("tickets")
     .select("*", { count: "exact", head: true })
@@ -118,6 +123,29 @@ export async function updateTicketTier(
     .eq("id", tierId);
 
   if (error) return { error: `Failed to update tier: ${error.message}` };
+
+  // Re-verify after update: if more tickets were sold during the race window,
+  // revert the capacity to the current sold count to avoid underselling.
+  const { count: postUpdateSold } = await admin
+    .from("tickets")
+    .select("*", { count: "exact", head: true })
+    .eq("ticket_tier_id", tierId)
+    .in("status", ["paid", "checked_in"]);
+
+  const actualSold = postUpdateSold ?? 0;
+  if (data.capacity < actualSold) {
+    // Race detected: more tickets were sold between our check and update.
+    // Correct the capacity to match the actual sold count.
+    await admin
+      .from("ticket_tiers")
+      .update({ capacity: actualSold })
+      .eq("id", tierId);
+
+    revalidatePath(`/dashboard/events/${ownership.eventId}`);
+    return {
+      error: `Capacity was adjusted to ${actualSold} — additional tickets were sold while updating.`,
+    };
+  }
 
   revalidatePath(`/dashboard/events/${ownership.eventId}`);
   return { error: null };
@@ -176,7 +204,7 @@ export async function createTicketTier(
       sort_order: nextOrder,
     })
     .select("id, name, price, capacity, sort_order")
-    .single();
+    .maybeSingle();
 
   if (error) return { error: `Failed to create tier: ${error.message}`, tier: null };
 

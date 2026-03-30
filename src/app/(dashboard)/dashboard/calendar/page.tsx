@@ -77,7 +77,8 @@ export default function CalendarHeatMap() {
     const { data: memberships } = await supabase
       .from("collective_members")
       .select("collective_id")
-      .eq("user_id", user.id);
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
 
     const collIds = memberships?.map((m) => m.collective_id) ?? [];
     setYourCollectiveIds(collIds);
@@ -92,6 +93,7 @@ export default function CalendarHeatMap() {
       .from("events")
       .select("starts_at, title, collective_id, collectives(name)")
       .in("status", ["published", "completed"])
+      .is("deleted_at", null)
       .gte("starts_at", start.toISOString())
       .lte("starts_at", end.toISOString())
       .order("starts_at");

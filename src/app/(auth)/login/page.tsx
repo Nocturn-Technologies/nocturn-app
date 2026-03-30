@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import { Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -78,7 +80,7 @@ export default function LoginPage() {
         startLockout();
         setError(`Too many attempts. Try again in ${LOCKOUT_DURATION}s`);
       } else {
-        setError(error.message);
+        setError("Invalid email or password");
       }
       setLoading(false);
       return;
@@ -110,6 +112,16 @@ export default function LoginPage() {
       return;
     }
 
+    // Honor redirect param (e.g., from invite flow), but only allow safe relative paths
+    // Block protocol-relative URLs (//), backslash tricks (/\), and encoded control chars
+    let decodedRedirect = "";
+    try { decodedRedirect = decodeURIComponent(redirectTo ?? ""); } catch { /* invalid encoding */ }
+    if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//") && !redirectTo.includes("\\") && !/[\x00-\x1f]/.test(decodedRedirect)) {
+      router.push(redirectTo);
+      router.refresh();
+      return;
+    }
+
     // Check user type for routing
     if (userType === "artist") {
       router.push("/dashboard/artists/me");
@@ -121,11 +133,26 @@ export default function LoginPage() {
     router.refresh();
   }
 
+  // Track magic link / reset attempts for client-side rate limiting
+  const [otpAttempts, setOtpAttempts] = useState(0);
+  const [otpLockout, setOtpLockout] = useState(false);
+
   async function handleMagicLink() {
     setError(null);
     if (!email) {
       setError("Enter your email first.");
       return;
+    }
+    if (otpLockout) {
+      setError("Too many requests. Please wait a moment.");
+      return;
+    }
+    // Rate limit: max 3 magic link requests, then 60s cooldown
+    const newAttempts = otpAttempts + 1;
+    setOtpAttempts(newAttempts);
+    if (newAttempts >= 3) {
+      setOtpLockout(true);
+      setTimeout(() => { setOtpLockout(false); setOtpAttempts(0); }, 60000);
     }
     setLoading(true);
 
@@ -137,9 +164,10 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
+      // Generic message to prevent user enumeration
+      console.error("[login] Magic link error:", error.message);
+      setError("If an account exists with this email, you'll receive a link shortly.");
       setLoading(false);
-      return;
     }
 
     setMagicLinkSent(true);
@@ -152,6 +180,16 @@ export default function LoginPage() {
       setError("Enter your email first.");
       return;
     }
+    if (otpLockout) {
+      setError("Too many requests. Please wait a moment.");
+      return;
+    }
+    const newAttempts = otpAttempts + 1;
+    setOtpAttempts(newAttempts);
+    if (newAttempts >= 3) {
+      setOtpLockout(true);
+      setTimeout(() => { setOtpLockout(false); setOtpAttempts(0); }, 60000);
+    }
     setLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -159,9 +197,8 @@ export default function LoginPage() {
     });
 
     if (error) {
-      setError(error.message);
-      setLoading(false);
-      return;
+      // Generic message to prevent user enumeration
+      console.error("[login] Password reset error:", error.message);
     }
 
     setResetSent(true);

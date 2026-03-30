@@ -34,8 +34,8 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const query = req.nextUrl.searchParams.get("q") || "";
-  const page = parseInt(req.nextUrl.searchParams.get("page") || "1", 10) || 1;
+  const query = (req.nextUrl.searchParams.get("q") || "").slice(0, 200);
+  const page = Math.min(50, Math.max(1, parseInt(req.nextUrl.searchParams.get("page") || "1", 10) || 1));
 
   // If no custom query, use curated nightlife terms
   const searchQuery = query.trim()

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { sendEmail } from "@/lib/email/send";
+
+function sanitizeSubject(str: string): string {
+  return str.replace(/[\r\n\t\x00-\x1f]/g, "").slice(0, 200);
+}
 import {
   dayOfHypeEmail,
   organizerCountdownEmail,
@@ -46,6 +50,7 @@ export async function GET(request: Request) {
       .from("events")
       .select("id, title, slug, starts_at, doors_at, metadata, venues(name, address, city), collectives(slug)")
       .eq("status", "published")
+      .is("deleted_at", null)
       .gte("starts_at", todayStart.toISOString())
       .lt("starts_at", todayEnd.toISOString());
 
@@ -74,11 +79,12 @@ export async function GET(request: Request) {
         .eq("event_id", event.id)
         .in("status", ["paid", "checked_in"]);
 
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const emails = new Set<string>();
       for (const t of tickets ?? []) {
         const meta = t.metadata as Record<string, unknown> | null;
         const email = (meta?.email || meta?.customer_email || meta?.buyer_email) as string;
-        if (email) emails.add(email);
+        if (email && emailRegex.test(email)) emails.add(email.toLowerCase().trim());
       }
 
       const html = dayOfHypeEmail(
@@ -103,7 +109,7 @@ export async function GET(request: Request) {
             const htmlWithUnsub = html + `<p style="text-align:center;margin-top:24px;font-size:11px;color:#71717A;">To stop receiving emails, <a href="${appUrl}/unsubscribe?email=${encodeURIComponent(to)}" style="color:#7B2FF7;text-decoration:underline;">unsubscribe here</a>.</p>`;
             return sendEmail({
               to,
-              subject: `Tonight: ${event.title} 🔥`,
+              subject: sanitizeSubject(`Tonight: ${event.title} 🔥`),
               html: htmlWithUnsub,
             });
           })
@@ -132,6 +138,7 @@ export async function GET(request: Request) {
       .from("events")
       .select("id, title, starts_at, collective_id")
       .eq("status", "published")
+      .is("deleted_at", null)
       .gte("starts_at", in46hr.toISOString())
       .lte("starts_at", in48hr.toISOString());
 
@@ -160,7 +167,8 @@ export async function GET(request: Request) {
         .from("collective_members")
         .select("user_id, users(email, full_name)")
         .eq("collective_id", event.collective_id)
-        .eq("role", "admin");
+        .eq("role", "admin")
+        .is("deleted_at", null);
 
       const eventDate = new Date(event.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" });
 
@@ -179,7 +187,7 @@ export async function GET(request: Request) {
 
         await sendEmail({
           to: user.email,
-          subject: `48 hours: ${event.title} — ${ticketsSold}/${totalCap} sold`,
+          subject: sanitizeSubject(`48 hours: ${event.title} — ${ticketsSold}/${totalCap} sold`),
           html,
         });
       }
@@ -213,6 +221,7 @@ export async function GET(request: Request) {
           .from("events")
           .select("created_at")
           .eq("collective_id", col.id)
+          .is("deleted_at", null)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -236,6 +245,7 @@ export async function GET(request: Request) {
           .select("users(email, full_name)")
           .eq("collective_id", col.id)
           .eq("role", "admin")
+          .is("deleted_at", null)
           .limit(1);
 
         const admin = admins?.[0]?.users as unknown as { email: string; full_name: string } | null;
@@ -249,7 +259,7 @@ export async function GET(request: Request) {
 
         await sendEmail({
           to: admin.email,
-          subject: `${col.name} — the scene needs you 🌙`,
+          subject: sanitizeSubject(`${col.name} — the scene needs you 🌙`),
           html,
         });
 

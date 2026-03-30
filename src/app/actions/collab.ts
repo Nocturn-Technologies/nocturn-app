@@ -32,7 +32,8 @@ export async function searchCollectives(query: string, myCollectiveId: string) {
     // Sanitize input to prevent PostgREST filter injection
     const sanitized = query.replace(/\\/g, "").replace(/[%_.,()'"`]/g, "").trim();
     if (sanitized) {
-      builder = builder.or(`name.ilike.%${sanitized}%,city.ilike.%${sanitized}%,slug.ilike.%${sanitized}%`);
+      const escaped = sanitized.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+      builder = builder.or(`name.ilike.%${escaped}%,city.ilike.%${escaped}%,slug.ilike.%${escaped}%`);
     }
   }
 
@@ -57,6 +58,7 @@ export async function startCollabChat(myCollectiveId: string, partnerCollectiveI
     .select("role")
     .eq("user_id", user.id)
     .eq("collective_id", myCollectiveId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!membership) return { error: "Not a member of this collective", channelId: null };
@@ -118,9 +120,10 @@ export async function startCollabChat(myCollectiveId: string, partnerCollectiveI
       },
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (error) return { error: error.message, channelId: null };
+  if (!channel) return { error: "Failed to create channel", channelId: null };
 
   // Send a welcome message
   await sb.from("messages").insert({
@@ -188,6 +191,7 @@ export async function inviteToCollab(myCollectiveId: string, email: string) {
     .select("role")
     .eq("user_id", user.id)
     .eq("collective_id", myCollectiveId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!membership) return { error: "Not a member of this collective" };

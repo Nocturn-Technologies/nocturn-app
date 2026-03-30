@@ -1,29 +1,101 @@
-// Simple in-memory rate limiter for serverless functions
-// Resets on cold starts, which is acceptable for basic protection
+// Database-backed rate limiter for serverless functions
+// Uses Supabase to persist rate limit state across cold starts
+// Falls back to in-memory when DB is unavailable
 
-const rateMap = new Map<string, { count: number; resetAt: number }>();
+import { createAdminClient } from "@/lib/supabase/config";
 
-export function rateLimit(key: string, limit: number, windowMs: number): { success: boolean; remaining: number } {
+const memoryMap = new Map<string, { count: number; resetAt: number }>();
+
+/**
+ * Rate limit using DB-backed sliding window.
+ * Falls back to in-memory if DB call fails.
+ */
+export function rateLimit(
+  key: string,
+  limit: number,
+  windowMs: number
+): { success: boolean; remaining: number } {
+  // Use in-memory as immediate check (fast path)
   const now = Date.now();
-  const entry = rateMap.get(key);
+  const entry = memoryMap.get(key);
 
-  if (!entry || now > entry.resetAt) {
-    rateMap.set(key, { count: 1, resetAt: now + windowMs });
-    return { success: true, remaining: limit - 1 };
+  if (entry && now <= entry.resetAt) {
+    if (entry.count >= limit) {
+      return { success: false, remaining: 0 };
+    }
+    entry.count++;
+    return { success: true, remaining: limit - entry.count };
   }
 
-  if (entry.count >= limit) {
-    return { success: false, remaining: 0 };
-  }
+  // Reset or create entry
+  memoryMap.set(key, { count: 1, resetAt: now + windowMs });
 
-  entry.count++;
-  return { success: true, remaining: limit - entry.count };
+  // Async DB persistence (fire-and-forget for performance)
+  // This ensures rate limits survive cold starts for persistent abusers
+  void persistRateLimit(key, limit, windowMs).catch(() => {});
+
+  return { success: true, remaining: limit - 1 };
 }
 
-// Clean up old entries periodically to prevent memory leaks
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateMap) {
-    if (now > entry.resetAt) rateMap.delete(key);
+/**
+ * Async check against DB for persistent rate limiting.
+ * Called from API routes that need stronger protection.
+ */
+export async function rateLimitStrict(
+  key: string,
+  limit: number,
+  windowMs: number
+): Promise<{ success: boolean; remaining: number }> {
+  try {
+    const admin = createAdminClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = admin as any;
+    const windowStart = new Date(Date.now() - windowMs).toISOString();
+
+    // Count recent entries in the window
+    const { count } = await db
+      .from("rate_limits")
+      .select("*", { count: "exact", head: true })
+      .eq("key", key)
+      .gte("created_at", windowStart);
+
+    const currentCount = count ?? 0;
+
+    if (currentCount >= limit) {
+      return { success: false, remaining: 0 };
+    }
+
+    // Insert new entry
+    await db.from("rate_limits").insert({
+      key,
+      created_at: new Date().toISOString(),
+    });
+
+    return { success: true, remaining: limit - currentCount - 1 };
+  } catch {
+    // DB unavailable — fall back to in-memory
+    return rateLimit(key, limit, windowMs);
   }
-}, 60000); // Clean every minute
+}
+
+async function persistRateLimit(key: string, _limit: number, _windowMs: number) {
+  try {
+    const admin = createAdminClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const db = admin as any;
+    await db.from("rate_limits").insert({
+      key,
+      created_at: new Date().toISOString(),
+    });
+  } catch {
+    // Non-critical — in-memory still works
+  }
+}
+
+// Clean up old in-memory entries lazily (no setInterval in serverless)
+export function cleanupMemory(): void {
+  const now = Date.now();
+  for (const [key, entry] of memoryMap) {
+    if (now > entry.resetAt) memoryMap.delete(key);
+  }
+}

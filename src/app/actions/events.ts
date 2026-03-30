@@ -60,6 +60,10 @@ export async function createEvent(input: CreateEventInput) {
     return { error: "You must be logged in." };
   }
 
+  if (input.description && input.description.length > 5000) {
+    return { error: "Description is too long. Please keep it under 5,000 characters." };
+  }
+
   const admin = createAdminClient();
 
   // Get user's first collective
@@ -67,6 +71,7 @@ export async function createEvent(input: CreateEventInput) {
     .from("collective_members")
     .select("collective_id")
     .eq("user_id", user.id)
+    .is("deleted_at", null)
     .limit(1);
 
   if (!memberships || memberships.length === 0) {
@@ -113,11 +118,12 @@ export async function createEvent(input: CreateEventInput) {
         capacity: input.venueCapacity,
       })
       .select("id")
-      .single();
+      .maybeSingle();
 
     if (venueError) {
       return { error: `Venue error: ${venueError.message}` };
     }
+    if (!newVenue) return { error: "Failed to create venue" };
     venueId = newVenue.id;
   }
 
@@ -216,11 +222,12 @@ export async function createEvent(input: CreateEventInput) {
       },
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (eventError) {
     return { error: `Event error: ${eventError.message}` };
   }
+  if (!event) return { error: "Failed to create event" };
 
   // Create ticket tiers
   if (input.tiers.length > 0) {
@@ -256,6 +263,10 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
 
   if (!user) {
     return { error: "You must be logged in." };
+  }
+
+  if (input.description && input.description.length > 5000) {
+    return { error: "Description is too long. Please keep it under 5,000 characters." };
   }
 
   const ownership = await verifyEventOwnership(user.id, eventId);
@@ -309,11 +320,12 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
         capacity: input.venueCapacity,
       })
       .select("id")
-      .single();
+      .maybeSingle();
 
     if (venueError) {
       return { error: `Venue error: ${venueError.message}` };
     }
+    if (!newVenue) return { error: "Failed to create venue" };
     venueId = newVenue.id;
   }
 

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const { success } = rateLimit(`events-list:${clientIp}`, 30, 60000); // 30 requests per minute
+  const clientIp = request.headers.get("x-real-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { success } = await rateLimitStrict(`events-list:${clientIp}`, 30, 60000); // 30 requests per minute
   if (!success) {
     return NextResponse.json(
       { error: "Too many requests. Please try again in a moment." },
@@ -15,8 +15,8 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10)));
+    const page = Math.min(10000, Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1));
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10) || 50));
     const offset = (page - 1) * limit;
 
     const supabase = await createServerClient();
@@ -44,6 +44,7 @@ export async function GET(request: Request) {
       .from("events")
       .select("id, title, status, starts_at", { count: "exact" })
       .in("collective_id", collectiveIds)
+      .is("deleted_at", null)
       .order("starts_at", { ascending: false })
       .range(offset, offset + limit - 1);
 

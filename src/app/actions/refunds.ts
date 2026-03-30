@@ -139,9 +139,10 @@ export async function refundTicket(ticketId: string) {
 
       function escapeHtml(s: string) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
 
+      const safeSubjectTitle = (eventData?.title || "Event").replace(/[\r\n\x00-\x1f]/g, "");
       await sendEmail({
         to: buyerEmail,
-        subject: `Refund confirmed — ${eventData?.title || "Event"}`,
+        subject: `Refund confirmed — ${safeSubjectTitle}`,
         html: `
           <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
             <p style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</p>

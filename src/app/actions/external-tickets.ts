@@ -39,6 +39,7 @@ export async function saveExternalTicketData(data: ExternalTicketData): Promise<
     .select("id")
     .eq("collective_id", (event as { collective_id: string }).collective_id)
     .eq("user_id", user.id)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!membership) return { error: "Not authorized" };
@@ -96,6 +97,7 @@ export async function getExternalTicketData(eventId: string): Promise<{
     .select("id")
     .eq("collective_id", (event as { collective_id: string }).collective_id)
     .eq("user_id", user.id)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!membership) return null;

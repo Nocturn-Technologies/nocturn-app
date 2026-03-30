@@ -39,6 +39,7 @@ export async function getEventSuggestions(
     .select("id, title, starts_at, status, venues(name, city)")
     .eq("collective_id", collectiveId)
     .in("status", ["completed", "published"])
+    .is("deleted_at", null)
     .order("starts_at", { ascending: false })
     .limit(20);
 
@@ -49,6 +50,7 @@ export async function getEventSuggestions(
     .select("starts_at")
     .eq("collective_id", collectiveId)
     .gte("starts_at", now)
+    .is("deleted_at", null)
     .order("starts_at", { ascending: true });
 
   // Fetch ticket data for past events to gauge popularity

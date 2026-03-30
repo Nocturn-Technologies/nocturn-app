@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { calculateServiceFeeCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitStrict } from "@/lib/rate-limit";
 import { getCurrencyForCountry, convertAmount, formatLocalAmount } from "@/lib/currency";
 import { logPaymentEvent } from "@/lib/payment-events";
 
 export async function POST(request: NextRequest) {
-  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-  const { success } = rateLimit(`payment-intent:${clientIp}`, 10, 60000); // 10 requests per minute
+  const clientIp = request.headers.get("x-real-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { success } = await rateLimitStrict(`payment-intent:${clientIp}`, 10, 60000); // 10 requests per minute
   if (!success) {
     return NextResponse.json(
       { error: "Too many requests. Please try again in a moment." },
@@ -30,9 +30,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (quantity < 1 || quantity > 10) {
+    // Validate eventId and tierId as UUIDs to prevent injection/invalid queries
+    if (!uuidRegex.test(eventId) || !uuidRegex.test(tierId)) {
+      return NextResponse.json({ error: "Invalid event or tier ID" }, { status: 400 });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(buyerEmail)) {
+      return NextResponse.json({ error: "Invalid email address" }, { status: 400 });
+    }
+
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) {
       return NextResponse.json(
-        { error: "Quantity must be between 1 and 10" },
+        { error: "Quantity must be a whole number between 1 and 10" },
         { status: 400 }
       );
     }
@@ -44,6 +54,7 @@ export async function POST(request: NextRequest) {
       .from("events")
       .select("id, title, collective_id, status")
       .eq("id", eventId)
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (eventError || !event) {
@@ -114,27 +125,17 @@ export async function POST(request: NextRequest) {
         const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
 
         if (!isExpired) {
-          // Atomic claim: increment current_uses and check max_uses in one query
-          const claimQuery = promo.max_uses !== null
-            ? supabase
-                .from("promo_codes")
-                .update({ current_uses: (promo.current_uses ?? 0) + quantity })
-                .eq("id", promo.id)
-                .lte("current_uses", promo.max_uses - quantity)
-                .select("id")
-            : supabase
-                .from("promo_codes")
-                .update({ current_uses: (promo.current_uses ?? 0) + quantity })
-                .eq("id", promo.id)
-                .select("id");
+          // Validate promo code availability (check uses) but DON'T claim yet.
+          // Claiming happens in the webhook/fulfillment after payment succeeds,
+          // so abandoned checkouts don't consume promo uses.
+          const hasCapacity = promo.max_uses === null ||
+            (promo.current_uses ?? 0) + quantity <= promo.max_uses;
 
-          const { data: claimResult } = await claimQuery;
-
-          if (claimResult && claimResult.length > 0) {
+          if (hasCapacity) {
             promoId = promo.id;
             validatedPromoCode = promo.code;
             if (promo.discount_type === "percentage") {
-              discountCents = Math.round(basePriceCents * (Number(promo.discount_value) / 100));
+              discountCents = Math.round(basePriceCents * Math.min(Number(promo.discount_value) / 100, 1));
             } else {
               discountCents = Math.round(Number(promo.discount_value) * 100);
             }
@@ -144,12 +145,18 @@ export async function POST(request: NextRequest) {
     }
 
     const unitAmountCents = Math.max(basePriceCents - discountCents, 0);
+
     if (unitAmountCents < 50) {
       return NextResponse.json(
         { error: "Ticket price must be at least $0.50" },
         { status: 400 }
       );
     }
+
+    // Track checkout start AFTER price validation to avoid inflating counts for invalid requests
+    import("@/lib/analytics").then(({ trackCheckoutStart }) =>
+      trackCheckoutStart(eventId)
+    ).catch(() => {});
 
     const serviceFeePerTicketCents = calculateServiceFeeCents(unitAmountCents);
     const totalPerTicketCents = unitAmountCents + serviceFeePerTicketCents;

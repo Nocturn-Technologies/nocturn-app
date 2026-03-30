@@ -70,11 +70,19 @@ export async function POST(request: NextRequest) {
     console.error(`[stripe-webhook] Error handling ${event.type}:`, err);
     // Only return 500 (triggering Stripe retry) for transient errors like DB connection failures.
     // For logic errors, return 200 to prevent infinite retries and duplicate tickets.
+    const errMsg = err instanceof Error ? err.message.toLowerCase() : "";
     const isTransient = err instanceof Error && (
-      err.message.includes("connect") ||
-      err.message.includes("timeout") ||
-      err.message.includes("ECONNREFUSED") ||
-      err.message.includes("fetch failed")
+      errMsg.includes("connect") ||
+      errMsg.includes("timeout") ||
+      errMsg.includes("econnrefused") ||
+      errMsg.includes("econnreset") ||
+      errMsg.includes("fetch failed") ||
+      errMsg.includes("socket hang up") ||
+      errMsg.includes("network") ||
+      errMsg.includes("too many connections") ||
+      errMsg.includes("connection terminated") ||
+      errMsg.includes("54") || // Postgres connection-related error codes
+      errMsg.includes("could not connect")
     );
     if (isTransient) {
       return NextResponse.json(
@@ -118,11 +126,24 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const supabase = createAdminClient();
 
   // IDEMPOTENCY CHECK: Prevent duplicate ticket creation on webhook retry
-  const { count: existingCount } = await supabase
-    .from("tickets")
-    .select("*", { count: "exact", head: true })
-    .eq("event_id", eventId)
-    .or(`stripe_payment_intent_id.eq.${paymentIntentId},metadata->>checkout_session_id.eq.${session.id}`);
+  // Use separate checks to avoid OR-clause matching null PI IDs on free tickets
+  let existingCount = 0;
+  if (paymentIntentId) {
+    const { count } = await supabase
+      .from("tickets")
+      .select("*", { count: "exact", head: true })
+      .eq("event_id", eventId)
+      .eq("stripe_payment_intent_id", paymentIntentId);
+    existingCount = count ?? 0;
+  }
+  if (existingCount === 0) {
+    const { count } = await supabase
+      .from("tickets")
+      .select("*", { count: "exact", head: true })
+      .eq("event_id", eventId)
+      .filter("metadata->>checkout_session_id", "eq", session.id);
+    existingCount = count ?? 0;
+  }
 
   if (existingCount && existingCount > 0) {
     console.info(
@@ -164,76 +185,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   let pricePaid: number;
   if (metadata.ticketPriceCents) {
     // Use the exact discounted price from checkout (convert cents to dollars)
-    pricePaid = Number(metadata.ticketPriceCents) / 100;
+    pricePaid = parseFloat((Number(metadata.ticketPriceCents) / 100).toFixed(2));
   } else if (metadata.discountCents) {
     // Fallback: subtract discount from tier price
-    pricePaid = Math.max(Number(tier.price) - Number(metadata.discountCents) / 100, 0);
+    pricePaid = parseFloat(Math.max(Number(tier.price) - Number(metadata.discountCents) / 100, 0).toFixed(2));
   } else {
     // No discount — full price
     pricePaid = Number(tier.price);
   }
 
-  // Re-check capacity before inserting (defense against overselling)
-  const { data: recheck } = await supabase.rpc("check_and_reserve_capacity", {
-    p_tier_id: tierId,
-    p_quantity: quantity,
-  });
-  if (!recheck?.success) {
-    console.error(`[webhook] Capacity exceeded for tier ${tierId} — auto-refunding payment ${paymentIntentId}`);
-    void logPaymentEvent({
-      event_type: "capacity_exceeded",
-      payment_intent_id: paymentIntentId,
-      event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: session.amount_total ?? null,
-      currency: session.currency ?? "usd",
-      buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
-      metadata: { checkout_session_id: session.id, flow: "checkout_session" },
-    });
-    // Auto-refund the payment since we can't fulfill the tickets
-    if (paymentIntentId) {
-      try {
-        await getStripe().refunds.create({
-          payment_intent: paymentIntentId,
-          reason: "requested_by_customer",
-          metadata: {
-            reason: "capacity_exceeded",
-            event_id: eventId,
-            tier_id: tierId,
-          },
-        });
-        console.info(`[webhook] Auto-refund issued for PI ${paymentIntentId} (capacity exceeded)`);
-        void logPaymentEvent({
-          event_type: "refund_issued",
-          payment_intent_id: paymentIntentId,
-          event_id: eventId,
-          tier_id: tierId,
-          quantity,
-          amount_cents: session.amount_total ?? null,
-          currency: session.currency ?? "usd",
-          buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
-          metadata: { reason: "capacity_exceeded", checkout_session_id: session.id },
-        });
-      } catch (refundErr) {
-        const refundErrMsg = refundErr instanceof Error ? refundErr.message : String(refundErr);
-        console.error(`[webhook] Auto-refund FAILED for PI ${paymentIntentId}:`, refundErr);
-        void logPaymentEvent({
-          event_type: "refund_failed",
-          payment_intent_id: paymentIntentId,
-          event_id: eventId,
-          tier_id: tierId,
-          quantity,
-          amount_cents: session.amount_total ?? null,
-          currency: session.currency ?? "usd",
-          buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
-          error_message: refundErrMsg,
-          metadata: { reason: "capacity_exceeded", checkout_session_id: session.id },
-        });
-      }
-    }
-    return;
-  }
+  // NOTE: Capacity was already reserved at checkout creation (checkout/route.ts or
+  // create-payment-intent/route.ts). We skip re-reserving here to prevent double-decrement.
+  // The idempotency check above already prevents duplicate ticket creation on retries.
 
   // Build ticket records — referrerToken is a user UUID (from ?ref= link)
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -277,6 +240,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     `[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`
   );
 
+  // Claim promo code uses AFTER successful ticket creation (not at checkout creation).
+  // This ensures abandoned checkouts don't consume promo uses.
+  // Uses claim_promo_code RPC which accepts quantity (not increment_promo_uses which always adds 1).
+  if (metadata.promoId) {
+    try {
+      await supabase.rpc("claim_promo_code", { p_code_id: metadata.promoId, p_quantity: quantity });
+    } catch (promoErr) {
+      console.error("[stripe-webhook] Failed to claim promo uses (non-blocking):", promoErr);
+    }
+  }
+
   void logPaymentEvent({
     event_type: "tickets_fulfilled",
     payment_intent_id: paymentIntentId,
@@ -314,6 +288,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
             .from("events")
             .select("collective_id")
             .eq("id", eventId)
+            .is("deleted_at", null)
             .maybeSingle();
           if (eventForAnalytics?.collective_id) {
             upsertAttendeeProfile(eventForAnalytics.collective_id, customerEmailForAnalytics, eventId, pricePaid * quantity);
@@ -363,6 +338,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
             .from("events")
             .select("title, starts_at, venues(name)")
             .eq("id", eventId)
+            .is("deleted_at", null)
             .maybeSingle();
 
           const { data: tierInfo } = await supabase
@@ -498,72 +474,16 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   // Calculate actual price paid, accounting for discounts
   let pricePaid: number;
   if (metadata.ticketPriceCents) {
-    pricePaid = Number(metadata.ticketPriceCents) / 100;
+    pricePaid = parseFloat((Number(metadata.ticketPriceCents) / 100).toFixed(2));
   } else if (metadata.discountCents) {
-    pricePaid = Math.max(Number(tier.price) - Number(metadata.discountCents) / 100, 0);
+    pricePaid = parseFloat(Math.max(Number(tier.price) - Number(metadata.discountCents) / 100, 0).toFixed(2));
   } else {
     pricePaid = Number(tier.price);
   }
 
-  // Re-check capacity before inserting (defense against overselling)
-  const { data: recheck } = await supabase.rpc("check_and_reserve_capacity", {
-    p_tier_id: tierId,
-    p_quantity: quantity,
-  });
-  if (!recheck?.success) {
-    console.error(`[webhook] Capacity exceeded for tier ${tierId} — auto-refunding PI ${paymentIntent.id}`);
-    void logPaymentEvent({
-      event_type: "capacity_exceeded",
-      payment_intent_id: paymentIntent.id,
-      event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: paymentIntent.amount,
-      currency: paymentIntent.currency,
-      buyer_email: buyerEmail ?? null,
-      metadata: { flow: "payment_intent" },
-    });
-    // Auto-refund the payment since we can't fulfill the tickets
-    try {
-      await getStripe().refunds.create({
-        payment_intent: paymentIntent.id,
-        reason: "requested_by_customer",
-        metadata: {
-          reason: "capacity_exceeded",
-          event_id: eventId,
-          tier_id: tierId,
-        },
-      });
-      console.info(`[webhook] Auto-refund issued for PI ${paymentIntent.id} (capacity exceeded)`);
-      void logPaymentEvent({
-        event_type: "refund_issued",
-        payment_intent_id: paymentIntent.id,
-        event_id: eventId,
-        tier_id: tierId,
-        quantity,
-        amount_cents: paymentIntent.amount,
-        currency: paymentIntent.currency,
-        buyer_email: buyerEmail ?? null,
-        metadata: { reason: "capacity_exceeded", flow: "payment_intent" },
-      });
-    } catch (refundErr) {
-      const refundErrMsg = refundErr instanceof Error ? refundErr.message : String(refundErr);
-      console.error(`[webhook] Auto-refund FAILED for PI ${paymentIntent.id}:`, refundErr);
-      void logPaymentEvent({
-        event_type: "refund_failed",
-        payment_intent_id: paymentIntent.id,
-        event_id: eventId,
-        tier_id: tierId,
-        quantity,
-        amount_cents: paymentIntent.amount,
-        currency: paymentIntent.currency,
-        buyer_email: buyerEmail ?? null,
-        error_message: refundErrMsg,
-        metadata: { reason: "capacity_exceeded", flow: "payment_intent" },
-      });
-    }
-    return;
-  }
+  // NOTE: Capacity was already reserved at checkout creation (create-payment-intent/route.ts).
+  // We skip re-reserving here to prevent double-decrement.
+  // The idempotency check above already prevents duplicate ticket creation on retries.
 
   const uuidRegex2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   let referrerToken = metadata.referrerToken && uuidRegex2.test(metadata.referrerToken) ? metadata.referrerToken : null;
@@ -574,74 +494,136 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   // Store base currency (USD) for organizer reporting, not the buyer's charge currency
   const ticketCurrency = metadata.baseCurrency || "usd";
 
-  const tickets = Array.from({ length: quantity }, () => ({
-    event_id: eventId,
-    ticket_tier_id: tierId,
-    user_id: null,
-    status: "paid" as const,
-    price_paid: pricePaid,
-    currency: ticketCurrency,
-    stripe_payment_intent_id: paymentIntent.id,
-    ticket_token: randomUUID(),
-    referred_by: referrerToken,
-    metadata: {
-      payment_intent_id: paymentIntent.id,
-      customer_email: buyerEmail,
-      ...(metadata.chargeCurrency && metadata.chargeCurrency !== "usd" && {
-        charge_currency: metadata.chargeCurrency,
-        fx_rate: metadata.fxRate,
-        buyer_country: metadata.buyerCountry,
-      }),
-      ...(referrerToken && { referrer_token: referrerToken }),
-    },
-  }));
+  const ticketMetadata = {
+    payment_intent_id: paymentIntent.id,
+    customer_email: buyerEmail,
+    fulfilled_by: "webhook",
+    ...(metadata.chargeCurrency && metadata.chargeCurrency !== "usd" && {
+      charge_currency: metadata.chargeCurrency,
+      fx_rate: metadata.fxRate,
+      buyer_country: metadata.buyerCountry,
+    }),
+    ...(referrerToken && { referrer_token: referrerToken }),
+  };
 
-  // CRITICAL: Insert tickets — must complete before responding to Stripe
-  const { data: insertedTickets, error: insertError } = await supabase
-    .from("tickets")
-    .insert(tickets)
-    .select("id, ticket_token");
+  // CRITICAL: Use atomic fulfillment RPC to prevent race with client action.
+  // Falls back to plain insert if RPC doesn't exist yet (pre-migration).
+  let insertedTickets: { id: string; ticket_token: string; is_new?: boolean }[] | null = null;
+  let wasNewlyCreated = true;
 
-  if (insertError) {
-    console.error("[stripe-webhook] Failed to insert tickets:", insertError);
-    throw insertError;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: atomicResult, error: atomicError } = await (supabase as any).rpc("fulfill_tickets_atomic", {
+      p_payment_intent_id: paymentIntent.id,
+      p_event_id: eventId,
+      p_tier_id: tierId,
+      p_quantity: quantity,
+      p_price_paid: pricePaid,
+      p_currency: ticketCurrency,
+      p_buyer_email: buyerEmail ?? null,
+      p_referrer_token: referrerToken ?? null,
+      p_metadata: ticketMetadata,
+    });
+
+    if (atomicError) throw atomicError;
+    insertedTickets = atomicResult;
+
+    // Deterministic: the RPC returns is_new=false for pre-existing tickets
+    if (insertedTickets && insertedTickets.length > 0) {
+      wasNewlyCreated = insertedTickets[0]?.is_new !== false;
+    }
+  } catch {
+    // Fallback: plain insert (for pre-migration compatibility)
+    const tickets = Array.from({ length: quantity }, () => ({
+      event_id: eventId,
+      ticket_tier_id: tierId,
+      user_id: null,
+      status: "paid" as const,
+      price_paid: pricePaid,
+      currency: ticketCurrency,
+      stripe_payment_intent_id: paymentIntent.id,
+      ticket_token: randomUUID(),
+      referred_by: referrerToken,
+      metadata: ticketMetadata,
+    }));
+
+    const { data, error: insertError } = await supabase
+      .from("tickets")
+      .insert(tickets)
+      .select("id, ticket_token");
+
+    if (insertError) {
+      // If unique constraint violation, tickets already exist (created by client action)
+      if (insertError.code === "23505") {
+        console.info(`[stripe-webhook] Tickets already exist for PI ${paymentIntent.id} (unique constraint), skipping`);
+        wasNewlyCreated = false;
+        const { data: existing } = await supabase
+          .from("tickets")
+          .select("id, ticket_token")
+          .eq("stripe_payment_intent_id", paymentIntent.id);
+        insertedTickets = existing;
+      } else {
+        console.error("[stripe-webhook] Failed to insert tickets:", insertError);
+        throw insertError;
+      }
+    } else {
+      insertedTickets = data;
+    }
   }
 
-  console.info(`[stripe-webhook] Created ${quantity} ticket(s) for PI ${paymentIntent.id}`);
+  console.info(`[stripe-webhook] ${wasNewlyCreated ? "Created" : "Found existing"} ${quantity} ticket(s) for PI ${paymentIntent.id}`);
 
-  void logPaymentEvent({
-    event_type: "tickets_fulfilled",
-    payment_intent_id: paymentIntent.id,
-    event_id: eventId,
-    tier_id: tierId,
-    quantity,
-    amount_cents: paymentIntent.amount,
-    currency: paymentIntent.currency,
-    buyer_email: buyerEmail ?? null,
-    metadata: { flow: "payment_intent" },
-  });
+  // Only log fulfillment and claim promo if tickets were NEWLY created.
+  // If they pre-existed (client action beat the webhook), skip to avoid double-counting.
+  if (wasNewlyCreated) {
+    void logPaymentEvent({
+      event_type: "tickets_fulfilled",
+      payment_intent_id: paymentIntent.id,
+      event_id: eventId,
+      tier_id: tierId,
+      quantity,
+      amount_cents: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      buyer_email: buyerEmail ?? null,
+      metadata: { flow: "payment_intent" },
+    });
 
-  // NOTE: Promo code usage is already incremented atomically during checkout (checkout/route.ts).
-  // Do NOT increment again here — webhook retries would cause double-counting.
+    // Claim promo code uses AFTER successful ticket creation.
+    // Uses claim_promo_code RPC which accepts quantity (not increment_promo_uses which always adds 1).
+    if (metadata.promoId) {
+      try {
+        await supabase.rpc("claim_promo_code", { p_code_id: metadata.promoId, p_quantity: quantity });
+      } catch (promoErr) {
+        console.error("[stripe-webhook] Failed to claim promo uses (non-blocking):", promoErr);
+      }
+    }
+  } else {
+    console.info(`[stripe-webhook] Tickets pre-existed for PI ${paymentIntent.id}, skipping promo/analytics`);
+  }
 
   // Return background work to run AFTER the response is sent to Stripe
   return {
     backgroundWork: async () => {
-      // Analytics tracking
-      try {
-        const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
-        trackTicketSold(eventId, quantity, pricePaid * quantity);
-        if (buyerEmail) {
-          const { data: eventForAnalytics } = await supabase
-            .from("events")
-            .select("collective_id")
-            .eq("id", eventId)
-            .maybeSingle();
-          if (eventForAnalytics?.collective_id) {
-            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
+      // Analytics tracking — only if tickets were newly created
+      if (wasNewlyCreated) {
+        try {
+          const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+          trackTicketSold(eventId, quantity, pricePaid * quantity);
+          if (buyerEmail) {
+            const { data: eventForAnalytics } = await supabase
+              .from("events")
+              .select("collective_id")
+              .eq("id", eventId)
+              .is("deleted_at", null)
+              .maybeSingle();
+            if (eventForAnalytics?.collective_id) {
+              upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
+            }
           }
+        } catch (err) {
+          console.error("[stripe-webhook] Analytics tracking failed (non-blocking):", err);
         }
-      } catch { /* non-critical */ }
+      }
 
       // Generate QR codes FIRST, then include in email
       const piQrCodes: string[] = [];
@@ -669,6 +651,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
             .from("events")
             .select("title, starts_at, venues(name)")
             .eq("id", eventId)
+            .is("deleted_at", null)
             .maybeSingle();
 
           const { data: tierInfo } = await supabase

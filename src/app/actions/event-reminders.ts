@@ -26,6 +26,7 @@ export async function sendEventReminders() {
     .from("events")
     .select("id, title, slug, starts_at, doors_at, metadata, collectives(name, slug), venues(name, address, city)")
     .in("status", ["published", "upcoming"])
+    .is("deleted_at", null)
     .gte("starts_at", now.toISOString())
     .lte("starts_at", tomorrow.toISOString());
 

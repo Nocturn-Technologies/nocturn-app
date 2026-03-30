@@ -146,8 +146,8 @@ const TORONTO_ARTISTS = [
 ];
 
 export async function seedTorontoArtists(): Promise<{ error: string | null; count: number }> {
-  if (process.env.NODE_ENV === "production" && !process.env.ALLOW_SEED) {
-    return { error: "Seeding is not allowed in production", count: 0 };
+  if (!process.env.ALLOW_SEED) {
+    return { error: "Seeding is disabled", count: 0 };
   }
 
   const supabase = await createServerClient();

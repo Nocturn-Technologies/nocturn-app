@@ -46,6 +46,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     .select("title, description, flyer_url, starts_at, venues(name, city)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
+    .is("deleted_at", null)
     .maybeSingle();
   const event = eventRaw as { title: string; description: string | null; flyer_url: string | null; starts_at: string; venues: { name: string; city: string } | null } | null;
 
@@ -97,6 +98,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function PublicEventPage({ params, searchParams }: Props) {
   const { slug, eventSlug } = await params;
+  const slugFormat = /^[a-z0-9-]+$/i;
+  if (!slugFormat.test(slug) || !slugFormat.test(eventSlug)) {
+    notFound();
+  }
   const { ref: referrerToken } = await searchParams;
   const supabase = createAdminClient();
 
@@ -116,6 +121,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, venues(name, address, city, capacity)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
+    .is("deleted_at", null)
     .maybeSingle();
   const event = eventRaw2 as { id: string; title: string; slug: string; description: string | null; starts_at: string; ends_at: string | null; doors_at: string | null; status: string; flyer_url: string | null; vibe_tags: string[] | null; min_age: number | null; metadata: Record<string, string> | null; collective_id: string; venues: { name: string; address: string; city: string; capacity: number } | null } | null;
 
@@ -142,13 +148,14 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     supabase.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
     supabase.from("event_artists").select("artist_id, set_time, artists(name, genre)").eq("event_id", event.id).eq("status", "confirmed").order("set_time"),
     supabase.from("event_reactions").select("emoji").eq("event_id", event.id),
-    supabase.from("events").select("*", { count: "exact", head: true }).eq("collective_id", collective.id).in("status", ["published", "completed"]),
-    supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).order("starts_at", { ascending: false }).limit(6),
+    supabase.from("events").select("*", { count: "exact", head: true }).eq("collective_id", collective.id).in("status", ["published", "completed"]).is("deleted_at", null),
+    supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).is("deleted_at", null).order("starts_at", { ascending: false }).limit(6),
     supabase.from("events")
       .select("title, slug, flyer_url, starts_at, collective_id, collectives(name, slug), venues(name, city)")
       .eq("status", "published")
       .neq("id", event.id)
       .neq("collective_id", collective.id)
+      .is("deleted_at", null)
       .gte("starts_at", now.toISOString())
       .lte("starts_at", weekFromNow)
       .order("starts_at", { ascending: true })

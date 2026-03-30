@@ -35,6 +35,7 @@ export async function getArtistPerformanceAnalytics(): Promise<{
   const { data: membership } = await (admin.from("collective_members") as any)
     .select("collective_id")
     .eq("user_id", user.id)
+    .is("deleted_at", null)
     .limit(1)
     .maybeSingle();
 

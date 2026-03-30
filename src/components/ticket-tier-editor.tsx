@@ -171,9 +171,10 @@ export function TicketTierEditor({
       if (result.error) {
         setFeedback({ type: "error", message: result.error });
       } else if (result.tier) {
+        const tier = result.tier;
         setTiers((prev) => [
           ...prev,
-          { ...result.tier, sold: 0, price: Number(result.tier.price) },
+          { ...tier, sold: 0, price: Number(tier.price) },
         ]);
         setNewTier({ name: "", price: "", capacity: "" });
         setShowAddForm(false);

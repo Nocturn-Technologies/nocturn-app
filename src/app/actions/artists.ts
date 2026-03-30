@@ -46,7 +46,7 @@ export async function createArtist(formData: {
       metadata: formData.location ? { location: formData.location } : {},
     })
     .select("id, name, slug")
-    .single();
+    .maybeSingle();
 
   if (error) return { error: (error as { message: string }).message, artist: null };
   return { error: null, artist: artist as { id: string; name: string; slug: string } };

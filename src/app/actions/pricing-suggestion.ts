@@ -20,6 +20,13 @@ export async function getTicketPricingSuggestion(input: {
   date: string; // YYYY-MM-DD
   venueCapacity?: number;
 }): Promise<{ error: string | null; pricing: PricingSuggestion | null }> {
+  // Validate and sanitize city input
+  const city = input.city?.trim();
+  if (!city || city.length > 200) {
+    return { error: "Invalid city: must be between 1 and 200 characters", pricing: null };
+  }
+  input = { ...input, city };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", pricing: null };
@@ -49,13 +56,15 @@ export async function getTicketPricingSuggestion(input: {
       .select("id, title, starts_at, venues(city, capacity)")
       .in("status", ["published", "completed"])
       .gte("starts_at", weekBefore)
-      .lte("starts_at", weekAfter),
+      .lte("starts_at", weekAfter)
+      .is("deleted_at", null),
     // Historical events in same city
     admin
       .from("events")
       .select("id, starts_at, venues(city, capacity)")
       .in("status", ["published", "completed"])
-      .gte("starts_at", ninetyDaysAgo),
+      .gte("starts_at", ninetyDaysAgo)
+      .is("deleted_at", null),
   ]);
 
   // Filter to same city

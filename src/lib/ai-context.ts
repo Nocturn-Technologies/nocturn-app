@@ -17,7 +17,7 @@ export async function getEventContext(eventId: string): Promise<string> {
   const sb = createAdminClient();
 
   const [eventRes, tiersRes, ticketsRes, artistsRes, tasksRes] = await Promise.all([
-    sb.from("events").select("title, description, status, starts_at, ends_at, doors_at, flyer_url, collective_id, venues(name, city, capacity)").eq("id", eventId).maybeSingle(),
+    sb.from("events").select("title, description, status, starts_at, ends_at, doors_at, flyer_url, collective_id, venues(name, city, capacity)").eq("id", eventId).is("deleted_at", null).maybeSingle(),
     sb.from("ticket_tiers").select("id, name, price, capacity").eq("event_id", eventId),
     sb.from("tickets").select("ticket_tier_id, status, price_paid, created_at").eq("event_id", eventId),
     sb.from("event_artists").select("artists(name), fee, set_time, status").eq("event_id", eventId),
@@ -80,8 +80,8 @@ export async function getCollectiveContext(collectiveId: string): Promise<string
 
   const [collectiveRes, eventsRes, membersRes, settlementsRes] = await Promise.all([
     sb.from("collectives").select("name, slug, bio").eq("id", collectiveId).maybeSingle(),
-    sb.from("events").select("id, title, status, starts_at").eq("collective_id", collectiveId).order("starts_at", { ascending: false }).limit(10),
-    sb.from("collective_members").select("role").eq("collective_id", collectiveId),
+    sb.from("events").select("id, title, status, starts_at").eq("collective_id", collectiveId).is("deleted_at", null).order("starts_at", { ascending: false }).limit(10),
+    sb.from("collective_members").select("role").eq("collective_id", collectiveId).is("deleted_at", null),
     sb.from("settlements").select("gross_revenue, net_revenue, status").eq("collective_id", collectiveId),
   ]);
 
@@ -120,7 +120,7 @@ export async function getDashboardBriefingData(collectiveId: string) {
   const yesterday = new Date(now.getTime() - 86400000);
 
   const [eventsRes, ticketsRes, tasksRes, settlementsRes] = await Promise.all([
-    sb.from("events").select("id, title, status, starts_at").eq("collective_id", collectiveId).in("status", ["draft", "published"]).order("starts_at", { ascending: true }).limit(5),
+    sb.from("events").select("id, title, status, starts_at").eq("collective_id", collectiveId).in("status", ["draft", "published"]).is("deleted_at", null).order("starts_at", { ascending: true }).limit(5),
     sb.from("tickets").select("event_id, status, created_at, price_paid").eq("status", "paid").gte("created_at", yesterday.toISOString()),
     sb.from("event_tasks").select("title, status, event_id").neq("status", "done").limit(10),
     sb.from("settlements").select("id, status, gross_revenue, net_revenue, event_id, events(title)").eq("collective_id", collectiveId).in("status", ["draft", "pending_approval"]),

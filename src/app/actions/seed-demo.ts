@@ -11,6 +11,10 @@ import { randomUUID } from "crypto";
  * Call from browser console: fetch('/api/seed-demo', { method: 'POST' })
  */
 export async function seedDemoData(collectiveId: string) {
+  if (!process.env.ALLOW_SEED) {
+    return { error: "Seeding is disabled" };
+  }
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };

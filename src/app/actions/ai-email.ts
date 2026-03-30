@@ -16,6 +16,7 @@ export async function generatePostEventEmail(eventId: string) {
     .from("events")
     .select("*, venues(name, city), collectives(name, slug)")
     .eq("id", eventId)
+    .is("deleted_at", null)
     .maybeSingle();
   const event = eventRaw as { id: string; title: string; slug: string; starts_at: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string } | null; [key: string]: unknown } | null;
 
@@ -23,7 +24,7 @@ export async function generatePostEventEmail(eventId: string) {
 
   // Verify ownership
   const collectiveId = event.collectives ? (event.collectives as { name: string; slug: string } & Record<string, unknown>).id ?? null : null;
-  const { data: evForCol } = await admin.from("events").select("collective_id").eq("id", eventId).maybeSingle();
+  const { data: evForCol } = await admin.from("events").select("collective_id").eq("id", eventId).is("deleted_at", null).maybeSingle();
   const colId = evForCol?.collective_id;
   if (colId) {
     const { count: memberCount } = await admin
@@ -146,6 +147,7 @@ export async function generatePromoEmail(eventId: string) {
     .from("events")
     .select("*, venues(name, city, address), collectives(name, slug)")
     .eq("id", eventId)
+    .is("deleted_at", null)
     .maybeSingle();
   const event = eventRaw2 as { id: string; title: string; slug: string; starts_at: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string; address: string } | null; [key: string]: unknown } | null;
 

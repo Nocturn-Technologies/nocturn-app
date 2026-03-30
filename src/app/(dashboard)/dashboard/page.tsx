@@ -76,7 +76,8 @@ export default async function DashboardPage() {
         .select("*", { count: "exact", head: true })
         .in("collective_id", collectiveIds)
         .in("status", ["published", "upcoming"])
-        .gte("starts_at", now),
+        .gte("starts_at", now)
+        .is("deleted_at", null),
 
       // Next event
       admin
@@ -85,6 +86,7 @@ export default async function DashboardPage() {
         .in("collective_id", collectiveIds)
         .in("status", ["published", "upcoming"])
         .gte("starts_at", now)
+        .is("deleted_at", null)
         .order("starts_at", { ascending: true })
         .limit(1),
 
@@ -94,6 +96,7 @@ export default async function DashboardPage() {
         .select("title")
         .in("collective_id", collectiveIds)
         .eq("status", "draft")
+        .is("deleted_at", null)
         .limit(1),
 
       // Attendee count (direct query instead of fetching event IDs first)

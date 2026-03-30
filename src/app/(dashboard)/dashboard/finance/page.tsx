@@ -83,13 +83,14 @@ export default async function FinancePage() {
           .select("id, title, starts_at")
           .in("collective_id", collectiveIds)
           .eq("status", "completed")
+          .is("deleted_at", null)
           .order("starts_at", { ascending: false })
       : Promise.resolve({ data: null }),
   ]);
 
   const financials = financialsResult.data;
-  const eventSummaries = eventSummariesResult.data;
-  const forecasts = forecastResult.data;
+  const eventSummaries = eventSummariesResult.data ?? [];
+  const forecasts = forecastResult.data ?? [];
 
   type Settlement = {
     id: string;

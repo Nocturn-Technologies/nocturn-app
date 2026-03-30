@@ -88,7 +88,7 @@ export async function signUpUser(formData: {
         metadata: { auto_created: true, [userType]: true },
       })
       .select("id")
-      .single();
+      .maybeSingle();
 
     if (collectiveError) {
       console.error(`[signup] Failed to create ${userType} collective:`, collectiveError.message);
@@ -240,11 +240,12 @@ export async function createCollective(formData: {
       metadata: { city: formData.city },
     })
     .select("id")
-    .single();
+    .maybeSingle();
 
   if (collectiveError) {
     return { error: collectiveError.message };
   }
+  if (!collective) return { error: "Failed to create collective" };
 
   // Add user as admin
   const { error: memberError } = await admin
@@ -266,14 +267,9 @@ async function sendApprovalRequestEmail(userId: string, email: string, name: str
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) return;
 
-  const approvalSecret = process.env.ADMIN_APPROVAL_SECRET || process.env.CRON_SECRET || "";
-  if (!approvalSecret) {
-    console.error("[signup] ADMIN_APPROVAL_SECRET/CRON_SECRET not set — skipping approval request email");
-    return;
-  }
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
-  const approveUrl = `${baseUrl}/api/approve-user?user_id=${userId}&action=approve&secret=${encodeURIComponent(approvalSecret)}`;
-  const denyUrl = `${baseUrl}/api/approve-user?user_id=${userId}&action=deny&secret=${encodeURIComponent(approvalSecret)}`;
+  // Use HMAC-signed tokens instead of raw secret in URLs
+  const { generateApprovalUrls } = await import("@/app/api/approve-user/route");
+  const { approveUrl, denyUrl } = generateApprovalUrls(userId);
   const safeName = escapeHtml(name);
   const safeEmail = escapeHtml(email);
 

@@ -99,7 +99,7 @@ export async function generateChatResponse(
       user_id: null,
       content: aiContent,
       type: "ai",
-    }).select("id").single();
+    }).select("id").maybeSingle();
     if (insertedMsg) messageId = insertedMsg.id;
   } catch (insertErr) {
     console.error("[ai-chat] Failed to insert AI message:", insertErr);

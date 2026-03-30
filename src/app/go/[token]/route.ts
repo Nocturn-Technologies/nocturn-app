@@ -50,6 +50,7 @@ export async function GET(
       .from("events")
       .select("slug, collectives(slug)")
       .eq("id", link.event_id)
+      .is("deleted_at", null)
       .maybeSingle();
 
     const ev = event as { slug: string; collectives: { slug: string } | null } | null;
