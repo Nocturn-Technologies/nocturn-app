@@ -227,6 +227,88 @@ export async function getTicketsBySessionId(sessionOrPaymentId: string) {
 }
 
 /**
+ * Send ticket confirmation email with QR codes.
+ * Extracted as a helper so ALL fulfillment paths (success, retry, idempotent)
+ * can send the email — not just the happy path.
+ */
+async function sendConfirmationEmail(params: {
+  admin: ReturnType<typeof createAdminClient>;
+  ticketTokens: string[];
+  ticketIds?: string[];
+  eventId: string;
+  tierId: string;
+  buyerEmail: string;
+  quantity: number;
+  pricePaid: number;
+}) {
+  const { admin, ticketTokens, ticketIds, eventId, tierId, buyerEmail, quantity, pricePaid } = params;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+
+  try {
+    // Generate QR codes for tickets that don't have them yet
+    const QRCodeLib = (await import("qrcode")).default;
+    const qrCodes: string[] = [];
+
+    if (ticketIds && ticketIds.length > 0) {
+      const qrResults = await Promise.allSettled(
+        ticketIds.map(async (id, i) => {
+          // Check if QR already exists
+          const { data: existing } = await admin
+            .from("tickets")
+            .select("qr_code")
+            .eq("id", id)
+            .maybeSingle();
+
+          if (existing?.qr_code) return existing.qr_code;
+
+          const token = ticketTokens[i] || id;
+          const qrDataUrl = await QRCodeLib.toDataURL(
+            `${appUrl}/check-in/${token}`,
+            { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
+          );
+          await admin.from("tickets").update({ qr_code: qrDataUrl }).eq("id", id);
+          return qrDataUrl;
+        })
+      );
+
+      for (const r of qrResults) {
+        if (r.status === "fulfilled") qrCodes.push(r.value);
+      }
+    }
+
+    // Fetch event + tier info for email
+    const [{ data: event }, { data: tierInfo }] = await Promise.all([
+      admin.from("events").select("title, starts_at, venues(name)").eq("id", eventId).maybeSingle(),
+      admin.from("ticket_tiers").select("name").eq("id", tierId).maybeSingle(),
+    ]);
+
+    if (!event) {
+      console.error("[fulfillPaymentIntent] Event not found for email, skipping");
+      return;
+    }
+
+    const venue = event.venues as unknown as { name: string } | null;
+    const { sendTicketConfirmation } = await import("@/lib/email/actions");
+    await sendTicketConfirmation({
+      to: buyerEmail,
+      eventTitle: event.title || "Event",
+      eventDate: new Date(event.starts_at).toLocaleDateString("en", {
+        weekday: "long", month: "long", day: "numeric", year: "numeric",
+      }),
+      venueName: venue?.name || "TBA",
+      tierName: tierInfo?.name || "General Admission",
+      quantity,
+      totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
+      ticketLink: `${appUrl}/ticket/${ticketTokens[0] || ""}`,
+      qrCodes: qrCodes.length > 0 ? qrCodes : undefined,
+    });
+    console.info("[fulfillPaymentIntent] Confirmation email sent with QR codes");
+  } catch (err) {
+    console.error("[fulfillPaymentIntent] Email failed:", err);
+  }
+}
+
+/**
  * Fulfill tickets after a successful embedded payment (PaymentElement flow).
  * This is the PRIMARY ticket creation path — called directly from the client
  * after stripe.confirmPayment() succeeds. The webhook serves as a backup.
@@ -241,14 +323,46 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
 
   const admin = createAdminClient();
 
-  // IDEMPOTENCY: If tickets already exist for this PI, return them
+  // IDEMPOTENCY: If tickets already exist for this PI, send email if needed and return them
   const { data: existingTickets } = await admin
     .from("tickets")
-    .select("ticket_token, status, created_at")
+    .select("id, ticket_token, status, created_at, qr_code, metadata")
     .eq("stripe_payment_intent_id", paymentIntentId);
 
   if (existingTickets && existingTickets.length > 0) {
-    return { error: null, tickets: existingTickets };
+    // Tickets exist (from webhook or earlier call) — ensure email was sent
+    const customerEmail = (existingTickets[0]?.metadata as Record<string, unknown>)?.customer_email as string | undefined;
+    if (customerEmail) {
+      // Check if a confirmation email was already sent by looking for a QR code
+      // (QR + email are always sent together). If no QR, email likely wasn't sent.
+      const missingQr = existingTickets.some((t) => !t.qr_code);
+      if (missingQr) {
+        // Retrieve tier price from Stripe metadata for the email
+        try {
+          const { getStripe } = await import("@/lib/stripe");
+          const pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
+          const meta = pi.metadata;
+          const { data: tier } = await admin.from("ticket_tiers").select("price").eq("id", meta?.tierId || "").maybeSingle();
+          let pricePaid = Number(tier?.price ?? 0);
+          if (meta?.ticketPriceCents) pricePaid = Number(meta.ticketPriceCents) / 100;
+          else if (meta?.discountCents) pricePaid = Math.max(pricePaid - Number(meta.discountCents) / 100, 0);
+
+          await sendConfirmationEmail({
+            admin,
+            ticketTokens: existingTickets.map((t) => t.ticket_token),
+            ticketIds: existingTickets.map((t) => t.id),
+            eventId: meta?.eventId || "",
+            tierId: meta?.tierId || "",
+            buyerEmail: customerEmail,
+            quantity: existingTickets.length,
+            pricePaid,
+          });
+        } catch (err) {
+          console.error("[fulfillPaymentIntent] Email recovery failed:", err);
+        }
+      }
+    }
+    return { error: null, tickets: existingTickets.map((t) => ({ ticket_token: t.ticket_token, status: t.status, created_at: t.created_at })) };
   }
 
   // Verify the PaymentIntent with Stripe — this is the security check
@@ -368,11 +482,20 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     // Re-check for existing tickets first (idempotency)
     const { data: postLockTickets } = await admin
       .from("tickets")
-      .select("ticket_token, status, created_at")
+      .select("id, ticket_token, status, created_at, qr_code")
       .eq("stripe_payment_intent_id", paymentIntentId);
 
     if (postLockTickets && postLockTickets.length > 0) {
-      return { error: null, tickets: postLockTickets };
+      // Tickets created by webhook — still send email + QR if missing
+      if (buyerEmail) {
+        await sendConfirmationEmail({
+          admin,
+          ticketTokens: postLockTickets.map((t) => t.ticket_token),
+          ticketIds: postLockTickets.map((t) => t.id),
+          eventId, tierId, buyerEmail, quantity, pricePaid,
+        });
+      }
+      return { error: null, tickets: postLockTickets.map((t) => ({ ticket_token: t.ticket_token, status: t.status, created_at: t.created_at })) };
     }
 
     const result = await admin
@@ -401,10 +524,19 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     // Check if tickets were created by webhook in the meantime
     const { data: retryTickets } = await admin
       .from("tickets")
-      .select("ticket_token, status, created_at")
+      .select("id, ticket_token, status, created_at, qr_code")
       .eq("stripe_payment_intent_id", paymentIntentId);
     if (retryTickets && retryTickets.length > 0) {
-      return { error: null, tickets: retryTickets };
+      // Tickets exist from webhook — send email before returning
+      if (buyerEmail) {
+        await sendConfirmationEmail({
+          admin,
+          ticketTokens: retryTickets.map((t) => t.ticket_token),
+          ticketIds: retryTickets.map((t) => t.id),
+          eventId, tierId, buyerEmail, quantity, pricePaid,
+        });
+      }
+      return { error: null, tickets: retryTickets.map((t) => ({ ticket_token: t.ticket_token, status: t.status, created_at: t.created_at })) };
     }
     return { error: "Failed to create tickets", tickets: null };
   }
@@ -436,23 +568,21 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
       metadata: { fulfilled_by: "client_action" },
     });
 
-    // Analytics tracking (non-blocking, fire-and-forget)
+    // Analytics tracking
     try {
       const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
       trackTicketSold(eventId, quantity, pricePaid * quantity);
       if (buyerEmail) {
-        (async () => {
-          try {
-            const { data: eventForAnalytics } = await admin
-              .from("events")
-              .select("collective_id")
-              .eq("id", eventId)
-              .maybeSingle();
-            if (eventForAnalytics?.collective_id) {
-              upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
-            }
-          } catch { /* non-critical */ }
-        })();
+        try {
+          const { data: eventForAnalytics } = await admin
+            .from("events")
+            .select("collective_id")
+            .eq("id", eventId)
+            .maybeSingle();
+          if (eventForAnalytics?.collective_id) {
+            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
+          }
+        } catch { /* non-critical */ }
       }
     } catch (analyticsErr) {
       console.error("[fulfillPaymentIntent] Analytics tracking failed (non-blocking):", analyticsErr);
@@ -461,67 +591,14 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     console.info(`[fulfillPaymentIntent] Tickets pre-existed for PI ${paymentIntentId}, skipping promo/analytics`);
   }
 
-  // Generate QR codes FIRST, then send email with QR codes embedded
-  const QRCodeLib = (await import("qrcode")).default;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
-
-  if (insertedTickets) {
-    // Generate all QR codes and collect data URLs
-    const qrResults = await Promise.allSettled(
-      insertedTickets.map(async (ticket) => {
-        const qrDataUrl = await QRCodeLib.toDataURL(
-          `${appUrl}/check-in/${ticket.ticket_token}`,
-          { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
-        );
-        // Persist QR to DB
-        await admin.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
-        return qrDataUrl;
-      })
-    );
-
-    const qrCodes = qrResults
-      .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
-      .map((r) => r.value);
-
-    // Send confirmation email WITH QR codes inline
-    if (buyerEmail) {
-      (async () => {
-        try {
-          const { data: event } = await admin
-            .from("events")
-            .select("title, starts_at, venues(name)")
-            .eq("id", eventId)
-            .maybeSingle();
-
-          const { data: tierInfo } = await admin
-            .from("ticket_tiers")
-            .select("name")
-            .eq("id", tierId)
-            .maybeSingle();
-
-          if (event) {
-            const venue = event.venues as unknown as { name: string } | null;
-            const { sendTicketConfirmation } = await import("@/lib/email/actions");
-            await sendTicketConfirmation({
-              to: buyerEmail,
-              eventTitle: event.title || "Event",
-              eventDate: new Date(event.starts_at).toLocaleDateString("en", {
-                weekday: "long", month: "long", day: "numeric", year: "numeric",
-              }),
-              venueName: venue?.name || "TBA",
-              tierName: tierInfo?.name || "General Admission",
-              quantity,
-              totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
-              ticketLink: `${appUrl}/ticket/${insertedTickets[0]?.ticket_token || ""}`,
-              qrCodes: qrCodes.length > 0 ? qrCodes : undefined,
-            });
-            console.info("[fulfillPaymentIntent] Confirmation email sent with QR codes");
-          }
-        } catch (err) {
-          console.error("[fulfillPaymentIntent] Email failed:", err);
-        }
-      })();
-    }
+  // Send confirmation email with QR codes — AWAITED so serverless doesn't kill it
+  if (buyerEmail && insertedTickets) {
+    await sendConfirmationEmail({
+      admin,
+      ticketTokens: insertedTickets.map((t) => t.ticket_token),
+      ticketIds: insertedTickets.map((t) => t.id),
+      eventId, tierId, buyerEmail, quantity, pricePaid,
+    });
   }
 
   return {
