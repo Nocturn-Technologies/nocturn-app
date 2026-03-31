@@ -112,21 +112,29 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
         </div>
       </div>
 
-      {/* Filter chips — horizontally scrollable */}
-      <div className="flex gap-1.5 overflow-x-auto px-3 pb-2 scrollbar-hide">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-              filter === f
-                ? "bg-[#7B2FF7] text-white"
-                : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
-            }`}
-          >
-            {f}
-          </button>
-        ))}
+      {/* Filter chips — horizontally scrollable with fade hint */}
+      <div
+        className="relative"
+        style={{
+          maskImage: "linear-gradient(to right, black 85%, transparent 100%)",
+          WebkitMaskImage: "linear-gradient(to right, black 85%, transparent 100%)",
+        }}
+      >
+        <div className="flex gap-1.5 overflow-x-auto px-3 pb-2 scrollbar-hide">
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                filter === f
+                  ? "bg-[#7B2FF7] text-white"
+                  : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Venue list */}

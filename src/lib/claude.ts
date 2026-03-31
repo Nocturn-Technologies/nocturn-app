@@ -91,13 +91,18 @@ export async function generateWithClaude(
   // Add the current user message
   messages.push({ role: "user", content: prompt });
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
   try {
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1024,
       system: systemBlocks,
       messages,
-    });
+    }, { signal: controller.signal as AbortSignal });
+
+    clearTimeout(timeout);
 
     // Log cache performance for monitoring
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,22 +113,35 @@ export async function generateWithClaude(
       );
     }
 
+    if (!response.content || response.content.length === 0) return null;
     return response.content[0].type === "text" ? response.content[0].text : null;
   } catch (error: unknown) {
+    clearTimeout(timeout);
     const msg = error instanceof Error ? error.message : String(error);
+
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error("[claude] API call timed out after 30s");
+      return null;
+    }
+
     console.error("[claude] API error:", msg);
 
     // If model not found, try haiku as fallback (also with caching)
-    if (msg.includes("model") || msg.includes("not_found")) {
+    if (msg.includes("model_not_found") || msg.includes("not_found_error") || msg.includes("Could not resolve the model")) {
+      const fallbackController = new AbortController();
+      const fallbackTimeout = setTimeout(() => fallbackController.abort(), 30000);
       try {
         const response = await client.messages.create({
           model: "claude-haiku-4-5-20251001",
           max_tokens: 1024,
           system: systemBlocks,
           messages,
-        });
+        }, { signal: fallbackController.signal as AbortSignal });
+        clearTimeout(fallbackTimeout);
+        if (!response.content || response.content.length === 0) return null;
         return response.content[0].type === "text" ? response.content[0].text : null;
       } catch (fallbackError) {
+        clearTimeout(fallbackTimeout);
         console.error("[claude] Fallback also failed:", fallbackError);
       }
     }

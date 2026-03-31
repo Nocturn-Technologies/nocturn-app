@@ -3,7 +3,7 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Sparkles } from "lucide-react";
+import { Plus, Sparkles, AlertCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { CollapsibleEventSection } from "@/components/events/collapsible-event-section";
 import { EventSuggestions } from "@/components/events/event-suggestions";
@@ -20,14 +20,6 @@ export default async function EventsPage() {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const { data: memberships } = await admin
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-
-  const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
-
   type EventRow = {
     id: string;
     title: string;
@@ -38,24 +30,48 @@ export default async function EventsPage() {
     venues: { name: string; city: string } | null;
   };
 
-  // Fetch events and AI suggestions in parallel
-  const primaryCollectiveId = collectiveIds[0] ?? null;
+  let collectiveIds: string[] = [];
+  let events: EventRow[] = [];
+  let suggestions: Awaited<ReturnType<typeof getEventSuggestions>> = [];
+  let fetchError: string | null = null;
 
-  const [eventsResult, suggestions] = await Promise.all([
-    collectiveIds.length > 0
-      ? admin
-          .from("events")
-          .select("id, title, slug, starts_at, status, flyer_url, venues(name, city)")
-          .in("collective_id", collectiveIds)
-          .is("deleted_at", null)
-          .order("starts_at", { ascending: false })
-      : Promise.resolve({ data: null }),
-    primaryCollectiveId
-      ? getEventSuggestions(primaryCollectiveId)
-      : Promise.resolve([]),
-  ]);
+  try {
+    const { data: memberships, error: membershipsError } = await admin
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
 
-  const events = (eventsResult.data ?? []) as unknown as EventRow[];
+    if (membershipsError) {
+      throw new Error(membershipsError.message);
+    }
+
+    collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
+    const primaryCollectiveId = collectiveIds[0] ?? null;
+
+    const [eventsResult, suggestionsResult] = await Promise.all([
+      collectiveIds.length > 0
+        ? admin
+            .from("events")
+            .select("id, title, slug, starts_at, status, flyer_url, venues(name, city)")
+            .in("collective_id", collectiveIds)
+            .is("deleted_at", null)
+            .order("starts_at", { ascending: false })
+        : Promise.resolve({ data: null, error: null }),
+      primaryCollectiveId
+        ? getEventSuggestions(primaryCollectiveId)
+        : Promise.resolve([]),
+    ]);
+
+    if (eventsResult.error) {
+      throw new Error(eventsResult.error.message);
+    }
+
+    events = (eventsResult.data ?? []) as unknown as EventRow[];
+    suggestions = suggestionsResult;
+  } catch (err) {
+    fetchError = err instanceof Error ? err.message : "Failed to load events";
+  }
 
   const now = new Date();
   const drafts = events.filter((e) => e.status === "draft");
@@ -66,6 +82,39 @@ export default async function EventsPage() {
     (e) => e.status === "completed" || (e.status !== "draft" && e.status !== "cancelled" && new Date(e.starts_at) < now)
   );
   const cancelled = events.filter((e) => e.status === "cancelled");
+
+  if (fetchError) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300 overflow-x-hidden">
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold font-heading">Events</h1>
+            <p className="text-sm text-muted-foreground truncate">
+              Create and manage your events
+            </p>
+          </div>
+        </div>
+        <Card className="rounded-2xl border-destructive/50">
+          <CardContent className="flex flex-col items-center gap-4 py-16 px-6" role="alert">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-destructive/10">
+              <AlertCircle className="h-8 w-8 text-destructive" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-lg font-bold">Something went wrong</p>
+              <p className="text-sm text-muted-foreground max-w-[320px]">
+                We couldn&apos;t load your events right now. Please try again in a moment.
+              </p>
+            </div>
+            <Link href="/dashboard/events">
+              <Button variant="outline" className="mt-2 min-h-[44px]">
+                Try again
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 overflow-x-hidden">
@@ -84,7 +133,27 @@ export default async function EventsPage() {
         </Link>
       </div>
 
-      {events.length === 0 ? (
+      {collectiveIds.length === 0 ? (
+        <Card className="rounded-2xl border-dashed">
+          <CardContent className="flex flex-col items-center gap-4 py-16 px-6">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-nocturn/10">
+              <Users className="h-8 w-8 text-nocturn" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-lg font-bold">No collective yet</p>
+              <p className="text-sm text-muted-foreground max-w-[280px]">
+                Join or create a collective to start planning events.
+              </p>
+            </div>
+            <Link href="/onboarding">
+              <Button className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200 mt-2 min-h-[44px]">
+                <Plus className="mr-2 h-4 w-4" />
+                Create a Collective
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : events.length === 0 ? (
         <Card className="rounded-2xl border-dashed">
           <CardContent className="flex flex-col items-center gap-4 py-16 px-6">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-nocturn/10">

@@ -298,8 +298,8 @@ function EventConfirmationCard({
               label="When"
               value={`${dateDisplay}${timeDisplay ? ` at ${timeDisplay}` : ""}`}
               icon={Calendar}
-              onSave={() => {
-                onUpdate("date", data.date!);
+              onSave={(val) => {
+                onUpdate("date", val);
               }}
             />
           )}
@@ -374,7 +374,7 @@ function EventConfirmationCard({
       </div>
 
       {error && (
-        <div className="mx-4 mb-3 rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400 text-center">
+        <div role="alert" className="mx-4 mb-3 rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400 text-center">
           {error}
         </div>
       )}
@@ -425,6 +425,9 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
     setFetched(true);
     getTicketPricingSuggestion({ city, date, venueCapacity }).then(({ pricing: p }) => {
       setPricing(p);
+      setLoading(false);
+    }).catch(() => {
+      setPricing(null);
       setLoading(false);
     });
   }, [city, date, venueCapacity, fetched]);
@@ -661,6 +664,14 @@ export default function NewEventPage() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { listening, transcript, startListening, stopListening, clearTranscript } = useSpeech();
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  // Detect speech recognition support
+  useEffect(() => {
+    if (typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
+      setSpeechSupported(true);
+    }
+  }, []);
 
   // Auto-submit speech transcript
   useEffect(() => {
@@ -670,7 +681,11 @@ export default function NewEventPage() {
       // Submit on next tick so the input state is set
       setTimeout(() => {
         const form = document.getElementById("chat-form") as HTMLFormElement;
-        if (form) form.requestSubmit();
+        if (form) {
+          form.requestSubmit();
+        } else {
+          setInput(transcript);
+        }
       }, 50);
     }
   }, [transcript, thinking, clearTranscript]);
@@ -693,6 +708,37 @@ export default function NewEventPage() {
       setTimeout(() => inputRef.current?.focus(), 500);
     }
   }, [introShown]);
+
+  // Warn before leaving with unsaved data
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if ((phase === "chat" || phase === "review") && messages.length > 1) {
+        e.preventDefault();
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [phase, messages.length]);
+
+  // ── Start over handler ─────────────────────────────────────────────────
+  function handleStartOver() {
+    if (!window.confirm("Start over? You'll lose your progress.")) return;
+    setMessages([
+      {
+        role: "ai",
+        content: "Tell me about your event — name, date, venue, whatever you know. I'll figure out the rest. \u{1F319}",
+      },
+    ]);
+    setEventData({});
+    setTiers([]);
+    setStep("name");
+    setPhase("chat");
+    setBudgetInput({});
+    setBudgetResult(null);
+    setError(null);
+    setShowVenuePicker(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  }
 
   // ── Step advancement helper ──────────────────────────────────────────────
 
@@ -804,24 +850,34 @@ export default function NewEventPage() {
       if (lower.includes("no") || lower.includes("none") || lower.includes("skip") || lower === "0") {
         // No venue costs — go calculate budget
         setThinking(true);
-        const finalBudget = { ...budgetInput, venueCost: 0, barMinimum: 0, deposit: 0, otherExpenses: 0 } as BudgetInput;
-        const result = await calculateBudget(finalBudget);
-        setBudgetResult(result);
+        try {
+          const finalBudget = { ...budgetInput, venueCost: 0, barMinimum: 0, deposit: 0, otherExpenses: 0 } as BudgetInput;
+          const result = await calculateBudget(finalBudget);
+          setBudgetResult(result);
 
-        // Auto-populate suggested tiers
-        if (result.suggestedTiers.length > 0) {
-          setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+          // Auto-populate suggested tiers
+          if (result.suggestedTiers.length > 0) {
+            setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+          }
+
+          setThinking(false);
+          // Show budget summary and go to review
+          const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
+          setMessages(prev => [
+            ...prev,
+            { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel: ~$${result.travelEstimate.total.toLocaleString()} (${result.travelEstimate.breakdown})` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. You can adjust prices in the review, or tell me different amounts.` },
+          ]);
+          setStep("review");
+          setPhase("review");
+        } catch {
+          setThinking(false);
+          setMessages(prev => [
+            ...prev,
+            { role: "ai", content: "I couldn't calculate the budget. Let's continue — you can adjust later." },
+          ]);
+          setStep("review");
+          setPhase("review");
         }
-
-        setThinking(false);
-        // Show budget summary and go to review
-        const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
-        setMessages(prev => [
-          ...prev,
-          { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel: ~$${result.travelEstimate.total.toLocaleString()} (${result.travelEstimate.breakdown})` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. You can adjust prices in the review, or tell me different amounts.` },
-        ]);
-        setStep("review");
-        setPhase("review");
         return;
       }
 
@@ -843,24 +899,34 @@ export default function NewEventPage() {
 
       // Calculate budget
       setThinking(true);
-      const finalBudget = { ...budgetInput, venueCost, barMinimum, deposit, otherExpenses } as BudgetInput;
-      const result = await calculateBudget(finalBudget);
-      setBudgetResult(result);
+      try {
+        const finalBudget = { ...budgetInput, venueCost, barMinimum, deposit, otherExpenses } as BudgetInput;
+        const result = await calculateBudget(finalBudget);
+        setBudgetResult(result);
 
-      // Auto-populate suggested tiers
-      if (result.suggestedTiers.length > 0) {
-        setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+        // Auto-populate suggested tiers
+        if (result.suggestedTiers.length > 0) {
+          setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+        }
+
+        setThinking(false);
+
+        const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
+        setMessages(prev => [
+          ...prev,
+          { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel estimate: ~$${result.travelEstimate.total.toLocaleString()}\n${result.travelEstimate.breakdown}` : ""}${barMinimum > 0 ? `\n\n⚠️ Bar minimum: $${barMinimum.toLocaleString()} — if you don't hit it, you lose your $${deposit.toLocaleString()} deposit.` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. Adjust in the review or tell me different prices.` },
+        ]);
+        setStep("review");
+        setPhase("review");
+      } catch {
+        setThinking(false);
+        setMessages(prev => [
+          ...prev,
+          { role: "ai", content: "I couldn't calculate the budget. Let's continue — you can adjust later." },
+        ]);
+        setStep("review");
+        setPhase("review");
       }
-
-      setThinking(false);
-
-      const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
-      setMessages(prev => [
-        ...prev,
-        { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel estimate: ~$${result.travelEstimate.total.toLocaleString()}\n${result.travelEstimate.breakdown}` : ""}${barMinimum > 0 ? `\n\n⚠️ Bar minimum: $${barMinimum.toLocaleString()} — if you don't hit it, you lose your $${deposit.toLocaleString()} deposit.` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. Adjust in the review or tell me different prices.` },
-      ]);
-      setStep("review");
-      setPhase("review");
       return;
     }
 
@@ -868,6 +934,13 @@ export default function NewEventPage() {
       // Let Claude parse whatever the user said — no rigid steps
       const { parseEventDetails } = await import("@/app/actions/ai-parse-event");
       const { parsed, reply } = await parseEventDetails(userMsg, eventData);
+
+      // Check for auth expiry
+      if (reply && reply.includes("Not authenticated")) {
+        setThinking(false);
+        router.push("/login");
+        return;
+      }
 
       // Merge new data with existing
       const merged = { ...eventData, ...parsed };
@@ -1014,10 +1087,17 @@ export default function NewEventPage() {
   }
 
   async function handleCreate() {
-    setPhase("creating");
     setError(null);
 
     const d = eventData;
+
+    // Validate date is set — don't silently fall back to today
+    if (!d.date) {
+      setError("Please specify a date for your event.");
+      return;
+    }
+
+    setPhase("creating");
 
     // Build tiers from the collected ticket tiers, or fallback to single-tier legacy
     let validTiers: { name: string; price: number; quantity: number }[] = [];
@@ -1037,33 +1117,38 @@ export default function NewEventPage() {
       ];
     }
 
-    const result = await createEvent({
-      title: d.title || "Untitled Event",
-      slug: slugify(d.title || "untitled-event"),
-      description: d.description || null,
-      date: d.date || new Date().toISOString().split("T")[0],
-      doorsOpen: d.doorsOpen || null,
-      startTime: d.startTime || "22:00",
-      endTime: d.endTime || null,
-      venueName: d.venueName || "TBA",
-      venueAddress: d.venueAddress || "",
-      venueCity: d.venueCity || "",
-      venueCapacity: d.venueCapacity || 0,
-      tiers: validTiers,
-    });
+    try {
+      const result = await createEvent({
+        title: d.title || "Untitled Event",
+        slug: slugify(d.title || "untitled-event"),
+        description: d.description || null,
+        date: d.date,
+        doorsOpen: d.doorsOpen || null,
+        startTime: d.startTime || "22:00",
+        endTime: d.endTime || null,
+        venueName: d.venueName || "TBA",
+        venueAddress: d.venueAddress || "",
+        venueCity: d.venueCity || "",
+        venueCapacity: d.venueCapacity || 0,
+        tiers: validTiers,
+      });
 
-    if (result.error) {
-      setError(result.error);
+      if (result.error) {
+        setError(result.error);
+        setPhase("review");
+        return;
+      }
+
+      haptic('success');
+      setPhase("done");
+      setTimeout(() => {
+        router.push(`/dashboard/events/${result.eventId}`);
+        router.refresh();
+      }, 2000);
+    } catch {
+      setError("Network error — please try again.");
       setPhase("review");
-      return;
     }
-
-    haptic('success');
-    setPhase("done");
-    setTimeout(() => {
-      router.push(`/dashboard/events/${result.eventId}`);
-      router.refresh();
-    }, 2000);
   }
 
   // ── Should show text input? ──────────────────────────────────────────────
@@ -1088,6 +1173,14 @@ export default function NewEventPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
+        {messages.length > 1 && (
+          <button
+            onClick={handleStartOver}
+            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Start over
+          </button>
+        )}
         <h1 className="text-xl font-bold font-heading truncate">
           New Event
         </h1>
@@ -1098,7 +1191,7 @@ export default function NewEventPage() {
       </div>
 
       {/* Chat area */}
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4 min-h-0">
+      <div className="flex-1 overflow-y-auto space-y-4 pb-4 min-h-0" aria-live="polite">
         {messages.map((msg, i) => {
           if (msg.role === "ai") {
             return (
@@ -1128,26 +1221,16 @@ export default function NewEventPage() {
         {thinking && <ThinkingDots />}
 
         {/* Review card with editable fields */}
-        {phase === "review" && (
+        {(phase === "review" || phase === "creating") && (
           <EventConfirmationCard
             data={eventData}
             tiers={tiers}
             onUpdate={handleUpdateField}
             onEdit={handleBackToChat}
             onCreate={handleCreate}
-            creating={false}
+            creating={phase === "creating"}
             error={error}
           />
-        )}
-
-        {/* Creating state */}
-        {phase === "creating" && (
-          <div className="ml-11 flex items-center gap-3 animate-fade-in-up">
-            <Loader2 className="h-5 w-5 text-[#7B2FF7] animate-spin" />
-            <span className="text-sm text-zinc-400">
-              Creating your event...
-            </span>
-          </div>
         )}
 
         {/* Done state */}
@@ -1185,22 +1268,26 @@ export default function NewEventPage() {
             placeholder={getPlaceholder()}
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            maxLength={2000}
+            aria-label="Describe your event"
             className="flex-1 text-sm bg-zinc-900 border-white/10 rounded-full px-4 focus:border-[#7B2FF7]/50 min-h-[44px]"
             disabled={thinking || listening}
           />
-          <Button
-            type="button"
-            size="icon"
-            onClick={listening ? stopListening : startListening}
-            className={`shrink-0 rounded-full min-h-[44px] min-w-[44px] transition-all duration-200 active:scale-95 ${
-              listening
-                ? "bg-red-600 hover:bg-red-700 animate-pulse"
-                : "bg-zinc-800 hover:bg-zinc-700 border border-white/10"
-            }`}
-            disabled={thinking}
-          >
-            <Mic className={`h-4 w-4 ${listening ? "text-white" : "text-zinc-400"}`} />
-          </Button>
+          {speechSupported && (
+            <Button
+              type="button"
+              size="icon"
+              onClick={listening ? stopListening : startListening}
+              className={`shrink-0 rounded-full min-h-[44px] min-w-[44px] transition-all duration-200 active:scale-95 ${
+                listening
+                  ? "bg-red-600 hover:bg-red-700 animate-pulse"
+                  : "bg-zinc-800 hover:bg-zinc-700 border border-white/10"
+              }`}
+              disabled={thinking}
+            >
+              <Mic className={`h-4 w-4 ${listening ? "text-white" : "text-zinc-400"}`} />
+            </Button>
+          )}
           <Button
             type="submit"
             size="icon"

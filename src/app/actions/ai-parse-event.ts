@@ -92,12 +92,18 @@ Today is ${new Date().toISOString().split("T")[0]}. "10pm"="22:00". Assume PM fo
     const jsonMatch = text.match(/\{[\s\S]*\}/);
 
     if (jsonMatch) {
-      const result = JSON.parse(jsonMatch[0]);
-      const reply = result.reply || generateReply({ ...existingData, ...result }, result);
-      delete result.reply;
-      return { parsed: { ...existingData, ...stripEmpty(result) }, reply };
+      const parsed = JSON.parse(jsonMatch[0]);
+      // Validate expected field types
+      if (parsed.date && typeof parsed.date !== 'string') delete parsed.date;
+      if (parsed.startTime && typeof parsed.startTime !== 'string') delete parsed.startTime;
+      if (parsed.ticketPrice !== undefined && typeof parsed.ticketPrice !== 'number') delete parsed.ticketPrice;
+      if (parsed.ticketQuantity !== undefined && typeof parsed.ticketQuantity !== 'number') delete parsed.ticketQuantity;
+      const reply = parsed.reply || generateReply({ ...existingData, ...parsed }, parsed);
+      delete parsed.reply;
+      return { parsed: { ...existingData, ...stripEmpty(parsed) }, reply };
     }
-  } catch {
+  } catch (e) {
+    console.error("[ai-parse-event] API error:", e);
     // Fall through
   }
 
@@ -116,6 +122,11 @@ function localParse(message: string, existing: Partial<ParsedEventDetails>): Par
   const result: Partial<ParsedEventDetails> = {};
   const lower = message.toLowerCase().trim();
 
+  // === TITLE ===
+  // Extract title: first line or text before date/time/venue keywords
+  const titleMatch = lower.match(/^([^,.\n]+?)(?:\s+(?:on|at|from|this|next|january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}[\/\-]))/i);
+  if (titleMatch) result.title = message.slice(0, titleMatch[1].length).trim();
+
   // === DATE ===
   // "2026-04-25"
   const isoDate = message.match(/(\d{4}-\d{2}-\d{2})/);
@@ -129,7 +140,11 @@ function localParse(message: string, existing: Partial<ParsedEventDetails>): Par
       jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
     };
     const m = months[monthDay[1].slice(0, 3)];
-    result.date = `2026-${m}-${monthDay[2].padStart(2, "0")}`;
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const parsedMonth = parseInt(m);
+    const year = parsedMonth < (now.getMonth() + 1) ? currentYear + 1 : currentYear;
+    result.date = `${year}-${m}-${monthDay[2].padStart(2, "0")}`;
   }
 
   // === TIME ===

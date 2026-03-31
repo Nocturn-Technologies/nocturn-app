@@ -65,6 +65,32 @@ export async function createEvent(input: CreateEventInput) {
     return { error: "Description is too long. Please keep it under 5,000 characters." };
   }
 
+  // Title validation
+  const trimmedTitle = input.title?.trim();
+  if (!trimmedTitle || trimmedTitle.length === 0) {
+    return { error: "Event title is required." };
+  }
+  if (trimmedTitle.length > 200) {
+    return { error: "Event title must be under 200 characters." };
+  }
+
+  // Tier validation (same rules as ticket-tiers.ts createTicketTier)
+  for (const t of input.tiers) {
+    const tierName = t.name?.trim();
+    if (!tierName || tierName.length === 0) {
+      return { error: "Invalid ticket tier: name is required." };
+    }
+    if (tierName.length > 100) {
+      return { error: "Invalid ticket tier: name must be under 100 characters." };
+    }
+    if (t.price < 0 || t.price > 99999.99 || !Number.isFinite(t.price)) {
+      return { error: "Invalid ticket tier: price must be between $0 and $99,999.99." };
+    }
+    if (t.quantity < 1 || t.quantity > 1000000 || !Number.isInteger(t.quantity)) {
+      return { error: "Invalid ticket tier: capacity must be a whole number between 1 and 1,000,000." };
+    }
+  }
+
   const admin = createAdminClient();
 
   // Get user's first collective
@@ -152,8 +178,21 @@ export async function createEvent(input: CreateEventInput) {
   }
 
   const startsAt = toTimestamp(input.date, input.startTime);
+
+  // Cross-midnight handling: if end time is before start time, add one day
+  let endDate = input.date;
+  if (input.endTime) {
+    const [startHour, startMinute] = input.startTime.split(":").map(Number);
+    const [endHour, endMinute] = input.endTime.split(":").map(Number);
+    if (endHour < startHour || (endHour === startHour && endMinute < startMinute)) {
+      const nextDay = new Date(`${input.date}T00:00:00`);
+      nextDay.setDate(nextDay.getDate() + 1);
+      endDate = nextDay.toISOString().split("T")[0];
+    }
+  }
+
   const endsAt = input.endTime
-    ? toTimestamp(input.date, input.endTime)
+    ? toTimestamp(endDate, input.endTime)
     : null;
   const doorsAt = input.doorsOpen
     ? toTimestamp(input.date, input.doorsOpen)
@@ -202,14 +241,25 @@ export async function createEvent(input: CreateEventInput) {
     }
   }
 
+  // Check for slug collision, append random suffix if needed
+  let eventSlug = input.slug;
+  const { data: slugCheck } = await admin
+    .from("events")
+    .select("id")
+    .eq("slug", eventSlug)
+    .maybeSingle();
+  if (slugCheck) {
+    eventSlug = `${eventSlug}-${Math.random().toString(36).slice(2, 6)}`;
+  }
+
   // Create event
   const { data: event, error: eventError } = await admin
     .from("events")
     .insert({
       collective_id: collectiveId,
       venue_id: venueId,
-      title: input.title,
-      slug: input.slug,
+      title: trimmedTitle,
+      slug: eventSlug,
       description: enrichedDescription,
       starts_at: startsAt,
       ends_at: endsAt,
@@ -230,13 +280,13 @@ export async function createEvent(input: CreateEventInput) {
   }
   if (!event) return { error: "Failed to create event" };
 
-  // Create ticket tiers
+  // Create ticket tiers (with price rounding)
   if (input.tiers.length > 0) {
     const { error: tierError } = await admin.from("ticket_tiers").insert(
       input.tiers.map((t, i) => ({
         event_id: event.id,
-        name: t.name,
-        price: t.price,
+        name: t.name.trim(),
+        price: Math.round(t.price * 100) / 100,
         capacity: t.quantity,
         sort_order: i,
       }))
@@ -244,16 +294,20 @@ export async function createEvent(input: CreateEventInput) {
 
     if (tierError) {
       console.error("Ticket tier error:", tierError);
-      return { error: `Event created but ticket tiers failed: ${tierError.message}`, eventId: event.id };
+      // Cleanup: delete the event that was just created
+      await admin.from("events").delete().eq("id", event.id);
+      return { error: `Ticket tier creation failed: ${tierError.message}` };
     }
   }
 
   // Track event creation
   import("@/lib/track-server").then(({ trackServerEvent }) =>
-    trackServerEvent("event_created", { eventId: event.id, title: input.title, collectiveId: memberships[0].collective_id })
+    trackServerEvent("event_created", { eventId: event.id, title: trimmedTitle, collectiveId: memberships[0].collective_id })
   ).catch(() => {});
 
-  revalidatePath("/dashboard/events"); return { error: null, eventId: event.id };
+  revalidatePath("/dashboard/events");
+  revalidatePath("/dashboard");
+  return { error: null, eventId: event.id };
   } catch (err) {
     console.error("[createEvent] Unexpected error:", err);
     return { error: "Something went wrong" };
