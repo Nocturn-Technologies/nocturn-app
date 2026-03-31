@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createEvent } from "@/app/actions/events";
 import {
@@ -40,6 +40,45 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+
+const DRAFT_STORAGE_KEY = "nocturn-event-draft";
+
+interface DraftState {
+  messages: Message[];
+  eventData: ParsedEventDetails;
+  tiers: TicketTier[];
+  step: ChatStep;
+  phase: "chat" | "review" | "creating" | "done";
+}
+
+function saveDraft(state: DraftState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // storage full or unavailable — silently ignore
+  }
+}
+
+function loadDraft(): DraftState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as DraftState;
+  } catch {
+    return null;
+  }
+}
+
+function clearDraft() {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -223,6 +262,173 @@ function EditableRow({
   );
 }
 
+// ─── Editable Description ───────────────────────────────────────────────────
+
+function EditableDescription({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (editing && textareaRef.current) {
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(editValue.length, editValue.length);
+    }
+  }, [editing, editValue.length]);
+
+  if (editing) {
+    return (
+      <textarea
+        ref={textareaRef}
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.shiftKey && editValue.trim()) {
+            e.preventDefault();
+            onSave(editValue.trim());
+            setEditing(false);
+          }
+          if (e.key === "Escape") {
+            setEditValue(value);
+            setEditing(false);
+          }
+        }}
+        onBlur={() => {
+          if (editValue.trim()) onSave(editValue.trim());
+          setEditing(false);
+        }}
+        rows={3}
+        className="w-full text-sm text-zinc-300 bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-[#7B2FF7]/50 resize-none"
+      />
+    );
+  }
+
+  return (
+    <div className="group/desc">
+      <button
+        onClick={() => {
+          setEditValue(value);
+          setEditing(true);
+        }}
+        className="text-sm text-zinc-400 line-clamp-3 text-left flex items-start gap-1.5 hover:text-zinc-300 active:scale-[0.98] transition-all duration-200"
+      >
+        <span className="flex-1">{value}</span>
+        <Pencil className="h-3 w-3 text-zinc-500 opacity-0 group-hover/desc:opacity-100 transition-opacity shrink-0 mt-0.5" />
+      </button>
+    </div>
+  );
+}
+
+// ─── Editable Tier Row ──────────────────────────────────────────────────────
+
+function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: TicketTier) => void }) {
+  const [editingField, setEditingField] = useState<"name" | "price" | "capacity" | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editingField) inputRef.current?.focus();
+  }, [editingField]);
+
+  function startEdit(field: "name" | "price" | "capacity") {
+    setEditingField(field);
+    if (field === "name") setEditValue(tier.name);
+    else if (field === "price") setEditValue(String(tier.price));
+    else setEditValue(String(tier.capacity));
+  }
+
+  function commitEdit() {
+    if (!editingField) return;
+    const updated = { ...tier };
+    if (editingField === "name" && editValue.trim()) {
+      updated.name = editValue.trim();
+    } else if (editingField === "price") {
+      const num = parseFloat(editValue.replace(/[^0-9.]/g, ""));
+      if (!isNaN(num)) updated.price = num;
+    } else if (editingField === "capacity") {
+      const num = parseInt(editValue.replace(/[^0-9]/g, ""));
+      if (!isNaN(num) && num > 0) updated.capacity = num;
+    }
+    onSave(updated);
+    setEditingField(null);
+  }
+
+  function cancelEdit() {
+    setEditingField(null);
+    setEditValue("");
+  }
+
+  return (
+    <div className="flex items-center justify-between bg-zinc-800/50 rounded-xl px-3 py-2 transition-colors duration-200 hover:bg-zinc-800/80">
+      <div className="flex items-center gap-2">
+        {editingField === "name" ? (
+          <input
+            ref={inputRef}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitEdit();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            onBlur={commitEdit}
+            className="w-24 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-sm text-white outline-none focus:border-[#7B2FF7]/50"
+          />
+        ) : (
+          <button
+            onClick={() => startEdit("name")}
+            className="text-sm font-medium text-white hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/name flex items-center gap-1"
+          >
+            {tier.name}
+            <Pencil className="h-2.5 w-2.5 text-zinc-500 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+          </button>
+        )}
+        {editingField === "capacity" ? (
+          <input
+            ref={editingField === "capacity" ? inputRef : undefined}
+            value={editValue}
+            onChange={(e) => setEditValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitEdit();
+              if (e.key === "Escape") cancelEdit();
+            }}
+            onBlur={commitEdit}
+            className="w-20 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-xs text-white outline-none focus:border-[#7B2FF7]/50"
+          />
+        ) : (
+          <button
+            onClick={() => startEdit("capacity")}
+            className="text-xs text-zinc-500 hover:text-zinc-300 active:scale-[0.98] transition-all duration-200 group/cap flex items-center gap-1"
+          >
+            {tier.capacity} tickets
+            <Pencil className="h-2.5 w-2.5 text-zinc-500 opacity-0 group-hover/cap:opacity-100 transition-opacity" />
+          </button>
+        )}
+      </div>
+      {editingField === "price" ? (
+        <input
+          ref={editingField === "price" ? inputRef : undefined}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitEdit();
+            if (e.key === "Escape") cancelEdit();
+          }}
+          onBlur={commitEdit}
+          className="w-16 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-sm text-right text-white outline-none focus:border-[#7B2FF7]/50"
+        />
+      ) : (
+        <button
+          onClick={() => startEdit("price")}
+          className="text-sm font-semibold text-[#7B2FF7] hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/price flex items-center gap-1"
+        >
+          {tier.price === 0 ? "Free" : `$${tier.price}`}
+          <Pencil className="h-2.5 w-2.5 text-zinc-500 opacity-0 group-hover/price:opacity-100 transition-opacity" />
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Confirmation Card ───────────────────────────────────────────────────────
 
 function EventConfirmationCard({
@@ -236,7 +442,7 @@ function EventConfirmationCard({
 }: {
   data: ParsedEventDetails;
   tiers: TicketTier[];
-  onUpdate: (field: keyof ParsedEventDetails, value: string | number) => void;
+  onUpdate: (field: keyof ParsedEventDetails | "tiers" | "description", value: string | number | TicketTier[]) => void;
   onEdit: () => void;
   onCreate: () => void;
   creating: boolean;
@@ -288,7 +494,10 @@ function EventConfirmationCard({
         />
 
         {data.description && (
-          <p className="text-sm text-zinc-400 line-clamp-3">{data.description}</p>
+          <EditableDescription
+            value={data.description}
+            onSave={(v) => onUpdate("description", v)}
+          />
         )}
 
         {/* Details grid */}
@@ -321,9 +530,16 @@ function EventConfirmationCard({
                 .join(", ")}
               icon={MapPin}
               onSave={(val) => {
-                const parts = val.split(",").map((s) => s.trim());
-                if (parts[0]) onUpdate("venueName", parts[0]);
-                if (parts[1]) onUpdate("venueCity", parts[1]);
+                const lastCommaIdx = val.lastIndexOf(",");
+                if (lastCommaIdx === -1) {
+                  // No comma — treat entire string as venue name
+                  onUpdate("venueName", val.trim());
+                } else {
+                  const name = val.slice(0, lastCommaIdx).trim();
+                  const city = val.slice(lastCommaIdx + 1).trim();
+                  if (name) onUpdate("venueName", name);
+                  if (city) onUpdate("venueCity", city);
+                }
               }}
             />
           )}
@@ -338,15 +554,15 @@ function EventConfirmationCard({
             </div>
             <div className="space-y-2">
               {tiers.map((tier, i) => (
-                <div key={i} className="flex items-center justify-between bg-zinc-800/50 rounded-xl px-3 py-2 transition-colors duration-200 hover:bg-zinc-800/80">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-white">{tier.name}</span>
-                    <span className="text-xs text-zinc-500">{tier.capacity} tickets</span>
-                  </div>
-                  <span className="text-sm font-semibold text-[#7B2FF7]">
-                    {tier.price === 0 ? "Free" : `$${tier.price}`}
-                  </span>
-                </div>
+                <EditableTierRow
+                  key={i}
+                  tier={tier}
+                  onSave={(updatedTier) => {
+                    const updatedTiers = [...tiers];
+                    updatedTiers[i] = updatedTier;
+                    onUpdate("tiers", updatedTiers);
+                  }}
+                />
               ))}
             </div>
           </div>
@@ -666,6 +882,34 @@ export default function NewEventPage() {
   const { listening, transcript, startListening, stopListening, clearTranscript } = useSpeech();
   const [speechSupported, setSpeechSupported] = useState(false);
 
+  // ── Restore draft from localStorage on mount ──────────────────────────
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft && draft.messages.length > 1) {
+      setMessages(draft.messages);
+      setEventData(draft.eventData);
+      setTiers(draft.tiers);
+      setStep(draft.step);
+      setPhase(draft.phase === "creating" ? "review" : draft.phase);
+      setIntroShown(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Debounced save to localStorage on key state changes ───────────────
+  const saveDraftDebounced = useCallback(() => {
+    const timer = setTimeout(() => {
+      if (phase === "done") return; // don't persist after creation
+      saveDraft({ messages, eventData, tiers, step, phase });
+    }, 500);
+    return timer;
+  }, [messages, eventData, tiers, step, phase]);
+
+  useEffect(() => {
+    const timer = saveDraftDebounced();
+    return () => clearTimeout(timer);
+  }, [saveDraftDebounced]);
+
   // Detect speech recognition support
   useEffect(() => {
     if (typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
@@ -723,6 +967,7 @@ export default function NewEventPage() {
   // ── Start over handler ─────────────────────────────────────────────────
   function handleStartOver() {
     if (!window.confirm("Start over? You'll lose your progress.")) return;
+    clearDraft();
     setMessages([
       {
         role: "ai",
@@ -1067,10 +1312,14 @@ export default function NewEventPage() {
   // ── Review / create handlers ─────────────────────────────────────────────
 
   function handleUpdateField(
-    field: keyof ParsedEventDetails,
-    value: string | number
+    field: keyof ParsedEventDetails | "tiers" | "description",
+    value: string | number | TicketTier[]
   ) {
-    setEventData((prev) => ({ ...prev, [field]: value }));
+    if (field === "tiers" && Array.isArray(value)) {
+      setTiers(value as TicketTier[]);
+    } else {
+      setEventData((prev) => ({ ...prev, [field]: value }));
+    }
   }
 
   function handleBackToChat() {
@@ -1140,6 +1389,10 @@ export default function NewEventPage() {
       }
 
       haptic('success');
+      clearDraft();
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("event-created", "true");
+      }
       setPhase("done");
       setTimeout(() => {
         router.push(`/dashboard/events/${result.eventId}`);

@@ -33,6 +33,7 @@ import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
 import { LiveModeBanner } from "./live-mode-banner";
 import { EventShareCard } from "./event-share-card";
+import { EventCreatedToast } from "./event-created-toast";
 import { ExternalTicketsForm } from "./external-tickets";
 import { getExternalTicketData } from "@/app/actions/external-tickets";
 import { TicketTierEditor } from "@/components/ticket-tier-editor";
@@ -185,6 +186,7 @@ export default async function EventDetailPage({ params }: Props) {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6 animate-in fade-in duration-500">
+      <EventCreatedToast />
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/dashboard/events">
