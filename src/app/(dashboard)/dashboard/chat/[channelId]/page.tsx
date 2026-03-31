@@ -395,44 +395,44 @@ export default function ChatRoomPage() {
   const isOwnMessage = (msg: Message) => msg.user_id === userId;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-[calc(100vh-1.5rem)] -m-4 md:-m-6">
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-[calc(100vh-1.5rem)] -m-4 md:-m-6 animate-in fade-in duration-300">
       {/* Header */}
       <header className="flex items-center gap-3 px-4 h-14 bg-card/95 backdrop-blur-lg border-b border-border shrink-0 z-10">
         <Link
           href="/dashboard/chat"
-          className="w-11 h-11 flex items-center justify-center -ml-2 md:hidden"
+          className="w-11 h-11 flex items-center justify-center -ml-2 md:hidden rounded-xl transition-colors duration-200 hover:bg-accent active:bg-accent/80 active:scale-95"
         >
           <ArrowLeft size={22} />
         </Link>
         <Link
           href="/dashboard/chat"
-          className="hidden md:flex items-center justify-center w-9 h-9 rounded-md hover:bg-accent -ml-1"
+          className="hidden md:flex items-center justify-center w-9 h-9 rounded-xl hover:bg-accent active:bg-accent/80 -ml-1 transition-colors duration-200"
         >
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="font-semibold truncate text-[15px]">
+          <h1 className="font-bold truncate text-[15px]">
             {channel?.name ?? "Chat"}
           </h1>
           {channel?.type === "event" && (
-            <p className="text-[11px] text-nocturn">Event Channel</p>
+            <p className="text-[11px] text-nocturn font-medium">Event Channel</p>
           )}
         </div>
-        <Button variant="ghost" size="icon" className="-mr-2" aria-label="Channel settings">
+        <Button variant="ghost" size="icon" className="-mr-2 rounded-xl transition-colors duration-200 hover:bg-accent active:bg-accent/80 active:scale-95" aria-label="Channel settings">
           <Info size={20} className="text-muted-foreground" />
         </Button>
       </header>
 
       {/* Connection status banner */}
       {connectionStatus === 'disconnected' && (
-        <div className="shrink-0 bg-amber-500/15 border-b border-amber-500/20 px-4 py-1.5 text-center">
+        <div className="shrink-0 bg-amber-500/15 border-b border-amber-500/20 px-4 py-1.5 text-center animate-in fade-in slide-in-from-top-1 duration-200">
           <span className="text-xs text-amber-400 font-medium">Reconnecting...</span>
         </div>
       )}
 
       {/* Voice upload error */}
       {voiceError && (
-        <div className="shrink-0 bg-red-500/15 border-b border-red-500/20 px-4 py-1.5 text-center">
+        <div className="shrink-0 bg-red-500/15 border-b border-red-500/20 px-4 py-1.5 text-center animate-in fade-in slide-in-from-top-1 duration-200">
           <span className="text-xs text-red-400 font-medium">{voiceError}</span>
         </div>
       )}
@@ -451,8 +451,40 @@ export default function ChatRoomPage() {
         className="flex-1 overflow-y-auto px-3 py-3 space-y-2"
       >
         {loading ? (
-          <div className="flex justify-center py-12">
-            <div className="w-6 h-6 border-2 border-nocturn border-t-transparent rounded-full animate-spin" />
+          <div className="space-y-4 py-4 px-1">
+            {/* Skeleton: incoming message */}
+            <div className="flex justify-start">
+              <div className="max-w-[75%] space-y-1.5">
+                <div className="h-3 w-16 rounded bg-muted-foreground/10 animate-pulse" />
+                <div className="rounded-2xl rounded-tl-md bg-card/60 px-4 py-3 space-y-2">
+                  <div className="h-3 w-48 rounded bg-muted-foreground/10 animate-pulse" />
+                  <div className="h-3 w-36 rounded bg-muted-foreground/10 animate-pulse" />
+                </div>
+              </div>
+            </div>
+            {/* Skeleton: own message */}
+            <div className="flex justify-end">
+              <div className="max-w-[65%] space-y-1.5">
+                <div className="rounded-2xl rounded-tr-md bg-nocturn/10 px-4 py-3 space-y-2">
+                  <div className="h-3 w-40 rounded bg-nocturn/10 animate-pulse" />
+                  <div className="h-3 w-24 rounded bg-nocturn/10 animate-pulse" />
+                </div>
+              </div>
+            </div>
+            {/* Skeleton: AI message */}
+            <div className="flex justify-start">
+              <div className="max-w-[85%] space-y-1.5">
+                <div className="flex items-center gap-1.5 ml-1">
+                  <div className="h-3 w-3 rounded-full bg-nocturn/10 animate-pulse" />
+                  <div className="h-3 w-20 rounded bg-nocturn/10 animate-pulse" />
+                </div>
+                <div className="rounded-2xl rounded-tl-md bg-nocturn/5 px-4 py-3 space-y-2">
+                  <div className="h-3 w-56 rounded bg-nocturn/10 animate-pulse" />
+                  <div className="h-3 w-44 rounded bg-nocturn/10 animate-pulse" />
+                  <div className="h-3 w-32 rounded bg-nocturn/10 animate-pulse" />
+                </div>
+              </div>
+            </div>
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 px-4 space-y-6">
@@ -472,7 +504,7 @@ export default function ChatRoomPage() {
                   onClick={() => {
                     setInput(prompt);
                   }}
-                  className="rounded-full border border-nocturn/20 bg-nocturn/5 px-3 py-1.5 text-xs font-medium text-nocturn hover:bg-nocturn/10 transition-colors"
+                  className="rounded-full border border-nocturn/20 bg-nocturn/5 px-3 py-1.5 text-xs font-medium text-nocturn hover:bg-nocturn/10 hover:border-nocturn/30 active:bg-nocturn/15 active:scale-[0.97] transition-all duration-200"
                 >
                   {prompt}
                 </button>
@@ -493,7 +525,7 @@ export default function ChatRoomPage() {
         )}
         {/* Typing indicator */}
         {aiTyping && (
-          <div className="flex justify-start">
+          <div className="flex justify-start animate-in fade-in slide-in-from-bottom-1 duration-200">
             <div className="max-w-[85%]">
               <div className="flex items-center gap-1.5 mb-1 ml-1">
                 <Sparkles size={12} className="text-nocturn" />
@@ -543,9 +575,9 @@ export default function ChatRoomPage() {
             onClick={sendMessage}
             disabled={!input.trim()}
             aria-label="Send message"
-            className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+            className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 transition-all duration-200 ${
               input.trim()
-                ? "bg-nocturn hover:bg-nocturn/90"
+                ? "bg-nocturn hover:bg-nocturn/90 active:bg-nocturn/80 active:scale-95"
                 : "bg-accent"
             }`}
           >
@@ -581,7 +613,7 @@ const MessageBubble = memo(function MessageBubble({
   // System messages
   if (msg.type === "system") {
     return (
-      <div className="flex justify-center py-1">
+      <div className="flex justify-center py-1 animate-in fade-in duration-200">
         <span className="text-[12px] text-muted-foreground/60 text-center px-3">
           {msg.content}
         </span>
@@ -660,7 +692,7 @@ const MessageBubble = memo(function MessageBubble({
     const followUps = getFollowUps(msg.content);
 
     return (
-      <div className="flex justify-start">
+      <div className="flex justify-start animate-in fade-in slide-in-from-bottom-1 duration-200">
         <div className="max-w-[88%] space-y-2">
           <div className="flex items-center gap-1.5 mb-1 ml-1">
             <Sparkles size={12} className="text-nocturn" />
@@ -681,7 +713,7 @@ const MessageBubble = memo(function MessageBubble({
                 <button
                   key={q}
                   onClick={() => onFollowUp?.(q)}
-                  className="text-[11px] rounded-full border border-nocturn/20 bg-nocturn/5 px-2.5 py-1 text-nocturn hover:bg-nocturn/10 transition-colors"
+                  className="text-[11px] rounded-full border border-nocturn/20 bg-nocturn/5 px-2.5 py-1 text-nocturn hover:bg-nocturn/10 hover:border-nocturn/30 active:bg-nocturn/15 active:scale-[0.97] transition-all duration-200"
                 >
                   {q}
                 </button>
@@ -700,7 +732,7 @@ const MessageBubble = memo(function MessageBubble({
   // Voice messages
   if (msg.type === "voice") {
     return (
-      <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+      <div className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-1 duration-200`}>
         <div className="max-w-[75%]">
           {!isOwn && (
             <span className="text-[11px] text-muted-foreground ml-1 mb-0.5 block">
@@ -708,7 +740,7 @@ const MessageBubble = memo(function MessageBubble({
             </span>
           )}
           <div
-            className={`rounded-2xl px-3.5 py-2.5 ${
+            className={`rounded-2xl px-3.5 py-2.5 transition-colors duration-200 ${
               isOwn
                 ? "bg-nocturn rounded-tr-md"
                 : "bg-card border border-border rounded-tl-md"
@@ -734,7 +766,7 @@ const MessageBubble = memo(function MessageBubble({
 
   // Regular text messages
   return (
-    <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+    <div className={`flex ${isOwn ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-1 duration-200`}>
       <div className="max-w-[80%]">
         {!isOwn && (
           <span className="text-[11px] text-muted-foreground ml-1 mb-0.5 block">
@@ -742,7 +774,7 @@ const MessageBubble = memo(function MessageBubble({
           </span>
         )}
         <div
-          className={`rounded-2xl px-3.5 py-2.5 ${
+          className={`rounded-2xl px-3.5 py-2.5 transition-colors duration-200 ${
             isOwn
               ? "bg-nocturn rounded-tr-md"
               : "bg-card border border-border rounded-tl-md"
