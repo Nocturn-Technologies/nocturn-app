@@ -318,23 +318,25 @@ export default function VenuesPage() {
       {activeTab === "discover" && (
         <div className="space-y-4">
           {/* Search bar */}
-          <div className="relative px-4 md:px-0">
-            <Search className="absolute left-7 md:left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search venues in Toronto..."
-              className="w-full pl-10 pr-10"
-            />
-            {query && (
-              <button
-                onClick={() => setQuery("")}
-                className="absolute right-7 md:right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-muted-foreground hover:bg-muted-foreground/30"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
+          <div className="px-4 md:px-0">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search venues in Toronto..."
+                className="w-full pl-10 pr-10"
+              />
+              {query && (
+                <button
+                  onClick={() => setQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-muted-foreground hover:bg-muted-foreground/30"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Filter chips — horizontal scroll within screen bounds */}
@@ -850,7 +852,7 @@ function DetailRow({
   const content = (
     <div className="flex items-start gap-2.5 text-sm min-w-0">
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-      <span className={`truncate ${href ? "text-nocturn" : "text-foreground"}`}>{label}</span>
+      <span className={`break-words min-w-0 ${href ? "text-nocturn" : "text-foreground"}`}>{label}</span>
     </div>
   );
 

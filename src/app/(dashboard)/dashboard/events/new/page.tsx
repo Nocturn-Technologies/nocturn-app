@@ -329,8 +329,8 @@ function EventConfirmationCard({
     : "";
 
   return (
-    <div className="ml-11 rounded-2xl border border-[#7B2FF7]/20 bg-zinc-900 overflow-hidden animate-scale-in">
-      <div className="p-4 space-y-3">
+    <div className="ml-11 rounded-2xl border border-[#7B2FF7]/20 bg-zinc-900 overflow-hidden animate-scale-in flex flex-col max-h-[70vh] md:max-h-none">
+      <div className="p-4 space-y-3 overflow-y-auto min-h-0 flex-1">
         {/* Status badge */}
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -439,8 +439,8 @@ function EventConfirmationCard({
         </div>
       )}
 
-      {/* Action buttons */}
-      <div className="flex border-t border-white/5">
+      {/* Action buttons — always visible at bottom */}
+      <div className="flex border-t border-white/5 shrink-0 bg-zinc-900">
         <button
           onClick={onEdit}
           className="flex-1 flex items-center justify-center gap-1.5 h-12 text-sm text-zinc-400 font-medium hover:text-white hover:bg-white/5 active:scale-[0.98] transition-all duration-200 border-r border-white/5"
