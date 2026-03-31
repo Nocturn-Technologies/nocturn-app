@@ -29,6 +29,7 @@ export async function signUpUser(formData: {
   fullName: string;
   userType?: "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
 }) {
+  try {
   // Rate limit: 3 attempts per 5 minutes per email
   const rl = await rateLimitStrict(`signup:${formData.email}`, 3, 5 * 60 * 1000);
   if (!rl.success) {
@@ -134,6 +135,10 @@ export async function signUpUser(formData: {
   }
 
   return { error: null };
+  } catch (err) {
+    console.error("[signUpUser] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 function escapeHtml(str: string): string {
@@ -207,6 +212,7 @@ export async function createCollective(formData: {
   instagram: string | null;
   website: string | null;
 }) {
+  try {
   // Input length validation
   if (formData.name.length > 100) {
     return { error: "Collective name must be 100 characters or fewer." };
@@ -250,8 +256,8 @@ export async function createCollective(formData: {
   if (!existingUser) {
     await admin.from("users").insert({
       id: user.id,
-      email: user.email!,
-      full_name: user.user_metadata?.full_name ?? user.email!.split("@")[0],
+      email: user.email ?? "",
+      full_name: user.user_metadata?.full_name ?? (user.email ? user.email.split("@")[0] : "User"),
     });
   }
 
@@ -288,6 +294,10 @@ export async function createCollective(formData: {
   }
 
   return { error: null };
+  } catch (err) {
+    console.error("[createCollective] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 async function sendApprovalRequestEmail(userId: string, email: string, name: string, userType: string) {

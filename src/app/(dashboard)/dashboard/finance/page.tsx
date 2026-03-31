@@ -138,7 +138,7 @@ export default async function FinancePage() {
   ];
 
   return (
-    <div className="space-y-8 pb-24">
+    <div className="space-y-8 pb-24 overflow-x-hidden">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Money</h1>
@@ -165,7 +165,7 @@ export default async function FinancePage() {
                 </p>
               </div>
               <Link href="/dashboard/events">
-                <Button className="bg-nocturn hover:bg-nocturn-light">
+                <Button className="bg-nocturn hover:bg-nocturn-light min-h-[44px]">
                   Create an Event
                 </Button>
               </Link>
@@ -194,7 +194,7 @@ export default async function FinancePage() {
                   <Link href="/dashboard/events">
                     <Button
                       size="sm"
-                      className="bg-nocturn hover:bg-nocturn-light text-xs"
+                      className="bg-nocturn hover:bg-nocturn-light text-xs min-h-[44px]"
                     >
                       View Events
                     </Button>
@@ -276,7 +276,7 @@ export default async function FinancePage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-xs"
+                            className="text-xs min-h-[44px]"
                           >
                             {alert.cta.label}
                           </Button>
@@ -458,7 +458,7 @@ export default async function FinancePage() {
                 >
                   <Button
                     size="default"
-                    className="bg-nocturn hover:bg-nocturn-light text-sm"
+                    className="bg-nocturn hover:bg-nocturn-light text-sm min-h-[44px]"
                   >
                     Settle
                   </Button>

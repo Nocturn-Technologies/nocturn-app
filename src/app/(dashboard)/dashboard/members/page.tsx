@@ -319,18 +319,18 @@ export default function MembersPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Team & Network</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground truncate">
             Manage your crew, connect with collectives, and grow your network
           </p>
         </div>
         {activeTab === "team" && (
           <Button
-            className="bg-nocturn hover:bg-nocturn-light"
+            className="bg-nocturn hover:bg-nocturn-light min-h-[44px] shrink-0"
             onClick={() => setShowInvite(!showInvite)}
           >
             <UserPlus className="mr-2 h-4 w-4" />
@@ -349,7 +349,7 @@ export default function MembersPage() {
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 min-h-[44px] text-sm font-medium transition-colors ${
               activeTab === key
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -365,13 +365,13 @@ export default function MembersPage() {
       {error && (
         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive flex items-center justify-between">
           {error}
-          <button onClick={() => setError(null)}><X className="h-4 w-4" /></button>
+          <button onClick={() => setError(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"><X className="h-4 w-4" /></button>
         </div>
       )}
       {success && (
         <div className="rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-500 flex items-center justify-between">
           {success}
-          <button onClick={() => setSuccess(null)}><X className="h-4 w-4" /></button>
+          <button onClick={() => setSuccess(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"><X className="h-4 w-4" /></button>
         </div>
       )}
 
@@ -417,7 +417,7 @@ export default function MembersPage() {
                   </div>
                   <Button
                     type="submit"
-                    className="bg-nocturn hover:bg-nocturn-light"
+                    className="bg-nocturn hover:bg-nocturn-light min-h-[44px]"
                     disabled={inviting}
                   >
                     {inviting ? "Sending..." : "Send Invite"}
@@ -457,7 +457,7 @@ export default function MembersPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-muted-foreground hover:text-destructive"
+                        className="text-muted-foreground hover:text-destructive min-h-[44px] min-w-[44px]"
                         onClick={() => handleCancelInvite(invite.id)}
                       >
                         <X className="h-4 w-4" />
@@ -516,7 +516,7 @@ export default function MembersPage() {
                     </div>
                     {!isCurrentUser && (
                       <DropdownMenu>
-                        <DropdownMenuTrigger className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent">
+                        <DropdownMenuTrigger className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-md hover:bg-accent">
                           <MoreVertical className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -614,7 +614,7 @@ export default function MembersPage() {
                       </div>
                       <Button
                         size="sm"
-                        className="bg-nocturn hover:bg-nocturn-light shrink-0"
+                        className="bg-nocturn hover:bg-nocturn-light shrink-0 min-h-[44px]"
                         onClick={() => handleConnect(c.id)}
                         disabled={connectingId === c.id}
                       >
@@ -670,7 +670,7 @@ export default function MembersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="border-nocturn/20"
+                        className="border-nocturn/20 min-h-[44px]"
                         onClick={handleCopyCode}
                       >
                         {copied ? (
@@ -688,7 +688,7 @@ export default function MembersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="border-nocturn/20"
+                        className="border-nocturn/20 min-h-[44px]"
                         onClick={() => {
                           if (!referralCode) return;
                           const url = `https://app.trynocturn.com/signup?ref=${referralCode}`;

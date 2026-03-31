@@ -169,7 +169,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground">
@@ -216,7 +216,7 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-            <Button type="submit" className="bg-nocturn hover:bg-nocturn-light" disabled={saving}>
+            <Button type="submit" className="bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={saving}>
               {saving ? "Saving..." : "Save Profile"}
             </Button>
           </form>
@@ -297,7 +297,7 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-            <Button type="submit" className="bg-nocturn hover:bg-nocturn-light" disabled={saving}>
+            <Button type="submit" className="bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={saving}>
               {saving ? "Saving..." : "Save Collective"}
             </Button>
           </form>

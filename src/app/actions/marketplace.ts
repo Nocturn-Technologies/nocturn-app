@@ -31,6 +31,7 @@ export async function createMarketplaceProfile(data: {
   portfolioUrls?: string[] | null;
   pastVenues?: string[] | null;
 }): Promise<{ error: string | null; slug: string | null }> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -82,6 +83,10 @@ export async function createMarketplaceProfile(data: {
 
   revalidatePath("/dashboard/discover");
   return { error: null, slug };
+  } catch (err) {
+    console.error("[createMarketplaceProfile] Unexpected error:", err);
+    return { error: "Something went wrong", slug: null };
+  }
 }
 
 export async function updateMarketplaceProfile(data: {
@@ -101,6 +106,7 @@ export async function updateMarketplaceProfile(data: {
   avatarUrl?: string | null;
   coverPhotoUrl?: string | null;
 }): Promise<{ error: string | null }> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -138,9 +144,14 @@ export async function updateMarketplaceProfile(data: {
 
   revalidatePath("/dashboard/discover");
   return { error: null };
+  } catch (err) {
+    console.error("[updateMarketplaceProfile] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function getMarketplaceProfile() {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -156,9 +167,14 @@ export async function getMarketplaceProfile() {
     .maybeSingle();
 
   return data ?? null;
+  } catch (err) {
+    console.error("[getMarketplaceProfile] Unexpected error:", err);
+    return null;
+  }
 }
 
 export async function getProfileBySlug(slug: string) {
+  try {
   if (!slug || typeof slug !== "string" || slug.length > 200) return null;
 
   const admin = createAdminClient();
@@ -170,6 +186,10 @@ export async function getProfileBySlug(slug: string) {
     .maybeSingle();
 
   return data ?? null;
+  } catch (err) {
+    console.error("[getProfileBySlug] Unexpected error:", err);
+    return null;
+  }
 }
 
 /** Escape special Postgres LIKE/ILIKE pattern chars and PostgREST filter delimiters */
@@ -233,6 +253,7 @@ export async function searchProfiles(filters: {
 export async function saveProfile(
   profileId: string
 ): Promise<{ error: string | null }> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -292,11 +313,16 @@ export async function saveProfile(
 
   revalidatePath("/dashboard/discover");
   return { error: null };
+  } catch (err) {
+    console.error("[saveProfile] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function unsaveProfile(
   profileId: string
 ): Promise<{ error: string | null }> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -315,9 +341,14 @@ export async function unsaveProfile(
 
   revalidatePath("/dashboard/discover");
   return { error: null };
+  } catch (err) {
+    console.error("[unsaveProfile] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function isProfileSaved(profileId: string): Promise<boolean> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -333,12 +364,17 @@ export async function isProfileSaved(profileId: string): Promise<boolean> {
     .eq("profile_id", profileId);
 
   return (count ?? 0) > 0;
+  } catch (err) {
+    console.error("[isProfileSaved] Unexpected error:", err);
+    return false;
+  }
 }
 
 export async function getSavedProfiles(): Promise<{
   profiles: Record<string, unknown>[];
   savedIds: string[];
 }> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -370,6 +406,10 @@ export async function getSavedProfiles(): Promise<{
   const savedIds = rows.map((r) => r.profile_id);
 
   return { profiles, savedIds };
+  } catch (err) {
+    console.error("[getSavedProfiles] Unexpected error:", err);
+    return { profiles: [], savedIds: [] };
+  }
 }
 
 /**
@@ -467,6 +507,7 @@ export async function sendInquiry(data: {
   message: string;
   inquiryType?: string;
 }): Promise<{ error: string | null }> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -569,4 +610,8 @@ export async function sendInquiry(data: {
 
   revalidatePath("/dashboard/discover");
   return { error: null };
+  } catch (err) {
+    console.error("[sendInquiry] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }

@@ -90,9 +90,10 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
 
   const ownership = await verifyOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error, data: null };
+  if (!ownership.event) return { error: "Event not found.", data: null };
 
   const admin = createAdminClient();
-  const event = ownership.event!;
+  const event = ownership.event;
 
   // Parallel queries
   const [tiersRes, ticketsRes, expensesRes, artistsRes] = await Promise.all([

@@ -40,6 +40,7 @@ export async function inviteMember(
   email: string,
   role: string = "member"
 ) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -159,9 +160,14 @@ export async function inviteMember(
   sendInvitationEmail(collectiveId, email.toLowerCase().trim(), role, user.id);
 
   return { error: null, status: "invited" as const };
+  } catch (err) {
+    console.error("[inviteMember] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function getTeamMembers() {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -226,9 +232,14 @@ export async function getTeamMembers() {
     collectiveId,
     members,
   };
+  } catch (err) {
+    console.error("[getTeamMembers] Unexpected error:", err);
+    return { error: "Something went wrong", userId: null, collectiveId: null, members: [] };
+  }
 }
 
 export async function getPendingInvitations(collectiveId: string) {
+  try {
   // Auth check: only collective members can view invitations
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -259,9 +270,14 @@ export async function getPendingInvitations(collectiveId: string) {
   }
 
   return { error: null, data };
+  } catch (err) {
+    console.error("[getPendingInvitations] Unexpected error:", err);
+    return { error: "Something went wrong", data: null };
+  }
 }
 
 export async function cancelInvitation(invitationId: string) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -301,9 +317,14 @@ export async function cancelInvitation(invitationId: string) {
   }
 
   return { error: null };
+  } catch (err) {
+    console.error("[cancelInvitation] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function acceptInvitation(token: string) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -371,9 +392,9 @@ export async function acceptInvitation(token: string) {
   if (!existingUserRecord) {
     await admin.from("users").insert({
       id: user.id,
-      email: user.email!,
+      email: user.email ?? "",
       full_name:
-        user.user_metadata?.full_name ?? user.email!.split("@")[0],
+        user.user_metadata?.full_name ?? (user.email ? user.email.split("@")[0] : "User"),
     });
   }
 
@@ -397,4 +418,8 @@ export async function acceptInvitation(token: string) {
     .eq("id", invitation.id);
 
   return { error: null, alreadyMember: false };
+  } catch (err) {
+    console.error("[acceptInvitation] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }

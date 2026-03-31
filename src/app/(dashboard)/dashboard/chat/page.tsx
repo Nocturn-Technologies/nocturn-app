@@ -144,7 +144,7 @@ function ChannelRow({
   return (
     <Link
       href={`/dashboard/chat/${ch.id}`}
-      className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 border-b border-white/[0.04] last:border-b-0"
+      className="flex items-center gap-3 px-4 py-3 min-h-[48px] hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 border-b border-white/[0.04] last:border-b-0"
     >
       {/* Avatar */}
       {icon ?? <Avatar name={ch.name} />}
@@ -503,7 +503,7 @@ export default function ChatPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-2xl mx-auto pb-24 md:pb-0 animate-in fade-in duration-300">
+    <div className="max-w-2xl mx-auto pb-24 md:pb-0 animate-in fade-in duration-300 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
@@ -520,7 +520,7 @@ export default function ChatPage() {
             setInviteSent(false);
           }}
           size="sm"
-          className="bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full h-9 px-4 text-sm font-semibold transition-all duration-200"
+          className="bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full min-h-[44px] h-11 px-4 text-sm font-semibold transition-all duration-200"
         >
           <Plus className="h-4 w-4 mr-1" />
           New Chat
@@ -539,7 +539,7 @@ export default function ChatPage() {
         {searchQuery && (
           <button
             onClick={() => setSearchQuery("")}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground active:scale-90 transition-all duration-200"
+            className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-foreground active:scale-90 transition-all duration-200 min-h-[44px] min-w-[44px] flex items-center justify-center"
           >
             <X className="h-4 w-4" />
           </button>
@@ -581,7 +581,7 @@ export default function ChatPage() {
           </p>
           <Button
             onClick={() => setSheetOpen(true)}
-            className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 transition-all duration-200"
+            className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 min-h-[44px] transition-all duration-200"
           >
             <Plus className="h-4 w-4 mr-1.5" />
             New Chat
@@ -700,7 +700,7 @@ export default function ChatPage() {
                     key={c.id}
                     onClick={() => handleStartCollab(c.id)}
                     disabled={startingCollab === c.id}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 text-left"
+                    className="w-full flex items-center gap-3 p-3 min-h-[48px] rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 text-left"
                   >
                     <Avatar name={c.name} size="sm" />
                     <div className="flex-1 min-w-0">

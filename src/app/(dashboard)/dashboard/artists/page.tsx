@@ -149,23 +149,23 @@ export default function ArtistsPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="space-y-6 overflow-x-hidden">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">Artist Library</h1>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground truncate">
             Shared directory of DJs, producers, and performers across Nocturn
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 shrink-0">
           <Link href="/dashboard/artists/analytics">
-            <Button variant="outline" className="border-nocturn/20 text-nocturn hover:bg-nocturn/10">
+            <Button variant="outline" className="border-nocturn/20 text-nocturn hover:bg-nocturn/10 min-h-[44px]">
               <BarChart3 className="mr-2 h-4 w-4" />
               Performance
             </Button>
           </Link>
           <Button
-            className="bg-nocturn hover:bg-nocturn-light"
+            className="bg-nocturn hover:bg-nocturn-light min-h-[44px]"
             onClick={() => setShowAdd(!showAdd)}
           >
             <Plus className="mr-2 h-4 w-4" />
@@ -283,10 +283,10 @@ export default function ArtistsPage() {
                 />
               </div>
               <div className="flex gap-2">
-                <Button type="submit" className="bg-nocturn hover:bg-nocturn-light" disabled={saving}>
+                <Button type="submit" className="bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={saving}>
                   {saving ? "Adding..." : "Add Artist"}
                 </Button>
-                <Button type="button" variant="ghost" onClick={() => setShowAdd(false)}>
+                <Button type="button" variant="ghost" onClick={() => setShowAdd(false)} className="min-h-[44px]">
                   Cancel
                 </Button>
               </div>
@@ -354,7 +354,7 @@ export default function ArtistsPage() {
                         </span>
                       ))}
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
                       {loc && (
                         <span className="flex items-center gap-1">
                           <MapPin className="h-3 w-3" />

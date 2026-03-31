@@ -187,7 +187,7 @@ export default function OnboardingPage() {
                 <Button
                   onClick={() => setStep("vibe")}
                   disabled={!name.trim() || !city.trim()}
-                  className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base"
+                  className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base min-h-[48px]"
                 >
                   Continue
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -201,7 +201,7 @@ export default function OnboardingPage() {
             <div className="space-y-6">
               <button
                 onClick={() => setStep("name_city")}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors"
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors min-h-[44px]"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Back
@@ -229,7 +229,7 @@ export default function OnboardingPage() {
             <div className="space-y-6">
               <button
                 onClick={() => setStep("vibe")}
-                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors"
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors min-h-[44px]"
               >
                 <ArrowLeft className="h-3.5 w-3.5" />
                 Back
@@ -256,7 +256,7 @@ export default function OnboardingPage() {
 
               <button
                 onClick={handleSkipEvent}
-                className="w-full text-center text-sm text-muted-foreground hover:text-white transition-colors"
+                className="w-full text-center text-sm text-muted-foreground hover:text-white transition-colors min-h-[44px]"
               >
                 I&apos;ll do this later
               </button>

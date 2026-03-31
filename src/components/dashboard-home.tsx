@@ -238,14 +238,14 @@ export function DashboardHome(props: DashboardHomeProps) {
   const ambience = getAmbienceColor();
 
   return (
-    <div className="space-y-6 gradient-mesh relative">
+    <div className="space-y-6 gradient-mesh relative overflow-x-hidden">
       {/* Time-of-day ambient glow */}
-      <div className="absolute -top-20 -left-20 w-[400px] h-[400px] rounded-full blur-[120px] pointer-events-none" style={{ background: ambience.glow }} />
+      <div className="absolute -top-20 -left-20 w-[400px] h-[400px] rounded-full blur-[120px] pointer-events-none overflow-hidden" style={{ background: ambience.glow }} />
 
       {/* ── Greeting — large, editorial ── */}
       <div className="animate-fade-in-up relative z-10">
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight truncate">
+        <div className="flex items-center gap-3 min-w-0">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-tight truncate min-w-0">
             {greeting}, {props.firstName}
           </h1>
           <Sparkles className="h-6 w-6 shrink-0 text-nocturn-glow animate-text-glow" />
@@ -405,7 +405,7 @@ export function DashboardHome(props: DashboardHomeProps) {
                 <p className="text-xs text-muted-foreground mt-1 max-w-[240px]">
                   Create and publish an event to start tracking revenue and expenses.
                 </p>
-                <Button variant="outline" size="sm" className="mt-4 rounded-full border-nocturn/20 text-nocturn-light hover:bg-nocturn/10 hover:border-nocturn/30 transition-all duration-200">
+                <Button variant="outline" size="sm" className="mt-4 rounded-full border-nocturn/20 text-nocturn-light hover:bg-nocturn/10 hover:border-nocturn/30 transition-all duration-200 min-h-[44px]">
                   <Plus className="h-3.5 w-3.5 mr-1.5" />
                   Create Event
                 </Button>
@@ -415,7 +415,7 @@ export function DashboardHome(props: DashboardHomeProps) {
         )}
 
         {/* Stats column — stacked */}
-        <div className="grid grid-cols-3 md:grid-cols-1 gap-4">
+        <div className="grid grid-cols-3 min-[375px]:grid-cols-3 md:grid-cols-1 gap-4">
           <Card className="rounded-2xl transition-all duration-300 hover:ring-nocturn/20 hover:shadow-md hover:shadow-nocturn/5 active:scale-[0.98]">
             <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn/5">
@@ -491,7 +491,7 @@ export function DashboardHome(props: DashboardHomeProps) {
             <Link
               key={i}
               href={insight.href}
-              className="flex items-start gap-2 group rounded-lg px-2 py-1.5 -mx-2 transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06]"
+              className="flex items-start gap-2 group rounded-lg px-2 py-2.5 -mx-2 min-h-[44px] transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06]"
             >
               <ArrowRight className="h-3.5 w-3.5 shrink-0 mt-0.5 text-nocturn opacity-50 group-hover:opacity-100 transition-opacity duration-200" />
               <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-200 line-clamp-2">

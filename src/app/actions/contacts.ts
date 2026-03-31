@@ -184,7 +184,7 @@ export async function getContacts(
   segmentCounts: Record<string, number>;
 }> {
   const empty = { error: null as string | null, contacts: [] as Contact[], totalCount: 0, segmentCounts: {} };
-
+  try {
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { ...empty, error: auth.error };
 
@@ -310,6 +310,10 @@ export async function getContacts(
     totalCount: totalCount ?? 0,
     segmentCounts: {},
   };
+  } catch (err) {
+    console.error("[getContacts] Unexpected error:", err);
+    return { ...empty, error: "Something went wrong" };
+  }
 }
 
 // ── 2. getContactDetail ───────────────────────────────────────────────────────
@@ -317,6 +321,7 @@ export async function getContacts(
 export async function getContactDetail(
   contactId: string
 ): Promise<{ error: string | null; detail: ContactDetail | null }> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -431,6 +436,10 @@ export async function getContactDetail(
   );
 
   return { error: null, detail: { contact, timeline } };
+  } catch (err) {
+    console.error("[getContactDetail] Unexpected error:", err);
+    return { error: "Something went wrong", detail: null };
+  }
 }
 
 // ── 3. importContacts ─────────────────────────────────────────────────────────
@@ -445,6 +454,7 @@ export async function importContacts(
     role?: string;
   }
 ): Promise<{ error: string | null; result: ImportResult | null }> {
+  try {
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { error: auth.error, result: null };
 
@@ -584,6 +594,10 @@ export async function importContacts(
   }
 
   return { error: null, result };
+  } catch (err) {
+    console.error("[importContacts] Unexpected error:", err);
+    return { error: "Something went wrong", result: null };
+  }
 }
 
 // ── 4. addContact ─────────────────────────────────────────────────────────────
@@ -601,6 +615,7 @@ export async function addContact(
     notes?: string;
   }
 ): Promise<{ error: string | null; contact: Contact | null }> {
+  try {
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { error: auth.error, contact: null };
 

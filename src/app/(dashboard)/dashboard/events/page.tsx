@@ -68,7 +68,7 @@ export default async function EventsPage() {
   const cancelled = events.filter((e) => e.status === "cancelled");
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-300">
+    <div className="space-y-6 animate-in fade-in duration-300 overflow-x-hidden">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold">Events</h1>
@@ -77,7 +77,7 @@ export default async function EventsPage() {
           </p>
         </div>
         <Link href="/dashboard/events/new" className="shrink-0">
-          <Button className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200">
+          <Button className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200 min-h-[44px] min-w-[44px]">
             <Plus className="mr-2 h-4 w-4" />
             New Event
           </Button>
@@ -97,7 +97,7 @@ export default async function EventsPage() {
               </p>
             </div>
             <Link href="/dashboard/events/new">
-              <Button className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200 mt-2">
+              <Button className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200 mt-2 min-h-[44px]">
                 <Plus className="mr-2 h-4 w-4" />
                 Create Your First Event
               </Button>

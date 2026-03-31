@@ -32,7 +32,7 @@ export async function sendEmail({
 
   const resend = getResend();
   if (!resend) {
-    console.log(`[email] Dev mode — skipped sending: ${subject}`);
+    console.info(`[email] Dev mode — skipped sending: ${subject}`);
     return { error: null, messageId: "dev-mode" };
   }
 

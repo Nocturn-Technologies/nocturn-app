@@ -225,7 +225,7 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardFooter className="justify-center">
-          <Button variant="ghost" onClick={() => setResetSent(false)}>
+          <Button variant="ghost" onClick={() => setResetSent(false)} className="min-h-[44px]">
             Back to login
           </Button>
         </CardFooter>
@@ -243,7 +243,7 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardFooter className="justify-center">
-          <Button variant="ghost" onClick={() => setMagicLinkSent(false)}>
+          <Button variant="ghost" onClick={() => setMagicLinkSent(false)} className="min-h-[44px]">
             Back to login
           </Button>
         </CardFooter>
@@ -277,7 +277,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={handleResetPassword}
-                className="text-xs text-nocturn hover:underline"
+                className="text-xs text-nocturn hover:underline min-h-[44px] flex items-center"
               >
                 Forgot password?
               </button>
@@ -296,7 +296,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                className="absolute right-1 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground min-h-[44px] min-w-[44px] flex items-center justify-center"
                 tabIndex={-1}
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -311,7 +311,7 @@ export default function LoginPage() {
           {error && !isLockedOut && (
             <p className="text-sm text-destructive">{error}</p>
           )}
-          <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light" disabled={loading || isLockedOut}>
+          <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={loading || isLockedOut}>
             {isLockedOut
               ? `Locked (${lockoutSeconds}s)`
               : loading
@@ -328,7 +328,7 @@ export default function LoginPage() {
 
         <Button
           variant="outline"
-          className="w-full"
+          className="w-full min-h-[44px]"
           onClick={handleMagicLink}
           disabled={loading}
         >

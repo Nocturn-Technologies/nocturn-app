@@ -20,6 +20,7 @@ interface EventItem {
 export function SwipeableEventList({ events }: { events: EventItem[] }) {
   const router = useRouter();
   const [archiveConfirm, setArchiveConfirm] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   async function handlePublish(eventId: string) {
     haptic("medium");
@@ -70,13 +71,20 @@ export function SwipeableEventList({ events }: { events: EventItem[] }) {
               </button>
               <button
                 onClick={async () => {
-                  await cancelEvent(archiveConfirm);
-                  setArchiveConfirm(null);
-                  router.refresh();
+                  if (archiving) return;
+                  setArchiving(true);
+                  try {
+                    await cancelEvent(archiveConfirm);
+                    setArchiveConfirm(null);
+                    router.refresh();
+                  } finally {
+                    setArchiving(false);
+                  }
                 }}
-                className="flex-1 rounded-xl bg-red-500/15 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/25 active:scale-95 transition-all duration-200"
+                disabled={archiving}
+                className={`flex-1 rounded-xl bg-red-500/15 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/25 active:scale-95 transition-all duration-200 ${archiving ? "opacity-50" : ""}`}
               >
-                Archive
+                {archiving ? "Archiving..." : "Archive"}
               </button>
             </div>
           </div>

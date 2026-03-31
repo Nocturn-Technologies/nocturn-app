@@ -175,7 +175,7 @@ export default function SignupPage() {
                   setUserType(type);
                   setStep("form");
                 }}
-                className={`w-full flex items-center gap-4 rounded-xl border p-4 text-left transition-all hover:border-nocturn/50 hover:bg-nocturn/5 active:scale-[0.98] ${
+                className={`w-full flex items-center gap-4 rounded-xl border p-4 text-left transition-all hover:border-nocturn/50 hover:bg-nocturn/5 active:scale-[0.98] min-h-[56px] ${
                   userType === type ? "border-nocturn bg-nocturn/10" : "border-border"
                 }`}
               >
@@ -239,7 +239,7 @@ export default function SignupPage() {
       <CardHeader>
         <button
           onClick={() => setStep("type")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors mb-2"
+          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors mb-2 min-h-[44px]"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Change type
@@ -306,7 +306,7 @@ export default function SignupPage() {
           {error && (
             <p className="text-sm text-destructive">{error}</p>
           )}
-          <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light" disabled={loading}>
+          <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={loading}>
             {loading ? "Creating account..." : "Create account"}
           </Button>
         </form>

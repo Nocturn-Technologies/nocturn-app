@@ -12,6 +12,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"
  * The QR encodes the check-in URL: {APP_URL}/check-in/{ticket_token}
  */
 export async function generateTicketQRCode(ticketToken: string) {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", qrCode: null };
@@ -75,6 +76,10 @@ export async function generateTicketQRCode(ticketToken: string) {
   }
 
   return { error: null, qrCode: qrDataUrl };
+  } catch (err) {
+    console.error("[generateTicketQRCode] Unexpected error:", err);
+    return { error: "Something went wrong", qrCode: null };
+  }
 }
 
 /**
@@ -102,6 +107,7 @@ export async function generateQRCodesForTokens(tokens: string[]) {
  * If not authenticated, returns limited public data (for check-in page / ticket view).
  */
 export async function getTicketByToken(ticketToken: string) {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -175,12 +181,17 @@ export async function getTicketByToken(ticketToken: string) {
   // For unauthenticated users, the ticket token itself is the proof of access
   // (only the buyer has the token from their email/success page)
   return { error: null, ticket };
+  } catch (err) {
+    console.error("[getTicketByToken] Unexpected error:", err);
+    return { error: "Something went wrong", ticket: null };
+  }
 }
 
 /**
  * Look up tickets by Stripe checkout session ID.
  */
 export async function getTicketsBySessionId(sessionOrPaymentId: string) {
+  try {
   // This is called from the public success page — buyer may not be logged in.
   // The session/payment ID itself acts as proof of purchase (only the buyer has it).
   if (!sessionOrPaymentId || sessionOrPaymentId.length < 10 || sessionOrPaymentId.length > 255) {
@@ -224,6 +235,10 @@ export async function getTicketsBySessionId(sessionOrPaymentId: string) {
   }
 
   return { error: null, tickets: [] };
+  } catch (err) {
+    console.error("[getTicketsBySessionId] Unexpected error:", err);
+    return { error: "Something went wrong", tickets: null };
+  }
 }
 
 /**
@@ -318,6 +333,7 @@ async function sendConfirmationEmail(params: {
  * so a client can't forge a request.
  */
 export async function fulfillPaymentIntent(paymentIntentId: string) {
+  try {
   if (!paymentIntentId || !paymentIntentId.startsWith("pi_")) {
     return { error: "Invalid payment intent ID", tickets: null };
   }
@@ -610,4 +626,8 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
       created_at: new Date().toISOString(),
     })),
   };
+  } catch (err) {
+    console.error("[fulfillPaymentIntent] Unexpected error:", err);
+    return { error: "Something went wrong", tickets: null };
+  }
 }

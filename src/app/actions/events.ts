@@ -51,6 +51,7 @@ interface UpdateEventInput {
 }
 
 export async function createEvent(input: CreateEventInput) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -253,9 +254,14 @@ export async function createEvent(input: CreateEventInput) {
   ).catch(() => {});
 
   revalidatePath("/dashboard/events"); return { error: null, eventId: event.id };
+  } catch (err) {
+    console.error("[createEvent] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function updateEvent(eventId: string, input: UpdateEventInput) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -271,8 +277,9 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
 
   const ownership = await verifyEventOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error };
+  if (!ownership.event) return { error: "Event not found." };
 
-  if (ownership.event!.status !== "draft") {
+  if (ownership.event.status !== "draft") {
     return { error: "Only draft events can be edited." };
   }
 
@@ -434,6 +441,10 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
   revalidatePath("/dashboard/events");
 
   return { error: null };
+  } catch (err) {
+    console.error("[updateEvent] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 async function verifyEventOwnership(userId: string, eventId: string) {
@@ -471,6 +482,7 @@ async function verifyEventOwnership(userId: string, eventId: string) {
 }
 
 export async function publishEvent(eventId: string) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -480,9 +492,10 @@ export async function publishEvent(eventId: string) {
 
   const ownership = await verifyEventOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error };
+  if (!ownership.event) return { error: "Event not found." };
 
-  if (ownership.event!.status !== "draft") {
-    return { error: `Cannot publish an event with status "${ownership.event!.status}". Only draft events can be published.` };
+  if (ownership.event.status !== "draft") {
+    return { error: `Cannot publish an event with status "${ownership.event.status}". Only draft events can be published.` };
   }
 
   const admin = createAdminClient();
@@ -512,9 +525,14 @@ export async function publishEvent(eventId: string) {
   ).catch(() => {});
 
   return { error: null };
+  } catch (err) {
+    console.error("[publishEvent] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function cancelEvent(eventId: string) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -524,8 +542,9 @@ export async function cancelEvent(eventId: string) {
 
   const ownership = await verifyEventOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error };
+  if (!ownership.event) return { error: "Event not found." };
 
-  const status = ownership.event!.status;
+  const status = ownership.event.status;
   if (status === "cancelled") {
     return { error: "Event is already cancelled." };
   }
@@ -642,9 +661,14 @@ export async function cancelEvent(eventId: string) {
   }
 
   return { error: null };
+  } catch (err) {
+    console.error("[cancelEvent] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function completeEvent(eventId: string) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -654,8 +678,9 @@ export async function completeEvent(eventId: string) {
 
   const ownership = await verifyEventOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error };
+  if (!ownership.event) return { error: "Event not found." };
 
-  const status = ownership.event!.status;
+  const status = ownership.event.status;
   if (status !== "published" && status !== "upcoming") {
     return { error: `Cannot complete an event with status "${status}". Only published or upcoming events can be completed.` };
   }
@@ -680,6 +705,10 @@ export async function completeEvent(eventId: string) {
   }
 
   return { error: null };
+  } catch (err) {
+    console.error("[completeEvent] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 interface EventDesignInput {
@@ -693,6 +722,7 @@ interface EventDesignInput {
 }
 
 export async function updateEventDesign(eventId: string, input: EventDesignInput) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -750,9 +780,14 @@ export async function updateEventDesign(eventId: string, input: EventDesignInput
 
   if (error) return { error: `Failed to update design: ${error.message}` };
   return { error: null };
+  } catch (err) {
+    console.error("[updateEventDesign] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function getEventDesign(eventId: string) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -818,4 +853,8 @@ export async function getEventDesign(eventId: string) {
       doorsDisplay,
     },
   };
+  } catch (err) {
+    console.error("[getEventDesign] Unexpected error:", err);
+    return { error: "Something went wrong", event: null };
+  }
 }

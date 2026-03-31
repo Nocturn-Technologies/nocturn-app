@@ -49,6 +49,7 @@ export default function SettlementDetailPage() {
   const [addingExpense, setAddingExpense] = useState(false);
   const [payingOut, setPayingOut] = useState(false);
   const [reportCopied, setReportCopied] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -363,12 +364,19 @@ export default function SettlementDetailPage() {
             <Button
               variant="outline"
               className="w-full"
+              disabled={generatingReport}
               onClick={async () => {
-                const result = await generateSettlementReport(settlement.id as string);
-                if (result.report) {
-                  await navigator.clipboard.writeText(`Subject: ${result.report.subject}\n\n${result.report.body}`);
-                  setReportCopied(true);
-                  setTimeout(() => setReportCopied(false), 3000);
+                if (generatingReport) return;
+                setGeneratingReport(true);
+                try {
+                  const result = await generateSettlementReport(settlement.id as string);
+                  if (result.report) {
+                    await navigator.clipboard.writeText(`Subject: ${result.report.subject}\n\n${result.report.body}`);
+                    setReportCopied(true);
+                    setTimeout(() => setReportCopied(false), 3000);
+                  }
+                } finally {
+                  setGeneratingReport(false);
                 }
               }}
             >

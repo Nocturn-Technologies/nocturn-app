@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/config";
 
 // Generate a settlement for a completed event
 export async function generateSettlement(eventId: string) {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -205,10 +206,15 @@ export async function generateSettlement(eventId: string) {
   ).catch(() => {});
 
   revalidatePath("/dashboard/finance"); return { error: null, settlementId: settlement.id };
+  } catch (err) {
+    console.error("[generateSettlement] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 // Approve a settlement
 export async function approveSettlement(settlementId: string) {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -252,10 +258,15 @@ export async function approveSettlement(settlementId: string) {
   }
 
   revalidatePath("/dashboard/finance"); return { error: null };
+  } catch (err) {
+    console.error("[approveSettlement] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 // Get settlement for an event
 export async function getSettlement(eventId: string) {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", settlement: null, lines: [] };
@@ -296,6 +307,10 @@ export async function getSettlement(eventId: string) {
     .order("created_at");
 
   return { settlement, lines: lines ?? [] };
+  } catch (err) {
+    console.error("[getSettlement] Unexpected error:", err);
+    return { error: "Something went wrong", settlement: null, lines: [] };
+  }
 }
 
 // Add an expense to an event
@@ -305,6 +320,7 @@ export async function addEventExpense(input: {
   description: string;
   amount: number;
 }) {
+  try {
   // Input validation
   const VALID_EXPENSE_CATEGORIES = ["supply", "venue", "artist", "travel", "marketing", "production", "staff", "other"];
   if (!input.eventId || typeof input.eventId !== "string") return { error: "Invalid event ID" };
@@ -348,10 +364,15 @@ export async function addEventExpense(input: {
 
   if (error) return { error: error.message };
   revalidatePath("/dashboard/finance"); return { error: null };
+  } catch (err) {
+    console.error("[addEventExpense] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 // Get expenses for an event
 export async function getEventExpenses(eventId: string) {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
@@ -384,4 +405,8 @@ export async function getEventExpenses(eventId: string) {
     .order("created_at", { ascending: false });
 
   return data ?? [];
+  } catch (err) {
+    console.error("[getEventExpenses] Unexpected error:", err);
+    return [];
+  }
 }

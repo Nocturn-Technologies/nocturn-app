@@ -27,7 +27,7 @@ interface EventCardData {
   ticket_pricing: {
     tier?: string;
     price?: number;
-    quantity?: number;
+    capacity?: number;
   }[] | null;
   action_items: {
     task: string;
@@ -173,7 +173,7 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
                           {t.tier ?? "General"}
                         </span>
                         <span className="text-nocturn">
-                          ${t.price ?? 0} x {t.quantity ?? 0}
+                          ${t.price ?? 0} x {t.capacity ?? 0}
                         </span>
                       </div>
                     ))}

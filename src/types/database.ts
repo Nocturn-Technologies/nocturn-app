@@ -52,13 +52,12 @@ export interface Event {
   title: string;
   slug: string;
   description: string | null;
-  date: string;
-  doors_open: string;
-  start_time: string;
-  end_time: string | null;
+  starts_at: string;
+  ends_at: string | null;
+  doors_at: string | null;
   capacity: number;
   status: "draft" | "published" | "cancelled" | "completed";
-  cover_image_url: string | null;
+  flyer_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -68,7 +67,7 @@ export interface TicketTier {
   event_id: string;
   name: string;
   price: number;
-  quantity: number;
+  capacity: number;
   sold: number;
   sort_order: number;
 }

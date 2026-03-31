@@ -22,6 +22,7 @@ export async function createArtist(formData: {
   defaultFee: number | null;
   location?: string | null;
 }) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -50,6 +51,10 @@ export async function createArtist(formData: {
 
   if (error) return { error: (error as { message: string }).message, artist: null };
   return { error: null, artist: artist as { id: string; name: string; slug: string } };
+  } catch (err) {
+    console.error("[createArtist] Unexpected error:", err);
+    return { error: "Something went wrong", artist: null };
+  }
 }
 
 export async function addArtistToEvent(formData: {
@@ -60,6 +65,7 @@ export async function addArtistToEvent(formData: {
   setDuration: number | null;
   notes: string | null;
 }) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -126,12 +132,17 @@ export async function addArtistToEvent(formData: {
   }
 
   return { error: null };
+  } catch (err) {
+    console.error("[addArtistToEvent] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function updateBookingStatus(formData: {
   eventArtistId: string;
   status: "pending" | "confirmed" | "declined" | "cancelled";
 }) {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -170,4 +181,8 @@ export async function updateBookingStatus(formData: {
 
   if (error) return { error: (error as { message: string }).message };
   return { error: null };
+  } catch (err) {
+    console.error("[updateBookingStatus] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }

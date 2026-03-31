@@ -36,7 +36,7 @@ export function CollapsibleEventSection({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 -mx-2 group cursor-pointer hover:bg-accent/50 active:scale-[0.98] transition-all duration-200"
+        className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 -mx-2 min-h-[44px] group cursor-pointer hover:bg-accent/50 active:scale-[0.98] transition-all duration-200"
       >
         <div className={`h-2 w-2 rounded-full ${dotColor}`} />
         <h2
