@@ -15,8 +15,8 @@ export default function MarketingPage() {
 
       {/* Agent hero card */}
       <Card className="overflow-hidden border-nocturn/20">
-        <div className="relative bg-gradient-to-br from-nocturn/20 via-nocturn/10 to-transparent p-6">
-          <div className="flex items-start gap-4">
+        <div className="relative bg-gradient-to-br from-nocturn/20 via-nocturn/10 to-transparent p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row items-start gap-3 sm:gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-nocturn/20">
               <Sparkles className="h-6 w-6 text-nocturn" />
             </div>

@@ -309,7 +309,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
             <NocturnLogo size="sm" />
           </Link>
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center">
+            <DropdownMenuTrigger className="flex items-center min-h-[44px] min-w-[44px] justify-center">
               <div className="relative">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-gradient-to-br from-nocturn to-nocturn-light text-xs text-white">

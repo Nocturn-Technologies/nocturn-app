@@ -239,7 +239,7 @@ export default function DiscoverPage() {
       <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5 mx-4 md:mx-0 w-fit">
         <button
           onClick={() => setActiveTab("discover")}
-          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
             activeTab === "discover"
               ? "bg-nocturn text-white shadow-sm"
               : "text-muted-foreground hover:text-foreground"
@@ -250,7 +250,7 @@ export default function DiscoverPage() {
         </button>
         <button
           onClick={() => setActiveTab("network")}
-          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all min-h-[44px] ${
             activeTab === "network"
               ? "bg-nocturn text-white shadow-sm"
               : "text-muted-foreground hover:text-foreground"
@@ -272,7 +272,7 @@ export default function DiscoverPage() {
                   haptic("light");
                   setCategory(tab.value);
                 }}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[44px] ${
                   category === tab.value
                     ? "bg-nocturn text-white"
                     : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -298,7 +298,7 @@ export default function DiscoverPage() {
               className="w-full pl-10"
             />
           </div>
-          <div className="w-32 md:w-40">
+          <div className="w-28 sm:w-32 md:w-40">
             <Input
               type="text"
               value={cityFilter}

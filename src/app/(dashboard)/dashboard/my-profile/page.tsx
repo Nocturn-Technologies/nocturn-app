@@ -267,7 +267,7 @@ export default function MyProfilePage() {
 
       {/* ── Basic Info ── */}
       <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Display name</Label>
             <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name" />
@@ -421,7 +421,7 @@ export default function MyProfilePage() {
       </div>
 
       {/* ── Rate & Availability ── */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Rate range</Label>
           <Input

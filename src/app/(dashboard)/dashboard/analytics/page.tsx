@@ -119,7 +119,7 @@ export default async function AnalyticsPage() {
   const maxDaily = Math.max(...Object.values(dailyVolume), 1);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-bold font-heading">Analytics</h1>
         <p className="text-sm text-muted-foreground">
@@ -158,7 +158,7 @@ export default async function AnalyticsPage() {
       </div>
 
       {/* Secondary KPIs */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <MiniKPI label="Total Users" value={fmt(totalUsers ?? 0)} sub={`+${newUsers30d ?? 0} this month`} />
         <MiniKPI label="Events Created" value={fmt(totalEvents ?? 0)} sub={`${publishedEvents ?? 0} live`} />
         <MiniKPI label="Completed Events" value={fmt(completedEvents ?? 0)} />
@@ -278,7 +278,7 @@ function KPICard({ label, value, sub, growth, icon }: {
           <span className="text-xs text-muted-foreground font-medium">{label}</span>
           <span className="text-muted-foreground">{icon}</span>
         </div>
-        <p className="text-xl font-bold">{value}</p>
+        <p className="text-xl font-bold truncate">{value}</p>
         <div className="flex items-center gap-1 mt-0.5">
           {growth !== undefined && growth !== 0 && (
             <span className={`text-xs flex items-center gap-0.5 ${growth > 0 ? "text-green-500" : "text-red-400"}`}>

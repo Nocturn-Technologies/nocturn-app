@@ -260,7 +260,7 @@ export default function VenuesPage() {
           <div className="flex gap-2">
             <Button
               size="sm"
-              className="bg-nocturn hover:bg-nocturn-light text-white"
+              className="bg-nocturn hover:bg-nocturn-light text-white min-h-[44px]"
               onClick={() =>
                 setScoutingVenue({ placeId: nearbyVenue.place_id, name: nearbyVenue.name })
               }
@@ -271,6 +271,7 @@ export default function VenuesPage() {
             <Button
               size="sm"
               variant="outline"
+              className="min-h-[44px]"
               onClick={() => {
                 const sv = nearbyVenue;
                 openDetail({
@@ -331,7 +332,7 @@ export default function VenuesPage() {
               {query && (
                 <button
                   onClick={() => setQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20 text-muted-foreground hover:bg-muted-foreground/30"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-muted-foreground hover:bg-muted-foreground/30"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -346,7 +347,7 @@ export default function VenuesPage() {
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+                  className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors min-h-[44px] ${
                     filter === f
                       ? "bg-nocturn text-white"
                       : "bg-muted text-muted-foreground hover:text-foreground"
@@ -588,7 +589,7 @@ function VenueDetailContent({
           <Button
             onClick={() => (isSaved ? onRemove() : onSave())}
             disabled={isSaving}
-            className={`flex-1 ${
+            className={`flex-1 min-h-[44px] ${
               isSaved
                 ? "bg-destructive/15 text-destructive hover:bg-destructive/25"
                 : "bg-nocturn hover:bg-nocturn-light text-white"
@@ -609,7 +610,7 @@ function VenueDetailContent({
               </>
             )}
           </Button>
-          <Button variant="secondary" onClick={onDirections}>
+          <Button variant="secondary" className="min-h-[44px]" onClick={onDirections}>
             <Navigation className="mr-2 h-4 w-4" />
             Directions
           </Button>
@@ -633,7 +634,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all ${
+      className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all min-h-[44px] ${
         active
           ? "bg-background text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground"
@@ -791,7 +792,7 @@ function SavedVenueCard({
               e.stopPropagation();
               onScout();
             }}
-            className="shrink-0 text-nocturn hover:bg-nocturn/10 hover:text-nocturn"
+            className="shrink-0 text-nocturn hover:bg-nocturn/10 hover:text-nocturn min-h-[44px] min-w-[44px]"
             title="Scout this venue"
           >
             <ClipboardList className="h-4 w-4" />
@@ -807,7 +808,7 @@ function SavedVenueCard({
             onRemove();
           }}
           disabled={isSaving}
-          className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive min-h-[44px] min-w-[44px]"
         >
           <Trash2 className="h-4 w-4" />
         </Button>
@@ -829,7 +830,7 @@ function HeartButton({
     <button
       onClick={onClick}
       disabled={loading}
-      className={`flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition-all ${
+      className={`flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full backdrop-blur-sm transition-all ${
         filled
           ? "bg-red-500/30 text-red-400"
           : "bg-black/40 text-white/70 hover:text-white"

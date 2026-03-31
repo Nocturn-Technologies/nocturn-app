@@ -176,7 +176,7 @@ export default function CalendarHeatMap() {
   const monthName = currentMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <div className="min-w-0">
         <h1 className="text-2xl font-bold font-heading">Calendar</h1>
         <p className="text-sm text-muted-foreground">
@@ -213,6 +213,7 @@ export default function CalendarHeatMap() {
         <Button
           variant="ghost"
           size="icon"
+          className="min-h-[44px] min-w-[44px]"
           onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1))}
         >
           <ChevronLeft className="h-4 w-4" />
@@ -221,6 +222,7 @@ export default function CalendarHeatMap() {
         <Button
           variant="ghost"
           size="icon"
+          className="min-h-[44px] min-w-[44px]"
           onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1))}
         >
           <ChevronRight className="h-4 w-4" />
@@ -266,7 +268,7 @@ export default function CalendarHeatMap() {
                     onClick={() => setSelectedDay(isSelected ? null : dateKey)}
                     disabled={!inMonth}
                     className={`
-                      relative aspect-square rounded-lg flex flex-col items-center justify-center text-xs transition-all
+                      relative aspect-square rounded-lg flex flex-col items-center justify-center text-xs transition-all min-h-[44px]
                       ${!inMonth ? "opacity-20 cursor-default" : "cursor-pointer hover:ring-1 hover:ring-white/20"}
                       ${isSelected ? "ring-2 ring-nocturn" : ""}
                       ${isToday ? "ring-1 ring-white/30" : ""}

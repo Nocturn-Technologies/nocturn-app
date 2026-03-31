@@ -415,7 +415,7 @@ export function DashboardHome(props: DashboardHomeProps) {
         )}
 
         {/* Stats column — stacked */}
-        <div className="grid grid-cols-3 min-[375px]:grid-cols-3 md:grid-cols-1 gap-4">
+        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 md:grid-cols-1 gap-4">
           <Card className="rounded-2xl transition-all duration-300 hover:ring-nocturn/20 hover:shadow-md hover:shadow-nocturn/5 active:scale-[0.98]">
             <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn/5">
