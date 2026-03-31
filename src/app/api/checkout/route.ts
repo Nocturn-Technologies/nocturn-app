@@ -390,6 +390,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Reserve capacity by inserting "pending" tickets immediately.
+    // These count toward capacity and will be updated to "paid" on fulfillment,
+    // or cleaned up after 30 minutes if the checkout is abandoned (Gap 9 + 25).
+    const pendingTickets = Array.from({ length: quantity }, () => ({
+      event_id: eventId,
+      ticket_tier_id: tierId,
+      user_id: null,
+      status: "pending" as const,
+      price_paid: 0,
+      currency: "usd",
+      stripe_payment_intent_id: null,
+      ticket_token: randomUUID(),
+      metadata: {
+        customer_email: buyerEmail,
+        pending_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      },
+    }));
+
+    const { data: insertedPending, error: pendingError } = await supabaseAdmin
+      .from("tickets")
+      .insert(pendingTickets)
+      .select("id, ticket_token");
+
+    if (pendingError) {
+      console.error("[checkout] Failed to insert pending tickets:", pendingError);
+      return NextResponse.json(
+        { error: "Failed to reserve tickets. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    const pendingTicketIds = insertedPending?.map((t) => t.id) ?? [];
+
     const referer = request.headers.get("referer");
     let cancelUrl = APP_URL;
     if (referer) {
@@ -441,6 +474,7 @@ export async function POST(request: NextRequest) {
           ...(promoId && { promoId, promoCode: promoCode ?? "" }),
           ...(referrerToken && { referrerToken }),
           ...(discountCents > 0 && { discountCents: String(discountCents) }),
+          pendingTicketIds: JSON.stringify(pendingTicketIds),
         },
         success_url: `${APP_URL}/e/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: cancelUrl,

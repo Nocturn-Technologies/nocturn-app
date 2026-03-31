@@ -328,11 +328,12 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
 
   const admin = createAdminClient();
 
-  // IDEMPOTENCY: If tickets already exist for this PI, send email if needed and return them
+  // IDEMPOTENCY: If PAID tickets already exist for this PI, send email if needed and return them
   const { data: existingTickets } = await admin
     .from("tickets")
     .select("id, ticket_token, status, created_at, qr_code, metadata")
-    .eq("stripe_payment_intent_id", paymentIntentId);
+    .eq("stripe_payment_intent_id", paymentIntentId)
+    .in("status", ["paid", "checked_in"]);
 
   if (existingTickets && existingTickets.length > 0) {
     // Tickets exist (from webhook or earlier call) — ensure email was sent
@@ -428,6 +429,91 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
   // Use the base USD price for the ticket record (organizer always sees USD)
   const ticketCurrency = metadata.baseCurrency || pi.currency || "usd";
 
+  const ticketMetadata = {
+    payment_intent_id: paymentIntentId,
+    customer_email: buyerEmail,
+    fulfilled_by: "client_action",
+    ...(referrerToken && { referrer_token: referrerToken }),
+  };
+
+  // Try to update pending tickets (created at checkout) to "paid" first (Gap 9 + 25).
+  const pendingTicketIds: string[] = metadata.pendingTicketIds ? JSON.parse(metadata.pendingTicketIds) : [];
+
+  if (pendingTicketIds.length > 0) {
+    const { data: updatedTickets, error: updateError } = await admin
+      .from("tickets")
+      .update({
+        status: "paid",
+        price_paid: pricePaid,
+        currency: ticketCurrency,
+        stripe_payment_intent_id: paymentIntentId,
+        referred_by: referrerToken,
+        metadata: ticketMetadata,
+      })
+      .in("id", pendingTicketIds)
+      .eq("status", "pending")
+      .select("id, ticket_token, status, created_at");
+
+    if (!updateError && updatedTickets && updatedTickets.length > 0) {
+      console.info(`[fulfillPaymentIntent] Updated ${updatedTickets.length} pending ticket(s) to paid for PI ${paymentIntentId}`);
+
+      // Generate QR codes + send email for the updated tickets
+      if (buyerEmail) {
+        await sendConfirmationEmail({
+          admin,
+          ticketTokens: updatedTickets.map((t) => t.ticket_token),
+          ticketIds: updatedTickets.map((t) => t.id),
+          eventId, tierId, buyerEmail, quantity, pricePaid,
+        });
+      }
+
+      // Claim promo and track analytics
+      if (metadata.promoId) {
+        try {
+          await admin.rpc("claim_promo_code", { p_code_id: metadata.promoId, p_quantity: quantity });
+        } catch (promoErr) {
+          console.error("[fulfillPaymentIntent] Failed to claim promo uses (non-blocking):", promoErr);
+        }
+      }
+
+      void logPaymentEvent({
+        event_type: "tickets_fulfilled",
+        payment_intent_id: paymentIntentId,
+        event_id: eventId,
+        tier_id: tierId,
+        quantity,
+        amount_cents: Math.round(pricePaid * quantity * 100),
+        currency: ticketCurrency,
+        buyer_email: buyerEmail ?? null,
+        metadata: { fulfilled_by: "client_action", from_pending: true },
+      });
+
+      try {
+        const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+        trackTicketSold(eventId, quantity, pricePaid * quantity);
+        if (buyerEmail) {
+          const { data: eventForAnalytics } = await admin
+            .from("events")
+            .select("collective_id")
+            .eq("id", eventId)
+            .maybeSingle();
+          if (eventForAnalytics?.collective_id) {
+            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
+          }
+        }
+      } catch { /* non-critical */ }
+
+      return {
+        error: null,
+        tickets: updatedTickets.map((t) => ({
+          ticket_token: t.ticket_token,
+          status: "paid" as const,
+          created_at: t.created_at,
+        })),
+      };
+    }
+  }
+
   const { randomUUID } = await import("crypto");
   const tickets = Array.from({ length: quantity }, () => ({
     event_id: eventId,
@@ -439,12 +525,7 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     stripe_payment_intent_id: paymentIntentId,
     ticket_token: randomUUID(),
     referred_by: referrerToken,
-    metadata: {
-      payment_intent_id: paymentIntentId,
-      customer_email: buyerEmail,
-      fulfilled_by: "client_action",
-      ...(referrerToken && { referrer_token: referrerToken }),
-    },
+    metadata: ticketMetadata,
   }));
 
   // ATOMIC FULFILLMENT: Use a single DB function that acquires an advisory lock,

@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
 import { getCurrencyForCountry, convertAmount, formatLocalAmount } from "@/lib/currency";
 import { logPaymentEvent } from "@/lib/payment-events";
+import { randomUUID } from "crypto";
 
 export async function POST(request: NextRequest) {
   const clientIp = request.headers.get("x-real-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -106,6 +107,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Reserve capacity by inserting "pending" tickets immediately.
+    // These count toward capacity and will be updated to "paid" on fulfillment,
+    // or cleaned up after 30 minutes if the checkout is abandoned (Gap 9 + 25).
+    const pendingTickets = Array.from({ length: quantity }, () => ({
+      event_id: eventId,
+      ticket_tier_id: tierId,
+      user_id: null,
+      status: "pending" as const,
+      price_paid: 0,
+      currency: "usd",
+      stripe_payment_intent_id: null,
+      ticket_token: randomUUID(),
+      metadata: {
+        customer_email: buyerEmail,
+        pending_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      },
+    }));
+
+    const { data: insertedPending, error: pendingError } = await supabase
+      .from("tickets")
+      .insert(pendingTickets)
+      .select("id, ticket_token");
+
+    if (pendingError) {
+      console.error("[create-payment-intent] Failed to insert pending tickets:", pendingError);
+      return NextResponse.json(
+        { error: "Failed to reserve tickets. Please try again." },
+        { status: 500 }
+      );
+    }
+
+    const pendingTicketIds = insertedPending?.map((t) => t.id) ?? [];
+
     // Apply promo code discount if provided
     const basePriceCents = Math.round(Number(tier.price) * 100);
     let discountCents = 0;
@@ -201,9 +235,25 @@ export async function POST(request: NextRequest) {
         ...(referrerToken && { referrerToken }),
         ...(promoId && { promoId, promoCode: validatedPromoCode ?? "" }),
         ...(discountCents > 0 && { discountCents: String(discountCents) }),
+        pendingTicketIds: JSON.stringify(pendingTicketIds),
       },
       automatic_payment_methods: { enabled: true },
     });
+
+    // Link pending tickets to this PaymentIntent so webhooks can find them
+    if (pendingTicketIds.length > 0) {
+      await supabase
+        .from("tickets")
+        .update({
+          stripe_payment_intent_id: paymentIntent.id,
+          metadata: {
+            customer_email: buyerEmail,
+            pending_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+            payment_intent_id: paymentIntent.id,
+          },
+        })
+        .in("id", pendingTicketIds);
+    }
 
     // Log the payment creation for audit trail
     void logPaymentEvent({

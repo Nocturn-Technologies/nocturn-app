@@ -17,9 +17,9 @@ import { DEFAULT_TIMEZONE } from "@/lib/utils";
 import { trackEventPageView } from "@/lib/analytics";
 import Link from "next/link";
 
-// Revalidate public event pages every 60 seconds (ISR)
-// Visitors get instant cached pages, data refreshes in background
-export const revalidate = 60;
+// Revalidate public event pages every 10 seconds (ISR)
+// Short window reduces stale capacity data shown to buyers (Gap 16)
+export const revalidate = 10;
 
 interface Props {
   params: Promise<{ slug: string; eventSlug: string }>;
@@ -141,6 +141,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     { data: pastEventsRaw },
     { data: nearbyEventsRaw },
     { data: tierTicketsRaw },
+    { data: pendingTierTicketsRaw },
   ] = await Promise.all([
     supabase.from("ticket_tiers").select("*").eq("event_id", event.id).order("sort_order"),
     supabase.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
@@ -159,6 +160,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       .order("starts_at", { ascending: true })
       .limit(6),
     supabase.from("tickets").select("ticket_tier_id").eq("event_id", event.id).in("status", ["paid", "checked_in"]),
+    supabase.from("tickets").select("ticket_tier_id").eq("event_id", event.id).eq("status", "pending").gte("created_at", new Date(Date.now() - 30 * 60 * 1000).toISOString()),
   ]);
 
   const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number; sort_order: number }[] | null;
@@ -167,10 +169,15 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const pastEvents = pastEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string }[] | null;
   const nearbyEvents = nearbyEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string; collective_id: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string } | null }[] | null;
   const tierTickets = tierTicketsRaw as { ticket_tier_id: string }[] | null;
+  const pendingTierTickets = pendingTierTicketsRaw as { ticket_tier_id: string }[] | null;
 
   // Compute per-tier sold counts for accurate "remaining" display
+  // Include confirmed tickets + active pending reservations (< 30 min old) toward capacity
   const tierSoldCounts: Record<string, number> = {};
   for (const t of tierTickets || []) {
+    tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
+  }
+  for (const t of pendingTierTickets || []) {
     tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
   }
 

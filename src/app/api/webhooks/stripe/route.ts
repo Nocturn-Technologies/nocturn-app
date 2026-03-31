@@ -4,9 +4,15 @@
  * Handled events (configure in Stripe Dashboard → Webhooks):
  *   - checkout.session.completed    — Fulfill tickets from Checkout Sessions
  *   - payment_intent.succeeded      — Fulfill tickets from embedded/direct PaymentIntents
- *   - payment_intent.payment_failed — Mark pending tickets as failed
+ *   - payment_intent.payment_failed — Delete pending tickets to release capacity
  *   - charge.refunded               — Mark paid/checked-in tickets as refunded
  *   - charge.dispute.created         — Mark tickets as disputed
+ *
+ * TODO: Add a cron job (e.g., Vercel cron every 15 min) to clean up expired pending
+ * tickets older than 30 minutes. For now, the capacity queries in the public event
+ * page and checkout routes only count pending tickets created within the last 30 min,
+ * so expired ones are effectively ignored. A cleanup cron would just remove the rows:
+ *   DELETE FROM tickets WHERE status = 'pending' AND created_at < now() - interval '30 minutes';
  */
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
@@ -80,18 +86,19 @@ export async function POST(request: NextRequest) {
         console.warn(
           `[stripe-webhook] Payment failed for PI ${pi.id}: ${failureReason}`
         );
+        // Delete pending tickets to release reserved capacity (Gap 9 + 25)
         const supabase = createAdminClient();
         const { data: failedTickets, error: failErr } = await supabase
           .from("tickets")
-          .update({ status: "failed" })
+          .delete()
           .eq("stripe_payment_intent_id", pi.id)
           .eq("status", "pending")
           .select("id");
         if (failErr) {
-          console.error("[stripe-webhook] Failed to update tickets to failed:", failErr);
+          console.error("[stripe-webhook] Failed to delete pending tickets:", failErr);
         } else if (failedTickets && failedTickets.length > 0) {
           console.info(
-            `[stripe-webhook] Marked ${failedTickets.length} pending ticket(s) as failed for PI ${pi.id}`
+            `[stripe-webhook] Deleted ${failedTickets.length} pending ticket(s) to release capacity for PI ${pi.id}`
           );
         }
         break;
@@ -224,28 +231,30 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   const supabase = createAdminClient();
 
   // IDEMPOTENCY CHECK: Prevent duplicate ticket creation on webhook retry
-  // Use separate checks to avoid OR-clause matching null PI IDs on free tickets
-  let existingCount = 0;
+  // Check for already-fulfilled (paid) tickets — not pending ones which we'll update
+  let existingPaidCount = 0;
   if (paymentIntentId) {
     const { count } = await supabase
       .from("tickets")
       .select("*", { count: "exact", head: true })
       .eq("event_id", eventId)
-      .eq("stripe_payment_intent_id", paymentIntentId);
-    existingCount = count ?? 0;
+      .eq("stripe_payment_intent_id", paymentIntentId)
+      .in("status", ["paid", "checked_in"]);
+    existingPaidCount = count ?? 0;
   }
-  if (existingCount === 0) {
+  if (existingPaidCount === 0) {
     const { count } = await supabase
       .from("tickets")
       .select("*", { count: "exact", head: true })
       .eq("event_id", eventId)
-      .filter("metadata->>checkout_session_id", "eq", session.id);
-    existingCount = count ?? 0;
+      .filter("metadata->>checkout_session_id", "eq", session.id)
+      .in("status", ["paid", "checked_in"]);
+    existingPaidCount = count ?? 0;
   }
 
-  if (existingCount && existingCount > 0) {
+  if (existingPaidCount && existingPaidCount > 0) {
     console.info(
-      `[stripe-webhook] Idempotency: tickets already exist for session ${session.id}` +
+      `[stripe-webhook] Idempotency: paid tickets already exist for session ${session.id}` +
       (paymentIntentId ? ` / PI ${paymentIntentId}` : "") +
       `, skipping duplicate creation`
     );
@@ -323,20 +332,57 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     },
   }));
 
-  // CRITICAL: Insert tickets — must complete before responding to Stripe
-  const { data: insertedTickets, error: insertError } = await supabase
-    .from("tickets")
-    .insert(tickets)
-    .select("id, ticket_token");
+  // Try to update pending tickets (created at checkout) to "paid" first.
+  // If pending tickets exist from checkout creation, update them instead of inserting new ones.
+  let insertedTickets: { id: string; ticket_token: string }[] | null = null;
+  const pendingTicketIds: string[] = metadata.pendingTicketIds ? JSON.parse(metadata.pendingTicketIds) : [];
 
-  if (insertError) {
-    console.error("[stripe-webhook] Failed to insert tickets:", insertError);
-    throw insertError; // Will cause 500 so Stripe retries
+  if (pendingTicketIds.length > 0) {
+    const { data: updatedTickets, error: updateError } = await supabase
+      .from("tickets")
+      .update({
+        status: "paid",
+        price_paid: pricePaid,
+        currency: "usd",
+        stripe_payment_intent_id: paymentIntentId,
+        metadata: {
+          checkout_session_id: session.id,
+          customer_email: session.customer_email ?? session.customer_details?.email,
+          ...(referrerToken && { referrer_token: referrerToken }),
+          ...(session.metadata?.promoId && { promo_id: session.metadata.promoId, promo_code: session.metadata.promoCode }),
+          ...(session.metadata?.discountCents && { discount_cents: session.metadata.discountCents }),
+        },
+      })
+      .in("id", pendingTicketIds)
+      .eq("status", "pending")
+      .select("id, ticket_token");
+
+    if (!updateError && updatedTickets && updatedTickets.length > 0) {
+      insertedTickets = updatedTickets;
+      console.info(
+        `[stripe-webhook] Updated ${updatedTickets.length} pending ticket(s) to paid for session ${session.id}`
+      );
+    } else {
+      if (updateError) console.warn("[stripe-webhook] Failed to update pending tickets, falling back to insert:", updateError);
+    }
   }
 
-  console.info(
-    `[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`
-  );
+  // Fallback: insert new tickets if no pending tickets were updated
+  if (!insertedTickets || insertedTickets.length === 0) {
+    const { data: newTickets, error: insertError } = await supabase
+      .from("tickets")
+      .insert(tickets)
+      .select("id, ticket_token");
+
+    if (insertError) {
+      console.error("[stripe-webhook] Failed to insert tickets:", insertError);
+      throw insertError; // Will cause 500 so Stripe retries
+    }
+    insertedTickets = newTickets;
+    console.info(
+      `[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`
+    );
+  }
 
   // Contact upsert — best-effort fan sync
   try {
@@ -588,16 +634,17 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   const supabase = createAdminClient();
 
   // IDEMPOTENCY CHECK: Prevent duplicate ticket creation.
-  // Check specifically for this payment_intent_id (no OR logic that could match unrelated tickets).
-  const { count: existingCount } = await supabase
+  // Only check for paid/checked_in tickets — pending ones will be updated to paid.
+  const { count: existingPaidCount } = await supabase
     .from("tickets")
     .select("*", { count: "exact", head: true })
     .eq("event_id", eventId)
-    .eq("stripe_payment_intent_id", paymentIntent.id);
+    .eq("stripe_payment_intent_id", paymentIntent.id)
+    .in("status", ["paid", "checked_in"]);
 
-  if (existingCount && existingCount > 0) {
+  if (existingPaidCount && existingPaidCount > 0) {
     console.info(
-      `[stripe-webhook] Idempotency: tickets already exist for PI ${paymentIntent.id}, skipping duplicate creation`
+      `[stripe-webhook] Idempotency: paid tickets already exist for PI ${paymentIntent.id}, skipping duplicate creation`
     );
     return;
   }
@@ -661,68 +708,96 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     ...(referrerToken && { referrer_token: referrerToken }),
   };
 
-  // CRITICAL: Use atomic fulfillment RPC to prevent race with client action.
-  // Falls back to plain insert if RPC doesn't exist yet (pre-migration).
+  // Try to update pending tickets (created at checkout) to "paid" first.
   let insertedTickets: { id: string; ticket_token: string; is_new?: boolean }[] | null = null;
   let wasNewlyCreated = true;
+  const pendingTicketIds: string[] = metadata.pendingTicketIds ? JSON.parse(metadata.pendingTicketIds) : [];
 
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: atomicResult, error: atomicError } = await (supabase as any).rpc("fulfill_tickets_atomic", {
-      p_payment_intent_id: paymentIntent.id,
-      p_event_id: eventId,
-      p_tier_id: tierId,
-      p_quantity: quantity,
-      p_price_paid: pricePaid,
-      p_currency: ticketCurrency,
-      p_buyer_email: buyerEmail ?? null,
-      p_referrer_token: referrerToken ?? null,
-      p_metadata: ticketMetadata,
-    });
-
-    if (atomicError) throw atomicError;
-    insertedTickets = atomicResult;
-
-    // Deterministic: the RPC returns is_new=false for pre-existing tickets
-    if (insertedTickets && insertedTickets.length > 0) {
-      wasNewlyCreated = insertedTickets[0]?.is_new !== false;
-    }
-  } catch {
-    // Fallback: plain insert (for pre-migration compatibility)
-    const tickets = Array.from({ length: quantity }, () => ({
-      event_id: eventId,
-      ticket_tier_id: tierId,
-      user_id: null,
-      status: "paid" as const,
-      price_paid: pricePaid,
-      currency: ticketCurrency,
-      stripe_payment_intent_id: paymentIntent.id,
-      ticket_token: randomUUID(),
-      referred_by: referrerToken,
-      metadata: ticketMetadata,
-    }));
-
-    const { data, error: insertError } = await supabase
+  if (pendingTicketIds.length > 0) {
+    const { data: updatedTickets, error: updateError } = await supabase
       .from("tickets")
-      .insert(tickets)
+      .update({
+        status: "paid",
+        price_paid: pricePaid,
+        currency: ticketCurrency,
+        stripe_payment_intent_id: paymentIntent.id,
+        referred_by: referrerToken,
+        metadata: ticketMetadata,
+      })
+      .in("id", pendingTicketIds)
+      .eq("status", "pending")
       .select("id, ticket_token");
 
-    if (insertError) {
-      // If unique constraint violation, tickets already exist (created by client action)
-      if (insertError.code === "23505") {
-        console.info(`[stripe-webhook] Tickets already exist for PI ${paymentIntent.id} (unique constraint), skipping`);
-        wasNewlyCreated = false;
-        const { data: existing } = await supabase
-          .from("tickets")
-          .select("id, ticket_token")
-          .eq("stripe_payment_intent_id", paymentIntent.id);
-        insertedTickets = existing;
-      } else {
-        console.error("[stripe-webhook] Failed to insert tickets:", insertError);
-        throw insertError;
-      }
+    if (!updateError && updatedTickets && updatedTickets.length > 0) {
+      insertedTickets = updatedTickets;
+      console.info(
+        `[stripe-webhook] Updated ${updatedTickets.length} pending ticket(s) to paid for PI ${paymentIntent.id}`
+      );
     } else {
-      insertedTickets = data;
+      if (updateError) console.warn("[stripe-webhook] Failed to update pending tickets for PI, falling back:", updateError);
+    }
+  }
+
+  // Fallback: Use atomic fulfillment RPC or plain insert if no pending tickets were updated.
+  if (!insertedTickets || insertedTickets.length === 0) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: atomicResult, error: atomicError } = await (supabase as any).rpc("fulfill_tickets_atomic", {
+        p_payment_intent_id: paymentIntent.id,
+        p_event_id: eventId,
+        p_tier_id: tierId,
+        p_quantity: quantity,
+        p_price_paid: pricePaid,
+        p_currency: ticketCurrency,
+        p_buyer_email: buyerEmail ?? null,
+        p_referrer_token: referrerToken ?? null,
+        p_metadata: ticketMetadata,
+      });
+
+      if (atomicError) throw atomicError;
+      insertedTickets = atomicResult;
+
+      // Deterministic: the RPC returns is_new=false for pre-existing tickets
+      if (insertedTickets && insertedTickets.length > 0) {
+        wasNewlyCreated = insertedTickets[0]?.is_new !== false;
+      }
+    } catch {
+      // Fallback: plain insert (for pre-migration compatibility)
+      const tickets = Array.from({ length: quantity }, () => ({
+        event_id: eventId,
+        ticket_tier_id: tierId,
+        user_id: null,
+        status: "paid" as const,
+        price_paid: pricePaid,
+        currency: ticketCurrency,
+        stripe_payment_intent_id: paymentIntent.id,
+        ticket_token: randomUUID(),
+        referred_by: referrerToken,
+        metadata: ticketMetadata,
+      }));
+
+      const { data, error: insertError } = await supabase
+        .from("tickets")
+        .insert(tickets)
+        .select("id, ticket_token");
+
+      if (insertError) {
+        // If unique constraint violation, tickets already exist (created by client action)
+        if (insertError.code === "23505") {
+          console.info(`[stripe-webhook] Tickets already exist for PI ${paymentIntent.id} (unique constraint), skipping`);
+          wasNewlyCreated = false;
+          const { data: existing } = await supabase
+            .from("tickets")
+            .select("id, ticket_token")
+            .eq("stripe_payment_intent_id", paymentIntent.id);
+          insertedTickets = existing;
+        } else {
+          console.error("[stripe-webhook] Failed to insert tickets:", insertError);
+          throw insertError;
+        }
+      } else {
+        insertedTickets = data;
+      }
     }
   }
 
