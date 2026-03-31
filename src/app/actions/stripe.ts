@@ -40,13 +40,16 @@ export async function createConnectAccount(collectiveId: string) {
 
   // Create a new Express account if one doesn't exist
   if (!accountId) {
-    const account = await getStripe().accounts.create({
-      type: "express",
-      metadata: { collective_id: collectiveId },
-      business_profile: {
-        name: collective.name,
+    const account = await getStripe().accounts.create(
+      {
+        type: "express",
+        metadata: { collective_id: collectiveId },
+        business_profile: {
+          name: collective.name,
+        },
       },
-    });
+      { idempotencyKey: `connect-account-${collectiveId}` }
+    );
 
     accountId = account.id;
 

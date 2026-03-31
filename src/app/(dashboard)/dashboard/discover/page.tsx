@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
 import { haptic } from "@/lib/haptics";
 import { Search, Compass, ChevronLeft, ChevronRight, Users2 } from "lucide-react";
 import { NetworkCRM } from "./network-crm";
+import { createClient } from "@/lib/supabase/client";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ const PER_PAGE = 20;
 
 export default function DiscoverPage() {
   const [activeTab, setActiveTab] = useState<"discover" | "network">("discover");
+  const [collectiveId, setCollectiveId] = useState<string | undefined>(undefined);
   const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("");
@@ -62,6 +64,32 @@ export default function DiscoverPage() {
     type: string;
     city: string;
   } | null>(null);
+
+  // Fetch collectiveId for the current user
+  const collectiveIdFetched = useRef(false);
+  useEffect(() => {
+    if (collectiveIdFetched.current) return;
+    collectiveIdFetched.current = true;
+    (async () => {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: membership } = await supabase
+          .from("collective_members")
+          .select("collective_id")
+          .eq("user_id", user.id)
+          .is("deleted_at", null)
+          .limit(1)
+          .maybeSingle();
+        if (membership?.collective_id) {
+          setCollectiveId(membership.collective_id);
+        }
+      } catch {
+        // Silent fail — collectiveId is optional for NetworkCRM
+      }
+    })();
+  }, []);
 
   // Reset page when filters change
   useEffect(() => {
@@ -231,7 +259,7 @@ export default function DiscoverPage() {
       {/* Network CRM — replaces the old network profile list */}
       {activeTab === "network" && (
         <div className="px-4 md:px-0">
-          <NetworkCRM />
+          <NetworkCRM collectiveId={collectiveId} />
         </div>
       )}
 

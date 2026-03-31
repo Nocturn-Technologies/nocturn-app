@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 const SYSTEM_PROMPT = `You are Nocturn's AI assistant for music collectives and promoters. You have access to the user's real data. Answer questions concisely and actionably. Use their actual numbers. If they ask you to do something you can't (like send an email), tell them which page to go to. Keep responses under 3 sentences unless they ask for detail.
 
@@ -25,6 +26,10 @@ export async function askNocturn(
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return "Not authenticated";
+
+  // Rate limit: 15 questions per minute per user
+  const { success: rlOk } = await rateLimitStrict(`ask-nocturn:${user.id}`, 15, 60_000);
+  if (!rlOk) return "You're asking too fast. Please wait a moment.";
 
   if (!question.trim()) {
     return "Ask me anything about your events, revenue, audience, or how to use Nocturn.";

@@ -472,6 +472,13 @@ body::before {
 .delay-700 { animation-delay: 700ms; }
 .delay-1000 { animation-delay: 1000ms; }
 
+/* Confetti animation for share screen */
+@keyframes confettiFall {
+  0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+.animate-confetti { animation: confettiFall 2s ease-in forwards; }
+
 .thinking-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: #7B2FF7;

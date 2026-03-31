@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/config";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 /**
  * Refund a ticket — marks as refunded in DB and issues Stripe refund.
@@ -14,6 +15,10 @@ export async function refundTicket(ticketId: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
+
+  // Rate limit: 20 refunds per minute per user
+  const { success: rlOk } = await rateLimitStrict(`refund:${user.id}`, 20, 60_000);
+  if (!rlOk) return { error: "Too many refund requests. Please wait a moment." };
 
   const sb = createAdminClient();
 
@@ -55,27 +60,9 @@ export async function refundTicket(ticketId: string) {
 
   const pricePaid = Number(ticket.price_paid) || 0;
 
-  // Issue Stripe refund if there was a payment
-  if (ticket.stripe_payment_intent_id && pricePaid > 0) {
-    try {
-      const stripe = getStripe();
-      await stripe.refunds.create({
-        payment_intent: ticket.stripe_payment_intent_id,
-        // Refund the ticket price portion only (service fee is non-refundable)
-        amount: Math.round(pricePaid * 100),
-        reason: "requested_by_customer",
-      }, {
-        idempotencyKey: `refund_${ticketId}`,
-      });
-    } catch (stripeErr) {
-      const msg = stripeErr instanceof Error ? stripeErr.message : "Stripe refund failed";
-      console.error("[refund] Stripe error:", msg);
-      return { error: `Refund failed: ${msg}` };
-    }
-  }
-
-  // Update ticket status — atomic guard: only update if still paid/checked_in
-  // Prevents double-refund race condition from concurrent requests
+  // SECURITY: Atomically claim the ticket for refund FIRST, then issue Stripe refund.
+  // This prevents double-refund race conditions where two concurrent requests
+  // both pass the status check and both issue Stripe refunds.
   const { error: updateError, count: updateCount } = await sb
     .from("tickets")
     .update({
@@ -96,6 +83,38 @@ export async function refundTicket(ticketId: string) {
 
   if (updateCount === 0) {
     return { error: "Ticket was already refunded or status changed. No action taken." };
+  }
+
+  // Issue Stripe refund AFTER atomic status claim (safe from double-refund)
+  if (ticket.stripe_payment_intent_id && pricePaid > 0) {
+    try {
+      const stripe = getStripe();
+      await stripe.refunds.create({
+        payment_intent: ticket.stripe_payment_intent_id,
+        // Refund the ticket price portion only (service fee is non-refundable)
+        amount: Math.round(pricePaid * 100),
+        reason: "requested_by_customer",
+      }, {
+        idempotencyKey: `refund_${ticketId}`,
+      });
+    } catch (stripeErr) {
+      // Stripe refund failed AFTER we already marked as refunded — revert status
+      const msg = stripeErr instanceof Error ? stripeErr.message : "Stripe refund failed";
+      console.error("[refund] Stripe error, reverting ticket status:", msg);
+      await sb
+        .from("tickets")
+        .update({
+          status: ticket.status, // Revert to original status
+          metadata: {
+            ...(ticket.metadata as Record<string, unknown>),
+            refund_failed_at: new Date().toISOString(),
+            refund_error: msg,
+          },
+        })
+        .eq("id", ticketId)
+        .eq("status", "refunded");
+      return { error: `Refund failed: ${msg}` };
+    }
   }
 
   // Notify next person on waitlist (non-blocking)

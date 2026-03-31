@@ -23,6 +23,10 @@ export async function saveExternalTicketData(data: ExternalTicketData): Promise<
     return { error: "Numbers cannot be negative" };
   }
 
+  if (data.ticketUrl && !data.ticketUrl.startsWith("https://")) {
+    return { error: "Ticket URL must start with https://" };
+  }
+
   const admin = createAdminClient();
 
   // Verify user owns this event

@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 const VALID_USER_TYPES = [
   "collective",
@@ -28,6 +29,12 @@ export async function signUpUser(formData: {
   fullName: string;
   userType?: "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
 }) {
+  // Rate limit: 3 attempts per 5 minutes per email
+  const rl = await rateLimitStrict(`signup:${formData.email}`, 3, 5 * 60 * 1000);
+  if (!rl.success) {
+    return { error: "Too many signup attempts. Please try again in a few minutes." };
+  }
+
   const admin = createAdminClient();
   const userType = formData.userType ?? "collective";
 
@@ -200,6 +207,20 @@ export async function createCollective(formData: {
   instagram: string | null;
   website: string | null;
 }) {
+  // Input length validation
+  if (formData.name.length > 100) {
+    return { error: "Collective name must be 100 characters or fewer." };
+  }
+  if (formData.slug.length > 100) {
+    return { error: "Slug must be 100 characters or fewer." };
+  }
+  if (formData.description && formData.description.length > 2000) {
+    return { error: "Description must be 2000 characters or fewer." };
+  }
+  if (formData.city.length > 100) {
+    return { error: "City must be 100 characters or fewer." };
+  }
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -208,6 +229,12 @@ export async function createCollective(formData: {
   if (!user) {
     console.error("createCollective: No user session found");
     return { error: "You must be logged in. Please refresh the page and try again." };
+  }
+
+  // Rate limit: 5 per minute per user
+  const rl = await rateLimitStrict(`createCollective:${user.id}`, 5, 60 * 1000);
+  if (!rl.success) {
+    return { error: "Too many requests. Please try again in a minute." };
   }
 
   // Use admin client to bypass RLS for initial collective + member creation

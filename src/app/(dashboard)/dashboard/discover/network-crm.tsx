@@ -15,6 +15,11 @@ import {
   Heart,
   MessageSquare,
   User,
+  Upload,
+  Plus,
+  Mail,
+  Phone,
+  Pencil,
 } from "lucide-react";
 import {
   getNetworkCRM,
@@ -22,22 +27,38 @@ import {
   type NetworkCRMStats,
   type RelationshipTag,
 } from "@/app/actions/network-crm";
+import { getContacts, type Contact } from "@/app/actions/contacts";
 import { saveProfile, unsaveProfile } from "@/app/actions/marketplace";
 import { ContactDialog } from "./contact-dialog";
+import { ImportSheet } from "@/components/people/import-sheet";
+import { ContactDetailSheet } from "@/components/people/contact-detail-sheet";
 import { haptic } from "@/lib/haptics";
 import { TYPE_BADGE_COLORS, TYPE_LABELS_SHORT } from "@/lib/marketplace-constants";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 type RelFilter = "all" | RelationshipTag;
-type CategoryFilter =
-  | "all"
-  | "artist"
-  | "venue"
-  | "photographer"
-  | "videographer"
-  | "collective"
-  | "other";
+
+// All 17 category types (matches discover page CATEGORY_TABS)
+const ALL_CATEGORY_TYPES = [
+  { label: "All", value: "all" },
+  { label: "DJs", value: "artist" },
+  { label: "Venues", value: "venue" },
+  { label: "Collectives", value: "collective" },
+  { label: "Promoters", value: "promoter" },
+  { label: "Managers", value: "artist_manager" },
+  { label: "Tour Mgrs", value: "tour_manager" },
+  { label: "Agents", value: "booking_agent" },
+  { label: "Photo", value: "photographer" },
+  { label: "Video", value: "videographer" },
+  { label: "MC / Host", value: "mc_host" },
+  { label: "Designers", value: "graphic_designer" },
+  { label: "Sound", value: "sound_production" },
+  { label: "Lighting", value: "lighting_production" },
+  { label: "Staff", value: "event_staff" },
+  { label: "PR", value: "pr_publicist" },
+  { label: "Sponsors", value: "sponsor" },
+] as const;
 
 const RELATIONSHIP_FILTERS: { label: string; value: RelFilter }[] = [
   { label: "All", value: "all" },
@@ -46,29 +67,11 @@ const RELATIONSHIP_FILTERS: { label: string; value: RelFilter }[] = [
   { label: "Connected", value: "Connected" },
 ];
 
-const CATEGORY_FILTERS: { label: string; value: CategoryFilter }[] = [
-  { label: "All", value: "all" },
-  { label: "DJs", value: "artist" },
-  { label: "Venues", value: "venue" },
-  { label: "Photo", value: "photographer" },
-  { label: "Video", value: "videographer" },
-  { label: "Collectives", value: "collective" },
-  { label: "Other", value: "other" },
-];
+// ── Props ─────────────────────────────────────────────────────────────────────
 
-const OTHER_TYPES = new Set([
-  "promoter",
-  "sound_production",
-  "lighting_production",
-  "sponsor",
-  "artist_manager",
-  "tour_manager",
-  "booking_agent",
-  "event_staff",
-  "mc_host",
-  "graphic_designer",
-  "pr_publicist",
-]);
+interface NetworkCRMProps {
+  collectiveId?: string;
+}
 
 // ── Relationship badge ─────────────────────────────────────────────────────────
 
@@ -146,6 +149,7 @@ interface ContactCardProps {
   onSave: (id: string) => void;
   onUnsave: (id: string) => void;
   onContact: (contact: IndustryContact) => void;
+  onClick: (contact: IndustryContact) => void;
 }
 
 function ContactCard({
@@ -154,6 +158,7 @@ function ContactCard({
   onSave,
   onUnsave,
   onContact,
+  onClick,
 }: ContactCardProps) {
   const type = contact.type ?? "artist";
   const badgeColor =
@@ -177,9 +182,18 @@ function ContactCard({
     .toUpperCase();
 
   return (
-    <Card className="overflow-hidden border-border/50 hover:border-border/80 transition-all group bg-card/60">
+    <Card
+      className="overflow-hidden border-border/50 hover:border-border/80 transition-all group bg-card/60 cursor-pointer"
+      onClick={() => onClick(contact)}
+    >
       {/* Gradient header strip */}
       <div className="relative h-16 bg-gradient-to-br from-nocturn/20 via-nocturn/5 to-transparent">
+        {/* Edit indicator */}
+        {(contact as IndustryContact & { _contactsTableId?: string })._contactsTableId && (
+          <span className="absolute top-2.5 left-2.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
+            <Pencil className="h-3 w-3" />
+          </span>
+        )}
         {/* Type badge */}
         <span
           className={`absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badgeColor}`}
@@ -244,6 +258,30 @@ function ContactCard({
             <RelBadge key={tag} tag={tag} />
           ))}
         </div>
+
+        {/* Contact info */}
+        {(contact.email || contact.phone) && (
+          <div className="mt-2 space-y-0.5">
+            {contact.email && (
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground truncate">
+                <Mail className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">{contact.email}</span>
+              </div>
+            )}
+            {contact.phone && (
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                <Phone className="h-2.5 w-2.5 shrink-0" />
+                <a
+                  href={`tel:${contact.phone}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="hover:text-foreground transition-colors"
+                >
+                  {contact.phone}
+                </a>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Social links */}
         <div className="mt-2 flex items-center gap-2">
@@ -313,7 +351,8 @@ function ContactCard({
           <Button
             size="sm"
             className="flex-1 bg-nocturn hover:bg-nocturn-light text-white h-9 text-xs"
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               haptic("light");
               onContact(contact);
             }}
@@ -334,7 +373,8 @@ function ContactCard({
                 ? "text-rose-400 hover:text-rose-300"
                 : "text-muted-foreground hover:text-foreground"
             }`}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               haptic("light");
               if (contact.profileId) {
                 isSaved ? onUnsave(contact.profileId) : onSave(contact.profileId);
@@ -349,10 +389,37 @@ function ContactCard({
   );
 }
 
+// ── Helper: Convert Contact (from contacts table) → IndustryContact shape ────
+
+function contactToIndustry(c: Contact): IndustryContact {
+  const meta = c.metadata ?? {};
+  return {
+    id: c.id,
+    name: c.fullName ?? c.email ?? "Unknown",
+    type: c.role ?? "other",
+    avatarUrl: (meta.avatar_url as string) ?? null,
+    city: (meta.city as string) ?? null,
+    email: c.email ?? null,
+    phone: c.phone ?? null,
+    instagramHandle: c.instagram ?? null,
+    soundcloudUrl: (meta.soundcloud_url as string) ?? null,
+    spotifyUrl: (meta.spotify_url as string) ?? null,
+    websiteUrl: (meta.website_url as string) ?? null,
+    eventsWorked: c.totalEvents ?? 0,
+    lastCollabDate: c.lastSeenAt ?? null,
+    isSaved: false,
+    relationships: c.source === "import" ? ["Connected"] : [],
+    profileId: c.marketplaceProfileId ?? null,
+    slug: null,
+    _contactsTableId: c.id,
+  };
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export function NetworkCRM() {
-  const [contacts, setContacts] = useState<IndustryContact[]>([]);
+export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
+  const [networkContacts, setNetworkContacts] = useState<IndustryContact[]>([]);
+  const [importedContacts, setImportedContacts] = useState<IndustryContact[]>([]);
   const [stats, setStats] = useState<NetworkCRMStats>({
     totalContacts: 0,
     bookedArtists: 0,
@@ -368,9 +435,9 @@ export function NetworkCRM() {
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [relFilter, setRelFilter] = useState<RelFilter>("all");
-  const [catFilter, setCatFilter] = useState<CategoryFilter>("all");
+  const [catFilter, setCatFilter] = useState<string>("all");
 
-  // Contact dialog
+  // Contact dialog (for messaging via marketplace profile)
   const [contactTarget, setContactTarget] = useState<{
     id: string;
     name: string;
@@ -378,37 +445,102 @@ export function NetworkCRM() {
     city: string;
   } | null>(null);
 
+  // Import sheet
+  const [importOpen, setImportOpen] = useState(false);
+  const [importDefaultTab, setImportDefaultTab] = useState<"paste" | "csv" | "quick">("paste");
+
+  // Contact detail sheet
+  const [detailContactId, setDetailContactId] = useState<string | null>(null);
+
+  // ── Merge & dedupe contacts from both sources ─────────────────────────────
+
+  const contacts = useMemo(() => {
+    const emailMap = new Map<string, IndustryContact>();
+    const idSet = new Set<string>();
+    const result: IndustryContact[] = [];
+
+    // Network contacts first (higher priority — they have richer data)
+    for (const c of networkContacts) {
+      result.push(c);
+      idSet.add(c.id);
+      // Track emails for deduplication (use name as proxy since IndustryContact lacks email)
+      const key = c.name.toLowerCase().trim();
+      if (key) emailMap.set(key, c);
+    }
+
+    // Then imported contacts — skip duplicates by name match
+    for (const c of importedContacts) {
+      const key = c.name.toLowerCase().trim();
+      if (emailMap.has(key) || idSet.has(c.id)) continue;
+      result.push(c);
+    }
+
+    return result;
+  }, [networkContacts, importedContacts]);
+
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await Promise.race([
-        getNetworkCRM(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("timeout")), 20000)
-        ),
+      // Fetch from both sources in parallel
+      const promises: [
+        Promise<{ error: string | null; contacts: IndustryContact[]; stats: NetworkCRMStats }>,
+        Promise<{ error: string | null; contacts: Contact[]; totalCount: number; segmentCounts: Record<string, number> }> | null,
+      ] = [
+        Promise.race([
+          getNetworkCRM(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("timeout")), 20000)
+          ),
+        ]),
+        null,
+      ];
+
+      // Only fetch from contacts table if we have a collectiveId
+      if (collectiveId) {
+        promises[1] = getContacts(collectiveId, { contactType: "industry" });
+      }
+
+      const [networkResult, contactsResult] = await Promise.all([
+        promises[0],
+        promises[1] ?? Promise.resolve({ error: null, contacts: [], totalCount: 0, segmentCounts: {} }),
       ]);
-      if (result.error) {
-        setError(result.error);
+
+      if (networkResult.error) {
+        setError(networkResult.error);
       } else {
-        setContacts(result.contacts);
-        setStats(result.stats);
+        setNetworkContacts(networkResult.contacts);
+        setStats(networkResult.stats);
         // Seed saved IDs from contacts
         const saved = new Set(
-          result.contacts
+          networkResult.contacts
             .filter((c) => c.isSaved && c.profileId)
             .map((c) => c.profileId as string)
         );
         setSavedIds(saved);
+      }
+
+      // Merge in imported contacts (non-error)
+      if (!contactsResult.error && contactsResult.contacts.length > 0) {
+        const converted = contactsResult.contacts.map(contactToIndustry);
+        setImportedContacts(converted);
+
+        // Update stats to include imported contacts
+        if (!networkResult.error) {
+          setStats((prev) => ({
+            ...prev,
+            totalContacts: prev.totalContacts + contactsResult.contacts.length,
+          }));
+        }
       }
     } catch {
       setError("Failed to load your network. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [collectiveId]);
 
   useEffect(() => {
     fetchData();
@@ -440,6 +572,23 @@ export function NetworkCRM() {
     }
   }
 
+  // ── Category counts (only show chips with >= 1 contact) ───────────────────
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const c of contacts) {
+      const t = c.type ?? "other";
+      counts[t] = (counts[t] ?? 0) + 1;
+    }
+    return counts;
+  }, [contacts]);
+
+  const visibleCategories = useMemo(() => {
+    return ALL_CATEGORY_TYPES.filter(
+      (cat) => cat.value === "all" || (categoryCounts[cat.value] ?? 0) > 0
+    );
+  }, [categoryCounts]);
+
   // ── Filter ─────────────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
@@ -451,11 +600,7 @@ export function NetworkCRM() {
 
       // Category filter
       if (catFilter !== "all") {
-        if (catFilter === "other") {
-          if (!OTHER_TYPES.has(c.type)) return false;
-        } else {
-          if (c.type !== catFilter) return false;
-        }
+        if (c.type !== catFilter) return false;
       }
 
       // Search
@@ -466,7 +611,7 @@ export function NetworkCRM() {
     });
   }, [contacts, relFilter, catFilter, searchQuery]);
 
-  // Filter counts for chips
+  // Filter counts for relationship chips
   const relCounts = useMemo(() => {
     const counts: Record<RelFilter, number> = {
       all: contacts.length,
@@ -479,6 +624,34 @@ export function NetworkCRM() {
     }
     return counts;
   }, [contacts]);
+
+  // ── Handle contact card click → open detail sheet ─────────────────────────
+
+  function handleCardClick(contact: IndustryContact) {
+    // If this contact has a contacts-table ID, open the detail sheet
+    if (contact._contactsTableId) {
+      setDetailContactId(contact._contactsTableId);
+    }
+  }
+
+  // ── Handle import complete → refresh data ─────────────────────────────────
+
+  function handleImportComplete() {
+    // Refresh data to include newly imported contacts
+    fetchData();
+  }
+
+  // ── Open import sheet with quick add tab ──────────────────────────────────
+
+  function openQuickAdd() {
+    setImportDefaultTab("quick");
+    setImportOpen(true);
+  }
+
+  function openImport() {
+    setImportDefaultTab("paste");
+    setImportOpen(true);
+  }
 
   // ── Loading state ──────────────────────────────────────────────────────────
 
@@ -517,20 +690,54 @@ export function NetworkCRM() {
 
   if (contacts.length === 0) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center gap-4 py-14">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
-            <Users className="h-8 w-8 text-nocturn" />
-          </div>
-          <div className="text-center max-w-xs">
-            <p className="font-semibold text-lg">Your network is empty</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Discover and save profiles, or book artists for your events — they&apos;ll
-              appear here as your industry contacts.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      <>
+        <Card>
+          <CardContent className="flex flex-col items-center gap-4 py-14">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
+              <Users className="h-8 w-8 text-nocturn" />
+            </div>
+            <div className="text-center max-w-xs">
+              <p className="font-semibold text-lg">Your network is empty</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Discover and save profiles, book artists, or import your contacts
+                to start building your industry network.
+              </p>
+            </div>
+            {collectiveId && (
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="bg-nocturn hover:bg-nocturn-light text-white min-h-[44px]"
+                  onClick={openImport}
+                >
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />
+                  Import Contacts
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="min-h-[44px]"
+                  onClick={openQuickAdd}
+                >
+                  <Plus className="mr-1.5 h-3.5 w-3.5" />
+                  Quick Add
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Import Sheet */}
+        {collectiveId && (
+          <ImportSheet
+            open={importOpen}
+            onOpenChange={setImportOpen}
+            collectiveId={collectiveId}
+            contactType="industry"
+            onImportComplete={handleImportComplete}
+          />
+        )}
+      </>
     );
   }
 
@@ -538,37 +745,63 @@ export function NetworkCRM() {
 
   return (
     <div className="space-y-4">
-      {/* Stats bar */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <StatCard
-          icon={<Users className="h-5 w-5" />}
-          label="Total Contacts"
-          value={stats.totalContacts}
-          iconBg="bg-nocturn/10"
-          iconColor="text-nocturn"
-        />
-        <StatCard
-          icon={<Music2 className="h-5 w-5" />}
-          label="Booked Artists"
-          value={stats.bookedArtists}
-          iconBg="bg-[#7B2FF7]/10"
-          iconColor="text-[#9D5CFF]"
-        />
-        <StatCard
-          icon={<Bookmark className="h-5 w-5" />}
-          label="Saved Profiles"
-          value={stats.savedProfiles}
-          iconBg="bg-rose-500/10"
-          iconColor="text-rose-400"
-        />
-        <StatCard
-          icon={<MapPin className="h-5 w-5" />}
-          label="Cities"
-          value={stats.cities}
-          iconBg="bg-emerald-500/10"
-          iconColor="text-emerald-400"
-        />
+      {/* Stats bar + action buttons */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <StatCard
+            icon={<Users className="h-5 w-5" />}
+            label="Total Contacts"
+            value={stats.totalContacts}
+            iconBg="bg-nocturn/10"
+            iconColor="text-nocturn"
+          />
+          <StatCard
+            icon={<Music2 className="h-5 w-5" />}
+            label="Booked Artists"
+            value={stats.bookedArtists}
+            iconBg="bg-[#7B2FF7]/10"
+            iconColor="text-[#9D5CFF]"
+          />
+          <StatCard
+            icon={<Bookmark className="h-5 w-5" />}
+            label="Saved Profiles"
+            value={stats.savedProfiles}
+            iconBg="bg-rose-500/10"
+            iconColor="text-rose-400"
+          />
+          <StatCard
+            icon={<MapPin className="h-5 w-5" />}
+            label="Cities"
+            value={stats.cities}
+            iconBg="bg-emerald-500/10"
+            iconColor="text-emerald-400"
+          />
+        </div>
       </div>
+
+      {/* Import + Quick Add buttons */}
+      {collectiveId && (
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="min-h-[44px] text-xs"
+            onClick={openImport}
+          >
+            <Upload className="mr-1.5 h-3.5 w-3.5" />
+            Import
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="min-h-[44px] min-w-[44px]"
+            onClick={openQuickAdd}
+            title="Quick add contact"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">
@@ -618,31 +851,41 @@ export function NetworkCRM() {
         })}
       </div>
 
-      {/* Category filter chips */}
-      <div className="flex gap-1.5 flex-wrap">
-        {CATEGORY_FILTERS.map(({ label, value }) => {
-          const isActive = catFilter === value;
-          return (
-            <button
-              key={value}
-              onClick={() => setCatFilter(value)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                isActive
-                  ? "bg-white/10 text-foreground border border-white/20"
-                  : "bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-            >
-              {label}
-            </button>
-          );
-        })}
+      {/* Category filter chips — all 17 types, only show those with >= 1 contact */}
+      <div className="-mx-1 px-1">
+        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+          {visibleCategories.map(({ label, value }) => {
+            const isActive = catFilter === value;
+            const count = value === "all" ? contacts.length : (categoryCounts[value] ?? 0);
+            return (
+              <button
+                key={value}
+                onClick={() => setCatFilter(value)}
+                className={`shrink-0 flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  isActive
+                    ? "bg-white/10 text-foreground border border-white/20"
+                    : "bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                    isActive ? "bg-white/15" : "bg-muted/80"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Result count */}
       <p className="text-xs text-muted-foreground">
         {filtered.length} contact{filtered.length !== 1 ? "s" : ""}
         {relFilter !== "all" && ` · ${relFilter}`}
-        {catFilter !== "all" && ` · ${CATEGORY_FILTERS.find((f) => f.value === catFilter)?.label}`}
+        {catFilter !== "all" && ` · ${visibleCategories.find((f) => f.value === catFilter)?.label}`}
         {searchQuery && ` · matching "${searchQuery}"`}
       </p>
 
@@ -659,7 +902,7 @@ export function NetworkCRM() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {filtered.map((contact) => (
             <ContactCard
-              key={`${contact.profileId ?? "artist"}-${contact.id}`}
+              key={`${contact.profileId ?? "c"}-${contact.id}`}
               contact={contact}
               savedIds={savedIds}
               onSave={handleSave}
@@ -674,12 +917,13 @@ export function NetworkCRM() {
                   });
                 }
               }}
+              onClick={handleCardClick}
             />
           ))}
         </div>
       )}
 
-      {/* Contact dialog */}
+      {/* Contact dialog (for messaging) */}
       <ContactDialog
         profileId={contactTarget?.id ?? ""}
         profileName={contactTarget?.name ?? ""}
@@ -688,6 +932,28 @@ export function NetworkCRM() {
           if (!open) setContactTarget(null);
         }}
       />
+
+      {/* Import Sheet */}
+      {collectiveId && (
+        <ImportSheet
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          collectiveId={collectiveId}
+          contactType="industry"
+          defaultTab={importDefaultTab}
+          onImportComplete={handleImportComplete}
+        />
+      )}
+
+      {/* Contact Detail Sheet */}
+      {collectiveId && (
+        <ContactDetailSheet
+          contactId={detailContactId}
+          onClose={() => setDetailContactId(null)}
+          collectiveId={collectiveId}
+          onContactUpdated={handleImportComplete}
+        />
+      )}
     </div>
   );
 }

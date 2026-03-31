@@ -186,11 +186,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Calculate price with discount
-    const basePriceCents = Math.round(Number(tier.price) * 100);
-
-    if (basePriceCents < 0) {
+    const basePriceNumber = Number(tier.price);
+    if (!Number.isFinite(basePriceNumber) || basePriceNumber < 0) {
       return NextResponse.json({ error: "Invalid ticket price" }, { status: 400 });
     }
+    const basePriceCents = Math.round(basePriceNumber * 100);
 
     const discountCents = discountPercent > 0
       ? Math.round(basePriceCents * discountPercent)
@@ -312,6 +312,26 @@ export async function POST(request: NextRequest) {
         }
       } catch (emailErr) {
         console.error("[checkout] Free ticket email failed (non-blocking):", emailErr);
+      }
+
+      // Contact upsert — best-effort fan sync for free tickets
+      try {
+        if (event.collective_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabaseAdmin.from("contacts") as any).upsert({
+            collective_id: event.collective_id,
+            contact_type: "fan",
+            email: buyerEmail,
+            full_name: null,
+            source: "ticket",
+            total_events: 1,
+            total_spend: 0,
+            last_seen_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "collective_id,email", ignoreDuplicates: false });
+        }
+      } catch (contactErr) {
+        console.error("[checkout] Contact upsert failed (non-blocking):", contactErr);
       }
 
       // Claim promo code uses for free tickets (webhook is bypassed for $0 tickets)

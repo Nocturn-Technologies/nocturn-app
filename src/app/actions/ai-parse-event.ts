@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 export interface TicketTier {
   name: string;
@@ -44,6 +45,9 @@ export async function parseEventDetails(
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { parsed: {}, reply: "Not authenticated" };
+
+  const { success: rlOk } = await rateLimitStrict(`ai-parse:${user.id}`, 20, 60_000);
+  if (!rlOk) return { parsed: existingData as ParsedEventDetails, reply: "Too many requests. Please wait a moment." };
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const localParsed = localParse(message, existingData);

@@ -4,6 +4,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { PLATFORM_FEE_PERCENT } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 export interface ForecastData {
   // Revenue projections
@@ -56,6 +57,10 @@ export async function generateEventForecast(eventId: string): Promise<{
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", forecast: null };
+
+  // Rate limit: 10 forecast requests per minute per user
+  const { success: rlOk } = await rateLimitStrict(`ai-finance:${user.id}`, 10, 60_000);
+  if (!rlOk) return { error: "Too many requests. Please wait a moment.", forecast: null };
 
   const admin = createAdminClient();
 
@@ -330,6 +335,9 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", recap: null };
+
+  const { success: rlOk } = await rateLimitStrict(`ai-recap:${user.id}`, 10, 60_000);
+  if (!rlOk) return { error: "Too many requests. Please wait a moment.", recap: null };
 
   const admin = createAdminClient();
 

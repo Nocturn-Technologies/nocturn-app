@@ -113,13 +113,23 @@ export default function LoginPage() {
     }
 
     // Honor redirect param (e.g., from invite flow), but only allow safe relative paths
-    // Block protocol-relative URLs (//), backslash tricks (/\), and encoded control chars
-    let decodedRedirect = "";
-    try { decodedRedirect = decodeURIComponent(redirectTo ?? ""); } catch { /* invalid encoding */ }
-    if (redirectTo && redirectTo.startsWith("/") && !redirectTo.startsWith("//") && !redirectTo.includes("\\") && !/[\x00-\x1f]/.test(decodedRedirect)) {
-      router.push(redirectTo);
-      router.refresh();
-      return;
+    // Validate BOTH raw and decoded forms to prevent encoding bypass attacks
+    if (redirectTo) {
+      let safeRedirect: string | null = null;
+      try {
+        const decoded = decodeURIComponent(redirectTo);
+        // Both raw AND decoded must pass safety checks
+        const isRawSafe = redirectTo.startsWith("/") && !redirectTo.startsWith("//") && !redirectTo.includes("\\");
+        const isDecodedSafe = decoded.startsWith("/") && !decoded.startsWith("//") && !decoded.includes("\\") && !/[\x00-\x1f]/.test(decoded);
+        if (isRawSafe && isDecodedSafe) {
+          safeRedirect = decoded;
+        }
+      } catch { /* invalid encoding — ignore */ }
+      if (safeRedirect) {
+        router.push(safeRedirect);
+        router.refresh();
+        return;
+      }
     }
 
     // Check user type for routing

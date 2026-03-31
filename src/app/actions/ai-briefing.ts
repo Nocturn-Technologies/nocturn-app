@@ -5,6 +5,7 @@ import { generateWithClaude } from "@/lib/claude";
 import { getDashboardBriefingData } from "@/lib/ai-context";
 import { createAdminClient } from "@/lib/supabase/config";
 import { unstable_cache } from "next/cache";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -144,6 +145,9 @@ export async function generateMorningBriefing(collectiveId: string): Promise<Bri
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
+
+  const { success: rlOk } = await rateLimitStrict(`ai-briefing:${user.id}`, 5, 60_000);
+  if (!rlOk) return [];
 
   const sb = createAdminClient();
 

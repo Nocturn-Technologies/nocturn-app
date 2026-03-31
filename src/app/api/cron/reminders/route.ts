@@ -213,6 +213,7 @@ export async function GET(request: Request) {
       const { data: collectives } = await sb
         .from("collectives")
         .select("id, name, metadata")
+        .is("deleted_at", null)
         .limit(100);
 
       for (const col of collectives ?? []) {

@@ -117,15 +117,19 @@ export async function checkInGuest(guestId: string) {
 
   const supabase = createAdminClient();
 
-  const { error } = await supabase
+  // Atomic status guard — only check in if not already checked in
+  const { data: updated, error } = await supabase
     .from("guest_list")
     .update({
       status: "checked_in",
       checked_in_at: new Date().toISOString(),
     })
-    .eq("id", guestId);
+    .eq("id", guestId)
+    .neq("status", "checked_in")
+    .select("id");
 
   if (error) return { error: error.message };
+  if (!updated || updated.length === 0) return { error: "Guest is already checked in" };
   return { error: null };
 }
 

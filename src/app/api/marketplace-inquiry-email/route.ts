@@ -57,9 +57,9 @@ export async function POST(req: NextRequest) {
   }
 
   const to = body.to || body.toEmail;
-  const profileName = body.profileName || body.toName || "there";
-  const senderName = body.senderName || "Someone";
-  const message = body.message || "";
+  const profileName = (body.profileName || body.toName || "there").slice(0, 200);
+  const senderName = (body.senderName || "Someone").slice(0, 200);
+  const message = (body.message || "").slice(0, 5000);
 
   if (!to) {
     return NextResponse.json(

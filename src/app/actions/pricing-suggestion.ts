@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 export interface PricingSuggestion {
   avgGA: number;
@@ -30,6 +31,10 @@ export async function getTicketPricingSuggestion(input: {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", pricing: null };
+
+  // Rate limit: 10 pricing queries per minute per user (expensive DB scans)
+  const { success: rlOk } = await rateLimitStrict(`pricing-suggest:${user.id}`, 10, 60_000);
+  if (!rlOk) return { error: "Too many requests. Please wait a moment.", pricing: null };
 
   const admin = createAdminClient();
 

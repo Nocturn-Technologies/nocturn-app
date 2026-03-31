@@ -305,6 +305,13 @@ export async function addEventExpense(input: {
   description: string;
   amount: number;
 }) {
+  // Input validation
+  const VALID_EXPENSE_CATEGORIES = ["supply", "venue", "artist", "travel", "marketing", "production", "staff", "other"];
+  if (!input.eventId || typeof input.eventId !== "string") return { error: "Invalid event ID" };
+  if (!VALID_EXPENSE_CATEGORIES.includes(input.category)) return { error: "Invalid expense category" };
+  if (!input.description || input.description.length > 500) return { error: "Description is required and must be under 500 characters" };
+  if (!Number.isFinite(input.amount) || input.amount <= 0 || input.amount > 1000000) return { error: "Amount must be between $0.01 and $1,000,000" };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -334,8 +341,8 @@ export async function addEventExpense(input: {
     event_id: input.eventId,
     collective_id: event.collective_id,
     category: input.category,
-    description: input.description,
-    amount: input.amount,
+    description: input.description.slice(0, 500),
+    amount: Math.round(input.amount * 100) / 100, // Round to 2 decimal places
     added_by: user.id,
   });
 

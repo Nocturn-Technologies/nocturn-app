@@ -67,7 +67,8 @@ export async function analyzeTicketSalesPatterns(
   const { data: events, error: eventsError } = await admin
     .from("events")
     .select("id, starts_at")
-    .eq("collective_id", collectiveId);
+    .eq("collective_id", collectiveId)
+    .is("deleted_at", null);
 
   if (eventsError || !events || events.length === 0) {
     return { error: "No events found for this collective.", data: null };
@@ -294,6 +295,7 @@ export async function getAudienceInsights(
     .from("events")
     .select("id, title, starts_at")
     .eq("collective_id", collectiveId)
+    .is("deleted_at", null)
     .order("starts_at", { ascending: true });
 
   if (eventsError || !events || events.length === 0) {

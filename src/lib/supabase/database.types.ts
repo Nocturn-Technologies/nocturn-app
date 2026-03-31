@@ -152,7 +152,7 @@ export type Database = {
         Row: {
           id: string
           collective_id: string
-          venue_id: string
+          venue_id: string | null
           title: string
           slug: string
           description: string | null
@@ -174,7 +174,7 @@ export type Database = {
         Insert: {
           id?: string
           collective_id: string
-          venue_id: string
+          venue_id?: string | null
           title: string
           slug: string
           description?: string | null
@@ -196,7 +196,7 @@ export type Database = {
         Update: {
           id?: string
           collective_id?: string
-          venue_id?: string
+          venue_id?: string | null
           title?: string
           slug?: string
           description?: string | null

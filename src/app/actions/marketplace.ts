@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { revalidatePath } from "next/cache";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -158,6 +159,8 @@ export async function getMarketplaceProfile() {
 }
 
 export async function getProfileBySlug(slug: string) {
+  if (!slug || typeof slug !== "string" || slug.length > 200) return null;
+
   const admin = createAdminClient();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -247,6 +250,44 @@ export async function saveProfile(
   // Ignore duplicate key (23505) — idempotent save
   if (error && (error as { code?: string }).code !== "23505") {
     return { error: (error as { message: string }).message };
+  }
+
+  // Contact upsert — best-effort industry sync for saved marketplace profile
+  try {
+    // Fetch the saved profile details + owner email for contact record
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: savedProfile } = await (admin.from("marketplace_profiles") as any)
+      .select("id, display_name, instagram_handle, user_type, users(email)")
+      .eq("id", profileId)
+      .maybeSingle();
+
+    if (savedProfile?.users?.email) {
+      // Get the saver's collective (first one they belong to)
+      const { data: membership } = await admin
+        .from("collective_members")
+        .select("collective_id")
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle();
+
+      if (membership?.collective_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (admin.from("contacts") as any).upsert({
+          collective_id: membership.collective_id,
+          contact_type: "industry",
+          email: savedProfile.users.email.toLowerCase().trim(),
+          full_name: savedProfile.display_name ?? null,
+          source: "marketplace",
+          instagram: savedProfile.instagram_handle ?? null,
+          marketplace_profile_id: savedProfile.id,
+          last_seen_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "collective_id,email", ignoreDuplicates: false });
+      }
+    }
+  } catch (contactErr) {
+    console.error("[marketplace] Contact upsert on save failed (non-blocking):", contactErr);
   }
 
   revalidatePath("/dashboard/discover");
@@ -432,6 +473,10 @@ export async function sendInquiry(data: {
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not logged in" };
 
+  // Rate limit: 5 inquiries per minute per user (sends email notifications)
+  const { success: rlOk } = await rateLimitStrict(`inquiry:${user.id}`, 5, 60_000);
+  if (!rlOk) return { error: "Too many messages. Please wait a moment." };
+
   const admin = createAdminClient();
 
   // Prevent self-inquiry
@@ -491,6 +536,35 @@ export async function sendInquiry(data: {
     } catch {
       // fire-and-forget — ignore email failures
     }
+  }
+
+  // Contact upsert — best-effort industry sync for inquiry recipient
+  try {
+    if (profile?.users?.email) {
+      const { data: membership } = await admin
+        .from("collective_members")
+        .select("collective_id")
+        .eq("user_id", user.id)
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle();
+
+      if (membership?.collective_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (admin.from("contacts") as any).upsert({
+          collective_id: membership.collective_id,
+          contact_type: "industry",
+          email: profile.users.email.toLowerCase().trim(),
+          full_name: profile.display_name ?? null,
+          source: "marketplace",
+          marketplace_profile_id: data.toProfileId,
+          last_seen_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "collective_id,email", ignoreDuplicates: false });
+      }
+    }
+  } catch (contactErr) {
+    console.error("[marketplace] Contact upsert on inquiry failed (non-blocking):", contactErr);
   }
 
   revalidatePath("/dashboard/discover");

@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 export interface EnrichedEventContent {
   description: string;
@@ -30,6 +31,9 @@ export async function enrichEventContent(input: {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { description: "", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
+
+  const { success: rlOk } = await rateLimitStrict(`ai-enrich:${user.id}`, 10, 60_000);
+  if (!rlOk) return { description: "", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
 
   const admin = createAdminClient();
 

@@ -1,6 +1,6 @@
 // Database-backed rate limiter for serverless functions
 // Uses Supabase to persist rate limit state across cold starts
-// Falls back to in-memory when DB is unavailable
+// Strict mode fails closed when DB is unavailable (no fallback to in-memory)
 
 import { createAdminClient } from "@/lib/supabase/config";
 
@@ -72,9 +72,10 @@ export async function rateLimitStrict(
     });
 
     return { success: true, remaining: limit - currentCount - 1 };
-  } catch {
-    // DB unavailable — fall back to in-memory
-    return rateLimit(key, limit, windowMs);
+  } catch (error) {
+    // DB unavailable — fail closed to prevent abuse in serverless
+    console.error("[rate-limit] DB unavailable, failing closed:", error);
+    return { success: false, remaining: 0 };
   }
 }
 

@@ -97,6 +97,34 @@ export async function addArtistToEvent(formData: {
   });
 
   if (error) return { error: (error as { message: string }).message };
+
+  // Contact upsert — best-effort industry sync for booked artist
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: artist } = await (admin.from("artists") as any)
+      .select("id, name, booking_email, instagram, soundcloud, spotify")
+      .eq("id", formData.artistId)
+      .maybeSingle();
+
+    if (artist?.booking_email) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (admin.from("contacts") as any).upsert({
+        collective_id: event.collective_id,
+        contact_type: "industry",
+        email: artist.booking_email.toLowerCase().trim(),
+        full_name: artist.name ?? null,
+        source: "artist_booking",
+        role: "artist",
+        artist_id: artist.id,
+        instagram: artist.instagram ?? null,
+        last_seen_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "collective_id,email", ignoreDuplicates: false });
+    }
+  } catch (contactErr) {
+    console.error("[artists] Contact upsert on booking failed (non-blocking):", contactErr);
+  }
+
   return { error: null };
 }
 

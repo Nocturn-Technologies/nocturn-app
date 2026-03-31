@@ -2,12 +2,16 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 // Generate a post-event recap email using Claude API
 export async function generatePostEventEmail(eventId: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", email: null };
+
+  const { success: rlOk } = await rateLimitStrict(`ai-email:${user.id}`, 10, 60_000);
+  if (!rlOk) return { error: "Too many requests. Please wait a moment.", email: null };
 
   const admin = createAdminClient();
 
@@ -141,6 +145,9 @@ export async function generatePromoEmail(eventId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", email: null };
 
+  const { success: rlOk2 } = await rateLimitStrict(`ai-email:${user.id}`, 10, 60_000);
+  if (!rlOk2) return { error: "Too many requests. Please wait a moment.", email: null };
+
   const admin = createAdminClient();
 
   const { data: eventRaw2 } = await admin
@@ -149,9 +156,21 @@ export async function generatePromoEmail(eventId: string) {
     .eq("id", eventId)
     .is("deleted_at", null)
     .maybeSingle();
-  const event = eventRaw2 as { id: string; title: string; slug: string; starts_at: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string; address: string } | null; [key: string]: unknown } | null;
+  const event = eventRaw2 as { id: string; title: string; slug: string; starts_at: string; collective_id?: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string; address: string } | null; [key: string]: unknown } | null;
 
   if (!event) return { error: "Event not found", email: null };
+
+  // Verify ownership — user must be a member of the event's collective
+  const colId = event.collective_id;
+  if (colId) {
+    const { count: memberCount } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", colId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!memberCount) return { error: "Not authorized", email: null };
+  }
 
   const { data: tiersRaw } = await admin
     .from("ticket_tiers")

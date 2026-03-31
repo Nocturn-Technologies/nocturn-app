@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 const UNSPLASH_ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY;
 
@@ -23,6 +24,10 @@ export async function GET(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    // Rate limit: 30 searches per minute per user
+    const { success: rlOk } = await rateLimitStrict(`unsplash:${user.id}`, 30, 60_000);
+    if (!rlOk) return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

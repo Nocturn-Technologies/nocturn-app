@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 /**
  * Verify the authenticated user is a member of the event's collective.
@@ -16,6 +17,7 @@ async function verifyCheckInAccess(eventId: string) {
     .from("events")
     .select("collective_id")
     .eq("id", eventId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event) return { error: "Event not found" };
@@ -44,6 +46,12 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
   const access = await verifyCheckInAccess(eventId);
   if (access.error) {
     return { success: false, error: access.error, ticket: null };
+  }
+
+  // Rate limit: 120 scans per minute per user (fast QR scanning)
+  const { success: rlOk } = await rateLimitStrict(`checkin:${eventId}`, 120, 60_000);
+  if (!rlOk) {
+    return { success: false, error: "Too many check-in attempts. Please wait.", ticket: null };
   }
 
   const supabase = createAdminClient();
@@ -95,9 +103,9 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
       success: false,
       error: `Already checked in at ${checkedInTime}`,
       ticket: {
-        tierName: (ticket.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
-        guestName: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
-        guestEmail: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.email ?? null,
+        tierName: ((ticket.ticket_tiers as Record<string, unknown> | null)?.name as string) ?? "General",
+        guestName: ((ticket.profiles as Record<string, unknown> | null)?.full_name as string) ?? "Guest",
+        guestEmail: ((ticket.profiles as Record<string, unknown> | null)?.email as string) ?? null,
       },
     };
   }

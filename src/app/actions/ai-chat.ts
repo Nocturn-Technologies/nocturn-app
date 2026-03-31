@@ -4,6 +4,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
 import { getEventContext, getCollectiveContext } from "@/lib/ai-context";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 import { SYSTEM_PROMPTS } from "@/lib/ai-prompts";
 
@@ -31,6 +32,10 @@ export async function generateChatResponse(
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { content: "Not authenticated", messageId: null };
+
+  // Rate limit: 20 AI chat messages per minute per user
+  const { success: rlOk } = await rateLimitStrict(`ai-chat:${user.id}`, 20, 60_000);
+  if (!rlOk) return { content: "You're sending messages too fast. Please slow down.", messageId: null };
 
   const sb = createAdminClient();
   let aiContent: string = fallbackResponse(userMessage);

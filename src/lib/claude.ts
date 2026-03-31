@@ -33,6 +33,22 @@ export async function generateWithClaude(
   const client = getClient();
   if (!client) return null;
 
+  // Validate and sanitize prompt length
+  if (prompt.length > 10000) {
+    prompt = prompt.slice(0, 10000);
+  }
+
+  // Validate and sanitize conversation history
+  if (conversationHistory) {
+    conversationHistory = conversationHistory
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .slice(-20)
+      .map((msg) => ({
+        role: msg.role,
+        content: msg.content.length > 5000 ? msg.content.slice(0, 5000) : msg.content,
+      }));
+  }
+
   const defaultSystem = "You are Nocturn AI, an assistant for nightlife promoters. Be concise, confident, and practical. Use nightlife terminology naturally.";
   const system = systemPrompt || defaultSystem;
 

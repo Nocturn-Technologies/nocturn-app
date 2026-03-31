@@ -18,6 +18,7 @@ export async function enrichAttendeeCRM(eventId: string) {
     .from("events")
     .select("collective_id")
     .eq("id", eventId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (!ev) return { error: "Event not found" };
   const { count: memberCount } = await admin

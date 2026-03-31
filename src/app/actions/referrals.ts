@@ -195,6 +195,9 @@ export async function checkReferralReward(
   threshold: number;
   remaining: number;
 }> {
+  // Hardcode threshold to prevent callers from lowering it
+  threshold = 5;
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { earned: false, count: 0, threshold, remaining: threshold };

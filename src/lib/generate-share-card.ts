@@ -89,7 +89,7 @@ export async function generateShareCard(event: ShareCardEvent): Promise<Blob> {
   const imgH = 900;
   const imgX = 60;
 
-  if (event.flyerUrl) {
+  if (event.flyerUrl && event.flyerUrl.startsWith("https://")) {
     try {
       const resp = await fetch(event.flyerUrl);
       if (!resp.ok) throw new Error(`Flyer fetch failed: ${resp.status}`);

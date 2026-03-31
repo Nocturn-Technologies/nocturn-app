@@ -66,6 +66,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const { prompt } = await request.json();
+    if (typeof prompt !== "string" || prompt.length > 2000) {
+      return NextResponse.json({ error: "Invalid or too-long prompt (max 2000 chars)" }, { status: 400 });
+    }
     if (!prompt) {
       return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
     }

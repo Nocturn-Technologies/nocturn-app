@@ -5,6 +5,54 @@
 ## What is this?
 Mobile-first web app for nightlife promoters and collectives. Manage events, sell tickets, coordinate teams, discover venues, and record calls — all from your phone or desktop. Built with Next.js + Supabase + Stripe.
 
+## Current Priority: Customer Pitch & Onboarding
+Shawn is actively pitching collectives as potential customers. The primary workflow right now is:
+1. Creating visual assets (slide decks, mockups, branded materials) to pitch Nocturn to collectives
+2. Demoing the new onboarding flow to prospective customers
+3. Getting the first 3 collectives onboarded before Techstars NYC deadline (June 10, 2026)
+
+### Pitch Context
+- **Target customer**: House music collectives in Toronto (20-30 year old promoters running 2-4 events/month)
+- **Pain they feel**: Scattered across Google Sheets, Venmo, Instagram DMs, group chats. No single tool runs their operation.
+- **Nocturn's pitch**: "You run the night. Nocturn runs the business." — one platform for events, tickets, settlements, marketing, and team coordination
+- **Competitive edge**: AI agents (Money, Promo, Reach, Ops) that automate the boring parts. 7% + $0.50 per ticket (cheaper than Posh at 10% + $0.99)
+- **North star metric**: Time to First Ticket Sold (target: <48 hours for 30% of new collectives)
+
+### New Onboarding Flow (Just Built)
+The collective onboarding was redesigned from a 7-step AI chat to a fast 3-screen card-based flow:
+1. **Screen 1 — Name + City**: Collective name with live slug preview + city input (combined, was 2 screens)
+2. **Screen 2 — Vibe Picker**: 6 house-music-focused vibes with subgenre listings:
+   - Deep & Melodic (Deep House / Melodic Techno / Progressive / Organic House)
+   - Peak Time (Tech House / Big Room / Mainstage / Festival House)
+   - Underground (Warehouse Techno / Minimal / Raw / Acid)
+   - Afro & Amapiano (Afro House / Amapiano / Afrobeats / Percussive)
+   - Experimental (Breaks / Electro / Left-field Bass / IDM)
+   - Open Format (House / Hip Hop / R&B / Genre-fluid)
+3. **Screen 3 — Drop Your First Event**: Pre-filled event card from vibe selection (8 templates), inline editing, venue optional
+4. **Share Screen**: Confetti + copy link + IG Story share + email share
+5. **Dashboard**: Setup checklist with progress toward first ticket sold
+
+**Key files for onboarding**:
+- `src/app/onboarding/page.tsx` — Main 3-screen flow
+- `src/lib/event-templates.ts` — 6 vibes + 8 event templates
+- `src/components/onboarding/vibe-picker.tsx` — Vibe selection grid
+- `src/components/onboarding/event-card.tsx` — Inline editable event card
+- `src/components/onboarding/share-screen.tsx` — Post-creation share screen
+- `src/app/actions/onboarding-event.ts` — Server action for quick event creation
+- `docs/ONBOARDING_REDESIGN.md` — Full design document with research
+
+**Approval gate**: Collectives still require manual approval (Shawn approves via email) before they can access the dashboard and onboarding. This is intentional to keep competitors out during beta.
+
+### Creating Pitch Assets
+When asked to create pitch decks, slides, or marketing materials:
+- Use the **Gamma MCP** for generating slide decks (it's connected)
+- Use the **Canva MCP** for creating visual designs and social assets
+- Follow brand guidelines: #7B2FF7 purple, #09090B background, Outfit headings, DM Sans body
+- Voice: Confident, warm, precise. Say "operators" not "users". Say "collectives" not "teams"
+- Photography style: atmospheric, moody, silhouette-forward. Avoid DJ hero shots or posed corporate
+- Key stats to include: 7% + $0.50 per ticket, 4 AI agents, <2 min to live event, house music focused
+- Competitors to reference: Posh (10% + $0.99), Eventbrite (dated UX), RA (24hr approval delay), Partiful (casual only)
+
 ## Tech Stack
 - **Framework**: Next.js 16 (App Router) + TypeScript
 - **Styling**: Tailwind CSS v4 + shadcn/ui components

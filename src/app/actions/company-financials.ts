@@ -119,7 +119,8 @@ export async function getCompanyFinancials(): Promise<{
     .from("events")
     .select("id")
     .in("collective_id", collectiveIds)
-    .in("status", ["completed", "published"]);
+    .in("status", ["completed", "published"])
+    .is("deleted_at", null);
 
   const unsettledIds = (allEvents ?? [])
     .map((e) => e.id)
@@ -192,6 +193,7 @@ export async function getEventFinancialSummaries(): Promise<{
       .select("id, title, starts_at, status")
       .in("collective_id", collectiveIds)
       .in("status", ["published", "completed", "draft"])
+      .is("deleted_at", null)
       .order("starts_at", { ascending: false }),
   ]);
 
@@ -303,6 +305,7 @@ export async function getRevenueForecast(): Promise<{
     .in("collective_id", collectiveIds)
     .in("status", ["published"])
     .gte("starts_at", todayStart.toISOString())
+    .is("deleted_at", null)
     .order("starts_at", { ascending: true });
 
   if (!upcomingEvents || upcomingEvents.length === 0) {

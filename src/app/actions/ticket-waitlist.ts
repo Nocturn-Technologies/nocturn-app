@@ -7,13 +7,16 @@ import { createAdminClient } from "@/lib/supabase/config";
 /**
  * Join the waitlist for a sold-out ticket tier.
  */
-export async function joinWaitlist(eventId: string, tierId: string) {
+export async function joinWaitlist(eventId: string, tierId: string, waitlistEmail?: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
 
-  const email = user.email;
-  if (!email) return { error: "No email associated with your account" };
+  // Use provided email (for unauthenticated users on public pages) or fall back to auth user email
+  const email = waitlistEmail?.trim() || user?.email;
+  if (!email) return { error: "Email is required to join the waitlist" };
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) return { error: "Invalid email format" };
 
   const sb = createAdminClient();
 

@@ -4,347 +4,283 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { createCollective } from "@/app/actions/auth";
-import { generateOnboardingSuggestions } from "@/app/actions/ai-onboarding";
-import { useTypewriter } from "@/lib/typewriter";
+import { createOnboardingEvent } from "@/app/actions/onboarding-event";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Sparkles, Check, ArrowRight } from "lucide-react";
 import { NocturnLogo } from "@/components/nocturn-logo";
+import { VibePicker } from "@/components/onboarding/vibe-picker";
+import { EventCard, createInitialEventData, type EventCardData } from "@/components/onboarding/event-card";
+import { ShareScreen } from "@/components/onboarding/share-screen";
+import { ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
+import { type VibeKey, VIBE_OPTIONS } from "@/lib/event-templates";
 
-type Step = "welcome" | "name" | "city" | "thinking" | "suggestions" | "creating" | "done";
+type Step = "name_city" | "vibe" | "event" | "creating" | "share";
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
 
-function AiBubble({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`flex items-start gap-3 animate-fade-in-up ${className}`}>
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-nocturn/20 animate-pulse-glow">
-        <Sparkles className="h-4 w-4 text-nocturn" />
-      </div>
-      <div className="rounded-2xl rounded-tl-sm bg-card border border-border px-4 py-3 max-w-md">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function ThinkingDots() {
-  return (
-    <div className="flex items-start gap-3 animate-fade-in-up">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-nocturn/20 animate-pulse-glow">
-        <Sparkles className="h-4 w-4 text-nocturn" />
-      </div>
-      <div className="rounded-2xl rounded-tl-sm bg-card border border-border px-5 py-4">
-        <div className="flex gap-1.5">
-          <div className="thinking-dot" />
-          <div className="thinking-dot" />
-          <div className="thinking-dot" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TypewriterBubble({ text, onComplete }: { text: string; onComplete?: () => void }) {
-  const { displayedText, isComplete } = useTypewriter(text, 25);
-
-  useEffect(() => {
-    if (isComplete && onComplete) onComplete();
-  }, [isComplete, onComplete]);
-
-  return (
-    <AiBubble>
-      <p className="text-sm leading-relaxed">
-        {displayedText}
-        {!isComplete && <span className="inline-block w-0.5 h-4 bg-nocturn ml-0.5 animate-pulse" />}
-      </p>
-    </AiBubble>
-  );
-}
-
 export default function OnboardingPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [step, setStep] = useState<Step>("welcome");
+  const [step, setStep] = useState<Step>("name_city");
+
+  // Screen 1: Name + City
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [city, setCity] = useState("");
-  const [bio, setBio] = useState("");
-  const [instagramCaption, setInstagramCaption] = useState("");
-  const [welcomeMessage, setWelcomeMessage] = useState("");
-  const [instagram, setInstagram] = useState("");
-  const [showExtras, setShowExtras] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [welcomeDone, setWelcomeDone] = useState(false);
 
-  // Auth guard — redirect to login if no user
+  // Screen 2: Vibe
+  const [selectedVibe, setSelectedVibe] = useState<VibeKey | null>(null);
+
+  // Screen 3: Event
+  const [eventData, setEventData] = useState<EventCardData | null>(null);
+  const [skipEvent, setSkipEvent] = useState(false);
+
+  // Share screen
+  const [createdEventSlug, setCreatedEventSlug] = useState("");
+
+  const [error, setError] = useState<string | null>(null);
+
+  // Auth guard
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (!user) router.push("/login");
     });
   }, [supabase, router]);
 
-  // Auto-advance from welcome
-  useEffect(() => {
-    if (step === "welcome" && welcomeDone) {
-      const timer = setTimeout(() => setStep("name"), 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [step, welcomeDone]);
-
-  // Call AI when entering thinking step
-  useEffect(() => {
-    if (step === "thinking") {
-      generateOnboardingSuggestions(name, city)
-        .then((result) => {
-          setBio(result.bio);
-          setInstagramCaption(result.instagramCaption);
-          setWelcomeMessage(result.welcomeMessage);
-          // Minimum 2s for the thinking feel
-          setTimeout(() => setStep("suggestions"), 2000);
-        })
-        .catch(() => {
-          // AI failed — use sensible defaults so user isn't stuck
-          setBio(`${name} is a music collective based in ${city}.`);
-          setInstagramCaption(`Something new is coming to ${city}. Stay tuned. 🌙`);
-          setWelcomeMessage(`Let's get ${name} set up!`);
-          setTimeout(() => setStep("suggestions"), 1000);
-        });
-    }
-  }, [step, name, city]);
-
-  async function handleCreate() {
-    setStep("creating");
-    setError(null);
-
-    const result = await createCollective({
-      name,
-      slug,
-      description: bio || null,
-      city,
-      instagram: instagram || null,
-      website: null,
-    });
-
-    if (result.error) {
-      setError(result.error);
-      setStep("suggestions");
-      return;
-    }
-
-    setStep("done");
-  }
-
   function handleNameChange(value: string) {
     setName(value);
     setSlug(slugify(value));
   }
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-lg space-y-6">
+  // When vibe is selected, initialize event data
+  function handleVibeSelect(vibe: VibeKey) {
+    setSelectedVibe(vibe);
+    setEventData(createInitialEventData(vibe, name));
+  }
 
+  async function handleCreate() {
+    setStep("creating");
+    setError(null);
+
+    // Build bio from vibe selection
+    const vibeOption = VIBE_OPTIONS.find((v) => v.key === selectedVibe);
+    const bio = `${name} — curating ${vibeOption?.label.toLowerCase() ?? "unforgettable"} nights in ${city}.`;
+
+    // 1. Create collective
+    const result = await createCollective({
+      name,
+      slug,
+      description: bio,
+      city,
+      instagram: null,
+      website: null,
+    });
+
+    if (result.error) {
+      setError(result.error);
+      setStep(skipEvent ? "vibe" : "event");
+      return;
+    }
+
+    // 2. Create event (if not skipped)
+    if (!skipEvent && eventData) {
+      const eventResult = await createOnboardingEvent({
+        collectiveSlug: slug,
+        title: eventData.title,
+        startsAt: eventData.date.toISOString(),
+        venue: eventData.venue || null,
+        tierName: eventData.tierName,
+        tierPrice: eventData.tierPrice,
+        vibeTags: vibeOption?.vibeTags ?? [],
+      });
+
+      if (eventResult.error) {
+        // Non-fatal — collective is created, event creation failed
+        console.error("[onboarding] event creation failed:", eventResult.error);
+        setCreatedEventSlug("");
+      } else {
+        setCreatedEventSlug(eventResult.eventSlug ?? "");
+      }
+    }
+
+    setStep("share");
+  }
+
+  function handleSkipEvent() {
+    setSkipEvent(true);
+    handleCreate();
+  }
+
+  function goToDashboard() {
+    router.push("/dashboard");
+    router.refresh();
+  }
+
+  const currentStep = step === "name_city" ? 1 : step === "vibe" ? 2 : step === "event" ? 3 : 0;
+  const totalSteps = 3;
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+      <div className="w-full max-w-lg space-y-8">
         {/* Logo */}
         <div className="flex justify-center animate-fade-in-up">
           <NocturnLogo size="md" />
         </div>
 
-        {/* Chat area */}
-        <div className="space-y-4 min-h-[400px]">
+        {/* Progress bar */}
+        {currentStep > 0 && (
+          <div className="flex items-center gap-2 animate-fade-in-up">
+            {Array.from({ length: totalSteps }).map((_, i) => (
+              <div
+                key={i}
+                className={`h-1 flex-1 rounded-full transition-all duration-500 ${
+                  i < currentStep ? "bg-nocturn" : "bg-border"
+                }`}
+              />
+            ))}
+            <span className="text-xs text-muted-foreground ml-1">{currentStep}/{totalSteps}</span>
+          </div>
+        )}
 
-          {/* Step: Welcome */}
-          {step === "welcome" && (
-            <TypewriterBubble
-              text="Hey! I'm Nocturn — your AI-powered nightlife operating system. Let's set up your collective in under a minute. ✨"
-              onComplete={() => setWelcomeDone(true)}
-            />
-          )}
-
-          {/* Step: Name */}
-          {step === "name" && (
-            <>
-              <AiBubble>
-                <p className="text-sm">What&apos;s your collective called?</p>
-                <p className="text-[11px] text-muted-foreground mt-1">Already selling tickets on another platform? No problem — you can still use all of Nocturn&apos;s planning and ops tools.</p>
-              </AiBubble>
-              <div className="ml-8 sm:ml-11 animate-fade-in-up delay-200 space-y-3">
-                <Input
-                  placeholder="e.g. Midnight Society"
-                  value={name}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  className="text-base"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && name.trim()) setStep("city");
-                  }}
-                />
-                {slug && (
-                  <p className="text-xs text-muted-foreground animate-fade-in-up">
-                    nocturn.app/<span className="text-nocturn">{slug}</span>
-                  </p>
-                )}
-                <Button
-                  onClick={() => setStep("city")}
-                  disabled={!name.trim()}
-                  className="bg-nocturn hover:bg-nocturn-light"
-                  size="sm"
-                >
-                  Continue
-                  <ArrowRight className="ml-1 h-3 w-3" />
-                </Button>
-              </div>
-            </>
-          )}
-
-          {/* Step: City */}
-          {step === "city" && (
-            <>
-              <AiBubble>
-                <p className="text-sm">
-                  Nice — <span className="font-medium text-nocturn">{name}</span>! Where are you based?
+        {/* Content */}
+        <div className="min-h-[420px]">
+          {/* Screen 1: Name + City */}
+          {step === "name_city" && (
+            <div className="space-y-6 animate-fade-in-up">
+              <div className="text-center space-y-2">
+                <h2 className="text-2xl font-bold tracking-tight">
+                  What&apos;s your collective called?
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  You can always change this later
                 </p>
-              </AiBubble>
-              <div className="ml-8 sm:ml-11 animate-fade-in-up delay-200 space-y-3">
+              </div>
+
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Input
+                    placeholder="e.g. Midnight Society"
+                    value={name}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    className="text-base h-12"
+                    autoFocus
+                  />
+                  {slug && (
+                    <p className="text-xs text-muted-foreground px-1">
+                      nocturn.app/<span className="text-nocturn font-medium">{slug}</span>
+                    </p>
+                  )}
+                </div>
+
                 <Input
-                  placeholder="e.g. Toronto"
+                  placeholder="Where are you based? (e.g. Toronto)"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  className="text-base"
-                  autoFocus
+                  className="text-base h-12"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && city.trim()) setStep("thinking");
+                    if (e.key === "Enter" && name.trim() && city.trim()) setStep("vibe");
                   }}
                 />
+
                 <Button
-                  onClick={() => setStep("thinking")}
-                  disabled={!city.trim()}
-                  className="bg-nocturn hover:bg-nocturn-light"
-                  size="sm"
+                  onClick={() => setStep("vibe")}
+                  disabled={!name.trim() || !city.trim()}
+                  className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base"
                 >
                   Continue
-                  <ArrowRight className="ml-1 h-3 w-3" />
-                </Button>
-              </div>
-            </>
-          )}
-
-          {/* Step: Thinking */}
-          {step === "thinking" && (
-            <>
-              <AiBubble>
-                <p className="text-sm">
-                  Setting up <span className="font-medium text-nocturn">{name}</span> in {city}...
-                </p>
-              </AiBubble>
-              <ThinkingDots />
-            </>
-          )}
-
-          {/* Step: Suggestions */}
-          {step === "suggestions" && (
-            <>
-              {welcomeMessage && (
-                <AiBubble>
-                  <p className="text-sm font-medium">{welcomeMessage}</p>
-                </AiBubble>
-              )}
-
-              <AiBubble className="delay-200">
-                <p className="text-sm text-muted-foreground mb-1">Here&apos;s a bio I wrote for you:</p>
-              </AiBubble>
-
-              <div className="ml-8 sm:ml-11 animate-scale-in delay-300">
-                <textarea
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  className="w-full rounded-xl border bg-card px-4 py-3 text-sm leading-relaxed resize-none focus:border-nocturn focus:ring-1 focus:ring-nocturn"
-                  rows={2}
-                />
-              </div>
-
-              <AiBubble className="delay-400">
-                <p className="text-sm text-muted-foreground mb-2">And a launch caption for Instagram:</p>
-                <div className="rounded-lg bg-nocturn/5 border border-nocturn/20 p-3 text-sm whitespace-pre-line">
-                  {instagramCaption}
-                </div>
-              </AiBubble>
-
-              {/* Optional extras */}
-              <div className="ml-11 space-y-3 animate-fade-in-up delay-500">
-                {!showExtras ? (
-                  <button
-                    onClick={() => setShowExtras(true)}
-                    className="text-xs text-nocturn hover:underline"
-                  >
-                    + Add Instagram handle
-                  </button>
-                ) : (
-                  <div className="animate-fade-in-up space-y-2">
-                    <Input
-                      placeholder="@yourcollective"
-                      value={instagram}
-                      onChange={(e) => setInstagram(e.target.value)}
-                      className="text-sm"
-                    />
-                  </div>
-                )}
-
-                {error && (
-                  <p className="text-sm text-destructive animate-fade-in-up">{error}</p>
-                )}
-
-                <Button
-                  onClick={handleCreate}
-                  className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base"
-                >
-                  <Sparkles className="mr-2 h-4 w-4" />
-                  Launch {name}
-                </Button>
-              </div>
-            </>
-          )}
-
-          {/* Step: Creating */}
-          {step === "creating" && (
-            <AiBubble>
-              <div className="flex items-center gap-2">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
-                <p className="text-sm">Setting up your collective...</p>
-              </div>
-            </AiBubble>
-          )}
-
-          {/* Step: Done */}
-          {step === "done" && (
-            <div className="flex flex-col items-center gap-5 py-12 animate-scale-in">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 animate-pulse-glow" style={{ animationDuration: "1.5s" }}>
-                <Check className="h-8 w-8 text-green-500" />
-              </div>
-              <div className="text-center">
-                <h2 className="text-xl font-bold">{name} is live!</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Your collective is ready. What&apos;s next?
-                </p>
-              </div>
-              <div className="flex flex-col gap-2 w-full max-w-xs">
-                <Button
-                  onClick={() => { router.push("/dashboard/events/new"); router.refresh(); }}
-                  className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base"
-                >
-                  <ArrowRight className="mr-2 h-4 w-4" />
-                  Create your first event
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => { router.push("/dashboard"); router.refresh(); }}
-                  className="w-full text-sm text-muted-foreground"
-                >
-                  Go to dashboard
+                  <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </div>
+          )}
+
+          {/* Screen 2: Vibe Picker */}
+          {step === "vibe" && (
+            <div className="space-y-6">
+              <button
+                onClick={() => setStep("name_city")}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
+
+              <VibePicker
+                collectiveName={name}
+                selected={selectedVibe}
+                onSelect={handleVibeSelect}
+              />
+
+              <Button
+                onClick={() => setStep("event")}
+                disabled={!selectedVibe}
+                className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base"
+              >
+                Continue
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          )}
+
+          {/* Screen 3: Event Card */}
+          {step === "event" && eventData && (
+            <div className="space-y-6">
+              <button
+                onClick={() => setStep("vibe")}
+                className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back
+              </button>
+
+              <EventCard
+                collectiveName={name}
+                vibe={selectedVibe!}
+                data={eventData}
+                onChange={setEventData}
+              />
+
+              {error && (
+                <p className="text-sm text-destructive text-center animate-fade-in-up">{error}</p>
+              )}
+
+              <Button
+                onClick={() => handleCreate()}
+                className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base"
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Create Event
+              </Button>
+
+              <button
+                onClick={handleSkipEvent}
+                className="w-full text-center text-sm text-muted-foreground hover:text-white transition-colors"
+              >
+                I&apos;ll do this later
+              </button>
+            </div>
+          )}
+
+          {/* Creating state */}
+          {step === "creating" && (
+            <div className="flex flex-col items-center gap-4 py-16 animate-fade-in-up">
+              <div className="h-10 w-10 animate-spin rounded-full border-3 border-nocturn border-t-transparent" />
+              <p className="text-sm text-muted-foreground">
+                Setting up {name}...
+              </p>
+            </div>
+          )}
+
+          {/* Screen 4: Share */}
+          {step === "share" && (
+            <ShareScreen
+              eventTitle={skipEvent ? name : eventData?.title ?? name}
+              collectiveSlug={slug}
+              eventSlug={createdEventSlug}
+              onDashboard={goToDashboard}
+            />
           )}
         </div>
       </div>

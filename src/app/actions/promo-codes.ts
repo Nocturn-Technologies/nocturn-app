@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 // Verify user owns the event via collective membership
 async function verifyEventAccess(eventId: string) {
@@ -56,6 +57,10 @@ export async function createPromoCode(input: {
 }) {
   const access = await verifyEventAccess(input.eventId);
   if (access.error) return { error: access.error };
+
+  // Rate limit: 10 promo code operations per minute per user
+  const { success: rlOk } = await rateLimitStrict(`promo:${access.userId}`, 10, 60_000);
+  if (!rlOk) return { error: "Too many requests. Please wait a moment." };
 
   // Validate discount value bounds
   if (!Number.isFinite(input.discountValue)) {

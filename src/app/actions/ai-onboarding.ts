@@ -3,11 +3,15 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { generateWithClaude } from "@/lib/claude";
 import { generateEventBio } from "@/app/actions/ai-generate";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 export async function generateOnboardingSuggestions(name: string, city: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { bio: "", instagramCaption: "", welcomeMessage: "" };
+
+  const { success: rlOk } = await rateLimitStrict(`ai-onboarding:${user.id}`, 5, 60_000);
+  if (!rlOk) return { bio: "", instagramCaption: "", welcomeMessage: "" };
 
   const fallback = {
     bio: `${name} — curating unforgettable nights in ${city}.`,

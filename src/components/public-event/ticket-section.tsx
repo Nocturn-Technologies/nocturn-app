@@ -234,7 +234,7 @@ export function TicketSection({
                             onClick={async () => {
                               if (!waitlistEmail || joiningWaitlist) return;
                               setJoiningWaitlist(true);
-                              const result = await joinWaitlist(eventId, tier.id);
+                              const result = await joinWaitlist(eventId, tier.id, waitlistEmail);
                               if (!result.error) {
                                 setWaitlistJoined(true);
                               }

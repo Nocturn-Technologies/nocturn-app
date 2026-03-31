@@ -3,7 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/send";
 import { createAdminClient } from "@/lib/supabase/config";
-import { rateLimit } from "@/lib/rate-limit";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 /**
  * Send an email campaign to all attendees of an event.
@@ -14,11 +14,16 @@ export async function sendCampaignEmail(input: {
   subject: string;
   body: string;
 }) {
+  // Input validation
+  if (!input.eventId || typeof input.eventId !== "string") return { error: "Invalid event ID", sent: 0 };
+  if (!input.subject || input.subject.length > 200) return { error: "Subject is required and must be under 200 characters", sent: 0 };
+  if (!input.body || input.body.length > 10000) return { error: "Body is required and must be under 10,000 characters", sent: 0 };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", sent: 0 };
 
-  const { success } = rateLimit(`campaign:${user.id}`, 3, 60_000);
+  const { success } = await rateLimitStrict(`campaign:${user.id}`, 3, 60_000);
   if (!success) return { error: "Rate limit exceeded. Please wait before sending another campaign.", sent: 0 };
 
   const sb = createAdminClient();
@@ -28,6 +33,7 @@ export async function sendCampaignEmail(input: {
     .from("events")
     .select("id, title, collective_id")
     .eq("id", input.eventId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event) return { error: "Event not found", sent: 0 };
@@ -72,7 +78,7 @@ export async function sendCampaignEmail(input: {
 
   // Build HTML email from plain text body
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
-  const eventTitle = event.title.replace(/[\r\n\t\x00-\x1f]/g, "").slice(0, 200);
+  const eventTitle = escapeHtml(event.title.replace(/[\r\n\t\x00-\x1f]/g, "")).slice(0, 200);
   const htmlBody = input.body
     .split("\n")
     .map((line) => (line.trim() === "" ? "<br>" : `<p>${escapeHtml(line)}</p>`))

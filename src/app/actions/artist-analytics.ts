@@ -46,7 +46,8 @@ export async function getArtistPerformanceAnalytics(): Promise<{
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: events } = await (admin.from("events") as any)
     .select("id, metadata")
-    .eq("collective_id", collectiveId);
+    .eq("collective_id", collectiveId)
+    .is("deleted_at", null);
 
   if (!events || (events as { id: string }[]).length === 0) {
     return { error: null, artists: [], avgTicketsAcrossAll: 0 };

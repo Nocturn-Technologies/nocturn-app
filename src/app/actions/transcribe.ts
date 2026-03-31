@@ -3,6 +3,7 @@
 import OpenAI from "openai";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -14,6 +15,10 @@ export async function transcribeFromStorage(storagePath: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", transcript: "", summary: "", action_items: [], key_decisions: [] };
+
+  // Rate limit: 5 transcriptions per hour per user (Whisper + GPT are expensive)
+  const { success: rlOk } = await rateLimitStrict(`transcribe:${user.id}`, 5, 3_600_000);
+  if (!rlOk) return { error: "Rate limit exceeded. Max 5 transcriptions per hour.", transcript: "", summary: "", action_items: [], key_decisions: [] };
 
   try {
     const admin = createAdminClient();
@@ -141,6 +146,10 @@ export async function transcribeAudio(audioBase64: string, mimeType: string) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", transcript: "", summary: "", action_items: [], key_decisions: [] };
+
+  // Rate limit: 5 transcriptions per hour per user
+  const { success: rlOk } = await rateLimitStrict(`transcribe:${user.id}`, 5, 3_600_000);
+  if (!rlOk) return { error: "Rate limit exceeded. Max 5 transcriptions per hour.", transcript: "", summary: "", action_items: [], key_decisions: [] };
 
   if (audioBase64.length > 35_000_000) {
     return { error: "Audio file too large", transcript: "", summary: "", action_items: [], key_decisions: [] };

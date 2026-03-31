@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { generateWithClaude } from "@/lib/claude";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 // ─── Event Description ──────────────────────────────────────────────────────
 
@@ -14,6 +15,9 @@ export async function generateEventDescription(
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return "";
+
+  const { success: rlOk } = await rateLimitStrict(`ai-gen:${user.id}`, 15, 60_000);
+  if (!rlOk) return "";
 
   const prompt = `Write a compelling event description for a nightlife event. Keep it under 150 words. Make it feel exclusive and exciting.
 

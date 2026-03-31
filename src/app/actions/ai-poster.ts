@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { generateWithClaude } from "@/lib/claude";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 const POSTER_SYSTEM_PROMPT = `You are a world-class creative director who designs posters for elite underground electronic music events — Circoloco, Paradise, Afterlife, Boiler Room, Keinemusik, fabric, Printworks.
 
@@ -61,6 +62,9 @@ export async function generatePosterPrompt(eventData: {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { prompt: "", error: "Not authenticated" };
+
+  const { success: rlOk } = await rateLimitStrict(`ai-poster:${user.id}`, 10, 60_000);
+  if (!rlOk) return { prompt: "", error: "Too many requests. Please wait." };
 
   const userPrompt = `Design a poster for this event:
 

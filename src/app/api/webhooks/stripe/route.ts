@@ -240,6 +240,35 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     `[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`
   );
 
+  // Contact upsert — best-effort fan sync
+  try {
+    const contactEmail = (session.customer_email ?? session.customer_details?.email ?? "").toLowerCase().trim();
+    if (contactEmail) {
+      const { data: eventForContact } = await supabase
+        .from("events")
+        .select("collective_id")
+        .eq("id", eventId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (eventForContact?.collective_id) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase.from("contacts") as any).upsert({
+          collective_id: eventForContact.collective_id,
+          contact_type: "fan",
+          email: contactEmail,
+          full_name: (metadata.customerName || metadata.buyerName || session.customer_details?.name) ?? null,
+          source: "ticket",
+          total_events: 1,
+          total_spend: pricePaid * quantity,
+          last_seen_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "collective_id,email", ignoreDuplicates: false });
+      }
+    }
+  } catch (contactErr) {
+    console.error("[stripe-webhook] Contact upsert failed (non-blocking):", contactErr);
+  }
+
   // Claim promo code uses AFTER successful ticket creation (not at checkout creation).
   // This ensures abandoned checkouts don't consume promo uses.
   // Uses claim_promo_code RPC which accepts quantity (not increment_promo_uses which always adds 1).
@@ -428,6 +457,28 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     console.error("[stripe-webhook] Invalid quantity in PI metadata:", metadata.quantity);
     return;
   }
+
+  // SECURITY: Verify payment amount matches expected amount from metadata
+  // Prevents fulfillment on amount mismatches (currency glitches, replay attacks)
+  const expectedCents = parseInt(metadata.totalAmountCents || metadata.baseAmountCents || "0", 10);
+  if (expectedCents > 0 && paymentIntent.amount !== expectedCents) {
+    console.error(
+      `[stripe-webhook] AMOUNT MISMATCH: PI ${paymentIntent.id} charged ${paymentIntent.amount} cents but expected ${expectedCents} cents`
+    );
+    void logPaymentEvent({
+      event_type: "fulfillment_failed",
+      payment_intent_id: paymentIntent.id,
+      event_id: eventId,
+      tier_id: tierId,
+      quantity,
+      amount_cents: paymentIntent.amount,
+      currency: paymentIntent.currency,
+      buyer_email: metadata.buyerEmail ?? null,
+      metadata: { error: `Amount mismatch: got ${paymentIntent.amount}, expected ${expectedCents}` },
+    });
+    return;
+  }
+
   const buyerEmail = metadata.buyerEmail || paymentIntent.receipt_email;
   const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
@@ -573,6 +624,37 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   }
 
   console.info(`[stripe-webhook] ${wasNewlyCreated ? "Created" : "Found existing"} ${quantity} ticket(s) for PI ${paymentIntent.id}`);
+
+  // Contact upsert — best-effort fan sync
+  if (wasNewlyCreated) {
+    try {
+      const contactEmail = (buyerEmail ?? "").toLowerCase().trim();
+      if (contactEmail) {
+        const { data: eventForContact } = await supabase
+          .from("events")
+          .select("collective_id")
+          .eq("id", eventId)
+          .is("deleted_at", null)
+          .maybeSingle();
+        if (eventForContact?.collective_id) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await (supabase.from("contacts") as any).upsert({
+            collective_id: eventForContact.collective_id,
+            contact_type: "fan",
+            email: contactEmail,
+            full_name: (metadata.buyerName || metadata.customerName) ?? null,
+            source: "ticket",
+            total_events: 1,
+            total_spend: pricePaid * quantity,
+            last_seen_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }, { onConflict: "collective_id,email", ignoreDuplicates: false });
+        }
+      }
+    } catch (contactErr) {
+      console.error("[stripe-webhook] Contact upsert failed (non-blocking):", contactErr);
+    }
+  }
 
   // Only log fulfillment and claim promo if tickets were NEWLY created.
   // If they pre-existed (client action beat the webhook), skip to avoid double-counting.

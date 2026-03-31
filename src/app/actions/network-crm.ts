@@ -13,6 +13,8 @@ export interface IndustryContact {
   type: string; // matches marketplace user_type values
   avatarUrl: string | null;
   city: string | null;
+  email: string | null;
+  phone: string | null;
   instagramHandle: string | null;
   soundcloudUrl: string | null;
   spotifyUrl: string | null;
@@ -24,6 +26,8 @@ export interface IndustryContact {
   // For marketplace profile contacts — used to contact via dialog
   profileId: string | null;
   slug: string | null;
+  // Set when contact comes from the unified contacts table
+  _contactsTableId?: string;
 }
 
 export interface NetworkCRMStats {
@@ -99,6 +103,7 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
             .from("events")
             .select("id, starts_at")
             .in("collective_id", collectiveIds)
+            .is("deleted_at", null)
         : Promise.resolve({ data: [], error: null }),
     ]);
 
@@ -231,6 +236,8 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
         type: (profile.user_type as string) ?? "artist",
         avatarUrl: (profile.avatar_url as string) ?? null,
         city: (profile.city as string) ?? null,
+        email: null,
+        phone: null,
         instagramHandle: (profile.instagram_handle as string) ?? null,
         soundcloudUrl: (profile.soundcloud_url as string) ?? null,
         spotifyUrl: (profile.spotify_url as string) ?? null,
@@ -272,6 +279,8 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
           type: "artist",
           avatarUrl: null,
           city: location,
+          email: null,
+          phone: null,
           instagramHandle: artist.instagram ?? null,
           soundcloudUrl: artist.soundcloud ?? null,
           spotifyUrl: artist.spotify ?? null,
