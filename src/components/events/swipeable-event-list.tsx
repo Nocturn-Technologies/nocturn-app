@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SwipeableCard } from "@/components/swipeable-card";
 import { publishEvent, cancelEvent } from "@/app/actions/events";
 import { haptic } from "@/lib/haptics";
-import { MapPin, Clock } from "lucide-react";
+import { MapPin, Clock, Loader2 } from "lucide-react";
 
 interface EventItem {
   id: string;
@@ -82,8 +82,9 @@ export function SwipeableEventList({ events }: { events: EventItem[] }) {
                   }
                 }}
                 disabled={archiving}
-                className={`flex-1 rounded-xl bg-red-500/15 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/25 active:scale-95 transition-all duration-200 ${archiving ? "opacity-50" : ""}`}
+                className={`flex-1 rounded-xl bg-red-500/15 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/25 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 ${archiving ? "opacity-50" : ""}`}
               >
+                {archiving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {archiving ? "Archiving..." : "Archive"}
               </button>
             </div>

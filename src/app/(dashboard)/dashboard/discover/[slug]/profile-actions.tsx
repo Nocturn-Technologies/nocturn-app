@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { ContactDialog } from "../contact-dialog";
 import { saveProfile, unsaveProfile, isProfileSaved } from "@/app/actions/marketplace";
 import { haptic } from "@/lib/haptics";
-import { Heart, MessageSquare } from "lucide-react";
+import { Heart, MessageSquare, Loader2 } from "lucide-react";
 
 interface ProfileActionsProps {
   profileId: string;
@@ -16,6 +16,7 @@ export function ProfileActions({ profileId, profileName }: ProfileActionsProps) 
   const [contactOpen, setContactOpen] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Check if this specific profile is saved (lightweight query)
   useEffect(() => {
@@ -26,15 +27,29 @@ export function ProfileActions({ profileId, profileName }: ProfileActionsProps) 
     if (saving) return;
     haptic("light");
     setSaving(true);
+    setSaveError(null);
 
-    if (isSaved) {
-      setIsSaved(false);
-      const { error } = await unsaveProfile(profileId);
-      if (error) setIsSaved(true);
-    } else {
-      setIsSaved(true);
-      const { error } = await saveProfile(profileId);
-      if (error) setIsSaved(false);
+    try {
+      if (isSaved) {
+        setIsSaved(false);
+        const { error } = await unsaveProfile(profileId);
+        if (error) {
+          setIsSaved(true);
+          setSaveError(error);
+          setTimeout(() => setSaveError(null), 3000);
+        }
+      } else {
+        setIsSaved(true);
+        const { error } = await saveProfile(profileId);
+        if (error) {
+          setIsSaved(false);
+          setSaveError(error);
+          setTimeout(() => setSaveError(null), 3000);
+        }
+      }
+    } catch {
+      setSaveError("Something went wrong");
+      setTimeout(() => setSaveError(null), 3000);
     }
 
     setSaving(false);
@@ -60,12 +75,20 @@ export function ProfileActions({ profileId, profileName }: ProfileActionsProps) 
           onClick={handleToggleSave}
           disabled={saving}
         >
-          <Heart
-            className={`h-4 w-4 ${isSaved ? "fill-red-400" : ""}`}
-          />
+          {saving ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Heart
+              className={`h-4 w-4 ${isSaved ? "fill-red-400" : ""}`}
+            />
+          )}
           <span className="ml-2">{isSaved ? "Saved" : "Save"}</span>
         </Button>
       </div>
+
+      {saveError && (
+        <p className="text-xs text-destructive mt-2">{saveError}</p>
+      )}
 
       <ContactDialog
         profileId={profileId}

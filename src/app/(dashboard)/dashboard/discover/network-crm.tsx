@@ -20,6 +20,7 @@ import {
   Mail,
   Phone,
   Pencil,
+  Loader2,
 } from "lucide-react";
 import {
   getNetworkCRM,
@@ -428,6 +429,7 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
 
   // Local saved IDs for optimistic UI
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
@@ -676,10 +678,19 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={fetchData}
+            onClick={async () => {
+              setRetrying(true);
+              try {
+                await fetchData();
+              } finally {
+                setRetrying(false);
+              }
+            }}
+            disabled={retrying}
             className="min-h-[44px]"
           >
-            Retry
+            {retrying && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {retrying ? "Retrying..." : "Retry"}
           </Button>
         </CardContent>
       </Card>

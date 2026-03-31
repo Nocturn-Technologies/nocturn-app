@@ -14,6 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Loader2 } from "lucide-react";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -217,6 +218,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <Button type="submit" className="bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {saving ? "Saving..." : "Save Profile"}
             </Button>
           </form>
@@ -298,6 +300,7 @@ export default function SettingsPage() {
               </div>
             </div>
             <Button type="submit" className="bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {saving ? "Saving..." : "Save Collective"}
             </Button>
           </form>

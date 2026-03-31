@@ -13,6 +13,7 @@ import {
   Plus,
   Mail,
   Check,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -46,6 +47,7 @@ export default function SettlementDetailPage() {
   const [payingOut, setPayingOut] = useState(false);
   const [reportCopied, setReportCopied] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
+  const [payoutSuccess, setPayoutSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -199,6 +201,7 @@ export default function SettlementDetailPage() {
                 className="bg-nocturn hover:bg-nocturn-light"
                 disabled={addingExpense}
               >
+                {addingExpense && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {addingExpense ? "Adding..." : "Add"}
               </Button>
             </form>
@@ -323,7 +326,7 @@ export default function SettlementDetailPage() {
                 onClick={handleApprove}
                 disabled={approving}
               >
-                <CheckCircle className="mr-2 h-4 w-4" />
+                {approving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
                 {approving ? "Approving..." : "Approve Settlement"}
               </Button>
               <Button
@@ -331,27 +334,39 @@ export default function SettlementDetailPage() {
                 onClick={handleGenerate}
                 disabled={generating}
               >
+                {generating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {generating ? "Regenerating..." : "Regenerate"}
               </Button>
             </div>
           )}
 
           {settlement.status === "approved" && (
-            <Button
-              className="w-full bg-green-600 hover:bg-green-700"
-              onClick={async () => {
-                setPayingOut(true);
-                setError(null);
-                const result = await markSettlementPaid(settlement.id as string);
-                if (result.error) setError(result.error);
-                await loadData();
-                setPayingOut(false);
-              }}
-              disabled={payingOut}
-            >
-              <CheckCircle className="mr-2 h-4 w-4" />
-              {payingOut ? "Marking as Paid..." : "Mark as Paid (Manual Payout)"}
-            </Button>
+            <>
+              <Button
+                className="w-full bg-green-600 hover:bg-green-700"
+                onClick={async () => {
+                  setPayingOut(true);
+                  setError(null);
+                  setPayoutSuccess(null);
+                  const result = await markSettlementPaid(settlement.id as string);
+                  if (result.error) {
+                    setError(result.error);
+                  } else {
+                    setPayoutSuccess("Settlement marked as paid successfully!");
+                    setTimeout(() => setPayoutSuccess(null), 3000);
+                  }
+                  await loadData();
+                  setPayingOut(false);
+                }}
+                disabled={payingOut}
+              >
+                {payingOut ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle className="mr-2 h-4 w-4" />}
+                {payingOut ? "Marking as Paid..." : "Mark as Paid (Manual Payout)"}
+              </Button>
+              {payoutSuccess && (
+                <div className="rounded-lg bg-green-500/10 p-3 text-sm text-green-500">{payoutSuccess}</div>
+              )}
+            </>
           )}
 
           {settlement.status === "paid" && (
@@ -381,7 +396,9 @@ export default function SettlementDetailPage() {
                 }
               }}
             >
-              {reportCopied ? (
+              {generatingReport ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Generating Report...</>
+              ) : reportCopied ? (
                 <><Check className="mr-2 h-4 w-4" /> Report Copied to Clipboard</>
               ) : (
                 <><Mail className="mr-2 h-4 w-4" /> Copy Settlement Report</>

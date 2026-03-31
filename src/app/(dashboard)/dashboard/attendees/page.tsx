@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, UserCheck, DollarSign, Download, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Users, UserCheck, DollarSign, Download, Search, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import Link from "next/link";
 import {
   getAttendees,
@@ -108,7 +108,7 @@ export default function AttendeesPage() {
             onClick={handleExport}
             disabled={exporting}
           >
-            <Download className="mr-2 h-4 w-4" />
+            {exporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
             {exporting ? "Exporting..." : "Export CSV"}
           </Button>
         )}
