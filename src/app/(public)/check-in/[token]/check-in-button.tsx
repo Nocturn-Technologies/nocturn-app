@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { checkInTicket } from "@/app/actions/check-in";
 import { Button } from "@/components/ui/button";
 
@@ -13,6 +14,7 @@ export function PublicCheckInButton({
   ticketToken,
   eventId,
 }: PublicCheckInButtonProps) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
@@ -25,6 +27,8 @@ export function PublicCheckInButton({
 
     if (res.success) {
       setResult({ success: true, message: "Checked in successfully!" });
+      // Refresh the page data so server component reflects checked-in state
+      router.refresh();
     } else {
       setResult({ success: false, message: res.error ?? "Check-in failed" });
     }

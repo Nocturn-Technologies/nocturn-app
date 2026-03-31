@@ -1,3 +1,13 @@
+/**
+ * Stripe Webhook Handler
+ *
+ * Handled events (configure in Stripe Dashboard → Webhooks):
+ *   - checkout.session.completed    — Fulfill tickets from Checkout Sessions
+ *   - payment_intent.succeeded      — Fulfill tickets from embedded/direct PaymentIntents
+ *   - payment_intent.payment_failed — Mark pending tickets as failed
+ *   - charge.refunded               — Mark paid/checked-in tickets as refunded
+ *   - charge.dispute.created         — Mark tickets as disputed
+ */
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { getStripe, STRIPE_WEBHOOK_SECRET } from "@/lib/stripe";
@@ -63,6 +73,85 @@ export async function POST(request: NextRequest) {
         }
         break;
       }
+      case "payment_intent.payment_failed": {
+        const pi = event.data.object as Stripe.PaymentIntent;
+        const failureReason =
+          pi.last_payment_error?.message ?? "unknown";
+        console.warn(
+          `[stripe-webhook] Payment failed for PI ${pi.id}: ${failureReason}`
+        );
+        const supabase = createAdminClient();
+        const { data: failedTickets, error: failErr } = await supabase
+          .from("tickets")
+          .update({ status: "failed" })
+          .eq("stripe_payment_intent_id", pi.id)
+          .eq("status", "pending")
+          .select("id");
+        if (failErr) {
+          console.error("[stripe-webhook] Failed to update tickets to failed:", failErr);
+        } else if (failedTickets && failedTickets.length > 0) {
+          console.info(
+            `[stripe-webhook] Marked ${failedTickets.length} pending ticket(s) as failed for PI ${pi.id}`
+          );
+        }
+        break;
+      }
+      case "charge.refunded": {
+        const charge = event.data.object as Stripe.Charge;
+        const refundPiId =
+          typeof charge.payment_intent === "string"
+            ? charge.payment_intent
+            : (charge.payment_intent as Stripe.PaymentIntent | null)?.id ?? null;
+        if (refundPiId) {
+          console.info(`[stripe-webhook] Charge refunded for PI ${refundPiId}`);
+          const supabase = createAdminClient();
+          const { data: refundedTickets, error: refundErr } = await supabase
+            .from("tickets")
+            .update({ status: "refunded" })
+            .eq("stripe_payment_intent_id", refundPiId)
+            .in("status", ["paid", "checked_in"])
+            .select("id");
+          if (refundErr) {
+            console.error("[stripe-webhook] Failed to update tickets to refunded:", refundErr);
+          } else if (refundedTickets && refundedTickets.length > 0) {
+            console.info(
+              `[stripe-webhook] Marked ${refundedTickets.length} ticket(s) as refunded for PI ${refundPiId}`
+            );
+          }
+        } else {
+          console.warn("[stripe-webhook] charge.refunded event has no payment_intent ID, skipping");
+        }
+        break;
+      }
+      case "charge.dispute.created": {
+        const dispute = event.data.object as Stripe.Dispute;
+        const disputePiId =
+          typeof dispute.payment_intent === "string"
+            ? dispute.payment_intent
+            : (dispute.payment_intent as Stripe.PaymentIntent | null)?.id ?? null;
+        const disputeReason = dispute.reason ?? "unknown";
+        if (disputePiId) {
+          console.warn(
+            `[stripe-webhook] Charge disputed for PI ${disputePiId}, reason: ${disputeReason}`
+          );
+          const supabase = createAdminClient();
+          const { data: disputedTickets, error: disputeErr } = await supabase
+            .from("tickets")
+            .update({ status: "disputed" })
+            .eq("stripe_payment_intent_id", disputePiId)
+            .select("id");
+          if (disputeErr) {
+            console.error("[stripe-webhook] Failed to update tickets to disputed:", disputeErr);
+          } else if (disputedTickets && disputedTickets.length > 0) {
+            console.info(
+              `[stripe-webhook] Marked ${disputedTickets.length} ticket(s) as disputed for PI ${disputePiId}`
+            );
+          }
+        } else {
+          console.warn("[stripe-webhook] charge.dispute.created event has no payment_intent ID, skipping");
+        }
+        break;
+      }
       default:
         console.info(`[stripe-webhook] Unhandled event type: ${event.type}`);
     }
@@ -70,19 +159,24 @@ export async function POST(request: NextRequest) {
     console.error(`[stripe-webhook] Error handling ${event.type}:`, err);
     // Only return 500 (triggering Stripe retry) for transient errors like DB connection failures.
     // For logic errors, return 200 to prevent infinite retries and duplicate tickets.
-    const errMsg = err instanceof Error ? err.message.toLowerCase() : "";
+    const errMsg = err instanceof Error ? err.message : "";
+    const errMsgLower = errMsg.toLowerCase();
     const isTransient = err instanceof Error && (
-      errMsg.includes("connect") ||
-      errMsg.includes("timeout") ||
-      errMsg.includes("econnrefused") ||
-      errMsg.includes("econnreset") ||
-      errMsg.includes("fetch failed") ||
-      errMsg.includes("socket hang up") ||
-      errMsg.includes("network") ||
-      errMsg.includes("too many connections") ||
-      errMsg.includes("connection terminated") ||
-      errMsg.includes("54") || // Postgres connection-related error codes
-      errMsg.includes("could not connect")
+      errMsgLower.includes("connect") ||
+      errMsgLower.includes("timeout") ||
+      errMsgLower.includes("econnrefused") ||
+      errMsgLower.includes("econnreset") ||
+      errMsgLower.includes("etimedout") ||
+      errMsgLower.includes("fetch failed") ||
+      errMsgLower.includes("socket hang up") ||
+      errMsgLower.includes("network") ||
+      errMsgLower.includes("too many connections") ||
+      errMsgLower.includes("connection terminated") ||
+      errMsgLower.includes("connection pool") ||
+      errMsgLower.includes("54") || // Postgres connection-related error codes
+      errMsgLower.includes("could not connect") ||
+      errMsgLower.includes("503") ||
+      errMsgLower.includes("502")
     );
     if (isTransient) {
       return NextResponse.json(
@@ -106,9 +200,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   if (!metadata?.eventId || !metadata?.tierId || !metadata?.quantity) {
     console.error(
       "[stripe-webhook] Missing metadata on checkout session:",
-      session.id
+      session.id,
+      "metadata:",
+      JSON.stringify(metadata)
     );
-    return;
+    throw new Error(
+      `Missing required metadata (eventId/tierId/quantity) on checkout session ${session.id}`
+    );
   }
 
   const eventId = metadata.eventId;
@@ -175,8 +273,8 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     .maybeSingle();
 
   if (tierError || !tier) {
-    console.error("[stripe-webhook] Ticket tier not found:", tierId);
-    return;
+    console.error("[stripe-webhook] Ticket tier not found, tierId:", tierId, "error:", tierError);
+    throw new Error(`Ticket tier not found for tierId ${tierId}`);
   }
 
   // Calculate actual price paid, accounting for discounts
@@ -362,6 +460,11 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       // Send branded confirmation email with QR codes
       try {
         const customerEmail = session.customer_email ?? session.customer_details?.email;
+        if (!customerEmail) {
+          console.warn(
+            `[stripe-webhook] No buyer email available for session ${session.id}, skipping confirmation email`
+          );
+        }
         if (customerEmail) {
           const { data: event } = await supabase
             .from("events")
@@ -519,8 +622,8 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     .maybeSingle();
 
   if (!tier) {
-    console.error("[stripe-webhook] Tier not found for PI:", tierId);
-    return;
+    console.error("[stripe-webhook] Tier not found for PI, tierId:", tierId);
+    throw new Error(`Ticket tier not found for tierId ${tierId} (PI: ${paymentIntent.id})`);
   }
 
   // Calculate actual price paid, accounting for discounts

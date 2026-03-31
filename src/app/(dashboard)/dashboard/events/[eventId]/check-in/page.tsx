@@ -29,7 +29,7 @@ export default function CheckInScannerPage() {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [processing, setProcessing] = useState(false);
-  const lastScannedRef = useRef<string>("");
+  const scannedTokensRef = useRef<Set<string>>(new Set());
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load initial stats
@@ -60,11 +60,11 @@ export default function CheckInScannerPage() {
 
   const handleScan = useCallback(
     async (decodedText: string) => {
-      // Prevent duplicate scans of the same code in quick succession
+      // Prevent duplicate scans — track all scanned tokens for the session
       if (processing) return;
-      if (decodedText === lastScannedRef.current) return;
+      if (scannedTokensRef.current.has(decodedText)) return;
 
-      lastScannedRef.current = decodedText;
+      scannedTokensRef.current.add(decodedText);
       setProcessing(true);
       setScanResult(null);
 
@@ -138,8 +138,8 @@ export default function CheckInScannerPage() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
       setScanResult(null);
-      lastScannedRef.current = "";
-    }, 4000);
+      // Don't reset scannedTokensRef — keep dedup for the entire session
+    }, 30000);
   }
 
   const percentage =

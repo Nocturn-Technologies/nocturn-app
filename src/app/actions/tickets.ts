@@ -7,19 +7,34 @@ import { logPaymentEvent } from "@/lib/payment-events";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
+// In-memory rate limit for fulfillPaymentIntent: max 5 calls per minute per PI ID
+const fulfillRateLimit = new Map<string, number[]>();
+const FULFILL_RATE_LIMIT = 5;
+const FULFILL_RATE_WINDOW_MS = 60_000;
+
+function checkFulfillRateLimit(paymentIntentId: string): boolean {
+  const now = Date.now();
+  const timestamps = fulfillRateLimit.get(paymentIntentId) ?? [];
+  // Remove expired entries
+  const recent = timestamps.filter((t) => now - t < FULFILL_RATE_WINDOW_MS);
+  if (recent.length >= FULFILL_RATE_LIMIT) {
+    fulfillRateLimit.set(paymentIntentId, recent);
+    return false;
+  }
+  recent.push(now);
+  fulfillRateLimit.set(paymentIntentId, recent);
+  return true;
+}
+
 /**
  * Generate a QR code data URL for a ticket and persist it.
  * The QR encodes the check-in URL: {APP_URL}/check-in/{ticket_token}
  */
 export async function generateTicketQRCode(ticketToken: string) {
   try {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", qrCode: null };
-
   const admin = createAdminClient();
 
-  // Verify the ticket exists
+  // Verify the ticket exists — the token itself is the auth (only the buyer has it)
   const { data: ticket, error: fetchError } = await admin
     .from("tickets")
     .select("id, qr_code, user_id, event_id")
@@ -28,22 +43,6 @@ export async function generateTicketQRCode(ticketToken: string) {
 
   if (fetchError || !ticket) {
     return { error: "Ticket not found", qrCode: null };
-  }
-
-  // Verify caller owns the ticket or is a collective member (check-in staff)
-  if (ticket.user_id !== user.id) {
-    const { data: event } = await admin
-      .from("events")
-      .select("collective_id")
-      .eq("id", ticket.event_id)
-      .maybeSingle();
-    const { count } = await admin
-      .from("collective_members")
-      .select("*", { count: "exact", head: true })
-      .eq("collective_id", event?.collective_id ?? "")
-      .eq("user_id", user.id)
-      .is("deleted_at", null);
-    if (!count) return { error: "Not authorized", qrCode: null };
   }
 
   // If QR code already exists, return it
@@ -112,6 +111,7 @@ export async function getTicketByToken(ticketToken: string) {
         id,
         title,
         slug,
+        status,
         starts_at,
         ends_at,
         doors_at,
@@ -185,10 +185,12 @@ export async function getTicketsBySessionId(sessionOrPaymentId: string) {
 
   const admin = createAdminClient();
 
+  const ticketSelect = `ticket_token, status, created_at, price_paid, ticket_tiers:ticket_tier_id (name, price), events:event_id (id, title, starts_at, venues:venue_id (name, city))`;
+
   // Try checkout_session_id first (Stripe Checkout Sessions flow)
   const { data: sessionTickets } = await admin
     .from("tickets")
-    .select("ticket_token, status, created_at")
+    .select(ticketSelect)
     .filter("metadata->>checkout_session_id", "eq", sessionOrPaymentId);
 
   if (sessionTickets && sessionTickets.length > 0) {
@@ -198,7 +200,7 @@ export async function getTicketsBySessionId(sessionOrPaymentId: string) {
   // Try payment_intent_id in metadata (embedded PaymentElement flow)
   const { data: piMetaTickets } = await admin
     .from("tickets")
-    .select("ticket_token, status, created_at")
+    .select(ticketSelect)
     .filter("metadata->>payment_intent_id", "eq", sessionOrPaymentId);
 
   if (piMetaTickets && piMetaTickets.length > 0) {
@@ -208,7 +210,7 @@ export async function getTicketsBySessionId(sessionOrPaymentId: string) {
   // Try stripe_payment_intent_id column directly
   const { data: piTickets } = await admin
     .from("tickets")
-    .select("ticket_token, status, created_at")
+    .select(ticketSelect)
     .eq("stripe_payment_intent_id", sessionOrPaymentId);
 
   if (piTickets && piTickets.length > 0) {
@@ -317,6 +319,11 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
   try {
   if (!paymentIntentId || !paymentIntentId.startsWith("pi_")) {
     return { error: "Invalid payment intent ID", tickets: null };
+  }
+
+  // Rate limit: 5 calls per minute per PaymentIntent ID to prevent abuse
+  if (!checkFulfillRateLimit(paymentIntentId)) {
+    return { error: "Too many requests for this payment. Please wait a moment.", tickets: null };
   }
 
   const admin = createAdminClient();

@@ -108,7 +108,10 @@ export async function getAttendees(collectiveId?: string): Promise<{
     .select("id, event_id, price_paid, metadata, created_at")
     .in("event_id", eventIds)
     .in("status", ["paid", "checked_in"])
-    .limit(10000);
+    // TODO: Implement proper pagination (page/perPage params returning { attendees, total }).
+    // Supabase default limit is 1000 rows; this override handles large events but will
+    // need cursor-based pagination for collectives with 50k+ tickets.
+    .limit(50000);
   const tickets = ticketsRaw as { id: string; event_id: string; price_paid: number | null; metadata: Record<string, unknown> | null; created_at: string }[] | null;
 
   if (ticketError) {

@@ -55,13 +55,14 @@ export async function joinWaitlist(eventId: string, tierId: string, waitlistEmai
 }
 
 /**
- * Notify waitlisted users when a spot opens (called after refund).
- * Notifies the first person on the waitlist.
+ * Notify waitlisted users when spots open (called after refund).
+ * Notifies the next `count` people on the waitlist (oldest first).
+ * @param count Number of people to notify (default 1). Pass the refunded ticket quantity.
  */
-export async function notifyNextOnWaitlist(eventId: string, tierId: string) {
+export async function notifyNextOnWaitlist(eventId: string, tierId: string, count: number = 1) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { notified: false };
+  if (!user) return { notified: false, notifiedCount: 0 };
 
   const sb = createAdminClient();
 
@@ -71,7 +72,7 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string) {
     .select("collective_id")
     .eq("id", eventId)
     .maybeSingle();
-  if (!eventCheck) return { notified: false };
+  if (!eventCheck) return { notified: false, notifiedCount: 0 };
 
   const { count: memberCount } = await sb
     .from("collective_members")
@@ -79,20 +80,22 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string) {
     .eq("collective_id", eventCheck.collective_id)
     .eq("user_id", user.id)
     .is("deleted_at", null);
-  if (!memberCount || memberCount === 0) return { notified: false };
+  if (!memberCount || memberCount === 0) return { notified: false, notifiedCount: 0 };
 
-  // Get the next person waiting
-  const { data: next } = await sb
+  // Clamp count to a reasonable range
+  const notifyCount = Math.max(1, Math.min(count, 100));
+
+  // Get the next N people waiting (oldest first)
+  const { data: waitlistEntries } = await sb
     .from("ticket_waitlist")
     .select("id, email")
     .eq("event_id", eventId)
     .eq("ticket_tier_id", tierId)
     .eq("status", "waiting")
     .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(notifyCount);
 
-  if (!next) return { notified: false };
+  if (!waitlistEntries || waitlistEntries.length === 0) return { notified: false, notifiedCount: 0 };
 
   // Get event + tier details for the email
   const { data: event } = await sb
@@ -107,7 +110,7 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string) {
     .eq("id", tierId)
     .maybeSingle();
 
-  if (!event) return { notified: false };
+  if (!event) return { notified: false, notifiedCount: 0 };
 
   function escapeHtml(str: string): string {
     return str
@@ -123,40 +126,45 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string) {
     ? `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${collective.slug}/${event.slug}`
     : `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/dashboard/events/${eventId}`;
 
-  // Send notification email — only mark as notified if email succeeds
-  try {
-    await sendEmail({
-      to: next.email,
-      subject: `A spot just opened up — ${event.title} 🎟️`,
-      html: `
-        <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
-          <p style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</p>
-          <h2 style="margin: 16px 0 8px;">Good news — a spot just opened!</h2>
-          <p style="color: #A1A1AA; line-height: 1.6;">
-            A <strong style="color: #FAFAFA;">${escapeHtml(tier?.name || "ticket")}</strong> just became available for
-            <strong style="color: #FAFAFA;">${escapeHtml(event.title)}</strong>.
-            You were next on the waitlist — grab it before it's gone!
-          </p>
-          <a href="${eventUrl}" style="display: inline-block; margin: 20px 0; padding: 14px 28px; background: #7B2FF7; color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 15px;">
-            Get Your Ticket →
-          </a>
-          <p style="color: #71717A; font-size: 12px; margin-top: 24px;">
-            This spot is first-come, first-served. If it sells out again, you'll stay on the waitlist.
-            <br/><span style="font-size: 11px;">Don't want these emails? Reply with "unsubscribe" to opt out.</span>
-          </p>
-        </div>
-      `,
-    });
+  // Notify each waitlisted person — only mark as notified if email succeeds
+  const notifiedEmails: string[] = [];
 
-    // Only mark as notified after email successfully sent
-    await sb
-      .from("ticket_waitlist")
-      .update({ status: "notified", notified_at: new Date().toISOString() })
-      .eq("id", next.id);
+  for (const entry of waitlistEntries) {
+    try {
+      await sendEmail({
+        to: entry.email,
+        subject: `A spot just opened up — ${event.title} 🎟️`,
+        html: `
+          <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
+            <p style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</p>
+            <h2 style="margin: 16px 0 8px;">Good news — a spot just opened!</h2>
+            <p style="color: #A1A1AA; line-height: 1.6;">
+              A <strong style="color: #FAFAFA;">${escapeHtml(tier?.name || "ticket")}</strong> just became available for
+              <strong style="color: #FAFAFA;">${escapeHtml(event.title)}</strong>.
+              You were next on the waitlist — grab it before it's gone!
+            </p>
+            <a href="${eventUrl}" style="display: inline-block; margin: 20px 0; padding: 14px 28px; background: #7B2FF7; color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 15px;">
+              Get Your Ticket →
+            </a>
+            <p style="color: #71717A; font-size: 12px; margin-top: 24px;">
+              This spot is first-come, first-served. If it sells out again, you'll stay on the waitlist.
+              <br/><span style="font-size: 11px;">Don't want these emails? Reply with "unsubscribe" to opt out.</span>
+            </p>
+          </div>
+        `,
+      });
 
-    return { notified: true, email: next.email };
-  } catch (emailErr) {
-    console.error("[waitlist] Failed to send notification email:", emailErr);
-    return { notified: false };
+      // Only mark as notified after email successfully sent
+      await sb
+        .from("ticket_waitlist")
+        .update({ status: "notified", notified_at: new Date().toISOString() })
+        .eq("id", entry.id);
+
+      notifiedEmails.push(entry.email);
+    } catch (emailErr) {
+      console.error(`[waitlist] Failed to send notification to ${entry.email}:`, emailErr);
+    }
   }
+
+  return { notified: notifiedEmails.length > 0, notifiedCount: notifiedEmails.length, emails: notifiedEmails };
 }

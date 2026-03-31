@@ -38,6 +38,7 @@ export default async function PublicCheckInPage({ params }: Props) {
       id: string;
       title: string;
       slug: string;
+      status: string;
       starts_at: string;
       ends_at: string | null;
       doors_at: string | null;
@@ -51,6 +52,7 @@ export default async function PublicCheckInPage({ params }: Props) {
 
   const isCheckedIn = typedTicket.status === "checked_in";
   const isPaid = typedTicket.status === "paid";
+  const isEventCancelled = event?.status === "cancelled";
 
   const eventDate = event?.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en-US", {
@@ -116,6 +118,13 @@ export default async function PublicCheckInPage({ params }: Props) {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-8 space-y-6">
+        {/* Cancelled event banner */}
+        {isEventCancelled && (
+          <div className="rounded-xl border-2 border-yellow-500/30 bg-yellow-500/10 px-5 py-4 text-center">
+            <p className="text-sm font-semibold text-yellow-400">This event has been cancelled.</p>
+          </div>
+        )}
+
         {/* Ticket Summary Card */}
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
           <div className="bg-nocturn px-6 py-5">
@@ -174,7 +183,7 @@ export default async function PublicCheckInPage({ params }: Props) {
                     </svg>
                   </div>
                   <p className="text-base font-medium">Ready to Check In</p>
-                  {canCheckIn ? (
+                  {canCheckIn && !isEventCancelled ? (
                     <PublicCheckInButton
                       ticketToken={token}
                       eventId={event?.id ?? ""}

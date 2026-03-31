@@ -153,35 +153,47 @@ export async function POST(request: NextRequest) {
         .ilike("code", promoCode)
         .maybeSingle();
 
-      if (promo) {
-        const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
+      if (!promo) {
+        return NextResponse.json(
+          { error: "Promo code not found" },
+          { status: 400 }
+        );
+      }
 
-        if (isExpired) {
-          // Expired — skip silently (no discount applied)
-        } else {
-          // Validate promo code availability (check uses) but DON'T claim yet.
-          // Claiming happens in the webhook/fulfillment after payment succeeds,
-          // so abandoned checkouts don't consume promo uses.
-          const hasCapacity = promo.max_uses === null ||
-            (promo.current_uses ?? 0) + quantity <= promo.max_uses;
+      const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
+      if (isExpired) {
+        return NextResponse.json(
+          { error: "Promo code expired" },
+          { status: 400 }
+        );
+      }
 
-          if (hasCapacity) {
-            // Code is valid and has capacity — apply the discount
-            promoId = promo.id;
-            if (promo.discount_type === "percentage") {
-              const pct = Number(promo.discount_value);
-              if (pct < 0 || pct > 100) {
-                // Invalid percentage — skip promo, no discount
-                discountPercent = 0;
-              } else {
-                discountPercent = pct / 100;
-              }
-            } else {
-              discountFixed = Number(promo.discount_value) * 100; // convert to cents
-            }
-          }
-          // If no capacity, the code is maxed out — no discount applied
+      // Validate promo code availability (check uses) but DON'T claim yet.
+      // Claiming happens in the webhook/fulfillment after payment succeeds,
+      // so abandoned checkouts don't consume promo uses.
+      const hasCapacity = promo.max_uses === null ||
+        (promo.current_uses ?? 0) + quantity <= promo.max_uses;
+
+      if (!hasCapacity) {
+        return NextResponse.json(
+          { error: "Promo code usage limit reached" },
+          { status: 400 }
+        );
+      }
+
+      // Code is valid and has capacity — apply the discount
+      promoId = promo.id;
+      if (promo.discount_type === "percentage") {
+        const pct = Number(promo.discount_value);
+        if (pct < 0 || pct > 100) {
+          return NextResponse.json(
+            { error: "Invalid promo code configuration" },
+            { status: 400 }
+          );
         }
+        discountPercent = pct / 100;
+      } else {
+        discountFixed = Number(promo.discount_value) * 100; // convert to cents
       }
     }
 

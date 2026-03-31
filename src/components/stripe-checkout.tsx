@@ -169,6 +169,7 @@ function CheckoutForm({
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [succeeded, setSucceeded] = useState(false);
+  const [fulfillmentWarning, setFulfillmentWarning] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -205,6 +206,7 @@ function CheckoutForm({
         } catch (err) {
           // Non-blocking — webhook will catch it as backup
           console.error("[checkout] Ticket fulfillment failed:", err);
+          setFulfillmentWarning(true);
         }
       }
       setSucceeded(true);
@@ -215,13 +217,21 @@ function CheckoutForm({
 
   if (succeeded) {
     return (
-      <TicketSuccess
-        eventTitle={eventTitle}
-        eventDate={eventDate}
-        eventVenue={eventVenue}
-        tierName={tierName}
-        quantity={quantity}
-      />
+      <div>
+        {fulfillmentWarning && (
+          <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-400 mb-4">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            Payment received — your tickets are being prepared. Check your email for confirmation.
+          </div>
+        )}
+        <TicketSuccess
+          eventTitle={eventTitle}
+          eventDate={eventDate}
+          eventVenue={eventVenue}
+          tierName={tierName}
+          quantity={quantity}
+        />
+      </div>
     );
   }
 

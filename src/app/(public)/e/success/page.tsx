@@ -10,6 +10,9 @@ interface TicketStub {
   ticket_token: string;
   status: string;
   created_at: string;
+  price_paid?: number | null;
+  ticket_tiers?: { name: string; price: number } | null;
+  events?: { id: string; title: string; starts_at: string; venues: { name: string; city: string | null } | null } | null;
 }
 
 function SuccessContent() {
@@ -97,22 +100,35 @@ function SuccessContent() {
     if (!sessionId) return;
     setLoading(true);
 
-    const timeout = setTimeout(() => {
-      setTimedOut(true);
-      setLoading(false);
-    }, 10000);
+    // Poll up to 5 times with 2-second delays (same as paymentIntentId path)
+    let attempts = 0;
+    let cancelled = false;
+    const poll = async () => {
+      if (cancelled) return;
+      attempts++;
+      try {
+        const { tickets: found } = await getTicketsBySessionId(sessionId);
+        if (found && found.length > 0) {
+          setTickets(found);
+          setLoading(false);
+        } else if (attempts < 5) {
+          setTimeout(poll, 2000);
+        } else {
+          setTimedOut(true);
+          setLoading(false);
+        }
+      } catch {
+        if (attempts < 5) {
+          setTimeout(poll, 2000);
+        } else {
+          setTimedOut(true);
+          setLoading(false);
+        }
+      }
+    };
+    poll();
 
-    getTicketsBySessionId(sessionId)
-      .then(({ tickets: found }) => {
-        clearTimeout(timeout);
-        if (found) setTickets(found);
-      })
-      .finally(() => {
-        clearTimeout(timeout);
-        setLoading(false);
-      });
-
-    return () => clearTimeout(timeout);
+    return () => { cancelled = true; };
   }, [sessionId, isFree, freeTokens, paymentIntentId, redirectStatus]);
 
   if (!hasValidPurchase) {
@@ -168,6 +184,34 @@ function SuccessContent() {
           )}
         </div>
 
+        {/* Event Details */}
+        {!loading && tickets.length > 0 && tickets[0].events && (
+          <div className="rounded-xl border border-border bg-card p-5 space-y-1 text-left">
+            <p className="text-base font-semibold text-foreground font-heading">
+              {tickets[0].events.title}
+            </p>
+            <p className="text-sm text-muted-foreground">
+              {new Date(tickets[0].events.starts_at).toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}{" "}
+              at{" "}
+              {new Date(tickets[0].events.starts_at).toLocaleTimeString("en-US", {
+                hour: "numeric",
+                minute: "2-digit",
+              })}
+            </p>
+            {tickets[0].events.venues && (
+              <p className="text-sm text-muted-foreground">
+                {tickets[0].events.venues.name}
+                {tickets[0].events.venues.city ? `, ${tickets[0].events.venues.city}` : ""}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Ticket Links */}
         {loading ? (
           <div className="rounded-xl border border-border bg-card p-4">
@@ -195,6 +239,12 @@ function SuccessContent() {
                 >
                   <span className="text-sm text-foreground">
                     Ticket {i + 1}
+                    {t.ticket_tiers?.name && (
+                      <span className="text-muted-foreground ml-1.5">
+                        — {t.ticket_tiers.name}
+                        {t.ticket_tiers.price != null && ` ($${Number(t.ticket_tiers.price).toFixed(2)})`}
+                      </span>
+                    )}
                   </span>
                   <span className="text-xs text-nocturn group-hover:text-nocturn-light transition-colors flex items-center gap-1">
                     View

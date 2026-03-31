@@ -247,14 +247,19 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       },
     }),
     ...(tiers && tiers.length > 0 && {
-      offers: tiers.map((t) => ({
-        "@type": "Offer",
-        name: t.name,
-        price: Number(t.price).toFixed(2),
-        priceCurrency: "USD",
-        availability: "https://schema.org/InStock",
-        url: publicUrl,
-      })),
+      offers: tiers.map((t) => {
+        const remaining = Math.max(0, t.capacity - (tierSoldCounts[t.id] || 0));
+        return {
+          "@type": "Offer",
+          name: t.name,
+          price: Number(t.price).toFixed(2),
+          priceCurrency: "USD",
+          availability: remaining <= 0
+            ? "https://schema.org/SoldOut"
+            : "https://schema.org/InStock",
+          url: publicUrl,
+        };
+      }),
     }),
   };
 

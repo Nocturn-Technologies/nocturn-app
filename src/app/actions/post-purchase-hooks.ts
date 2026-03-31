@@ -29,7 +29,7 @@ export async function runPostPurchaseHooks(input: {
 
   // ── 1. Referral Nudge (send 1 min after purchase — instant for now) ──
   try {
-    const referralLink = `${BASE_URL}/e/${collective?.slug ?? ""}/${event.slug}?ref=${input.ticketToken.slice(0, 8)}`;
+    const referralLink = `${BASE_URL}/e/${collective?.slug ?? ""}/${event.slug}?ref=${input.ticketToken}`;
 
     const html = referralNudgeEmail(
       event.title,

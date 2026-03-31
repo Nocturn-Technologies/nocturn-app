@@ -34,10 +34,13 @@ export function TicketSection({
   const [showCheckout, setShowCheckout] = useState(false);
 
   const [buying, setBuying] = useState(false);
+  const [freeCheckoutLoading, setFreeCheckoutLoading] = useState(false);
+  const [freeCheckoutError, setFreeCheckoutError] = useState<string | null>(null);
   const [waitlistEmail, setWaitlistEmail] = useState("");
   const [joiningWaitlist, setJoiningWaitlist] = useState(false);
   const [waitlistJoined, setWaitlistJoined] = useState(false);
   const [waitlistTierId, setWaitlistTierId] = useState<string | null>(null);
+  const [waitlistError, setWaitlistError] = useState<string | null>(null);
 
   // Promo code state
   const [promoCode, setPromoCode] = useState("");
@@ -61,7 +64,7 @@ export function TicketSection({
   const ticketPrice = Math.max(baseTicketPrice - promoDiscount, 0);
 
   const isFree = ticketPrice === 0;
-  const serviceFeePerTicket = isFree ? 0 : Math.round((ticketPrice * 0.07 + 0.50) * 100) / 100;
+  const serviceFeePerTicket = isFree ? 0 : (Math.round(ticketPrice * 100 * 0.07) + 50) / 100;
   const subtotal = ticketPrice * quantity;
   const totalFees = serviceFeePerTicket * quantity;
   const total = subtotal + totalFees;
@@ -70,6 +73,43 @@ export function TicketSection({
     if (!email) return null;
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }, [email]);
+
+  const waitlistEmailValid = useMemo(() => {
+    if (!waitlistEmail) return false;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(waitlistEmail);
+  }, [waitlistEmail]);
+
+  async function handleFreeCheckout() {
+    if (!selectedTier || !email || emailValid !== true || freeCheckoutLoading) return;
+    setFreeCheckoutLoading(true);
+    setFreeCheckoutError(null);
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId,
+          tierId: selectedTier,
+          quantity,
+          buyerEmail: email,
+          ...(promoApplied?.code && { promoCode: promoApplied.code }),
+          ...(referrerToken && { referrerToken }),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setFreeCheckoutError(data.error || "Failed to register. Please try again.");
+        setFreeCheckoutLoading(false);
+        return;
+      }
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch {
+      setFreeCheckoutError("Something went wrong. Please try again.");
+      setFreeCheckoutLoading(false);
+    }
+  }
 
   // Show embedded Stripe checkout
   if (showCheckout && selectedTier && selected) {
@@ -227,25 +267,34 @@ export function TicketSection({
                             type="email"
                             placeholder="your@email.com"
                             value={waitlistEmail}
-                            onChange={(e) => setWaitlistEmail(e.target.value)}
+                            onChange={(e) => { setWaitlistEmail(e.target.value); setWaitlistError(null); }}
                             className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-amber-500/50"
                           />
                           <button
                             onClick={async () => {
-                              if (!waitlistEmail || joiningWaitlist) return;
+                              if (!waitlistEmailValid || joiningWaitlist) return;
+                              setWaitlistError(null);
                               setJoiningWaitlist(true);
                               const result = await joinWaitlist(eventId, tier.id, waitlistEmail);
-                              if (!result.error) {
+                              if (result.error) {
+                                setWaitlistError(result.error);
+                              } else {
                                 setWaitlistJoined(true);
                               }
                               setJoiningWaitlist(false);
                             }}
-                            disabled={!waitlistEmail || joiningWaitlist}
+                            disabled={!waitlistEmailValid || joiningWaitlist}
                             className="shrink-0 rounded-xl bg-amber-500 px-5 py-3 font-semibold text-black hover:bg-amber-400 transition-colors disabled:opacity-50"
                           >
                             {joiningWaitlist ? <Loader2 className="h-4 w-4 animate-spin" /> : "Notify Me"}
                           </button>
                         </div>
+                        {waitlistError && (
+                          <p className="text-xs text-red-400 flex items-center gap-1">
+                            <AlertCircle className="h-3 w-3" />
+                            {waitlistError}
+                          </p>
+                        )}
                       </>
                     )}
                   </div>
@@ -406,28 +455,44 @@ export function TicketSection({
           <div className="mx-auto max-w-[640px]">
             <button
               onClick={() => {
-                if (!email || emailValid !== true || buying) return;
+                if (!email || emailValid !== true || buying || freeCheckoutLoading) return;
                 haptic('confirm');
+                if (isFree) {
+                  handleFreeCheckout();
+                  return;
+                }
                 setBuying(true);
                 setTimeout(() => {
                   setShowCheckout(true);
                   setBuying(false);
                 }, 400);
               }}
-              disabled={!email || emailValid !== true || buying}
+              disabled={!email || emailValid !== true || buying || freeCheckoutLoading}
               className="flex w-full items-center justify-center gap-2.5 rounded-2xl px-6 py-4 text-lg font-bold text-white transition-all duration-200 hover:brightness-110 hover:shadow-lg hover:shadow-black/30 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed relative overflow-hidden"
               style={{ backgroundColor: accentColor }}
             >
-              {buying && (
+              {(buying || freeCheckoutLoading) && (
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
               )}
-              <Ticket className="h-5 w-5" />
-              {buying
-                ? "Securing your spot..."
-                : isFree
-                  ? "RSVP — Free"
-                  : `Get Tickets — $${total.toFixed(2)}`}
+              {freeCheckoutLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Ticket className="h-5 w-5" />
+              )}
+              {freeCheckoutLoading
+                ? "Registering..."
+                : buying
+                  ? "Securing your spot..."
+                  : isFree
+                    ? "RSVP — Free"
+                    : `Get Tickets — $${total.toFixed(2)}`}
             </button>
+            {freeCheckoutError && (
+              <p className="mt-2 text-center text-sm text-red-400 flex items-center justify-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5" />
+                {freeCheckoutError}
+              </p>
+            )}
             {totalFees > 0 && (
               <p className="mt-2.5 text-center text-[11px] text-white/20 tracking-wide">
                 ${subtotal.toFixed(2)} + ${totalFees.toFixed(2)} service fee

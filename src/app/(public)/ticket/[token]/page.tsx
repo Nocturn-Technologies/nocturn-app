@@ -36,6 +36,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
       id: string;
       title: string;
       slug: string;
+      status: string;
       starts_at: string;
       ends_at: string | null;
       doors_at: string | null;
@@ -43,6 +44,18 @@ export default async function TicketPage({ params }: TicketPageProps) {
     } | null;
     ticket_tiers: { name: string; price: number } | null;
   };
+
+  // Determine if ticket is invalid (refunded, disputed, failed)
+  const invalidStatuses = ["refunded", "disputed", "failed"];
+  const isTicketInvalid = invalidStatuses.includes(typedTicket.status);
+  const invalidLabel =
+    typedTicket.status === "refunded" ? "This ticket has been refunded and is no longer valid" :
+    typedTicket.status === "disputed" ? "This ticket is disputed and is no longer valid" :
+    typedTicket.status === "failed" ? "This ticket has been cancelled and is no longer valid" :
+    null;
+
+  // Check if event is cancelled
+  const isEventCancelled = typedTicket.events?.status === "cancelled";
 
   // If QR code hasn't been generated yet, generate it now (fallback)
   let qrCode = typedTicket.qr_code;
@@ -106,6 +119,20 @@ export default async function TicketPage({ params }: TicketPageProps) {
       </header>
 
       <main className="relative z-10 max-w-lg mx-auto px-4 py-8">
+        {/* Invalid ticket banner */}
+        {isTicketInvalid && invalidLabel && (
+          <div className="mb-4 rounded-xl border-2 border-red-500/30 bg-red-500/10 px-5 py-4 text-center">
+            <p className="text-sm font-semibold text-red-400">{invalidLabel}</p>
+          </div>
+        )}
+
+        {/* Cancelled event banner */}
+        {isEventCancelled && (
+          <div className="mb-4 rounded-xl border-2 border-yellow-500/30 bg-yellow-500/10 px-5 py-4 text-center">
+            <p className="text-sm font-semibold text-yellow-400">This event has been cancelled.</p>
+          </div>
+        )}
+
         <FlippableTicket
           eventTitle={event?.title ?? "Event"}
           eventDate={eventDate}
@@ -116,13 +143,18 @@ export default async function TicketPage({ params }: TicketPageProps) {
           venueCity={event?.venues?.city ?? null}
           tierName={tier?.name ?? "General Admission"}
           pricePaid={Number(typedTicket.price_paid)}
-          attendeeName={null}
+          attendeeName={
+            String(typedTicket.metadata?.customer_name || typedTicket.metadata?.buyer_name || "") ||
+            (typedTicket.metadata?.customer_email
+              ? String(typedTicket.metadata.customer_email).split("@")[0]
+              : null)
+          }
           attendeeEmail={String(typedTicket.metadata?.customer_email || "") || "Guest"}
           purchaseDate={purchaseDate}
           status={typedTicket.status}
           isCheckedIn={isCheckedIn}
           checkedInAt={typedTicket.checked_in_at ?? null}
-          qrCode={qrCode ?? null}
+          qrCode={isTicketInvalid ? null : (qrCode ?? null)}
           ticketToken={typedTicket.ticket_token}
         />
       </main>

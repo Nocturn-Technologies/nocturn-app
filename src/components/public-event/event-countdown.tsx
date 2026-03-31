@@ -70,26 +70,3 @@ export function EventCountdown({ targetDate }: { targetDate: string }) {
     </div>
   );
 }
-
-export function SellingFastBadge({ soldPercent }: { soldPercent: number }) {
-  if (soldPercent < 50) return null;
-
-  const label = soldPercent >= 90
-    ? "Almost sold out!"
-    : soldPercent >= 75
-      ? "Selling fast 🔥"
-      : "Over 50% sold";
-
-  const color = soldPercent >= 90
-    ? "bg-red-500/10 text-red-400 border-red-500/20"
-    : soldPercent >= 75
-      ? "bg-orange-500/10 text-orange-400 border-orange-500/20"
-      : "bg-yellow-500/10 text-yellow-400 border-yellow-500/20";
-
-  return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold ${color}`}>
-      <span className="inline-block w-1.5 h-1.5 rounded-full bg-current animate-pulse" />
-      {label}
-    </span>
-  );
-}

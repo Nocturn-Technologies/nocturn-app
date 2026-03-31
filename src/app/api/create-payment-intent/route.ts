@@ -121,26 +121,40 @@ export async function POST(request: NextRequest) {
         .ilike("code", promoCode)
         .maybeSingle();
 
-      if (promo) {
-        const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
+      if (!promo) {
+        return NextResponse.json(
+          { error: "Promo code not found" },
+          { status: 400 }
+        );
+      }
 
-        if (!isExpired) {
-          // Validate promo code availability (check uses) but DON'T claim yet.
-          // Claiming happens in the webhook/fulfillment after payment succeeds,
-          // so abandoned checkouts don't consume promo uses.
-          const hasCapacity = promo.max_uses === null ||
-            (promo.current_uses ?? 0) + quantity <= promo.max_uses;
+      const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
+      if (isExpired) {
+        return NextResponse.json(
+          { error: "Promo code expired" },
+          { status: 400 }
+        );
+      }
 
-          if (hasCapacity) {
-            promoId = promo.id;
-            validatedPromoCode = promo.code;
-            if (promo.discount_type === "percentage") {
-              discountCents = Math.round(basePriceCents * Math.min(Number(promo.discount_value) / 100, 1));
-            } else {
-              discountCents = Math.round(Number(promo.discount_value) * 100);
-            }
-          }
-        }
+      // Validate promo code availability (check uses) but DON'T claim yet.
+      // Claiming happens in the webhook/fulfillment after payment succeeds,
+      // so abandoned checkouts don't consume promo uses.
+      const hasCapacity = promo.max_uses === null ||
+        (promo.current_uses ?? 0) + quantity <= promo.max_uses;
+
+      if (!hasCapacity) {
+        return NextResponse.json(
+          { error: "Promo code usage limit reached" },
+          { status: 400 }
+        );
+      }
+
+      promoId = promo.id;
+      validatedPromoCode = promo.code;
+      if (promo.discount_type === "percentage") {
+        discountCents = Math.round(basePriceCents * Math.min(Number(promo.discount_value) / 100, 1));
+      } else {
+        discountCents = Math.round(Number(promo.discount_value) * 100);
       }
     }
 

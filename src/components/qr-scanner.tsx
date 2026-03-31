@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 
 interface QrScannerProps {
@@ -13,6 +13,7 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const pausedRef = useRef(paused);
   const onScanRef = useRef(onScan);
 
@@ -25,15 +26,26 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
     onScanRef.current = onScan;
   }, [onScan]);
 
-  useEffect(() => {
+  const startScanner = useCallback(() => {
     if (!containerRef.current) return;
 
     const elementId = "qr-scanner-region";
+
+    // Clean up previous scanner instance if retrying
+    if (scannerRef.current) {
+      if (scannerRef.current.isScanning) {
+        scannerRef.current.stop().catch(() => {});
+      }
+      scannerRef.current = null;
+    }
+
     const scanner = new Html5Qrcode(elementId);
     scannerRef.current = scanner;
 
     // Responsive QR box — smaller on narrow screens
     const boxSize = typeof window !== "undefined" && window.innerWidth < 400 ? 200 : 250;
+
+    setError(null);
 
     scanner
       .start(
@@ -61,14 +73,24 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
           "Could not access camera. Please grant camera permission and try again."
         );
       });
+  }, []);
+
+  useEffect(() => {
+    startScanner();
 
     return () => {
-      if (scanner.isScanning) {
-        scanner.stop().catch(() => {});
+      if (scannerRef.current && scannerRef.current.isScanning) {
+        scannerRef.current.stop().catch(() => {});
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [retryCount]);
+
+  function handleRetry() {
+    setStarted(false);
+    setError(null);
+    setRetryCount((c) => c + 1);
+  }
 
   return (
     <div className="relative w-full">
@@ -86,8 +108,14 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
         </div>
       )}
       {error && (
-        <div className="flex h-[250px] sm:h-[300px] items-center justify-center rounded-xl border border-destructive/30 bg-destructive/5">
+        <div className="flex h-[250px] sm:h-[300px] flex-col items-center justify-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5">
           <p className="max-w-xs px-4 text-center text-sm text-destructive">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="rounded-lg bg-nocturn px-4 py-2 text-sm font-medium text-white hover:bg-nocturn-light transition-colors"
+          >
+            Try again
+          </button>
         </div>
       )}
       {paused && started && (

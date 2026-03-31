@@ -32,29 +32,65 @@ export async function sendEmail({
 
   const resend = getResend();
   if (!resend) {
+    // Gap 26: In production, missing RESEND_API_KEY should be a hard error
+    if (process.env.NODE_ENV === "production") {
+      console.error("[email] RESEND_API_KEY is missing in production!");
+      throw new Error("RESEND_API_KEY is not configured. Emails cannot be sent in production.");
+    }
     console.info(`[email] Dev mode — skipped sending: ${subject}`);
     return { error: null, messageId: "dev-mode" };
   }
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from: FROM_EMAIL,
-      to,
-      subject,
-      html,
-    });
+  // Retry wrapper: up to 3 attempts with 1s delay, only retry on network/5xx errors
+  const MAX_RETRIES = 3;
+  let lastError: string | null = null;
 
-    if (error) {
-      console.error("[email] Send failed:", error);
-      return { error: error.message, messageId: null };
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const { data, error } = await resend.emails.send({
+        from: FROM_EMAIL,
+        to,
+        subject,
+        html,
+      });
+
+      if (error) {
+        // Resend API errors: check if retryable (5xx) or not (4xx)
+        const statusCode = (error as unknown as { statusCode?: number }).statusCode;
+        const is4xx = statusCode && statusCode >= 400 && statusCode < 500;
+
+        if (is4xx) {
+          // 4xx errors are client errors (bad request) — don't retry
+          console.error(`[email] Send failed (4xx, not retrying):`, error);
+          return { error: error.message, messageId: null };
+        }
+
+        lastError = error.message;
+        console.warn(`[email] Send failed (attempt ${attempt}/${MAX_RETRIES}):`, error);
+
+        if (attempt < MAX_RETRIES) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          continue;
+        }
+
+        return { error: lastError, messageId: null };
+      }
+
+      return { error: null, messageId: data?.id };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error";
+      lastError = message;
+      console.warn(`[email] Exception (attempt ${attempt}/${MAX_RETRIES}):`, message);
+
+      if (attempt < MAX_RETRIES) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        continue;
+      }
     }
-
-    return { error: null, messageId: data?.id };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[email] Exception:", message);
-    return { error: message, messageId: null };
   }
+
+  console.error("[email] All retry attempts exhausted");
+  return { error: lastError ?? "Email send failed after retries", messageId: null };
 }
 
 /**
