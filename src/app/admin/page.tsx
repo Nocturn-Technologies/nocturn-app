@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/config";
+import { generateApprovalUrls } from "@/app/api/approve-user/route";
 import AdminGate from "./admin-gate";
 
 export const metadata: Metadata = {
@@ -611,13 +612,13 @@ export default async function AdminPage({ searchParams }: Props) {
                             <td className="px-4 py-3 text-zinc-400">{formatDate(user.created_at)}</td>
                             <td className="px-4 py-3 space-x-3">
                               <a
-                                href={`/api/approve-user?user_id=${user.id}&action=approve&secret=${encodedSecret}`}
+                                href={generateApprovalUrls(user.id).approveUrl}
                                 className="text-green-400 hover:text-green-300 font-medium transition-colors"
                               >
                                 Approve
                               </a>
                               <a
-                                href={`/api/approve-user?user_id=${user.id}&action=deny&secret=${encodedSecret}`}
+                                href={generateApprovalUrls(user.id).denyUrl}
                                 className="text-red-400 hover:text-red-300 font-medium transition-colors"
                               >
                                 Deny
@@ -844,13 +845,13 @@ export default async function AdminPage({ searchParams }: Props) {
                           {!approved && (
                             <>
                               <a
-                                href={`/api/approve-user?user_id=${user.id}&action=approve&secret=${encodedSecret}`}
+                                href={generateApprovalUrls(user.id).approveUrl}
                                 className="text-green-400 hover:text-green-300 font-medium transition-colors"
                               >
                                 Approve
                               </a>
                               <a
-                                href={`/api/approve-user?user_id=${user.id}&action=deny&secret=${encodedSecret}`}
+                                href={generateApprovalUrls(user.id).denyUrl}
                                 className="text-red-400 hover:text-red-300 font-medium transition-colors"
                               >
                                 Deny
