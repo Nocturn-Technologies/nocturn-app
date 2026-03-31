@@ -216,7 +216,7 @@ export default function OnboardingPage() {
               <Button
                 onClick={() => setStep("event")}
                 disabled={!selectedVibe}
-                className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base"
+                className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base min-h-[48px]"
               >
                 Continue
                 <ArrowRight className="ml-2 h-4 w-4" />
@@ -248,7 +248,7 @@ export default function OnboardingPage() {
 
               <Button
                 onClick={() => handleCreate()}
-                className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base"
+                className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base min-h-[48px]"
               >
                 <Sparkles className="mr-2 h-4 w-4" />
                 Create Event

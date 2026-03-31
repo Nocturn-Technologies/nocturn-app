@@ -657,6 +657,10 @@ export async function addContact(
   }
 
   return { error: null, contact: rowToContact(row as Record<string, unknown>) };
+  } catch (err) {
+    console.error("[addContact] Unexpected error:", err);
+    return { error: "Something went wrong", contact: null };
+  }
 }
 
 // ── 5. updateContact ──────────────────────────────────────────────────────────
@@ -674,6 +678,7 @@ export async function updateContact(
     role?: string;
   }
 ): Promise<{ error: string | null; contact: Contact | null }> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -725,6 +730,10 @@ export async function updateContact(
   }
 
   return { error: null, contact: rowToContact(row as Record<string, unknown>) };
+  } catch (err) {
+    console.error("[updateContact] Unexpected error:", err);
+    return { error: "Something went wrong", contact: null };
+  }
 }
 
 // ── 6. bulkTagContacts ────────────────────────────────────────────────────────
@@ -734,6 +743,7 @@ export async function bulkTagContacts(
   tags: string[],
   collectiveId: string
 ): Promise<{ error: string | null; updated: number }> {
+  try {
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { error: auth.error, updated: 0 };
 
@@ -775,6 +785,10 @@ export async function bulkTagContacts(
   }
 
   return { error: null, updated: updatedCount };
+  } catch (err) {
+    console.error("[bulkTagContacts] Unexpected error:", err);
+    return { error: "Something went wrong", updated: 0 };
+  }
 }
 
 // ── 7. exportContactsCSV ─────────────────────────────────────────────────────
@@ -783,6 +797,7 @@ export async function exportContactsCSV(
   collectiveId: string,
   filters: ContactFilters = {}
 ): Promise<{ error: string | null; csv: string }> {
+  try {
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { error: auth.error, csv: "" };
 
@@ -861,4 +876,8 @@ export async function exportContactsCSV(
   const csv = [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
 
   return { error: null, csv };
+  } catch (err) {
+    console.error("[exportContactsCSV] Unexpected error:", err);
+    return { error: "Something went wrong", csv: "" };
+  }
 }
