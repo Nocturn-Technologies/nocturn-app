@@ -2,9 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { NocturnLogo } from "@/components/nocturn-logo";
 import { Button } from "@/components/ui/button";
-import { Clock, LogOut, RefreshCw, XCircle } from "lucide-react";
+import { Clock, LogOut, RefreshCw, XCircle, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function PendingApprovalPage() {
@@ -36,7 +35,6 @@ export default function PendingApprovalPage() {
 
   async function handleCheck() {
     setChecking(true);
-    // Re-fetch user metadata to see if approved
     const { data: { user } } = await supabase.auth.getUser();
     if (user?.user_metadata?.is_denied) {
       setIsDenied(true);
@@ -49,7 +47,6 @@ export default function PendingApprovalPage() {
       return;
     }
 
-    // Also check the users table directly
     if (user) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase.from("users") as any)
@@ -78,50 +75,104 @@ export default function PendingApprovalPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
-      <div className="w-full max-w-md space-y-8 text-center">
-        <NocturnLogo size="lg" />
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#09090B] px-4">
+      {/* Subtle background glow */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-nocturn/[0.04] blur-[120px]" />
+      </div>
 
-        <div className="flex justify-center">
-          <div className={`flex h-20 w-20 items-center justify-center rounded-full ${isDenied ? "bg-red-500/10" : "bg-amber-500/10"}`}>
-            {isDenied ? (
-              <XCircle className="h-10 w-10 text-red-500" />
-            ) : (
-              <Clock className="h-10 w-10 text-amber-500" />
-            )}
+      <div className="relative w-full max-w-[380px]">
+        {/* Logo — centered */}
+        <div className="flex justify-center mb-10">
+          <div className="flex items-center gap-2">
+            <span className="text-3xl">🌙</span>
+            <span className="text-3xl font-bold tracking-tight font-heading text-white">
+              nocturn.
+            </span>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <h1 className="text-2xl font-bold">
-            {isDenied ? "Your application was not approved" : "Your account is pending approval"}
-          </h1>
-          <p className="text-muted-foreground leading-relaxed">
+        {/* Card */}
+        <div className="rounded-2xl border border-white/[0.06] bg-[#111113] p-6">
+          {/* Status icon */}
+          <div className="flex justify-center mb-5">
+            <div
+              className={`flex h-14 w-14 items-center justify-center rounded-full ${
+                isDenied
+                  ? "bg-red-500/10 ring-1 ring-red-500/20"
+                  : "bg-amber-500/10 ring-1 ring-amber-500/20"
+              }`}
+            >
+              {isDenied ? (
+                <XCircle className="h-7 w-7 text-red-400" />
+              ) : (
+                <Clock className="h-7 w-7 text-amber-400" />
+              )}
+            </div>
+          </div>
+
+          {/* Heading */}
+          <h1 className="text-center text-lg font-semibold text-white mb-2">
             {isDenied
-              ? "Unfortunately, your account application was not approved at this time. If you believe this is an error, please contact us at shawn@trynocturn.com."
-              : "We review every collective and promoter account to keep the platform quality high. You'll get an email once you're approved — usually within 24 hours."}
+              ? "Application not approved"
+              : "Pending approval"}
+          </h1>
+
+          {/* Description */}
+          <p className="text-center text-sm text-zinc-400 leading-relaxed mb-1">
+            {isDenied
+              ? "Your account was not approved at this time. If you think this is an error, reach out to us."
+              : "We review every account to keep quality high. You'll get an email once approved — usually within 24 hours."}
           </p>
+
+          {/* Email badge */}
           {email && (
-            <p className="text-sm text-muted-foreground">
-              Signed up as <span className="text-foreground font-medium">{email}</span>
-            </p>
+            <div className="flex items-center justify-center gap-1.5 mt-4 mb-6">
+              <div className="flex items-center gap-2 rounded-full bg-white/[0.04] border border-white/[0.06] px-3 py-1.5">
+                <Mail className="h-3 w-3 text-zinc-500" />
+                <span className="text-xs text-zinc-300">{email}</span>
+              </div>
+            </div>
           )}
+
+          {/* Divider */}
+          <div className="h-px bg-white/[0.06] mb-5" />
+
+          {/* Actions */}
+          <div className="space-y-2.5">
+            <Button
+              className="w-full h-11 rounded-xl bg-nocturn hover:bg-nocturn-light text-white text-sm font-medium"
+              onClick={handleCheck}
+              disabled={checking || isDenied}
+            >
+              <RefreshCw
+                className={`mr-2 h-4 w-4 ${checking ? "animate-spin" : ""}`}
+              />
+              {checking ? "Checking..." : "Check Approval Status"}
+            </Button>
+
+            <button
+              onClick={handleLogout}
+              className="flex items-center justify-center gap-2 w-full py-2.5 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Sign Out
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-col gap-3">
-          <Button
-            className="bg-nocturn hover:bg-nocturn-light w-full"
-            onClick={handleCheck}
-            disabled={checking || isDenied}
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${checking ? "animate-spin" : ""}`} />
-            {checking ? "Checking..." : "Check Approval Status"}
-          </Button>
-          <Button variant="ghost" className="w-full" onClick={handleLogout}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign Out
-          </Button>
-        </div>
+        {/* Contact link */}
+        {isDenied && (
+          <p className="text-center text-xs text-zinc-500 mt-4">
+            Questions?{" "}
+            <a
+              href="mailto:shawn@trynocturn.com"
+              className="text-nocturn hover:underline"
+            >
+              shawn@trynocturn.com
+            </a>
+          </p>
+        )}
       </div>
     </div>
   );
