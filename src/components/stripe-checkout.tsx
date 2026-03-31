@@ -29,6 +29,7 @@ interface StripeCheckoutProps {
   eventVenue?: string;
   referrerToken?: string;
   promoCode?: string;
+  onAmountResolved?: (displayAmount: string) => void;
   onSuccess: () => void;
   onCancel: () => void;
 }
@@ -299,6 +300,7 @@ export function StripeCheckout({
   eventVenue,
   referrerToken,
   promoCode,
+  onAmountResolved,
   onSuccess,
   onCancel,
 }: StripeCheckoutProps) {
@@ -328,7 +330,10 @@ export function StripeCheckout({
         }
 
         setClientSecret(data.clientSecret);
-        if (data.displayAmount) setDisplayAmount(data.displayAmount);
+        if (data.displayAmount) {
+          setDisplayAmount(data.displayAmount);
+          onAmountResolved?.(data.displayAmount);
+        }
         setLoading(false);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;

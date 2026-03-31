@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { calculateServiceFeeCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
 import { rateLimitStrict } from "@/lib/rate-limit";
+import {
+  validatePromo,
+  isPromoError,
+  calculateCheckoutPricing,
+  insertPendingTickets,
+} from "@/lib/checkout-helpers";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
@@ -139,75 +144,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Apply promo code discount if provided
-    let discountPercent = 0;
-    let discountFixed = 0;
-    let promoId: string | null = null;
-
-    if (promoCode && typeof promoCode === "string" && promoCode.length <= 50) {
-      const { data: promo } = await supabase
-        .from("promo_codes")
-        .select("id, code, discount_type, discount_value, max_uses, current_uses, expires_at")
-        .eq("event_id", eventId)
-        .eq("is_active", true)
-        .ilike("code", promoCode)
-        .maybeSingle();
-
-      if (!promo) {
-        return NextResponse.json(
-          { error: "Promo code not found" },
-          { status: 400 }
-        );
-      }
-
-      const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
-      if (isExpired) {
-        return NextResponse.json(
-          { error: "Promo code expired" },
-          { status: 400 }
-        );
-      }
-
-      // Validate promo code availability (check uses) but DON'T claim yet.
-      // Claiming happens in the webhook/fulfillment after payment succeeds,
-      // so abandoned checkouts don't consume promo uses.
-      const hasCapacity = promo.max_uses === null ||
-        (promo.current_uses ?? 0) + quantity <= promo.max_uses;
-
-      if (!hasCapacity) {
-        return NextResponse.json(
-          { error: "Promo code usage limit reached" },
-          { status: 400 }
-        );
-      }
-
-      // Code is valid and has capacity — apply the discount
-      promoId = promo.id;
-      if (promo.discount_type === "percentage") {
-        const pct = Number(promo.discount_value);
-        if (pct < 0 || pct > 100) {
-          return NextResponse.json(
-            { error: "Invalid promo code configuration" },
-            { status: 400 }
-          );
-        }
-        discountPercent = pct / 100;
-      } else {
-        discountFixed = Number(promo.discount_value) * 100; // convert to cents
-      }
-    }
-
-    // Calculate price with discount
+    // Validate tier price
     const basePriceNumber = Number(tier.price);
     if (!Number.isFinite(basePriceNumber) || basePriceNumber < 0) {
       return NextResponse.json({ error: "Invalid ticket price" }, { status: 400 });
     }
     const basePriceCents = Math.round(basePriceNumber * 100);
 
-    const discountCents = discountPercent > 0
-      ? Math.round(basePriceCents * discountPercent)
-      : discountFixed;
-    const unitAmountCents = Math.max(basePriceCents - discountCents, 0);
+    // Apply promo code discount if provided
+    let discountCents = 0;
+    let promoId: string | null = null;
+    let validatedPromoCode: string | null = null;
+
+    if (promoCode) {
+      const promoResult = await validatePromo(supabaseAdmin, promoCode, eventId, basePriceCents, quantity);
+      if (isPromoError(promoResult)) {
+        return NextResponse.json({ error: promoResult.error }, { status: 400 });
+      }
+      promoId = promoResult.promoId;
+      validatedPromoCode = promoResult.promoCode;
+      discountCents = promoResult.discountCents;
+    }
+
+    // Calculate price with discount using shared pricing logic
+    const pricing = calculateCheckoutPricing(tier.price, discountCents);
+    const unitAmountCents = pricing.unitAmountCents;
 
     // Free tickets — bypass Stripe, create directly
     // Insert BEFORE releasing the lock to prevent oversell race condition
@@ -346,14 +307,7 @@ export async function POST(request: NextRequest) {
         console.error("[checkout] Contact upsert failed (non-blocking):", contactErr);
       }
 
-      // Claim promo code uses for free tickets (webhook is bypassed for $0 tickets)
-      if (promoId) {
-        try {
-          await supabaseAdmin.rpc("claim_promo_code", { p_code_id: promoId, p_quantity: quantity });
-        } catch (promoErr) {
-          console.error("[checkout] Free ticket promo claim failed (non-blocking):", promoErr);
-        }
-      }
+      // Promo code uses already claimed atomically in validatePromo() above
 
       // Track free registration in analytics (H6: free tickets were invisible to event_analytics)
       import("@/lib/analytics").then(({ trackTicketSold }) =>
@@ -379,8 +333,8 @@ export async function POST(request: NextRequest) {
       trackCheckoutStart(eventId)
     ).catch(() => {});
 
-    const serviceFeePerTicketCents = calculateServiceFeeCents(unitAmountCents);
-    const totalPerTicketCents = unitAmountCents + serviceFeePerTicketCents;
+    const serviceFeePerTicketCents = pricing.serviceFeePerTicketCents;
+    const totalPerTicketCents = pricing.totalPerTicketCents;
 
     // Stripe minimum is $0.50 USD
     if (totalPerTicketCents < 50) {
@@ -393,35 +347,22 @@ export async function POST(request: NextRequest) {
     // Reserve capacity by inserting "pending" tickets immediately.
     // These count toward capacity and will be updated to "paid" on fulfillment,
     // or cleaned up after 30 minutes if the checkout is abandoned (Gap 9 + 25).
-    const pendingTickets = Array.from({ length: quantity }, () => ({
-      event_id: eventId,
-      ticket_tier_id: tierId,
-      user_id: null,
-      status: "pending" as const,
-      price_paid: 0,
-      currency: "usd",
-      stripe_payment_intent_id: null,
-      ticket_token: randomUUID(),
-      metadata: {
-        customer_email: buyerEmail,
-        pending_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      },
-    }));
-
-    const { data: insertedPending, error: pendingError } = await supabaseAdmin
-      .from("tickets")
-      .insert(pendingTickets)
-      .select("id, ticket_token");
-
-    if (pendingError) {
-      console.error("[checkout] Failed to insert pending tickets:", pendingError);
+    let pendingTicketIds: string[];
+    try {
+      const pendingResult = await insertPendingTickets(supabaseAdmin, {
+        eventId,
+        tierId,
+        quantity,
+        email: buyerEmail,
+      });
+      pendingTicketIds = pendingResult.pendingTicketIds;
+    } catch (err) {
+      console.error("[checkout] Failed to insert pending tickets:", err);
       return NextResponse.json(
         { error: "Failed to reserve tickets. Please try again." },
         { status: 500 }
       );
     }
-
-    const pendingTicketIds = insertedPending?.map((t) => t.id) ?? [];
 
     const referer = request.headers.get("referer");
     let cancelUrl = APP_URL;
@@ -471,7 +412,7 @@ export async function POST(request: NextRequest) {
           quantity: String(quantity),
           ticketPriceCents: String(unitAmountCents),
           serviceFeeCents: String(serviceFeePerTicketCents),
-          ...(promoId && { promoId, promoCode: promoCode ?? "" }),
+          ...(promoId && { promoId, promoCode: validatedPromoCode ?? "", promoClaimedQuantity: String(quantity) }),
           ...(referrerToken && { referrerToken }),
           ...(discountCents > 0 && { discountCents: String(discountCents) }),
           pendingTicketIds: JSON.stringify(pendingTicketIds),
@@ -487,7 +428,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Promo code uses are claimed in the webhook/fulfillment after payment succeeds
+    // Promo code uses are already claimed atomically before payment (Gap 22 fix)
 
     return NextResponse.json({ url: session.url });
   } catch (error) {

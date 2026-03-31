@@ -235,6 +235,57 @@ export async function getRefundableTickets(eventId: string) {
 }
 
 /**
+ * Get refunded tickets for an event (refund history).
+ */
+export async function getRefundedTickets(eventId: string) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", tickets: [] };
+
+  const sb = createAdminClient();
+
+  // Verify user is a member of the event's collective
+  const { data: event } = await sb
+    .from("events")
+    .select("collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  if (!event) return { error: "Event not found", tickets: [] };
+
+  const { count } = await sb
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", event.collective_id)
+    .eq("user_id", user.id)
+    .is("deleted_at", null);
+
+  if (!count || count === 0) return { error: "You don't have access to this event", tickets: [] };
+
+  const { data: tickets } = await sb
+    .from("tickets")
+    .select("id, price_paid, status, metadata, created_at, updated_at, ticket_tiers(name)")
+    .eq("event_id", eventId)
+    .eq("status", "refunded")
+    .order("updated_at", { ascending: false });
+
+  return {
+    error: null,
+    tickets: (tickets ?? []).map((t) => {
+      const meta = t.metadata as Record<string, unknown>;
+      const tier = t.ticket_tiers as unknown as { name: string } | null;
+      return {
+        id: t.id,
+        email: (meta?.customer_email as string) || (meta?.buyer_email as string) || "Unknown",
+        tierName: tier?.name || "General",
+        amountRefunded: Number(meta?.refund_amount ?? t.price_paid ?? 0),
+        refundedAt: (meta?.refunded_at as string) || t.updated_at || t.created_at,
+      };
+    }),
+  };
+}
+
+/**
  * Toggle refund policy for an event (on/off).
  * Stored in events.metadata.refunds_enabled
  */

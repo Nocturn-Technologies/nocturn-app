@@ -101,6 +101,29 @@ export async function POST(request: NextRequest) {
             `[stripe-webhook] Deleted ${failedTickets.length} pending ticket(s) to release capacity for PI ${pi.id}`
           );
         }
+
+        // Release promo code claim (Gap 22): promo uses were claimed atomically
+        // before payment, so we must decrement on failure to free the slot.
+        const piPromoId = pi.metadata?.promoId;
+        const piPromoQuantity = parseInt(pi.metadata?.promoClaimedQuantity || "0", 10);
+        if (piPromoId && piPromoQuantity > 0) {
+          const { data: currentPromo } = await supabase
+            .from("promo_codes")
+            .select("current_uses")
+            .eq("id", piPromoId)
+            .maybeSingle();
+
+          if (currentPromo) {
+            const newUses = Math.max((currentPromo.current_uses ?? 0) - piPromoQuantity, 0);
+            await supabase
+              .from("promo_codes")
+              .update({ current_uses: newUses })
+              .eq("id", piPromoId);
+            console.info(
+              `[stripe-webhook] Released ${piPromoQuantity} promo claim(s) for code ${piPromoId} (PI ${pi.id})`
+            );
+          }
+        }
         break;
       }
       case "charge.refunded": {
@@ -413,16 +436,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     console.error("[stripe-webhook] Contact upsert failed (non-blocking):", contactErr);
   }
 
-  // Claim promo code uses AFTER successful ticket creation (not at checkout creation).
-  // This ensures abandoned checkouts don't consume promo uses.
-  // Uses claim_promo_code RPC which accepts quantity (not increment_promo_uses which always adds 1).
-  if (metadata.promoId) {
-    try {
-      await supabase.rpc("claim_promo_code", { p_code_id: metadata.promoId, p_quantity: quantity });
-    } catch (promoErr) {
-      console.error("[stripe-webhook] Failed to claim promo uses (non-blocking):", promoErr);
-    }
-  }
+  // Promo code uses are now claimed atomically BEFORE payment (Gap 22 fix).
+  // No need to claim here — the checkout/create-payment-intent routes handle it.
+  // If payment fails, the payment_intent.payment_failed webhook decrements the counter.
 
   void logPaymentEvent({
     event_type: "tickets_fulfilled",
@@ -849,14 +865,11 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       metadata: { flow: "payment_intent" },
     });
 
-    // Claim promo code uses AFTER successful ticket creation.
-    // Uses claim_promo_code RPC which accepts quantity (not increment_promo_uses which always adds 1).
-    if (metadata.promoId) {
-      try {
-        await supabase.rpc("claim_promo_code", { p_code_id: metadata.promoId, p_quantity: quantity });
-      } catch (promoErr) {
-        console.error("[stripe-webhook] Failed to claim promo uses (non-blocking):", promoErr);
-      }
+    // Promo code uses are now claimed atomically BEFORE payment (Gap 22 fix).
+    // No need to claim here — the create-payment-intent route handles it.
+    // If payment fails, the payment_intent.payment_failed webhook decrements the counter.
+    if (false && metadata.promoId) {
+      // Kept for reference — this block is intentionally disabled (Gap 22)
     }
   } else {
     console.info(`[stripe-webhook] Tickets pre-existed for PI ${paymentIntent.id}, skipping promo/analytics`);

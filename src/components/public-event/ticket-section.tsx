@@ -34,6 +34,7 @@ export function TicketSection({
   const [showCheckout, setShowCheckout] = useState(false);
 
   const [buying, setBuying] = useState(false);
+  const [resolvedAmount, setResolvedAmount] = useState<string | null>(null);
   const [freeCheckoutLoading, setFreeCheckoutLoading] = useState(false);
   const [freeCheckoutError, setFreeCheckoutError] = useState<string | null>(null);
   const [waitlistEmail, setWaitlistEmail] = useState("");
@@ -126,12 +127,19 @@ export function TicketSection({
               </p>
               <p className="text-sm text-white/40">{email}</p>
             </div>
-            <p
-              className="font-heading text-xl font-bold"
-              style={{ color: accentColor }}
-            >
-              ${total.toFixed(2)}
-            </p>
+            <div className="text-right">
+              <p
+                className="font-heading text-xl font-bold"
+                style={{ color: accentColor }}
+              >
+                {resolvedAmount ?? `$${total.toFixed(2)}`}
+              </p>
+              {!resolvedAmount && (
+                <p className="text-[10px] text-white/30 mt-0.5">
+                  Final amount in local currency
+                </p>
+              )}
+            </div>
           </div>
           <StripeCheckout
             eventId={eventId}
@@ -142,10 +150,11 @@ export function TicketSection({
             totalAmount={total}
             referrerToken={referrerToken}
             promoCode={promoApplied?.code}
+            onAmountResolved={(amount) => setResolvedAmount(amount)}
             onSuccess={() => {
               // Success handled inside StripeCheckout component
             }}
-            onCancel={() => setShowCheckout(false)}
+            onCancel={() => { setShowCheckout(false); setResolvedAmount(null); }}
           />
         </div>
       </div>

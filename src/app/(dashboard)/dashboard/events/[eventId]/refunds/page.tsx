@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, RotateCcw, AlertTriangle, Check, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { getRefundableTickets, refundTicket, getRefundPolicy, toggleRefundPolicy } from "@/app/actions/refunds";
+import { getRefundableTickets, getRefundedTickets, refundTicket, getRefundPolicy, toggleRefundPolicy } from "@/app/actions/refunds";
 
 interface RefundableTicket {
   id: string;
@@ -17,11 +17,20 @@ interface RefundableTicket {
   purchasedAt: string;
 }
 
+interface RefundedTicket {
+  id: string;
+  email: string;
+  tierName: string;
+  amountRefunded: number;
+  refundedAt: string;
+}
+
 export default function RefundsPage() {
   const params = useParams();
   const eventId = params.eventId as string;
 
   const [tickets, setTickets] = useState<RefundableTicket[]>([]);
+  const [refundHistory, setRefundHistory] = useState<RefundedTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [refunding, setRefunding] = useState<string | null>(null);
   const [refunded, setRefunded] = useState<Set<string>>(new Set());
@@ -30,11 +39,13 @@ export default function RefundsPage() {
   const [togglingPolicy, setTogglingPolicy] = useState(false);
 
   const loadTickets = useCallback(async () => {
-    const [ticketResult, policyResult] = await Promise.all([
+    const [ticketResult, refundedResult, policyResult] = await Promise.all([
       getRefundableTickets(eventId),
+      getRefundedTickets(eventId),
       getRefundPolicy(eventId),
     ]);
     if (ticketResult.tickets) setTickets(ticketResult.tickets);
+    if (refundedResult.tickets) setRefundHistory(refundedResult.tickets);
     setRefundsEnabled(policyResult.enabled);
     setLoading(false);
   }, [eventId]);
@@ -55,9 +66,19 @@ export default function RefundsPage() {
       setError(result.error);
     } else {
       setRefunded((prev) => new Set(prev).add(ticketId));
-      // Remove from list after animation
+      // Move to refund history after animation
+      const refundedTicket = tickets.find((t) => t.id === ticketId);
       setTimeout(() => {
         setTickets((prev) => prev.filter((t) => t.id !== ticketId));
+        if (refundedTicket) {
+          setRefundHistory((prev) => [{
+            id: refundedTicket.id,
+            email: refundedTicket.email,
+            tierName: refundedTicket.tierName,
+            amountRefunded: result.refundedAmount ?? refundedTicket.pricePaid,
+            refundedAt: new Date().toISOString(),
+          }, ...prev]);
+        }
       }, 1500);
     }
 
@@ -179,6 +200,31 @@ export default function RefundsPage() {
           })}
         </div>
       )}
+
+      {/* Refund History */}
+      <div className="space-y-2 pt-4 border-t border-border">
+        <h2 className="text-sm font-semibold text-foreground">Refund History</h2>
+        {refundHistory.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-3 text-center">No refunds yet</p>
+        ) : (
+          refundHistory.map((ticket) => (
+            <div
+              key={ticket.id}
+              className="rounded-lg border border-border p-3 flex items-center justify-between"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">{ticket.email}</p>
+                <p className="text-xs text-muted-foreground">
+                  {ticket.tierName} · ${ticket.amountRefunded.toFixed(2)} refunded · {new Date(ticket.refundedAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground font-medium flex items-center gap-1 shrink-0">
+                <RotateCcw className="h-3 w-3" /> Refunded
+              </span>
+            </div>
+          ))
+        )}
+      </div>
 
       <p className="text-[11px] text-muted-foreground text-center">
         Refunds are processed via Stripe. Buyers receive the ticket price back within 5-10 business days. The service fee is non-refundable.

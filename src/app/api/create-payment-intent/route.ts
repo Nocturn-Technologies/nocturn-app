@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
-import { calculateServiceFeeCents } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
 import { getCurrencyForCountry, convertAmount, formatLocalAmount } from "@/lib/currency";
 import { logPaymentEvent } from "@/lib/payment-events";
-import { randomUUID } from "crypto";
+import {
+  validatePromo,
+  isPromoError,
+  calculateCheckoutPricing,
+  insertPendingTickets,
+} from "@/lib/checkout-helpers";
 
 export async function POST(request: NextRequest) {
   const clientIp = request.headers.get("x-real-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -110,89 +114,48 @@ export async function POST(request: NextRequest) {
     // Reserve capacity by inserting "pending" tickets immediately.
     // These count toward capacity and will be updated to "paid" on fulfillment,
     // or cleaned up after 30 minutes if the checkout is abandoned (Gap 9 + 25).
-    const pendingTickets = Array.from({ length: quantity }, () => ({
-      event_id: eventId,
-      ticket_tier_id: tierId,
-      user_id: null,
-      status: "pending" as const,
-      price_paid: 0,
-      currency: "usd",
-      stripe_payment_intent_id: null,
-      ticket_token: randomUUID(),
-      metadata: {
-        customer_email: buyerEmail,
-        pending_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      },
-    }));
-
-    const { data: insertedPending, error: pendingError } = await supabase
-      .from("tickets")
-      .insert(pendingTickets)
-      .select("id, ticket_token");
-
-    if (pendingError) {
-      console.error("[create-payment-intent] Failed to insert pending tickets:", pendingError);
+    let pendingTicketIds: string[];
+    try {
+      const pendingResult = await insertPendingTickets(supabase, {
+        eventId,
+        tierId,
+        quantity,
+        email: buyerEmail,
+      });
+      pendingTicketIds = pendingResult.pendingTicketIds;
+    } catch (err) {
+      console.error("[create-payment-intent] Failed to insert pending tickets:", err);
       return NextResponse.json(
         { error: "Failed to reserve tickets. Please try again." },
         { status: 500 }
       );
     }
 
-    const pendingTicketIds = insertedPending?.map((t) => t.id) ?? [];
+    // Validate tier price
+    const basePriceNumber = Number(tier.price);
+    if (!Number.isFinite(basePriceNumber) || basePriceNumber < 0) {
+      return NextResponse.json({ error: "Invalid ticket price" }, { status: 400 });
+    }
+    const basePriceCents = Math.round(basePriceNumber * 100);
 
     // Apply promo code discount if provided
-    const basePriceCents = Math.round(Number(tier.price) * 100);
     let discountCents = 0;
     let promoId: string | null = null;
     let validatedPromoCode: string | null = null;
 
     if (promoCode) {
-      const { data: promo } = await supabase
-        .from("promo_codes")
-        .select("id, code, discount_type, discount_value, max_uses, current_uses, expires_at")
-        .eq("event_id", eventId)
-        .eq("is_active", true)
-        .ilike("code", promoCode)
-        .maybeSingle();
-
-      if (!promo) {
-        return NextResponse.json(
-          { error: "Promo code not found" },
-          { status: 400 }
-        );
+      const promoResult = await validatePromo(supabase, promoCode, eventId, basePriceCents, quantity);
+      if (isPromoError(promoResult)) {
+        return NextResponse.json({ error: promoResult.error }, { status: 400 });
       }
-
-      const isExpired = promo.expires_at && new Date(promo.expires_at) < new Date();
-      if (isExpired) {
-        return NextResponse.json(
-          { error: "Promo code expired" },
-          { status: 400 }
-        );
-      }
-
-      // Validate promo code availability (check uses) but DON'T claim yet.
-      // Claiming happens in the webhook/fulfillment after payment succeeds,
-      // so abandoned checkouts don't consume promo uses.
-      const hasCapacity = promo.max_uses === null ||
-        (promo.current_uses ?? 0) + quantity <= promo.max_uses;
-
-      if (!hasCapacity) {
-        return NextResponse.json(
-          { error: "Promo code usage limit reached" },
-          { status: 400 }
-        );
-      }
-
-      promoId = promo.id;
-      validatedPromoCode = promo.code;
-      if (promo.discount_type === "percentage") {
-        discountCents = Math.round(basePriceCents * Math.min(Number(promo.discount_value) / 100, 1));
-      } else {
-        discountCents = Math.round(Number(promo.discount_value) * 100);
-      }
+      promoId = promoResult.promoId;
+      validatedPromoCode = promoResult.promoCode;
+      discountCents = promoResult.discountCents;
     }
 
-    const unitAmountCents = Math.max(basePriceCents - discountCents, 0);
+    // Calculate pricing using shared logic
+    const pricing = calculateCheckoutPricing(tier.price, discountCents);
+    const unitAmountCents = pricing.unitAmountCents;
 
     if (unitAmountCents < 50) {
       return NextResponse.json(
@@ -206,8 +169,8 @@ export async function POST(request: NextRequest) {
       trackCheckoutStart(eventId)
     ).catch(() => {});
 
-    const serviceFeePerTicketCents = calculateServiceFeeCents(unitAmountCents);
-    const totalPerTicketCents = unitAmountCents + serviceFeePerTicketCents;
+    const serviceFeePerTicketCents = pricing.serviceFeePerTicketCents;
+    const totalPerTicketCents = pricing.totalPerTicketCents;
     const totalUsdCents = totalPerTicketCents * quantity;
 
     // Detect buyer's country from Vercel header → convert to local currency
@@ -233,7 +196,7 @@ export async function POST(request: NextRequest) {
         fxRate: String(fxRate),
         ...(buyerCountry && { buyerCountry }),
         ...(referrerToken && { referrerToken }),
-        ...(promoId && { promoId, promoCode: validatedPromoCode ?? "" }),
+        ...(promoId && { promoId, promoCode: validatedPromoCode ?? "", promoClaimedQuantity: String(quantity) }),
         ...(discountCents > 0 && { discountCents: String(discountCents) }),
         pendingTicketIds: JSON.stringify(pendingTicketIds),
       },
