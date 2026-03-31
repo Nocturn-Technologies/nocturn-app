@@ -19,7 +19,7 @@ import {
 } from "@/app/actions/discover-collectives";
 import { startCollabChat } from "@/app/actions/collab";
 import { haptic } from "@/lib/haptics";
-import { Search, Compass, ChevronLeft, ChevronRight, Users2, Building2 } from "lucide-react";
+import { Search, Compass, ChevronLeft, ChevronRight, Users2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { NetworkCRM } from "./network-crm";
 import { createClient } from "@/lib/supabase/client";
@@ -52,7 +52,7 @@ const PER_PAGE = 20;
 
 export default function DiscoverPage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"discover" | "collectives" | "network">("discover");
+  const [activeTab, setActiveTab] = useState<"discover" | "network">("discover");
   const [collectiveId, setCollectiveId] = useState<string | undefined>(undefined);
   const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
@@ -66,12 +66,9 @@ export default function DiscoverPage() {
 
   const [loadingDiscover, setLoadingDiscover] = useState(true);
 
-  // Collectives tab state
+  // Collectives state (when "Collectives" category chip is active)
   const [collectives, setCollectives] = useState<DiscoverCollective[]>([]);
   const [collectivesTotal, setCollectivesTotal] = useState(0);
-  const [collectivesPage, setCollectivesPage] = useState(1);
-  const [collectivesQuery, setCollectivesQuery] = useState("");
-  const [collectivesCityFilter, setCollectivesCityFilter] = useState("");
   const [loadingCollectives, setLoadingCollectives] = useState(false);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
@@ -82,6 +79,8 @@ export default function DiscoverPage() {
     type: string;
     city: string;
   } | null>(null);
+
+  const isCollectivesCategory = category === "collective";
 
   // Fetch collectiveId for the current user
   const collectiveIdFetched = useRef(false);
@@ -114,9 +113,10 @@ export default function DiscoverPage() {
     setPage(1);
   }, [category, query, cityFilter]);
 
-  // ── Fetch discover profiles ────────────────────────────────────────────
+  // ── Fetch discover profiles (non-collective categories) ──────────────
 
   const fetchProfiles = useCallback(async () => {
+    if (isCollectivesCategory) return; // handled separately
     setLoadingDiscover(true);
     const result = await searchProfiles({
       type: category === "all" ? null : category,
@@ -127,52 +127,35 @@ export default function DiscoverPage() {
     setProfiles(result.profiles);
     setTotalCount(result.total);
     setLoadingDiscover(false);
-  }, [category, query, cityFilter, page]);
+  }, [category, query, cityFilter, page, isCollectivesCategory]);
 
   useEffect(() => {
-    const timer = setTimeout(fetchProfiles, 200);
-    return () => clearTimeout(timer);
-  }, [fetchProfiles]);
+    if (!isCollectivesCategory) {
+      const timer = setTimeout(fetchProfiles, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [fetchProfiles, isCollectivesCategory]);
 
-  // ── Fetch saved profiles ───────────────────────────────────────────────
-
-  const fetchSaved = useCallback(async () => {
-    const result = await getSavedProfiles();
-    // savedIds is a string[] from the server action
-    const ids = new Set<string>(result.savedIds ?? []);
-    // Also include profile IDs as fallback
-    result.profiles.forEach((p) => ids.add((p as { id: string }).id));
-    setSavedIds(ids);
-  }, []);
-
-  useEffect(() => {
-    fetchSaved();
-  }, [fetchSaved]);
-
-  // ── Fetch collectives ────────────────────────────────────────────────
-
-  useEffect(() => {
-    setCollectivesPage(1);
-  }, [collectivesQuery, collectivesCityFilter]);
+  // ── Fetch collectives (when "Collectives" chip is selected) ──────────
 
   const fetchCollectives = useCallback(async () => {
     setLoadingCollectives(true);
     const result = await getDiscoverCollectives({
-      query: collectivesQuery.trim() || null,
-      city: collectivesCityFilter.trim() || null,
-      page: collectivesPage,
+      query: query.trim() || null,
+      city: cityFilter.trim() || null,
+      page,
     });
     setCollectives(result.collectives);
     setCollectivesTotal(result.total);
     setLoadingCollectives(false);
-  }, [collectivesQuery, collectivesCityFilter, collectivesPage]);
+  }, [query, cityFilter, page]);
 
   useEffect(() => {
-    if (activeTab === "collectives") {
+    if (isCollectivesCategory) {
       const timer = setTimeout(fetchCollectives, 200);
       return () => clearTimeout(timer);
     }
-  }, [activeTab, fetchCollectives]);
+  }, [isCollectivesCategory, fetchCollectives]);
 
   async function handleConnect(targetCollectiveId: string) {
     if (!collectiveId) return;
@@ -182,12 +165,24 @@ export default function DiscoverPage() {
     setConnectingId(null);
     if (!result.error && result.channelId) {
       setConnectedIds((prev) => new Set(prev).add(targetCollectiveId));
-      // Navigate to the chat after a brief moment so user sees the "Connected" state
       setTimeout(() => {
         router.push(`/dashboard/chat?channel=${result.channelId}`);
       }, 600);
     }
   }
+
+  // ── Fetch saved profiles ───────────────────────────────────────────────
+
+  const fetchSaved = useCallback(async () => {
+    const result = await getSavedProfiles();
+    const ids = new Set<string>(result.savedIds ?? []);
+    result.profiles.forEach((p) => ids.add((p as { id: string }).id));
+    setSavedIds(ids);
+  }, []);
+
+  useEffect(() => {
+    fetchSaved();
+  }, [fetchSaved]);
 
   // ── Save / unsave handlers ─────────────────────────────────────────────
 
@@ -221,12 +216,12 @@ export default function DiscoverPage() {
     }
   }
 
-  // ── Active profiles to show (discover tab only) ────────────────────────
+  // ── Computed ──────────────────────────────────────────────────────────
 
-  const displayProfiles = profiles;
-  const isLoading = loadingDiscover;
-  const totalPages = Math.ceil(totalCount / PER_PAGE);
+  const currentTotal = isCollectivesCategory ? collectivesTotal : totalCount;
+  const totalPages = Math.ceil(currentTotal / PER_PAGE);
   const showPagination = totalPages > 1;
+  const isLoading = isCollectivesCategory ? loadingCollectives : loadingDiscover;
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -236,15 +231,15 @@ export default function DiscoverPage() {
       <div className="px-4 md:px-0">
         <h1 className="text-xl font-bold">Discover</h1>
         <p className="text-xs text-muted-foreground">
-          Find DJs, photographers, venues, and more for your next event
+          Find DJs, collectives, photographers, venues, and more
         </p>
       </div>
 
-      {/* Tab toggle: Discover | Collectives | Network */}
+      {/* Tab toggle: Discover | My Network */}
       <div className="flex gap-1 rounded-lg bg-muted/50 p-0.5 mx-4 md:mx-0 w-fit">
         <button
           onClick={() => setActiveTab("discover")}
-          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
             activeTab === "discover"
               ? "bg-nocturn text-white shadow-sm"
               : "text-muted-foreground hover:text-foreground"
@@ -254,30 +249,19 @@ export default function DiscoverPage() {
           Discover
         </button>
         <button
-          onClick={() => setActiveTab("collectives")}
-          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
-            activeTab === "collectives"
-              ? "bg-nocturn text-white shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Building2 className="h-3.5 w-3.5" />
-          Collectives
-        </button>
-        <button
           onClick={() => setActiveTab("network")}
-          className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all ${
+          className={`flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-medium transition-all ${
             activeTab === "network"
               ? "bg-nocturn text-white shadow-sm"
               : "text-muted-foreground hover:text-foreground"
           }`}
         >
           <Users2 className="h-3.5 w-3.5" />
-          Network
+          My Network
         </button>
       </div>
 
-      {/* Category chips — horizontal scroll */}
+      {/* Category chips — horizontal scroll (discover tab only) */}
       {activeTab === "discover" && (
         <div className="-mx-4 px-4 md:mx-0 md:px-0">
           <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
@@ -301,7 +285,7 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* Search + City filters */}
+      {/* Search + City filters (discover tab only) */}
       {activeTab === "discover" && (
         <div className="flex gap-2 px-4 md:px-0">
           <div className="relative flex-1">
@@ -310,7 +294,7 @@ export default function DiscoverPage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search profiles..."
+              placeholder={isCollectivesCategory ? "Search collectives..." : "Search profiles..."}
               className="w-full pl-10"
             />
           </div>
@@ -325,228 +309,166 @@ export default function DiscoverPage() {
         </div>
       )}
 
-      {/* Collectives tab — search + city filter */}
-      {activeTab === "collectives" && (
-        <div className="flex gap-2 px-4 md:px-0">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="text"
-              value={collectivesQuery}
-              onChange={(e) => setCollectivesQuery(e.target.value)}
-              placeholder="Search collectives..."
-              className="w-full pl-10"
-            />
-          </div>
-          <div className="w-32 md:w-40">
-            <Input
-              type="text"
-              value={collectivesCityFilter}
-              onChange={(e) => setCollectivesCityFilter(e.target.value)}
-              placeholder="City"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Collectives grid */}
-      {activeTab === "collectives" && (
-        <div className="px-4 md:px-0">
-          {loadingCollectives ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
-            </div>
-          ) : collectives.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center gap-4 py-12">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/10">
-                  <Building2 className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <div className="text-center max-w-xs">
-                  <p className="font-semibold">No collectives found</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {collectivesQuery || collectivesCityFilter
-                      ? "Try a different search or city"
-                      : "Be the first collective on Nocturn!"}
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {collectives.map((collective) => (
-                  <CollectiveCard
-                    key={collective.id}
-                    collective={collective}
-                    onConnect={() => handleConnect(collective.id)}
-                    isConnecting={connectingId === collective.id}
-                    isConnected={connectedIds.has(collective.id)}
-                  />
-                ))}
-              </div>
-
-              {/* Result count */}
-              <p className="text-xs text-muted-foreground text-center pt-2">
-                {`${collectivesTotal} ${collectivesTotal === 1 ? "collective" : "collectives"} on Nocturn${
-                  Math.ceil(collectivesTotal / 20) > 1
-                    ? ` · Page ${collectivesPage} of ${Math.ceil(collectivesTotal / 20)}`
-                    : ""
-                }`}
-              </p>
-
-              {/* Pagination */}
-              {Math.ceil(collectivesTotal / 20) > 1 && (
-                <div className="flex items-center justify-center gap-2 pt-2 pb-4">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={collectivesPage <= 1}
-                    onClick={() => {
-                      setCollectivesPage((p) => Math.max(1, p - 1));
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                    className="min-h-[44px] min-w-[44px]"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={collectivesPage >= Math.ceil(collectivesTotal / 20)}
-                    onClick={() => {
-                      setCollectivesPage((p) => p + 1);
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                    }}
-                    className="min-h-[44px] min-w-[44px]"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {/* Network CRM — replaces the old network profile list */}
+      {/* Network CRM */}
       {activeTab === "network" && (
         <div className="px-4 md:px-0">
           <NetworkCRM collectiveId={collectiveId} />
         </div>
       )}
 
-      {/* Profiles grid — discover tab only */}
+      {/* Results grid — discover tab */}
       {activeTab === "discover" && (
-      <div className="px-4 md:px-0">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
-          </div>
-        ) : displayProfiles.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center gap-4 py-12">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
-                <Compass className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <div className="text-center max-w-xs">
-                <p className="font-semibold">No profiles found</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Try a different search or category
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {displayProfiles.map((profile) => (
-                <ProfileCard
-                  key={profile.id}
-                  profile={profile}
-                  isSaved={savedIds.has(profile.id)}
-                  onSave={() => handleSave(profile.id)}
-                  onUnsave={() => handleUnsave(profile.id)}
-                  onContact={() =>
-                    setContactProfile({
-                      id: profile.id,
-                      name: profile.display_name,
-                      type: profile.user_type ?? profile.type ?? "artist",
-                      city: profile.city ?? "",
-                    })
-                  }
-                  connectionTags={undefined}
-                />
-              ))}
+        <div className="px-4 md:px-0">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
             </div>
+          ) : isCollectivesCategory ? (
+            /* ── Collectives results ── */
+            collectives.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center gap-4 py-12">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/10">
+                    <Users2 className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div className="text-center max-w-xs">
+                    <p className="font-semibold">No collectives found</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {query || cityFilter
+                        ? "Try a different search or city"
+                        : "No other collectives on Nocturn yet"}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {collectives.map((collective) => (
+                    <CollectiveCard
+                      key={collective.id}
+                      collective={collective}
+                      onConnect={() => handleConnect(collective.id)}
+                      isConnecting={connectingId === collective.id}
+                      isConnected={connectedIds.has(collective.id)}
+                    />
+                  ))}
+                </div>
 
-            {/* Result count */}
-            <p className="text-xs text-muted-foreground text-center pt-2">
-              {`${totalCount} ${totalCount === 1 ? "profile" : "profiles"} found${totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""}`}
-            </p>
+                <p className="text-xs text-muted-foreground text-center pt-2">
+                  {`${collectivesTotal} ${collectivesTotal === 1 ? "collective" : "collectives"} on Nocturn${
+                    totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""
+                  }`}
+                </p>
+              </>
+            )
+          ) : (
+            /* ── Profile results (all other categories) ── */
+            profiles.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center gap-4 py-12">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
+                    <Compass className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div className="text-center max-w-xs">
+                    <p className="font-semibold">No profiles found</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Try a different search or category
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {profiles.map((profile) => (
+                    <ProfileCard
+                      key={profile.id}
+                      profile={profile}
+                      isSaved={savedIds.has(profile.id)}
+                      onSave={() => handleSave(profile.id)}
+                      onUnsave={() => handleUnsave(profile.id)}
+                      onContact={() =>
+                        setContactProfile({
+                          id: profile.id,
+                          name: profile.display_name,
+                          type: profile.user_type ?? profile.type ?? "artist",
+                          city: profile.city ?? "",
+                        })
+                      }
+                      connectionTags={undefined}
+                    />
+                  ))}
+                </div>
 
-            {/* Pagination */}
-            {showPagination && (
-              <div className="flex items-center justify-center gap-2 pt-2 pb-4">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page <= 1}
-                  onClick={() => {
-                    setPage((p) => Math.max(1, p - 1));
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="min-h-[44px] min-w-[44px]"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  // Show pages around current
-                  let pageNum: number;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (page <= 3) {
-                    pageNum = i + 1;
-                  } else if (page >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = page - 2 + i;
-                  }
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={page === pageNum ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => {
-                        setPage(pageNum);
-                        window.scrollTo({ top: 0, behavior: "smooth" });
-                      }}
-                      className={`min-h-[44px] min-w-[44px] ${
-                        page === pageNum ? "bg-nocturn hover:bg-nocturn-light" : ""
-                      }`}
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                })}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={page >= totalPages}
-                  onClick={() => {
-                    setPage((p) => Math.min(totalPages, p + 1));
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="min-h-[44px] min-w-[44px]"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-      )}  {/* end activeTab === "discover" */}
+                <p className="text-xs text-muted-foreground text-center pt-2">
+                  {`${totalCount} ${totalCount === 1 ? "profile" : "profiles"} found${
+                    totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""
+                  }`}
+                </p>
+              </>
+            )
+          )}
+
+          {/* Shared pagination */}
+          {showPagination && (
+            <div className="flex items-center justify-center gap-2 pt-2 pb-4">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => {
+                  setPage((p) => Math.max(1, p - 1));
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="min-h-[44px] min-w-[44px]"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (page <= 3) {
+                  pageNum = i + 1;
+                } else if (page >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = page - 2 + i;
+                }
+                return (
+                  <Button
+                    key={pageNum}
+                    variant={page === pageNum ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => {
+                      setPage(pageNum);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                    className={`min-h-[44px] min-w-[44px] ${
+                      page === pageNum ? "bg-nocturn hover:bg-nocturn-light" : ""
+                    }`}
+                  >
+                    {pageNum}
+                  </Button>
+                );
+              })}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= totalPages}
+                onClick={() => {
+                  setPage((p) => Math.min(totalPages, p + 1));
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="min-h-[44px] min-w-[44px]"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Contact Dialog */}
       <ContactDialog
