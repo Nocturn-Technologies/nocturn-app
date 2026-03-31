@@ -242,7 +242,7 @@ export default function VenuesPage() {
     <div className="space-y-6 overflow-x-hidden">
       {/* Header */}
       <div className="px-4 md:px-0">
-        <h1 className="text-2xl font-bold">Venues</h1>
+        <h1 className="text-2xl font-bold font-heading">Venues</h1>
         <p className="text-sm text-muted-foreground">
           Discover and save venues for your events
         </p>

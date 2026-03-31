@@ -177,8 +177,8 @@ export default function CalendarHeatMap() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Calendar</h1>
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold font-heading">Calendar</h1>
         <p className="text-sm text-muted-foreground">
           Find the best nights to throw — powered by city-wide event data
         </p>

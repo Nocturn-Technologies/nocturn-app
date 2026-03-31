@@ -190,7 +190,7 @@ function ContactCard({
       <div className="relative h-16 bg-gradient-to-br from-nocturn/20 via-nocturn/5 to-transparent">
         {/* Edit indicator */}
         {(contact as IndustryContact & { _contactsTableId?: string })._contactsTableId && (
-          <span className="absolute top-2.5 left-2.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors">
+          <span className="absolute top-2.5 left-2.5 text-muted-foreground/70 group-hover:text-muted-foreground transition-colors">
             <Pencil className="h-3 w-3" />
           </span>
         )}

@@ -121,7 +121,7 @@ export default async function AnalyticsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Analytics</h1>
+        <h1 className="text-2xl font-bold font-heading">Analytics</h1>
         <p className="text-sm text-muted-foreground">
           Platform-wide metrics — updated in real-time
         </p>

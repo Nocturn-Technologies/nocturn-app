@@ -228,7 +228,7 @@ export default function MarketplaceOnboardingPage() {
                     {typeLabel}
                   </span>
                 </div>
-                <h2 className="text-xl font-bold">Set up your profile</h2>
+                <h2 className="text-xl font-bold font-heading">Set up your profile</h2>
                 <p className="text-sm text-muted-foreground">
                   Drop a link and we&apos;ll pull your info automatically.
                 </p>

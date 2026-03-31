@@ -7,7 +7,7 @@ export default function MarketingPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Promo</h1>
+        <h1 className="text-2xl font-bold font-heading">Promo</h1>
         <p className="text-sm text-muted-foreground">
           Flyers, social, email — your brand, always on
         </p>
@@ -38,7 +38,7 @@ export default function MarketingPage() {
       </Card>
 
       {/* Channel cards */}
-      <h2 className="text-lg font-semibold">Content Channels</h2>
+      <h2 className="text-lg font-semibold font-heading">Content Channels</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         <ChannelCard
           icon={<Instagram className="h-5 w-5" />}
@@ -75,7 +75,7 @@ export default function MarketingPage() {
           <CardDescription>Your AI-generated content will appear here</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col items-center gap-2 py-8">
-          <Sparkles className="h-8 w-8 text-muted-foreground/50" />
+          <Sparkles className="h-8 w-8 text-muted-foreground" />
           <p className="text-sm text-muted-foreground">
             No content generated yet. Create an event first, then generate marketing content.
           </p>

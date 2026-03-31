@@ -71,7 +71,7 @@ export default async function EventsPage() {
     <div className="space-y-6 animate-in fade-in duration-300 overflow-x-hidden">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold">Events</h1>
+          <h1 className="text-2xl font-bold font-heading">Events</h1>
           <p className="text-sm text-muted-foreground truncate">
             Create and manage your events
           </p>

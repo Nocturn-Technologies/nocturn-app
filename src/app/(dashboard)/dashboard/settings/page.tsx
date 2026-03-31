@@ -170,8 +170,8 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 overflow-x-hidden">
-      <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold font-heading">Settings</h1>
         <p className="text-sm text-muted-foreground">
           Manage your profile and collective
         </p>

@@ -93,7 +93,7 @@ export default function PendingApprovalPage() {
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl border border-white/[0.06] bg-[#111113] p-6">
+        <div className="rounded-2xl border border-white/[0.06] bg-card p-6">
           {/* Status icon */}
           <div className="flex justify-center mb-5">
             <div

@@ -74,11 +74,11 @@ export default function AudiencePage() {
   }
 
   return (
-    <div className="space-y-6 px-4 pb-24 pt-6 md:px-6">
+    <div className="space-y-6 pb-24">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-bold font-heading tracking-tight text-foreground">
             Your Fans
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

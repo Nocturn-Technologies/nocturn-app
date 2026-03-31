@@ -245,7 +245,7 @@ export function DashboardHome(props: DashboardHomeProps) {
       {/* ── Greeting — large, editorial ── */}
       <div className="animate-fade-in-up relative z-10">
         <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-3xl md:text-4xl font-bold tracking-tight truncate min-w-0">
+          <h1 className="text-3xl md:text-4xl font-bold font-heading tracking-tight truncate min-w-0">
             {greeting}, {props.firstName}
           </h1>
           <Sparkles className="h-6 w-6 shrink-0 text-nocturn-glow animate-text-glow" />

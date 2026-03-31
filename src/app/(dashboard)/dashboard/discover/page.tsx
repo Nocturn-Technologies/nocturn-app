@@ -229,7 +229,7 @@ export default function DiscoverPage() {
     <div className="space-y-4 overflow-x-hidden">
       {/* Header */}
       <div className="px-4 md:px-0">
-        <h1 className="text-xl font-bold">Discover</h1>
+        <h1 className="text-2xl font-bold font-heading">Discover</h1>
         <p className="text-xs text-muted-foreground">
           Find DJs, collectives, photographers, venues, and more
         </p>

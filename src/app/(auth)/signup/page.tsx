@@ -183,7 +183,7 @@ export default function SignupPage() {
                   <Icon className="h-6 w-6 text-nocturn" />
                 </div>
                 <div>
-                  <p className="font-semibold text-white">{label}</p>
+                  <p className="font-semibold text-foreground">{label}</p>
                   <p className="text-sm text-muted-foreground">{description}</p>
                 </div>
               </button>

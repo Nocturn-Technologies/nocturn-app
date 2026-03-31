@@ -150,7 +150,7 @@ export default function OnboardingPage() {
           {step === "name_city" && (
             <div className="space-y-6 animate-fade-in-up">
               <div className="text-center space-y-2">
-                <h2 className="text-2xl font-bold tracking-tight">
+                <h2 className="text-2xl font-bold font-heading tracking-tight">
                   What&apos;s your collective called?
                 </h2>
                 <p className="text-sm text-muted-foreground">

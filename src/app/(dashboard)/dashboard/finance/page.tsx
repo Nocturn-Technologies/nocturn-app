@@ -138,10 +138,10 @@ export default async function FinancePage() {
   ];
 
   return (
-    <div className="space-y-8 pb-24 overflow-x-hidden">
+    <div className="space-y-6 pb-24 overflow-x-hidden">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Money</h1>
+        <h1 className="text-2xl font-bold font-heading">Money</h1>
         <p className="text-sm text-muted-foreground">
           Company-wide financials, P&L by event, and revenue forecasts
         </p>

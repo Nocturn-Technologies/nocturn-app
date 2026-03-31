@@ -152,7 +152,7 @@ export default function ArtistsPage() {
     <div className="space-y-6 overflow-x-hidden">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold">Artist Library</h1>
+          <h1 className="text-2xl font-bold font-heading">Artist Library</h1>
           <p className="text-sm text-muted-foreground truncate">
             Shared directory of DJs, producers, and performers across Nocturn
           </p>

@@ -68,11 +68,11 @@ function formatFullDate(iso: string): string {
 
 function WaveformBars() {
   return (
-    <div className="flex items-center justify-center gap-[3px] h-8">
+    <div className="flex items-center justify-center gap-1 h-8">
       {Array.from({ length: 20 }).map((_, i) => (
         <div
           key={i}
-          className="w-[3px] rounded-full bg-red-400 animate-pulse"
+          className="w-1 rounded-full bg-red-400 animate-pulse"
           style={{
             animationDelay: `${i * 0.07}s`,
             height: `${8 + Math.random() * 20}px`,
@@ -465,7 +465,7 @@ export default function RecordPage() {
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Record</h1>
+        <h1 className="text-2xl font-bold font-heading tracking-tight">Record</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Capture calls, meetings & ideas with AI notes
         </p>

@@ -155,8 +155,8 @@ export default function ArtistDetailPage() {
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10">
           <Music className="h-6 w-6 text-nocturn" />
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">{artist.name}</h1>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold font-heading truncate">{artist.name}</h1>
           {artist.genre?.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
               {artist.genre.map((g) => (

@@ -135,7 +135,7 @@ export default function SettlementDetailPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold">Event Settlement</h1>
+          <h1 className="text-2xl font-bold font-heading">Event Settlement</h1>
           <p className="text-sm text-muted-foreground">P&amp;L breakdown</p>
         </div>
       </div>
@@ -294,14 +294,18 @@ export default function SettlementDetailPage() {
                 <p className="text-xs font-semibold uppercase text-muted-foreground">
                   Deductions
                 </p>
-                {lines.map((line) => (
-                  <div key={line.id as string} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{String(line.label)}</span>
-                    <span className="text-red-400">
-                      -${Number(line.amount).toFixed(2)}
-                    </span>
-                  </div>
-                ))}
+                {lines.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">No deductions</p>
+                ) : (
+                  lines.map((line) => (
+                    <div key={line.id as string} className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">{String(line.label)}</span>
+                      <span className="text-red-400">
+                        -${Number(line.amount).toFixed(2)}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
 
               {/* Net */}

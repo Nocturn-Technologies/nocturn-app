@@ -21,7 +21,7 @@ function SuccessContent() {
   const freeCount = searchParams.get("tickets");
   const freeTokens = searchParams.get("tokens");
   const [tickets, setTickets] = useState<TicketStub[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [timedOut, setTimedOut] = useState(false);
   const [confettiFired, setConfettiFired] = useState(false);
   const fireConfetti = useConfetti();

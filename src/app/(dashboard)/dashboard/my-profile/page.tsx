@@ -214,7 +214,7 @@ export default function MyProfilePage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-bold">My Profile</h1>
+        <h1 className="text-2xl font-bold font-heading">My Profile</h1>
         <p className="text-sm text-muted-foreground">
           {TYPE_LABELS[profile.user_type] ?? profile.user_type} · Visible on Discover
         </p>

@@ -129,10 +129,10 @@ type ChatStep =
 function AiBubble({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 animate-fade-in-up">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#7B2FF7]/20">
-        <Sparkles className="h-4 w-4 text-[#7B2FF7]" />
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-nocturn/20">
+        <Sparkles className="h-4 w-4 text-nocturn" />
       </div>
-      <div className="rounded-2xl rounded-tl-sm bg-zinc-900 border border-white/5 px-4 py-3 max-w-[85%] overflow-hidden">
+      <div className="rounded-2xl rounded-tl-sm bg-card border border-white/5 px-4 py-3 max-w-[85%] overflow-hidden">
         {children}
       </div>
     </div>
@@ -142,7 +142,7 @@ function AiBubble({ children }: { children: React.ReactNode }) {
 function UserBubble({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex justify-end animate-fade-in-up">
-      <div className="rounded-2xl rounded-tr-sm bg-[#7B2FF7] px-4 py-3 max-w-[85%] overflow-hidden">
+      <div className="rounded-2xl rounded-tr-sm bg-nocturn px-4 py-3 max-w-[85%] overflow-hidden">
         {children}
       </div>
     </div>
@@ -152,14 +152,14 @@ function UserBubble({ children }: { children: React.ReactNode }) {
 function ThinkingDots() {
   return (
     <div className="flex items-start gap-3 animate-fade-in-up">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#7B2FF7]/20 animate-pulse">
-        <Sparkles className="h-4 w-4 text-[#7B2FF7]" />
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-nocturn/20 animate-pulse">
+        <Sparkles className="h-4 w-4 text-nocturn" />
       </div>
-      <div className="rounded-2xl rounded-tl-sm bg-zinc-900 border border-white/5 px-5 py-4">
+      <div className="rounded-2xl rounded-tl-sm bg-card border border-white/5 px-5 py-4">
         <div className="flex gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce [animation-delay:0ms]" />
-          <div className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce [animation-delay:150ms]" />
-          <div className="w-2 h-2 rounded-full bg-zinc-500 animate-bounce [animation-delay:300ms]" />
+          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
+          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
+          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
         </div>
       </div>
     </div>
@@ -209,10 +209,10 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
           setEditValue(value);
           setEditing(true);
         }}
-        className="text-lg font-bold text-white flex items-center gap-1.5 text-left hover:text-nocturn-light active:scale-[0.98] transition-all duration-200"
+        className="text-lg font-bold text-foreground flex items-center gap-1.5 text-left hover:text-nocturn-light active:scale-[0.98] transition-all duration-200"
       >
         {value}
-        <Pencil className="h-3 w-3 text-zinc-600 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0" />
+        <Pencil className="h-3 w-3 text-zinc-500 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0" />
       </button>
     </div>
   );
@@ -275,8 +275,8 @@ function EditableRow({
           className="flex items-center gap-1.5 text-sm text-left min-w-0 group/row hover:text-nocturn-light active:scale-[0.98] transition-all duration-200"
         >
           <span className="text-zinc-400 shrink-0">{label}:</span>
-          <span className="font-medium text-white truncate">{value}</span>
-          <Pencil className="h-3 w-3 text-zinc-600 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0" />
+          <span className="font-medium text-foreground truncate">{value}</span>
+          <Pencil className="h-3 w-3 text-zinc-500 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0" />
         </button>
       )}
     </div>

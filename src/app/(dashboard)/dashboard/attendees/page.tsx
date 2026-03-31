@@ -95,8 +95,8 @@ export default function AttendeesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Attendees</h1>
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold font-heading">Attendees</h1>
           <p className="text-sm text-muted-foreground">
             Your audience CRM from ticket purchases
           </p>

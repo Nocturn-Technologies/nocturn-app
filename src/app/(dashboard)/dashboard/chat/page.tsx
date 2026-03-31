@@ -169,12 +169,12 @@ function ChannelRow({
       {/* Right: time + unread */}
       <div className="flex flex-col items-end gap-1.5 shrink-0">
         {ch.last_message_at && (
-          <span className="text-[11px] text-muted-foreground/70">
+          <span className="text-[11px] text-muted-foreground">
             {relativeTime(ch.last_message_at)}
           </span>
         )}
         {ch.unread_count > 0 ? (
-          <div className="min-w-[20px] h-5 rounded-full bg-[#7B2FF7] flex items-center justify-center px-1.5">
+          <div className="min-w-[20px] h-5 rounded-full bg-nocturn flex items-center justify-center px-1.5">
             <span className="text-[11px] font-bold text-white">
               {ch.unread_count}
             </span>
@@ -507,7 +507,7 @@ export default function ChatPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-[#7B2FF7]" />
+          <MessageSquare className="h-5 w-5 text-nocturn" />
           <h1 className="text-2xl font-bold tracking-tight font-heading">
             Messages
           </h1>
