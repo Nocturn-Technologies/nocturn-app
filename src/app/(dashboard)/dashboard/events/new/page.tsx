@@ -28,7 +28,6 @@ import {
   Pencil,
   Mic,
   TrendingUp,
-  DollarSign,
   Target,
 } from "lucide-react";
 import Link from "next/link";
@@ -45,7 +44,7 @@ function slugify(text: string): string {
  * Parse a ticket tier from natural language (client-side).
  * Handles: "$25 for 200", "$50 VIP, 50 tickets", "free", "$25 for 200 tickets"
  */
-function parseTicketTier(message: string): TicketTier | null {
+function _parseTicketTier(message: string): TicketTier | null {
   const lower = message.toLowerCase().trim();
 
   // "free" or "free event"
@@ -556,8 +555,8 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
 
 function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
   const [priceMultiplier, setPriceMultiplier] = useState(1.0);
-  const PLATFORM_FEE = PLATFORM_FEE_PERCENT / 100; // 7% + $0.50 per ticket (buyer pays)
-  const PLATFORM_FEE_FLAT = PLATFORM_FEE_FLAT_CENTS / 100;
+  const _PLATFORM_FEE = PLATFORM_FEE_PERCENT / 100; // 7% + $0.50 per ticket (buyer pays)
+  const _PLATFORM_FEE_FLAT = PLATFORM_FEE_FLAT_CENTS / 100;
   const STRIPE_FEE_RATE = 0.029;
   const STRIPE_FEE_FLAT = 0.30;
 
@@ -703,7 +702,7 @@ function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
 
 // ─── Date/time parsing helpers ───────────────────────────────────────────────
 
-function parseDateTimeFromMessage(message: string): {
+function _parseDateTimeFromMessage(message: string): {
   date?: string;
   startTime?: string;
 } {
@@ -782,7 +781,7 @@ export default function NewEventPage() {
   const [error, setError] = useState<string | null>(null);
   const [introShown, setIntroShown] = useState(false);
   const [budgetInput, setBudgetInput] = useState<Partial<BudgetInput>>({});
-  const [budgetResult, setBudgetResult] = useState<BudgetResult | null>(null);
+  const [_budgetResult, setBudgetResult] = useState<BudgetResult | null>(null);
   const [showVenuePicker, setShowVenuePicker] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

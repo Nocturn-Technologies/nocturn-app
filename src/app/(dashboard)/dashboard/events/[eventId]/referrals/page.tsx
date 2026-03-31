@@ -16,12 +16,9 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
   ArrowLeft,
-  Users,
   Trophy,
   Gift,
   Share2,
-  Copy,
-  Check,
   Settings,
   Plus,
   Trash2,

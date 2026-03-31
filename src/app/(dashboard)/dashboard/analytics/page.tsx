@@ -5,7 +5,6 @@ import {
   Users,
   Ticket,
   DollarSign,
-  CalendarCheck,
   TrendingUp,
   ArrowUpRight,
   ArrowDownRight,
@@ -36,7 +35,7 @@ export default async function AnalyticsPage() {
   // Founder-level: pull ALL platform data
   const now = new Date();
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
-  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const _sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
@@ -44,7 +43,7 @@ export default async function AnalyticsPage() {
     { count: totalEvents },
     { count: publishedEvents },
     { count: completedEvents },
-    { count: totalTickets },
+    { count: _totalTickets },
     { count: paidTickets },
     { count: freeTickets },
     { count: checkedInTickets },
@@ -56,7 +55,7 @@ export default async function AnalyticsPage() {
     { data: settlements },
     { count: newCollectives30d },
     { count: newUsers30d },
-    { data: topCollectives },
+    { data: _topCollectives },
     { data: recentEvents },
     { count: waitlistEntries },
   ] = await Promise.all([

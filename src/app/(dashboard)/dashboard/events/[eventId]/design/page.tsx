@@ -12,7 +12,6 @@ import {
   Loader2,
   ExternalLink,
   Check,
-  Image as ImageIcon,
   Sparkles,
   RefreshCw,
   Camera,

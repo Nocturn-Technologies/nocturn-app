@@ -164,37 +164,6 @@ export async function validatePromoCode(eventId: string, code: string) {
   };
 }
 
-export async function applyPromoCode(codeId: string, quantity: number = 1) {
-  const supabase_auth = await createServerClient();
-  const { data: { user } } = await supabase_auth.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  // Validate inputs
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(codeId)) return { error: "Invalid promo code ID" };
-  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) return { error: "Invalid quantity" };
-
-  const supabase = createAdminClient();
-
-  // Use the atomic claim_promo_code RPC which acquires a FOR UPDATE lock,
-  // checks capacity, and increments — all within a single transaction.
-  // This eliminates the read-then-write TOCTOU race condition.
-  try {
-    await supabase.rpc("claim_promo_code", { p_code_id: codeId, p_quantity: quantity });
-    return { error: null };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    if (msg.includes("capacity") || msg.includes("exceeded")) {
-      return { error: "Promo code has reached its usage limit" };
-    }
-    if (msg.includes("not found")) {
-      return { error: "Promo code not found" };
-    }
-    console.error("[promo-codes] applyPromoCode failed:", msg);
-    return { error: "Failed to apply promo code" };
-  }
-}
-
 export async function togglePromoCode(codeId: string, isActive: boolean) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { seedDemoData } from "@/app/actions/seed-demo";
 import { createClient } from "@/lib/supabase/server";
 
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   // Block unless explicitly enabled via ALLOW_SEED — never rely on NODE_ENV alone
   if (!process.env.ALLOW_SEED) {
     return NextResponse.json({ error: "Seed routes disabled" }, { status: 403 });

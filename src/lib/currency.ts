@@ -61,7 +61,7 @@ const ZERO_DECIMAL_CURRENCIES = new Set([
 ]);
 
 // Currency symbols for display
-export const CURRENCY_SYMBOLS: Record<string, string> = {
+const CURRENCY_SYMBOLS: Record<string, string> = {
   usd: "$", eur: "\u20AC", gbp: "\u00A3", cad: "CA$", aud: "A$",
   nzd: "NZ$", jpy: "\u00A5", chf: "CHF ", sek: "kr ", nok: "kr ",
   dkk: "kr ", pln: "z\u0142", czk: "K\u010D ", huf: "Ft ", ron: "lei ",
@@ -81,7 +81,7 @@ export function getCurrencyForCountry(countryCode: string | null): string {
 /**
  * Check if a currency uses zero-decimal formatting.
  */
-export function isZeroDecimal(currency: string): boolean {
+function isZeroDecimal(currency: string): boolean {
   return ZERO_DECIMAL_CURRENCIES.has(currency.toLowerCase());
 }
 

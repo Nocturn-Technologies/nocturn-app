@@ -8,9 +8,7 @@ import {
   ArrowLeft,
   TrendingUp,
   TrendingDown,
-  DollarSign,
   Ticket,
-  Target,
   Sparkles,
   BarChart3,
 } from "lucide-react";
@@ -63,7 +61,7 @@ export default function ForecastPage() {
 
   const f = forecast;
   const profitColor = f.projectedProfit >= 0 ? "text-green-500" : "text-red-500";
-  const profitIcon = f.projectedProfit >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />;
+  const _profitIcon = f.projectedProfit >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />;
 
   return (
     <div className="space-y-6">

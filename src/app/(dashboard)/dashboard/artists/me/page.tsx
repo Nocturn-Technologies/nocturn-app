@@ -6,8 +6,8 @@ import { createArtist } from "@/app/actions/artists";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Music, Instagram, Share2, Check, Loader2, Search, Users } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Check, Loader2, Search, Users } from "lucide-react";
 import Link from "next/link";
 
 interface ArtistProfile {
@@ -25,7 +25,7 @@ interface ArtistProfile {
 
 export default function ArtistMePage() {
   const supabase = createClient();
-  const [userId, setUserId] = useState<string | null>(null);
+  const [_userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<ArtistProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

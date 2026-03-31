@@ -64,24 +64,6 @@ function baseTemplate(content: string): string {
 </html>`;
 }
 
-export function magicLinkEmail(link: string): string {
-  return baseTemplate(`
-    <h2>Sign in to Nocturn</h2>
-    <p>Click the button below to sign in to your account. This link expires in 1 hour.</p>
-    <a href="${sanitizeUrl(link)}" class="btn">Sign In →</a>
-    <p>If you didn't request this, you can safely ignore this email.</p>
-  `);
-}
-
-export function passwordResetEmail(link: string): string {
-  return baseTemplate(`
-    <h2>Reset your password</h2>
-    <p>Someone requested a password reset for your Nocturn account. Click below to set a new password.</p>
-    <a href="${sanitizeUrl(link)}" class="btn">Reset Password →</a>
-    <p>This link expires in 1 hour. If you didn't request this, no action is needed.</p>
-  `);
-}
-
 export function welcomeEmail(name: string, collectiveName: string): string {
   const safeName = escapeHtml(name);
   const safeCollective = escapeHtml(collectiveName);

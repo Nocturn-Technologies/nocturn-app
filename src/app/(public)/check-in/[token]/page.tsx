@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { getTicketByToken } from "@/app/actions/tickets";
-import { checkInTicket } from "@/app/actions/check-in";
+
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";

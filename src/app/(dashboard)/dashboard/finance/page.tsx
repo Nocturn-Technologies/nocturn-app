@@ -22,7 +22,7 @@ import {
 import { CompanyOverview } from "@/components/finance/company-overview";
 import { EventFinancialsTable } from "@/components/finance/event-financials-table";
 import { RevenueForecast } from "@/components/finance/revenue-forecast";
-import { formatMoney } from "@/lib/utils";
+
 
 export default async function FinancePage() {
   const supabase = await createServerClient();

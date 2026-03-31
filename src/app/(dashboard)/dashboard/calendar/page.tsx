@@ -259,7 +259,7 @@ export default function CalendarHeatMap() {
                   (e) => e.starts_at.slice(0, 10) === dateKey && yourCollectiveIds.includes(e.collective_id)
                 );
 
-                const { color, score } = getDayScore(date, dayData?.count ?? 0, isYourEvent);
+                const { color, score: _score } = getDayScore(date, dayData?.count ?? 0, isYourEvent);
                 const isSelected = selectedDay === dateKey;
 
                 return (

@@ -17,7 +17,6 @@ import { Label } from "@/components/ui/label";
 import {
   Sparkles,
   Check,
-  ArrowRight,
   ArrowLeft,
   Plus,
   X,
@@ -37,7 +36,7 @@ export default function MarketplaceOnboardingPage() {
 
   const [step, setStep] = useState<Step>("import");
   const [userType, setUserType] = useState<string>("");
-  const [fullName, setFullName] = useState("");
+  const [_fullName, setFullName] = useState("");
 
   // Import state
   const [importUrl, setImportUrl] = useState("");
@@ -60,7 +59,7 @@ export default function MarketplaceOnboardingPage() {
   // Save state
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [profileSlug, setProfileSlug] = useState<string | null>(null);
+  const [_profileSlug, setProfileSlug] = useState<string | null>(null);
 
   // Editing mode on review screen
   const [editing, setEditing] = useState(false);

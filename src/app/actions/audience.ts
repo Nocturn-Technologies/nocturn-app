@@ -360,7 +360,7 @@ export async function getPostEventInsights(eventId: string): Promise<{
   for (const t of allTickets ?? []) {
     if (t.referred_by) {
       // Find the referrer's email from their tickets
-      const referrerTickets = allTickets?.filter((at) => at.event_id && (at.metadata as Record<string, unknown>)?.customer_email);
+      const _referrerTickets = allTickets?.filter((at) => at.event_id && (at.metadata as Record<string, unknown>)?.customer_email);
       // Simplified: count by referred_by user_id
       const key = t.referred_by as string;
       referralCountByEmail.set(key, (referralCountByEmail.get(key) ?? 0) + 1);

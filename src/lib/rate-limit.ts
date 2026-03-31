@@ -93,10 +93,3 @@ async function persistRateLimit(key: string, _limit: number, _windowMs: number) 
   }
 }
 
-// Clean up old in-memory entries lazily (no setInterval in serverless)
-export function cleanupMemory(): void {
-  const now = Date.now();
-  for (const [key, entry] of memoryMap) {
-    if (now > entry.resetAt) memoryMap.delete(key);
-  }
-}

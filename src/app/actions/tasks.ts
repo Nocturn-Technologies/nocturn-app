@@ -87,7 +87,7 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
   const eventDate = new Date(event.starts_at);
 
   // Generate tasks
-  const tasks = templates.map((t, i) => {
+  const tasks = templates.map((t, _i) => {
     const dueDate = new Date(eventDate);
     dueDate.setDate(dueDate.getDate() + (t.days_before_event < 0 ? Math.abs(t.days_before_event) : -t.days_before_event));
 
@@ -216,44 +216,6 @@ export async function updateTaskStatus(taskId: string, status: string) {
     user_id: user.id,
     type: "task_update",
     content: `Marked "${task.title}" as ${status}`,
-  });
-
-  return { error: null };
-}
-
-// Assign a task
-export async function assignTask(taskId: string, userId: string | null) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  const admin = createAdminClient();
-
-  // Verify ownership via task's event
-  const { data: taskCheck } = await admin.from("event_tasks").select("event_id").eq("id", taskId).maybeSingle();
-  if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
-
-  const { data: task, error } = await admin
-    .from("event_tasks")
-    .update({ assigned_to: userId, updated_at: new Date().toISOString() })
-    .eq("id", taskId)
-    .select("title, event_id")
-    .maybeSingle();
-
-  if (error || !task) return { error: error?.message ?? "Task not found" };
-
-  // Get assignee name
-  let assigneeName = "Unassigned";
-  if (userId) {
-    const { data: assignee } = await admin.from("users").select("full_name").eq("id", userId).maybeSingle();
-    assigneeName = assignee?.full_name || "someone";
-  }
-
-  await admin.from("event_activity").insert({
-    event_id: task.event_id,
-    user_id: user.id,
-    type: "task_update",
-    content: `Assigned "${task.title}" to ${assigneeName}`,
   });
 
   return { error: null };

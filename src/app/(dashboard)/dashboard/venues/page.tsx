@@ -113,7 +113,7 @@ export default function VenuesPage() {
 
   // Location state
   const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
-  const [locationDenied, setLocationDenied] = useState(false);
+  const [_locationDenied, setLocationDenied] = useState(false);
   const [nearbyVenue, setNearbyVenue] = useState<SavedVenue | null>(null);
   const [scoutingVenue, setScoutingVenue] = useState<{ placeId: string; name: string } | null>(null);
 

@@ -46,12 +46,3 @@ export async function searchVenues(
   return results;
 }
 
-/**
- * Get full venue detail by place_id.
- * Currently looks up from mock data.
- * When Google Places is connected, this will call the Place Details endpoint.
- */
-export async function getVenueDetail(placeId: string): Promise<VenueResult | null> {
-  await new Promise((r) => setTimeout(r, 150));
-  return MOCK_VENUES.find((v) => v.place_id === placeId) ?? null;
-}

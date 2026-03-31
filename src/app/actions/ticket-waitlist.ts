@@ -55,24 +55,6 @@ export async function joinWaitlist(eventId: string, tierId: string, waitlistEmai
 }
 
 /**
- * Get waitlist count for a tier.
- */
-export async function getWaitlistCount(tierId: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return 0;
-
-  const sb = createAdminClient();
-  const { count } = await sb
-    .from("ticket_waitlist")
-    .select("id", { count: "exact", head: true })
-    .eq("ticket_tier_id", tierId)
-    .eq("status", "waiting");
-
-  return count ?? 0;
-}
-
-/**
  * Notify waitlisted users when a spot opens (called after refund).
  * Notifies the first person on the waitlist.
  */

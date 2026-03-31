@@ -106,7 +106,7 @@ const TIMELINE_ICONS: Record<string, typeof Ticket> = {
 export function ContactDetailSheet({
   contactId,
   onClose,
-  collectiveId,
+  collectiveId: _collectiveId,
   onContactUpdated,
 }: ContactDetailSheetProps) {
   const [contact, setContact] = useState<Contact | null>(null);

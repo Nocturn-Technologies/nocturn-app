@@ -3,15 +3,6 @@ import { sendEmail } from "@/lib/email/send";
 import { referralNudgeEmail, ticketMilestoneEmail } from "@/lib/email/templates";
 import { createAdminClient } from "@/lib/supabase/config";
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 /**
  * Run after every ticket purchase. Non-blocking — call with .catch(() => {}).
  * Handles: referral nudge, ticket milestone notifications.

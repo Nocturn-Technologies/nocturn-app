@@ -83,25 +83,6 @@ export async function generateTicketQRCode(ticketToken: string) {
 }
 
 /**
- * Bulk-generate QR codes for an array of ticket tokens.
- * Used by the Stripe webhook after ticket creation.
- */
-export async function generateQRCodesForTokens(tokens: string[]) {
-  const results = await Promise.allSettled(
-    tokens.map((token) => generateTicketQRCode(token))
-  );
-
-  const failures = results.filter((r) => r.status === "rejected");
-  if (failures.length > 0) {
-    console.error(
-      `[tickets] ${failures.length}/${tokens.length} QR code generations failed`
-    );
-  }
-
-  return results;
-}
-
-/**
  * Fetch a ticket with its event and tier details by token.
  * If the user is authenticated, verifies ownership.
  * If not authenticated, returns limited public data (for check-in page / ticket view).

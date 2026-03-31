@@ -9,7 +9,7 @@ import {
   useElements,
 } from "@stripe/react-stripe-js";
 import { Button } from "@/components/ui/button";
-import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { useConfetti } from "@/components/celebrations";
 import { fulfillPaymentIntent } from "@/app/actions/tickets";
 

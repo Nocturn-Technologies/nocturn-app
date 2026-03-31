@@ -77,7 +77,7 @@ export const VIBE_OPTIONS: VibeOption[] = [
   },
 ];
 
-export const EVENT_TEMPLATES: EventTemplate[] = [
+const EVENT_TEMPLATES: EventTemplate[] = [
   {
     id: "deep_sessions",
     label: "Deep Sessions",

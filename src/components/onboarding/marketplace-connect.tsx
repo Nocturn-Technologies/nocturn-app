@@ -27,7 +27,7 @@ interface MarketplaceConnectProps {
 }
 
 export function MarketplaceConnect({
-  userType,
+  userType: _userType,
   displayName,
   city,
   onSkip,

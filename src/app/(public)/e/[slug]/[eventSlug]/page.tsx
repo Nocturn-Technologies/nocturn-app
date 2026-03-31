@@ -1,12 +1,10 @@
 import { notFound } from "next/navigation";
-import { Calendar, Clock, MapPin, Navigation, Music } from "lucide-react";
+import { Navigation, Music } from "lucide-react";
 import { TicketSection } from "@/components/public-event/ticket-section";
 import { ShareButton } from "@/components/public-event/share-button";
 import { PublicEventShareCard } from "@/components/public-event/public-event-share-card";
 import { ExpandableText } from "@/components/public-event/expandable-text";
-import { EventCountdown, SellingFastBadge } from "@/components/public-event/event-countdown";
-import { GoingCounter } from "@/components/public-event/going-counter";
-import { HostMessage } from "@/components/public-event/host-message";
+import { EventCountdown } from "@/components/public-event/event-countdown";
 import { EventReactions } from "@/components/public-event/event-reactions";
 import { CollectiveProfile } from "@/components/public-event/collective-profile";
 import { PastEvents } from "@/components/public-event/past-events";
@@ -177,7 +175,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   }
 
   const totalCapacity = (tiers || []).reduce((s, t) => s + (t.capacity || 0), 0);
-  const soldPercent = totalCapacity > 0 ? Math.round(((ticketsSold ?? 0) / totalCapacity) * 100) : 0;
+  const _soldPercent = totalCapacity > 0 ? Math.round(((ticketsSold ?? 0) / totalCapacity) * 100) : 0;
 
   const reactionCounts: Record<string, number> = {};
   for (const r of reactionRows || []) {
@@ -212,7 +210,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // Dress code / min age / host message from metadata
   const dressCode = metadata.dressCode || null;
   const hostMessage = metadata.hostMessage || null;
-  const minAge = event.min_age;
+  const _minAge = event.min_age;
   const vibeTags = event.vibe_tags ?? [];
 
   // Share card data

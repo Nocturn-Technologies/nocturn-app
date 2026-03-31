@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { MapPin, Check, Loader2, Users, Calendar } from "lucide-react";
+import { MapPin, Check, Loader2, Calendar } from "lucide-react";
 import Link from "next/link";
 
 export default function VenueMePage() {

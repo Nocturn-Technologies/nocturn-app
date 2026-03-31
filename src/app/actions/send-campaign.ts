@@ -115,7 +115,7 @@ export async function sendCampaignEmail(input: {
   for (let i = 0; i < emailList.length; i += BATCH_SIZE) {
     const batch = emailList.slice(i, i + BATCH_SIZE);
 
-    const results = await Promise.allSettled(
+    const _results = await Promise.allSettled(
       batch.map(async (email) => {
         const result = await sendEmail({
           to: email,

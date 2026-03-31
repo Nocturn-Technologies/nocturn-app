@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, MessageSquare, Calendar, User } from "lucide-react";
+import { Loader2, MessageSquare, User } from "lucide-react";
 
 interface Inquiry {
   id: string;

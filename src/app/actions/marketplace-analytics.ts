@@ -116,29 +116,3 @@ export async function getProfilePerformanceWithCollective(
   };
 }
 
-export async function getMarketplaceInquiryCount(): Promise<number> {
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return 0;
-
-  const admin = createAdminClient();
-
-  // Get user's marketplace profile
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profile } = await (admin.from("marketplace_profiles") as any)
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!profile) return 0;
-
-  // Count inquiries
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count } = await (admin.from("marketplace_inquiries") as any)
-    .select("*", { count: "exact", head: true })
-    .eq("to_profile_id", (profile as { id: string }).id);
-
-  return (count ?? 0) as number;
-}

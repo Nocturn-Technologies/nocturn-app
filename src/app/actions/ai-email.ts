@@ -27,7 +27,7 @@ export async function generatePostEventEmail(eventId: string) {
   if (!event) return { error: "Event not found", email: null };
 
   // Verify ownership
-  const collectiveId = event.collectives ? (event.collectives as { name: string; slug: string } & Record<string, unknown>).id ?? null : null;
+  const _collectiveId = event.collectives ? (event.collectives as { name: string; slug: string } & Record<string, unknown>).id ?? null : null;
   const { data: evForCol } = await admin.from("events").select("collective_id").eq("id", eventId).is("deleted_at", null).maybeSingle();
   const colId = evForCol?.collective_id;
   if (colId) {
@@ -127,7 +127,7 @@ Return JSON with "subject" and "body" fields. The body should be plain text with
       },
     };
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : "AI generation failed";
+    const _message = err instanceof Error ? err.message : "AI generation failed";
     // Return fallback template on error
     return {
       error: null,

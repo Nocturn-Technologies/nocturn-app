@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { DashboardHome } from "@/components/dashboard-home";
 import { createAdminClient } from "@/lib/supabase/config";

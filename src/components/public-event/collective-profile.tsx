@@ -1,6 +1,6 @@
 import { Instagram } from "lucide-react";
 import Image from "next/image";
-import Link from "next/link";
+
 
 interface CollectiveProfileProps {
   name: string;
@@ -14,7 +14,7 @@ interface CollectiveProfileProps {
 
 export function CollectiveProfile({
   name,
-  slug,
+  slug: _slug,
   description,
   logoUrl,
   instagram,

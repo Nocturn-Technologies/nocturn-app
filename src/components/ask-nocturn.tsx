@@ -168,7 +168,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
               </div>
             )}
 
-            {messages.map((msg, i) => (
+            {messages.map((msg, _i) => (
               <div
                 key={msg.id}
                 className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}

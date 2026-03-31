@@ -8,13 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   DollarSign,
-  TrendingUp,
   ArrowLeft,
   CheckCircle,
   Plus,
-  Trash2,
   Mail,
-  Copy,
   Check,
 } from "lucide-react";
 import Link from "next/link";
@@ -30,7 +27,7 @@ import { generateSettlementReport } from "@/app/actions/settlement-email";
 
 export default function SettlementDetailPage() {
   const params = useParams();
-  const router = useRouter();
+  const _router = useRouter();
   const eventId = params.eventId as string;
 
   const [settlement, setSettlement] = useState<Record<string, unknown> | null>(null);

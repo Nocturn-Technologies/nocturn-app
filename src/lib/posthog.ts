@@ -1,7 +1,7 @@
 import posthog from "posthog-js";
 
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY || "";
-const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "";
+const _POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || "";
 
 export function initPostHog() {
   if (typeof window === "undefined") return;

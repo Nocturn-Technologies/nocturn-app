@@ -24,7 +24,6 @@ import {
   Settings,
   LogOut,
   MessageSquare,
-  Search,
   Menu,
   X,
   UsersRound,

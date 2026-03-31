@@ -15,8 +15,6 @@ import {
   Globe,
   BarChart3,
   Calendar,
-  Ticket,
-  TrendingUp,
 } from "lucide-react";
 import { TYPE_BADGE_COLORS, TYPE_LABELS } from "@/lib/marketplace-constants";
 import { ProfileActions } from "./profile-actions";

@@ -16,7 +16,6 @@ import {
   Music,
   ExternalLink,
   Check,
-  Image as ImageIcon,
   Video,
 } from "lucide-react";
 

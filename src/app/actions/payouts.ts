@@ -64,37 +64,3 @@ export async function markSettlementPaid(settlementId: string, payoutMethod?: st
   return { error: null };
 }
 
-// Get payout status for a settlement
-export async function getPayoutStatus(settlementId: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-
-  const admin = createAdminClient();
-
-  // Verify user owns this settlement's collective
-  const { data: settlement } = await admin
-    .from("settlements")
-    .select("collective_id")
-    .eq("id", settlementId)
-    .maybeSingle();
-
-  if (!settlement) return [];
-
-  const { count } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", settlement.collective_id)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-
-  if (!count || count === 0) return [];
-
-  const { data: lines } = await admin
-    .from("settlement_lines")
-    .select("id, label, amount, payout_status, type")
-    .eq("settlement_id", settlementId)
-    .order("created_at");
-
-  return lines ?? [];
-}

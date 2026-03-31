@@ -3,7 +3,7 @@ import { getPromoterExternalEvents } from "@/app/actions/external-events";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Ticket, Megaphone, CalendarDays, Link2, ExternalLink, MousePointerClick } from "lucide-react";
+import { Ticket, Megaphone, CalendarDays, Link2, MousePointerClick } from "lucide-react";
 import { CopyLinkButton } from "./copy-link-button";
 import { ExternalEventsSection } from "./external-events-section";
 

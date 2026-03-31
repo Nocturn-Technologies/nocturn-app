@@ -62,7 +62,7 @@ export async function sendEmail({
  * Gmail/Outlook block data: URIs and CID attachments are unreliable,
  * so we host QR images and use regular <img src="https://..."> in emails.
  */
-export async function uploadQRToStorage(
+async function uploadQRToStorage(
   dataUri: string,
   ticketToken: string,
   index: number = 0

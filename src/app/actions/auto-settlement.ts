@@ -115,7 +115,7 @@ export async function generateAutoSettlement(eventId: string) {
     const platformFee = 0;
 
     // Nocturn revenue reporting (not deducted from organizer)
-    const nocturnRevenue = grossRevenue * (PLATFORM_FEE_PERCENT / 100) + (PLATFORM_FEE_FLAT_CENTS / 100) * ticketCount;
+    const _nocturnRevenue = grossRevenue * (PLATFORM_FEE_PERCENT / 100) + (PLATFORM_FEE_FLAT_CENTS / 100) * ticketCount;
 
     // 7. Net revenue = gross - refunds - stripe fees - platform fee (matches manual settlement)
     const netRevenue = grossRevenue - refundsTotal - stripeFees - platformFee;
