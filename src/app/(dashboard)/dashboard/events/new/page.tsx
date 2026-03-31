@@ -9,7 +9,7 @@ import {
 } from "@/app/actions/ai-parse-event";
 import { getTicketPricingSuggestion, type PricingSuggestion } from "@/app/actions/pricing-suggestion";
 import { calculateBudget, type BudgetResult, type BudgetInput } from "@/app/actions/budget-planner";
-import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import VenuePicker, { type SelectedVenue } from "@/components/venue-picker";
@@ -40,65 +40,6 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-/**
- * Parse a ticket tier from natural language (client-side).
- * Handles: "$25 for 200", "$50 VIP, 50 tickets", "free", "$25 for 200 tickets"
- */
-function _parseTicketTier(message: string): TicketTier | null {
-  const lower = message.toLowerCase().trim();
-
-  // "free" or "free event"
-  if (/^free\b/.test(lower)) {
-    return { name: "General Admission", price: 0, capacity: 100 };
-  }
-
-  // "$25 for 200" or "$25 for 200 tickets"
-  const priceForQty = lower.match(/\$(\d+(?:\.\d{2})?)\s+(?:for\s+)?(\d+)(?:\s*tickets?)?/);
-  if (priceForQty) {
-    const price = parseFloat(priceForQty[1]);
-    const capacity = parseInt(priceForQty[2]);
-    const tierName = extractTierName(lower) || "General Admission";
-    return { name: tierName, price, capacity };
-  }
-
-  // "$50 VIP, 50 tickets" or "$50 VIP 50 tickets"
-  const priceNameQty = lower.match(/\$(\d+(?:\.\d{2})?)\s+(\w+)[\s,]+(\d+)\s*tickets?/);
-  if (priceNameQty) {
-    const price = parseFloat(priceNameQty[1]);
-    const name = priceNameQty[2].charAt(0).toUpperCase() + priceNameQty[2].slice(1);
-    const capacity = parseInt(priceNameQty[3]);
-    return { name, price, capacity };
-  }
-
-  // "$25 GA" or "$50 VIP" (no quantity specified — default 100)
-  const priceAndName = lower.match(/\$(\d+(?:\.\d{2})?)\s+(\w+)/);
-  if (priceAndName) {
-    const price = parseFloat(priceAndName[1]);
-    const name = priceAndName[2].charAt(0).toUpperCase() + priceAndName[2].slice(1);
-    return { name, price, capacity: 100 };
-  }
-
-  // Just "$25" (no name, no qty)
-  const justPrice = lower.match(/\$(\d+(?:\.\d{2})?)/);
-  if (justPrice) {
-    const price = parseFloat(justPrice[1]);
-    const tierName = extractTierName(lower) || "General Admission";
-    return { name: tierName, price, capacity: 100 };
-  }
-
-  return null;
-}
-
-function extractTierName(lower: string): string | null {
-  const tierKeywords = ["vip", "ga", "general admission", "early bird", "table", "bottle service"];
-  for (const kw of tierKeywords) {
-    if (lower.includes(kw)) {
-      if (kw === "ga") return "General Admission";
-      return kw.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-    }
-  }
-  return null;
-}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -555,8 +496,7 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
 
 function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
   const [priceMultiplier, setPriceMultiplier] = useState(1.0);
-  const _PLATFORM_FEE = PLATFORM_FEE_PERCENT / 100; // 7% + $0.50 per ticket (buyer pays)
-  const _PLATFORM_FEE_FLAT = PLATFORM_FEE_FLAT_CENTS / 100;
+
   const STRIPE_FEE_RATE = 0.029;
   const STRIPE_FEE_FLAT = 0.30;
 
@@ -700,71 +640,6 @@ function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
   );
 }
 
-// ─── Date/time parsing helpers ───────────────────────────────────────────────
-
-function _parseDateTimeFromMessage(message: string): {
-  date?: string;
-  startTime?: string;
-} {
-  const result: { date?: string; startTime?: string } = {};
-  const lower = message.toLowerCase().trim();
-
-  // ISO date "2026-04-25"
-  const isoDate = message.match(/(\d{4}-\d{2}-\d{2})/);
-  if (isoDate) result.date = isoDate[1];
-
-  // "april 25", "apr 25"
-  if (!result.date) {
-    const monthDay = lower.match(
-      /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})\b/
-    );
-    if (monthDay) {
-      const months: Record<string, string> = {
-        jan: "01", feb: "02", mar: "03", apr: "04", may: "05", jun: "06",
-        jul: "07", aug: "08", sep: "09", oct: "10", nov: "11", dec: "12",
-      };
-      const m = months[monthDay[1].slice(0, 3)];
-      const year = new Date().getFullYear();
-      result.date = `${year}-${m}-${monthDay[2].padStart(2, "0")}`;
-    }
-  }
-
-  // Time: "10pm", "10:30 pm"
-  const timeRegex = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/gi;
-  let match;
-  while ((match = timeRegex.exec(lower)) !== null) {
-    let hour = parseInt(match[1]);
-    const min = match[2] || "00";
-    if (match[3].toLowerCase() === "pm" && hour < 12) hour += 12;
-    if (match[3].toLowerCase() === "am" && hour === 12) hour = 0;
-    result.startTime = `${hour.toString().padStart(2, "0")}:${min}`;
-    break;
-  }
-
-  // 24h format "22:00"
-  if (!result.startTime) {
-    const time24 = lower.match(/\b(\d{2}):(\d{2})\b/);
-    if (time24) {
-      result.startTime = `${time24[1]}:${time24[2]}`;
-    }
-  }
-
-  // Implied time "at 10" (assume PM for nightlife)
-  if (!result.startTime) {
-    const implied = lower.match(
-      /(?:at\s+)(\d{1,2})(?::(\d{2}))?\b(?!\s*(?:am|pm))/
-    );
-    if (implied) {
-      let hour = parseInt(implied[1]);
-      const min = implied[2] || "00";
-      if (hour < 12 && hour >= 1) hour += 12;
-      result.startTime = `${hour.toString().padStart(2, "0")}:${min}`;
-    }
-  }
-
-  return result;
-}
-
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function NewEventPage() {
@@ -781,7 +656,7 @@ export default function NewEventPage() {
   const [error, setError] = useState<string | null>(null);
   const [introShown, setIntroShown] = useState(false);
   const [budgetInput, setBudgetInput] = useState<Partial<BudgetInput>>({});
-  const [_budgetResult, setBudgetResult] = useState<BudgetResult | null>(null);
+  const [, setBudgetResult] = useState<BudgetResult | null>(null);
   const [showVenuePicker, setShowVenuePicker] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);

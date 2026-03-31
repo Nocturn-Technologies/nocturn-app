@@ -139,44 +139,6 @@ export function ticketConfirmationEmail(
   `);
 }
 
-export function settlementReportEmail(
-  eventTitle: string,
-  eventDate: string,
-  grossRevenue: string,
-  netProfit: string,
-  ticketsSold: number,
-  settlementLink: string
-): string {
-  return baseTemplate(`
-    <h2>Settlement Report 💰</h2>
-    <p>Here's the financial breakdown for <span class="highlight">${escapeHtml(eventTitle)}</span>.</p>
-    <div class="card">
-      <p style="color: #FAFAFA; margin: 0 0 12px 0; font-weight: 600;">${escapeHtml(eventTitle)} — ${escapeHtml(eventDate)}</p>
-      <p style="margin: 0;">🎫 Tickets sold: <strong>${ticketsSold}</strong></p>
-      <p style="margin: 4px 0;">💵 Gross revenue: <strong>${escapeHtml(grossRevenue)}</strong></p>
-      <p style="margin: 8px 0 0 0; color: #7B2FF7; font-weight: 600; font-size: 20px;">Net profit: ${escapeHtml(netProfit)}</p>
-    </div>
-    <a href="${sanitizeUrl(settlementLink)}" class="btn">View Full Report →</a>
-  `);
-}
-
-export function postEventRecapEmail(
-  eventTitle: string,
-  collectiveName: string,
-  attendeeCount: number,
-  customBody: string
-): string {
-  return baseTemplate(`
-    <h2>${escapeHtml(eventTitle)} — What a night! 🌙</h2>
-    <p>${escapeHtml(customBody)}</p>
-    <div class="card">
-      <p style="color: #FAFAFA; margin: 0;">🎉 ${attendeeCount} people came through</p>
-    </div>
-    <p>Follow <span class="highlight">${escapeHtml(collectiveName)}</span> for the next one.</p>
-    <a href="https://app.trynocturn.com" class="btn">See What's Next →</a>
-  `);
-}
-
 // ── Day-of hype email to attendees ──
 export function dayOfHypeEmail(
   eventTitle: string,

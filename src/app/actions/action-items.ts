@@ -253,7 +253,6 @@ export async function getActionItems(): Promise<ActionItem[]> {
   for (const item of items) {
     // Extract event ID from the item id (format: "type-eventId")
     const eventId = item.id.split("-").slice(1).join("-");
-    const _key = `${item.type === "low-sales" ? "upcoming-or-low" : item.type}-${eventId}`;
 
     // For upcoming vs low-sales, keep only low-sales (it's more actionable)
     if (item.type === "upcoming") {

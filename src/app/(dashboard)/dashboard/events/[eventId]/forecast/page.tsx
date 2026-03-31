@@ -6,8 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   ArrowLeft,
-  TrendingUp,
-  TrendingDown,
   Ticket,
   Sparkles,
   BarChart3,
@@ -61,7 +59,7 @@ export default function ForecastPage() {
 
   const f = forecast;
   const profitColor = f.projectedProfit >= 0 ? "text-green-500" : "text-red-500";
-  const _profitIcon = f.projectedProfit >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />;
+
 
   return (
     <div className="space-y-6">

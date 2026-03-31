@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,7 +27,6 @@ import { generateSettlementReport } from "@/app/actions/settlement-email";
 
 export default function SettlementDetailPage() {
   const params = useParams();
-  const _router = useRouter();
   const eventId = params.eventId as string;
 
   const [settlement, setSettlement] = useState<Record<string, unknown> | null>(null);

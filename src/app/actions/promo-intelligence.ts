@@ -303,7 +303,6 @@ export async function getAudienceInsights(
   }
 
   const eventIds = events.map((e) => e.id);
-  const _eventMap = new Map(events.map((e) => [e.id, e]));
 
   // Get all paid/checked-in tickets
   const { data: tickets, error: ticketsError } = await admin

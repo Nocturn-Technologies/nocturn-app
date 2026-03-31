@@ -126,7 +126,6 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
 
   const totalExpenses = talentFee + venueCost + deposit + otherExpenses + travelCost;
   // Bar minimum is a threshold, not a direct expense (but deposit risk if not met)
-  const _riskAdjusted = totalExpenses + (barMinimum > 0 ? deposit : 0);
 
   const capacity = input.venueCapacity ?? 200;
 
@@ -145,7 +144,6 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
   // Suggest tiers
   const gaPrice = Math.max(breakEvenPrice, 15); // minimum $15
   const earlyBirdPrice = Math.round(gaPrice * 0.75);
-  const _vipPrice = Math.round(gaPrice * 2.2);
 
   const suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning: string }> = [];
 

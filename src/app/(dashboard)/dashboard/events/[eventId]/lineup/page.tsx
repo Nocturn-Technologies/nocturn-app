@@ -141,7 +141,6 @@ export default function LineupPage() {
   const bookedIds = lineup.map((l) => l.artist_id);
   const availableArtists = allArtists.filter((a) => !bookedIds.includes(a.id));
 
-  const _selectedArtist = allArtists.find((a) => a.id === selectedArtistId);
 
   const statusColors: Record<string, string> = {
     pending: "bg-yellow-500/10 text-yellow-500",

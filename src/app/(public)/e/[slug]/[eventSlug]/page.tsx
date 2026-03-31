@@ -174,8 +174,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
   }
 
-  const totalCapacity = (tiers || []).reduce((s, t) => s + (t.capacity || 0), 0);
-  const _soldPercent = totalCapacity > 0 ? Math.round(((ticketsSold ?? 0) / totalCapacity) * 100) : 0;
 
   const reactionCounts: Record<string, number> = {};
   for (const r of reactionRows || []) {
@@ -210,7 +208,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // Dress code / min age / host message from metadata
   const dressCode = metadata.dressCode || null;
   const hostMessage = metadata.hostMessage || null;
-  const _minAge = event.min_age;
   const vibeTags = event.vibe_tags ?? [];
 
   // Share card data

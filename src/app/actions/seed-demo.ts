@@ -194,7 +194,7 @@ export async function seedDemoData(collectiveId: string) {
     const stripeFees = Math.round((grossRevenue * 0.029 + totalTickets * 0.30) * 100) / 100;
     const totalArtistFees = (insertedArtists[artistIndex].default_fee ?? 0) + (insertedArtists[secondArtist].default_fee ?? 0);
     const platformFee = 0; // Buyer pays — organizer keeps 100%
-    const _nocturnRevenue = Math.round((grossRevenue * 0.07 + totalTickets * 0.50) * 100) / 100;
+
     const netRevenue = grossRevenue - stripeFees - platformFee;
     const profit = netRevenue - totalArtistFees;
 

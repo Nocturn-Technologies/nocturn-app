@@ -2,7 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
-import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
+
 import { enrichAttendeeCRM } from "./crm-enrichment";
 
 export async function generateAutoSettlement(eventId: string) {
@@ -115,7 +115,6 @@ export async function generateAutoSettlement(eventId: string) {
     const platformFee = 0;
 
     // Nocturn revenue reporting (not deducted from organizer)
-    const _nocturnRevenue = grossRevenue * (PLATFORM_FEE_PERCENT / 100) + (PLATFORM_FEE_FLAT_CENTS / 100) * ticketCount;
 
     // 7. Net revenue = gross - refunds - stripe fees - platform fee (matches manual settlement)
     const netRevenue = grossRevenue - refundsTotal - stripeFees - platformFee;

@@ -111,7 +111,7 @@ export default async function AdminPage({ searchParams }: Props) {
   // ── Core queries (always needed for tab badges / overview) ─────────────
   const [
     totalUsersRes,
-    collectivesRes,
+    ,  // collectivesRes (unused)
     marketplaceRes,
     eventsCountRes,
     // Tickets for GMV
@@ -213,7 +213,7 @@ export default async function AdminPage({ searchParams }: Props) {
 
   // ── Derived data ───────────────────────────────────────────────────────
   const totalUsers = totalUsersRes.count ?? 0;
-  const _totalCollectives = collectivesRes.count ?? 0;
+
   const totalMarketplace = marketplaceRes.count ?? 0;
   const totalEventsCount = eventsCountRes.count ?? 0;
   const pendingUsers = (pendingRes.data as any[]) ?? [];

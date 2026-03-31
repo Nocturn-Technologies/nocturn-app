@@ -95,48 +95,4 @@ export async function getEventReferralStats(eventId: string): Promise<{
   };
 }
 
-/**
- * Track a referral when a ticket is purchased with a ref parameter.
- * Called from the checkout flow.
- */
-export async function trackReferral(ticketId: string, referrerId: string): Promise<void> {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-
-  // Validate referrerId is a proper UUID to prevent injection
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!uuidRegex.test(referrerId) || !uuidRegex.test(ticketId)) return;
-
-  // Prevent self-referral
-  if (referrerId === user.id) return;
-
-  const admin = createAdminClient();
-
-  // Verify the referrer actually exists in the users table
-  const { data: referrerUser } = await admin
-    .from("users")
-    .select("id")
-    .eq("id", referrerId)
-    .maybeSingle();
-
-  if (!referrerUser) return;
-
-  // Verify the caller owns the ticket being updated
-  const { data: ticket } = await admin
-    .from("tickets")
-    .select("id, user_id, referred_by")
-    .eq("id", ticketId)
-    .maybeSingle();
-
-  if (!ticket || ticket.user_id !== user.id) return;
-
-  // Don't overwrite an existing referral (prevents referral stealing)
-  if (ticket.referred_by) return;
-
-  await admin
-    .from("tickets")
-    .update({ referred_by: referrerId })
-    .eq("id", ticketId);
-}
 
