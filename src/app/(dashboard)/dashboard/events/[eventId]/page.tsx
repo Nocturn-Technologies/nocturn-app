@@ -188,7 +188,7 @@ export default async function EventDetailPage({ params }: Props) {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/dashboard/events">
-          <Button variant="ghost" size="icon" className="shrink-0 hover:bg-accent active:scale-95 transition-all duration-200">
+          <Button variant="ghost" size="icon" className="shrink-0 min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -224,76 +224,76 @@ export default async function EventDetailPage({ params }: Props) {
       <div className="flex flex-wrap gap-2">
         {event.status === "draft" && (
           <Link href={`/dashboard/events/${event.id}/edit`}>
-            <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
+            <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
               <Pencil className="mr-2 h-3 w-3" />
               Edit Event
             </Button>
           </Link>
         )}
         <Link href={`/dashboard/events/${event.id}/design`}>
-          <Button variant="outline" size="sm" className="border-nocturn-glow/30 text-nocturn-glow hover:bg-nocturn-glow/10 active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn-glow/30 text-nocturn-glow hover:bg-nocturn-glow/10 active:scale-95 transition-all duration-200">
             <Palette className="mr-2 h-3 w-3" />
             Design
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/tasks`}>
-          <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
             <ListChecks className="mr-2 h-3 w-3" />
             Playbook
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/lineup`}>
-          <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
             <Music className="mr-2 h-3 w-3" />
             Manage Lineup
           </Button>
         </Link>
         {(event.status === "published" || event.status === "upcoming") && (
           <Link href={`/dashboard/events/${event.id}/check-in`}>
-            <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
+            <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
               <ScanLine className="mr-2 h-3 w-3" />
               Check-in Scanner
             </Button>
           </Link>
         )}
         <Link href={`/dashboard/events/${event.id}/promos`}>
-          <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
             <Tag className="mr-2 h-3 w-3" />
             Promos
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/guests`}>
-          <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
             <ClipboardList className="mr-2 h-3 w-3" />
             Guest List
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/chat`}>
-          <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
             <MessageSquare className="mr-2 h-3 w-3" />
             Chat
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/refunds`}>
-          <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
             <RotateCcw className="mr-2 h-3 w-3" />
             Refunds
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/referrals`}>
-          <Button variant="outline" size="sm" className="border-amber-400/30 text-amber-400 hover:bg-amber-400/10 active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] border-amber-400/30 text-amber-400 hover:bg-amber-400/10 active:scale-95 transition-all duration-200">
             <Share2 className="mr-2 h-3 w-3" />
             Referrals
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/financials`}>
-          <Button variant="outline" size="sm" className="border-green-400/30 text-green-400 hover:bg-green-400/10 active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] border-green-400/30 text-green-400 hover:bg-green-400/10 active:scale-95 transition-all duration-200">
             <Sheet className="mr-2 h-3 w-3" />
             P&L
           </Button>
         </Link>
         <Link href={`/dashboard/events/${event.id}/forecast`}>
-          <Button variant="outline" size="sm" className="border-nocturn-teal/30 text-nocturn-teal hover:bg-nocturn-teal/10 active:scale-95 transition-all duration-200">
+          <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn-teal/30 text-nocturn-teal hover:bg-nocturn-teal/10 active:scale-95 transition-all duration-200">
             <BarChart3 className="mr-2 h-3 w-3" />
             Forecast
           </Button>
@@ -301,13 +301,13 @@ export default async function EventDetailPage({ params }: Props) {
         {(event.status === "completed" || event.status === "settled") && (
           <>
             <Link href={`/dashboard/events/${event.id}/recap`}>
-              <Button variant="outline" size="sm" className="border-nocturn-amber/30 text-nocturn-amber hover:bg-nocturn-amber/10 active:scale-95 transition-all duration-200">
+              <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn-amber/30 text-nocturn-amber hover:bg-nocturn-amber/10 active:scale-95 transition-all duration-200">
                 <FileText className="mr-2 h-3 w-3" />
                 Recap
               </Button>
             </Link>
             <Link href={`/dashboard/events/${event.id}/wrap`}>
-              <Button variant="outline" size="sm" className="border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
+              <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
                 <Coffee className="mr-2 h-3 w-3" />
                 View Wrap
               </Button>
@@ -316,7 +316,7 @@ export default async function EventDetailPage({ params }: Props) {
         )}
         {publicUrl && (
           <Link href={publicUrl} target="_blank">
-            <Button variant="outline" size="sm" className="hover:bg-accent active:scale-95 transition-all duration-200">
+            <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
               <ExternalLink className="mr-2 h-3 w-3" />
               View Public Page
             </Button>

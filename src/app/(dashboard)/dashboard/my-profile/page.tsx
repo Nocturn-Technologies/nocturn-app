@@ -333,7 +333,7 @@ export default function MyProfilePage() {
                 )}
                 <button
                   onClick={() => removeMedia(url)}
-                  className="absolute top-1 right-1 h-6 w-6 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-1 right-1 min-h-[44px] min-w-[44px] h-11 w-11 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   <X className="h-3 w-3 text-white" />
                 </button>
@@ -454,7 +454,7 @@ export default function MyProfilePage() {
         <Button
           onClick={handleSave}
           disabled={saving}
-          className="bg-nocturn hover:bg-nocturn-light min-w-[120px]"
+          className="bg-nocturn hover:bg-nocturn-light min-w-[120px] min-h-[44px]"
         >
           {saving ? (
             <Loader2 className="h-4 w-4 animate-spin" />

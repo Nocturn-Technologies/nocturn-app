@@ -27,7 +27,7 @@ export default function MarketingPage() {
                 Pick an event and describe the vibe — Nocturn handles the rest.
               </p>
               <Link href="/dashboard/events" className="mt-4 inline-block">
-                <Button className="bg-nocturn hover:bg-nocturn-light">
+                <Button className="bg-nocturn hover:bg-nocturn-light min-h-[44px]">
                   <Sparkles className="mr-2 h-4 w-4" />
                   Generate Content
                 </Button>

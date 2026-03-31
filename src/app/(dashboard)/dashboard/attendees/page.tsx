@@ -104,6 +104,7 @@ export default function AttendeesPage() {
         {attendees.length > 0 && (
           <Button
             variant="outline"
+            className="min-h-[44px]"
             onClick={handleExport}
             disabled={exporting}
           >

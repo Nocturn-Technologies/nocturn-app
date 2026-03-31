@@ -406,7 +406,7 @@ export default function MembersPage() {
                       id="inviteRole"
                       value={inviteRole}
                       onChange={(e) => setInviteRole(e.target.value as Role)}
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     >
                       <option value="member">Member</option>
                       <option value="promoter">Promoter</option>

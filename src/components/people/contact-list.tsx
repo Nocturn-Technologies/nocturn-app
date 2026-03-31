@@ -424,7 +424,7 @@ export function ContactList({
               <button
                 key={value}
                 onClick={() => setActiveFilter(value)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[44px] ${
                   isActive
                     ? "bg-nocturn text-white"
                     : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"

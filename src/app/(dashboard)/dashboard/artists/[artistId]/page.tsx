@@ -103,7 +103,7 @@ export default function ArtistDetailPage() {
       <div className="mx-auto max-w-2xl space-y-6">
         <div className="flex items-center gap-3">
           <Link href="/dashboard/artists">
-            <Button variant="ghost" size="icon" aria-label="Go back">
+            <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Go back">
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
@@ -148,7 +148,7 @@ export default function ArtistDetailPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href="/dashboard/artists">
-          <Button variant="ghost" size="icon" aria-label="Go back">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Go back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>

@@ -130,7 +130,7 @@ export default function SettlementDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Link href="/dashboard/finance">
-          <Button variant="ghost" size="icon" aria-label="Go back">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Go back">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -151,6 +151,7 @@ export default function SettlementDetailPage() {
           <Button
             size="sm"
             variant="outline"
+            className="min-h-[44px]"
             onClick={() => setShowExpenseForm(!showExpenseForm)}
           >
             <Plus className="mr-1 h-3 w-3" />
@@ -164,7 +165,7 @@ export default function SettlementDetailPage() {
                 <div className="space-y-1">
                   <Label className="text-xs">Category</Label>
                   <select
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm h-11"
                     value={expenseCategory}
                     onChange={(e) => setExpenseCategory(e.target.value)}
                   >
@@ -367,7 +368,7 @@ export default function SettlementDetailPage() {
           {settlement && (settlement.status === "approved" || settlement.status === "paid") && (
             <Button
               variant="outline"
-              className="w-full"
+              className="w-full min-h-[44px]"
               disabled={generatingReport}
               onClick={async () => {
                 if (generatingReport) return;

@@ -836,7 +836,7 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
             <button
               key={value}
               onClick={() => setRelFilter(value)}
-              className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${chipClass}`}
+              className={`flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[44px] ${chipClass}`}
             >
               {label}
               <span
@@ -861,7 +861,7 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
               <button
                 key={value}
                 onClick={() => setCatFilter(value)}
-                className={`shrink-0 flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                className={`shrink-0 flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[44px] ${
                   isActive
                     ? "bg-white/10 text-foreground border border-white/20"
                     : "bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted"
