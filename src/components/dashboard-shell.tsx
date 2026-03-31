@@ -11,6 +11,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuGroup,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -273,12 +274,14 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
               <span className="truncate">{user.fullName || user.email}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="top" className="w-56 mb-1">
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user.fullName || "Account"}</p>
-                  <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
-                </div>
-              </DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user.fullName || "Account"}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{user.email}</p>
+                  </div>
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => router.push("/dashboard/members")}>
                 <Users className="mr-2 h-4 w-4" />
@@ -319,14 +322,16 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel className="font-normal">
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">{user.fullName || "Account"}</p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {activeColl ? activeColl.name : user.email}
-                  </p>
-                </div>
-              </DropdownMenuLabel>
+              <DropdownMenuGroup>
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">{user.fullName || "Account"}</p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {activeColl ? activeColl.name : user.email}
+                    </p>
+                  </div>
+                </DropdownMenuLabel>
+              </DropdownMenuGroup>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => router.push("/dashboard/members")}>
                 <Users className="mr-2 h-4 w-4" />
