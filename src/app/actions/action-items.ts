@@ -272,7 +272,8 @@ export async function getActionItems(): Promise<ActionItem[]> {
   }
 
   return deduped;
-  } catch {
+  } catch (err) {
+    console.error("[getActionItems]", err);
     return [];
   }
 }

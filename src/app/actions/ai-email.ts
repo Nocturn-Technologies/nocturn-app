@@ -139,70 +139,71 @@ Return JSON with "subject" and "body" fields. The body should be plain text with
 
 // Generate a promo email for an upcoming event
 export async function generatePromoEmail(eventId: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", email: null };
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", email: null };
 
-  const { success: rlOk2 } = await rateLimitStrict(`ai-email:${user.id}`, 10, 60_000);
-  if (!rlOk2) return { error: "Too many requests. Please wait a moment.", email: null };
+    const { success: rlOk2 } = await rateLimitStrict(`ai-email:${user.id}`, 10, 60_000);
+    if (!rlOk2) return { error: "Too many requests. Please wait a moment.", email: null };
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
 
-  const { data: eventRaw2 } = await admin
-    .from("events")
-    .select("*, venues(name, city, address), collectives(name, slug)")
-    .eq("id", eventId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  const event = eventRaw2 as { id: string; title: string; slug: string; starts_at: string; collective_id?: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string; address: string } | null; [key: string]: unknown } | null;
+    const { data: eventRaw2 } = await admin
+      .from("events")
+      .select("*, venues(name, city, address), collectives(name, slug)")
+      .eq("id", eventId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    const event = eventRaw2 as { id: string; title: string; slug: string; starts_at: string; collective_id?: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string; address: string } | null; [key: string]: unknown } | null;
 
-  if (!event) return { error: "Event not found", email: null };
+    if (!event) return { error: "Event not found", email: null };
 
-  // Verify ownership — user must be a member of the event's collective
-  const colId = event.collective_id;
-  if (colId) {
-    const { count: memberCount } = await admin
-      .from("collective_members")
-      .select("*", { count: "exact", head: true })
-      .eq("collective_id", colId)
-      .eq("user_id", user.id)
-      .is("deleted_at", null);
-    if (!memberCount) return { error: "Not authorized", email: null };
-  }
+    // Verify ownership — user must be a member of the event's collective
+    const colId = event.collective_id;
+    if (colId) {
+      const { count: memberCount } = await admin
+        .from("collective_members")
+        .select("*", { count: "exact", head: true })
+        .eq("collective_id", colId)
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+      if (!memberCount) return { error: "Not authorized", email: null };
+    }
 
-  const { data: tiersRaw } = await admin
-    .from("ticket_tiers")
-    .select("name, price, capacity")
-    .eq("event_id", eventId)
-    .order("sort_order");
-  const tiers = tiersRaw as { name: string; price: number; capacity: number }[] | null;
+    const { data: tiersRaw } = await admin
+      .from("ticket_tiers")
+      .select("name, price, capacity")
+      .eq("event_id", eventId)
+      .order("sort_order");
+    const tiers = tiersRaw as { name: string; price: number; capacity: number }[] | null;
 
-  const { data: lineupRaw2 } = await admin
-    .from("event_artists")
-    .select("artists(name)")
-    .eq("event_id", eventId)
-    .eq("status", "confirmed");
-  const lineup = lineupRaw2 as { artists: { name: string } | null }[] | null;
+    const { data: lineupRaw2 } = await admin
+      .from("event_artists")
+      .select("artists(name)")
+      .eq("event_id", eventId)
+      .eq("status", "confirmed");
+    const lineup = lineupRaw2 as { artists: { name: string } | null }[] | null;
 
-  const artistNames = (lineup ?? []).map((l) => {
-    return l.artists?.name ?? "";
-  });
+    const artistNames = (lineup ?? []).map((l) => {
+      return l.artists?.name ?? "";
+    });
 
-  const collective = event.collectives ?? { name: "Unknown", slug: "" };
-  const venue = event.venues;
-  const eventDate = new Date(event.starts_at);
+    const collective = event.collectives ?? { name: "Unknown", slug: "" };
+    const venue = event.venues;
+    const eventDate = new Date(event.starts_at);
 
-  const ticketInfo = (tiers ?? [])
-    .map((t) => `${t.name}: $${Number(t.price).toFixed(2)}`)
-    .join(", ");
+    const ticketInfo = (tiers ?? [])
+      .map((t) => `${t.name}: $${Number(t.price).toFixed(2)}`)
+      .join(", ");
 
-  const ticketUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${collective.slug}/${event.slug}`;
+    const ticketUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${collective.slug}/${event.slug}`;
 
-  return {
-    error: null,
-    email: {
-      subject: `${event.title} — ${eventDate.toLocaleDateString("en", { month: "short", day: "numeric" })} 🎶`,
-      body: `Hey there,
+    return {
+      error: null,
+      email: {
+        subject: `${event.title} — ${eventDate.toLocaleDateString("en", { month: "short", day: "numeric" })} 🎶`,
+        body: `Hey there,
 
 ${collective.name} presents: ${event.title}
 
@@ -217,8 +218,12 @@ Get your tickets: ${ticketUrl}
 
 See you on the dance floor!
 — ${collective.name}`,
-    },
-  };
+      },
+    };
+  } catch (err) {
+    console.error("[generatePromoEmail]", err);
+    return { error: "Something went wrong", email: null };
+  }
 }
 
 function generateFallbackEmail(

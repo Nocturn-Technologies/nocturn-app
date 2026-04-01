@@ -40,8 +40,9 @@ export async function transcribeFromStorage(storagePath: string) {
       .download(storagePath);
 
     if (dlError || !fileData) {
+      console.error("[transcribeFromStorage]", dlError);
       return {
-        error: `Failed to download audio: ${dlError?.message ?? "unknown"}`,
+        error: "Failed to download audio file",
         transcript: "",
         summary: "",
         action_items: [],
@@ -127,9 +128,9 @@ If the transcript is casual conversation with no clear action items or decisions
       key_decisions: parsed.key_decisions ?? [],
     };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Transcription failed";
+    console.error("[transcribeFromStorage]", err);
     return {
-      error: msg,
+      error: "Something went wrong",
       transcript: "",
       summary: "",
       action_items: [],
@@ -215,9 +216,9 @@ If the transcript is casual conversation with no clear action items or decisions
       key_decisions: parsed.key_decisions ?? [],
     };
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : "Transcription failed";
+    console.error("[transcribeAudio]", err);
     return {
-      error: msg,
+      error: "Something went wrong",
       transcript: "",
       summary: "",
       action_items: [],

@@ -46,37 +46,42 @@ export async function getAmbassadorConfig(eventId: string): Promise<{
   error: string | null;
   config: AmbassadorConfig;
 }> {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", config: DEFAULT_CONFIG };
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", config: DEFAULT_CONFIG };
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
 
-  // Verify user has access to this event
-  const { data: eventRaw } = await admin
-    .from("events")
-    .select("metadata, collective_id")
-    .eq("id", eventId)
-    .maybeSingle();
-  const event = eventRaw as { metadata: Record<string, unknown> | null; collective_id: string } | null;
+    // Verify user has access to this event
+    const { data: eventRaw } = await admin
+      .from("events")
+      .select("metadata, collective_id")
+      .eq("id", eventId)
+      .maybeSingle();
+    const event = eventRaw as { metadata: Record<string, unknown> | null; collective_id: string } | null;
 
-  if (!event) return { error: "Event not found", config: DEFAULT_CONFIG };
+    if (!event) return { error: "Event not found", config: DEFAULT_CONFIG };
 
-  const { count: memberCount } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", event.collective_id)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-  if (!memberCount || memberCount === 0) return { error: "Not authorized", config: DEFAULT_CONFIG };
+    const { count: memberCount } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", event.collective_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!memberCount || memberCount === 0) return { error: "Not authorized", config: DEFAULT_CONFIG };
 
-  const metadata = (event.metadata ?? {}) as Record<string, unknown>;
-  const ambassadorConfig = metadata.ambassador_config as AmbassadorConfig | undefined;
+    const metadata = (event.metadata ?? {}) as Record<string, unknown>;
+    const ambassadorConfig = metadata.ambassador_config as AmbassadorConfig | undefined;
 
-  return {
-    error: null,
-    config: ambassadorConfig ?? DEFAULT_CONFIG,
-  };
+    return {
+      error: null,
+      config: ambassadorConfig ?? DEFAULT_CONFIG,
+    };
+  } catch (err) {
+    console.error("[getAmbassadorConfig]", err);
+    return { error: "Something went wrong", config: DEFAULT_CONFIG };
+  }
 }
 
 // ── Save ambassador config for an event ──
@@ -85,43 +90,48 @@ export async function saveAmbassadorConfig(
   eventId: string,
   config: AmbassadorConfig
 ): Promise<{ error: string | null }> {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated" };
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
 
-  // Get current metadata + verify ownership
-  const { data: eventRaw2 } = await admin
-    .from("events")
-    .select("metadata, collective_id")
-    .eq("id", eventId)
-    .maybeSingle();
-  const event2 = eventRaw2 as { metadata: Record<string, unknown> | null; collective_id: string } | null;
+    // Get current metadata + verify ownership
+    const { data: eventRaw2 } = await admin
+      .from("events")
+      .select("metadata, collective_id")
+      .eq("id", eventId)
+      .maybeSingle();
+    const event2 = eventRaw2 as { metadata: Record<string, unknown> | null; collective_id: string } | null;
 
-  if (!event2) return { error: "Event not found" };
+    if (!event2) return { error: "Event not found" };
 
-  const { count: memberCount } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", event2.collective_id)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-  if (!memberCount || memberCount === 0) return { error: "Not authorized" };
+    const { count: memberCount } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", event2.collective_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!memberCount || memberCount === 0) return { error: "Not authorized" };
 
-  const currentMetadata = (event2.metadata ?? {}) as Record<string, unknown>;
+    const currentMetadata = (event2.metadata ?? {}) as Record<string, unknown>;
 
-  // Merge ambassador_config into existing metadata
-  const updatedMetadata = {
-    ...currentMetadata,
-    ambassador_config: config,
-  };
+    // Merge ambassador_config into existing metadata
+    const updatedMetadata = {
+      ...currentMetadata,
+      ambassador_config: config,
+    };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin.from("events") as any).update({ metadata: updatedMetadata })
-    .eq("id", eventId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (admin.from("events") as any).update({ metadata: updatedMetadata })
+      .eq("id", eventId);
 
-  if (error) return { error: error.message };
-  return { error: null };
+    if (error) return { error: "Something went wrong" };
+    return { error: null };
+  } catch (err) {
+    console.error("[saveAmbassadorConfig]", err);
+    return { error: "Something went wrong" };
+  }
 }
 

@@ -42,120 +42,125 @@ async function verifyCheckInAccess(eventId: string) {
  * - Updates status to 'checked_in' with timestamp
  */
 export async function checkInTicket(ticketToken: string, eventId: string) {
-  // Auth check: only collective members can check in tickets
-  const access = await verifyCheckInAccess(eventId);
-  if (access.error) {
-    return { success: false, error: access.error, ticket: null };
-  }
+  try {
+    // Auth check: only collective members can check in tickets
+    const access = await verifyCheckInAccess(eventId);
+    if (access.error) {
+      return { success: false, error: access.error, ticket: null };
+    }
 
-  // Rate limit: 120 scans per minute per user (fast QR scanning)
-  const { success: rlOk } = await rateLimitStrict(`checkin:${eventId}`, 120, 60_000);
-  if (!rlOk) {
-    return { success: false, error: "Too many check-in attempts. Please wait.", ticket: null };
-  }
+    // Rate limit: 120 scans per minute per user (fast QR scanning)
+    const { success: rlOk } = await rateLimitStrict(`checkin:${eventId}`, 120, 60_000);
+    if (!rlOk) {
+      return { success: false, error: "Too many check-in attempts. Please wait.", ticket: null };
+    }
 
-  const supabase = createAdminClient();
+    const supabase = createAdminClient();
 
-  // Fetch the ticket with event and tier info
-  const { data: ticket, error: fetchError } = await supabase
-    .from("tickets")
-    .select(
+    // Fetch the ticket with event and tier info
+    const { data: ticket, error: fetchError } = await supabase
+      .from("tickets")
+      .select(
+        `
+        id,
+        event_id,
+        status,
+        checked_in_at,
+        ticket_token,
+        ticket_tiers:ticket_tier_id (name),
+        profiles:user_id (full_name, email)
       `
-      id,
-      event_id,
-      status,
-      checked_in_at,
-      ticket_token,
-      ticket_tiers:ticket_tier_id (name),
-      profiles:user_id (full_name, email)
-    `
-    )
-    .eq("ticket_token", ticketToken)
-    .maybeSingle();
+      )
+      .eq("ticket_token", ticketToken)
+      .maybeSingle();
 
-  if (fetchError || !ticket) {
+    if (fetchError || !ticket) {
+      return {
+        success: false,
+        error: "Ticket not found",
+        ticket: null,
+      };
+    }
+
+    // Verify ticket belongs to this event
+    if (ticket.event_id !== eventId) {
+      return {
+        success: false,
+        error: "This ticket is for a different event",
+        ticket: null,
+      };
+    }
+
+    // Check current status
+    if (ticket.status === "checked_in") {
+      const checkedInTime = ticket.checked_in_at
+        ? new Date(ticket.checked_in_at).toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : "earlier";
+
+      return {
+        success: false,
+        error: `Already checked in at ${checkedInTime}`,
+        ticket: {
+          tierName: ((ticket.ticket_tiers as Record<string, unknown> | null)?.name as string) ?? "General",
+          guestName: ((ticket.profiles as Record<string, unknown> | null)?.full_name as string) ?? "Guest",
+          guestEmail: ((ticket.profiles as Record<string, unknown> | null)?.email as string) ?? null,
+        },
+      };
+    }
+
+    if (ticket.status !== "paid") {
+      return {
+        success: false,
+        error: `Ticket status is '${ticket.status}' — only paid tickets can be checked in`,
+        ticket: null,
+      };
+    }
+
+    // Perform the check-in — atomic guard: only update if still "paid"
+    // Prevents double check-in race condition from concurrent scans
+    const now = new Date().toISOString();
+    const { error: updateError, count: updateCount } = await supabase
+      .from("tickets")
+      .update({
+        status: "checked_in",
+        checked_in_at: now,
+      })
+      .eq("id", ticket.id)
+      .eq("status", "paid");
+
+    if (updateError) {
+      console.error("[check-in] Failed to update ticket:", updateError);
+      return {
+        success: false,
+        error: "Failed to check in ticket. Please try again.",
+        ticket: null,
+      };
+    }
+
+    if (updateCount === 0) {
+      return {
+        success: false,
+        error: "Ticket was already checked in by another scanner.",
+        ticket: null,
+      };
+    }
+
     return {
-      success: false,
-      error: "Ticket not found",
-      ticket: null,
-    };
-  }
-
-  // Verify ticket belongs to this event
-  if (ticket.event_id !== eventId) {
-    return {
-      success: false,
-      error: "This ticket is for a different event",
-      ticket: null,
-    };
-  }
-
-  // Check current status
-  if (ticket.status === "checked_in") {
-    const checkedInTime = ticket.checked_in_at
-      ? new Date(ticket.checked_in_at).toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-        })
-      : "earlier";
-
-    return {
-      success: false,
-      error: `Already checked in at ${checkedInTime}`,
+      success: true,
+      error: null,
       ticket: {
-        tierName: ((ticket.ticket_tiers as Record<string, unknown> | null)?.name as string) ?? "General",
-        guestName: ((ticket.profiles as Record<string, unknown> | null)?.full_name as string) ?? "Guest",
-        guestEmail: ((ticket.profiles as Record<string, unknown> | null)?.email as string) ?? null,
+        tierName: (ticket.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
+        guestName: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
+        guestEmail: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.email ?? null,
       },
     };
+  } catch (err) {
+    console.error("[checkInTicket]", err);
+    return { success: false, error: "Something went wrong", ticket: null };
   }
-
-  if (ticket.status !== "paid") {
-    return {
-      success: false,
-      error: `Ticket status is '${ticket.status}' — only paid tickets can be checked in`,
-      ticket: null,
-    };
-  }
-
-  // Perform the check-in — atomic guard: only update if still "paid"
-  // Prevents double check-in race condition from concurrent scans
-  const now = new Date().toISOString();
-  const { error: updateError, count: updateCount } = await supabase
-    .from("tickets")
-    .update({
-      status: "checked_in",
-      checked_in_at: now,
-    })
-    .eq("id", ticket.id)
-    .eq("status", "paid");
-
-  if (updateError) {
-    console.error("[check-in] Failed to update ticket:", updateError);
-    return {
-      success: false,
-      error: "Failed to check in ticket. Please try again.",
-      ticket: null,
-    };
-  }
-
-  if (updateCount === 0) {
-    return {
-      success: false,
-      error: "Ticket was already checked in by another scanner.",
-      ticket: null,
-    };
-  }
-
-  return {
-    success: true,
-    error: null,
-    ticket: {
-      tierName: (ticket.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
-      guestName: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
-      guestEmail: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.email ?? null,
-    },
-  };
 }
 
 export interface CheckInStats {
@@ -176,57 +181,62 @@ export interface CheckInStats {
  * - Most recent check-ins
  */
 export async function getCheckInStats(eventId: string): Promise<CheckInStats> {
-  // Auth check: only collective members can view check-in stats
-  const access = await verifyCheckInAccess(eventId);
-  if (access.error) {
+  try {
+    // Auth check: only collective members can view check-in stats
+    const access = await verifyCheckInAccess(eventId);
+    if (access.error) {
+      return { totalTickets: 0, checkedIn: 0, recentCheckIns: [] };
+    }
+
+    const supabase = createAdminClient();
+
+    // Count total eligible tickets (paid + checked_in)
+    const { count: totalTickets } = await supabase
+      .from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", eventId)
+      .in("status", ["paid", "checked_in"]);
+
+    // Count checked-in tickets
+    const { count: checkedIn } = await supabase
+      .from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("event_id", eventId)
+      .eq("status", "checked_in");
+
+    // Get recent check-ins (last 20)
+    const { data: recentData } = await supabase
+      .from("tickets")
+      .select(
+        `
+        id,
+        checked_in_at,
+        profiles:user_id (full_name),
+        ticket_tiers:ticket_tier_id (name)
+      `
+      )
+      .eq("event_id", eventId)
+      .eq("status", "checked_in")
+      .not("checked_in_at", "is", null)
+      .order("checked_in_at", { ascending: false })
+      .limit(20);
+
+    const recentCheckIns = (recentData ?? []).map((t) => ({
+      id: t.id,
+      guestName:
+        (t.profiles as unknown as { full_name: string } | null)?.full_name ?? "Guest",
+      tierName:
+        (t.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
+      checkedInAt: t.checked_in_at!,
+    }));
+
+    return {
+      totalTickets: totalTickets ?? 0,
+      checkedIn: checkedIn ?? 0,
+      recentCheckIns,
+    };
+  } catch (err) {
+    console.error("[getCheckInStats]", err);
     return { totalTickets: 0, checkedIn: 0, recentCheckIns: [] };
   }
-
-  const supabase = createAdminClient();
-
-  // Count total eligible tickets (paid + checked_in)
-  const { count: totalTickets } = await supabase
-    .from("tickets")
-    .select("id", { count: "exact", head: true })
-    .eq("event_id", eventId)
-    .in("status", ["paid", "checked_in"]);
-
-  // Count checked-in tickets
-  const { count: checkedIn } = await supabase
-    .from("tickets")
-    .select("id", { count: "exact", head: true })
-    .eq("event_id", eventId)
-    .eq("status", "checked_in");
-
-  // Get recent check-ins (last 20)
-  const { data: recentData } = await supabase
-    .from("tickets")
-    .select(
-      `
-      id,
-      checked_in_at,
-      profiles:user_id (full_name),
-      ticket_tiers:ticket_tier_id (name)
-    `
-    )
-    .eq("event_id", eventId)
-    .eq("status", "checked_in")
-    .not("checked_in_at", "is", null)
-    .order("checked_in_at", { ascending: false })
-    .limit(20);
-
-  const recentCheckIns = (recentData ?? []).map((t) => ({
-    id: t.id,
-    guestName:
-      (t.profiles as unknown as { full_name: string } | null)?.full_name ?? "Guest",
-    tierName:
-      (t.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
-    checkedInAt: t.checked_in_at!,
-  }));
-
-  return {
-    totalTickets: totalTickets ?? 0,
-    checkedIn: checkedIn ?? 0,
-    recentCheckIns,
-  };
 }

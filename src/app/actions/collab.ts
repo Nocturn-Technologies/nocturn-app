@@ -7,38 +7,45 @@ import { createAdminClient } from "@/lib/supabase/config";
  * Search for other collectives on Nocturn to collaborate with.
  */
 export async function searchCollectives(query: string, myCollectiveId: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  try {
+    if (!myCollectiveId?.trim()) return [];
 
-  const sb = createAdminClient();
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
 
-  // Verify caller is a member of myCollectiveId
-  const { count } = await sb
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", myCollectiveId)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-  if (!count) return [];
+    const sb = createAdminClient();
 
-  let builder = sb
-    .from("collectives")
-    .select("id, name, slug, logo_url, city, description")
-    .neq("id", myCollectiveId)
-    .order("name");
+    // Verify caller is a member of myCollectiveId
+    const { count } = await sb
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", myCollectiveId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!count) return [];
 
-  if (query.trim()) {
-    // Sanitize input to prevent PostgREST filter injection
-    const sanitized = query.replace(/\\/g, "").replace(/[%_.,()'"`]/g, "").trim();
-    if (sanitized) {
-      const escaped = sanitized.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-      builder = builder.or(`name.ilike.%${escaped}%,city.ilike.%${escaped}%,slug.ilike.%${escaped}%`);
+    let builder = sb
+      .from("collectives")
+      .select("id, name, slug, logo_url, city, description")
+      .neq("id", myCollectiveId)
+      .order("name");
+
+    if (query.trim()) {
+      // Sanitize input to prevent PostgREST filter injection
+      const sanitized = query.replace(/\\/g, "").replace(/[%_.,()'"`]/g, "").trim();
+      if (sanitized) {
+        const escaped = sanitized.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+        builder = builder.or(`name.ilike.%${escaped}%,city.ilike.%${escaped}%,slug.ilike.%${escaped}%`);
+      }
     }
-  }
 
-  const { data } = await builder.limit(20);
-  return data ?? [];
+    const { data } = await builder.limit(20);
+    return data ?? [];
+  } catch (err) {
+    console.error("[searchCollectives]", err);
+    return [];
+  }
 }
 
 /**
@@ -46,131 +53,146 @@ export async function searchCollectives(query: string, myCollectiveId: string) {
  * Creates a channel visible to both collectives.
  */
 export async function startCollabChat(myCollectiveId: string, partnerCollectiveId: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", channelId: null };
+  try {
+    if (!myCollectiveId?.trim() || !partnerCollectiveId?.trim()) {
+      return { error: "Collective IDs are required", channelId: null };
+    }
 
-  const sb = createAdminClient();
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", channelId: null };
 
-  // Verify user is a member of their collective
-  const { data: membership } = await sb
-    .from("collective_members")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("collective_id", myCollectiveId)
-    .is("deleted_at", null)
-    .maybeSingle();
+    const sb = createAdminClient();
 
-  if (!membership) return { error: "Not a member of this collective", channelId: null };
+    // Verify user is a member of their collective
+    const { data: membership } = await sb
+      .from("collective_members")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("collective_id", myCollectiveId)
+      .is("deleted_at", null)
+      .maybeSingle();
 
-  // Only admins and promoters can create collab chats
-  if (membership.role !== "admin" && membership.role !== "promoter") {
-    return { error: "Only admins and promoters can start collab chats", channelId: null };
+    if (!membership) return { error: "Not a member of this collective", channelId: null };
+
+    // Only admins and promoters can create collab chats
+    if (membership.role !== "admin" && membership.role !== "promoter") {
+      return { error: "Only admins and promoters can start collab chats", channelId: null };
+    }
+
+    // Check if a collab channel already exists between these two
+    const { data: existing } = await sb
+      .from("channels")
+      .select("id")
+      .eq("collective_id", myCollectiveId)
+      .eq("partner_collective_id", partnerCollectiveId)
+      .eq("type", "collab")
+      .maybeSingle();
+
+    if (existing) return { error: null, channelId: existing.id };
+
+    // Also check the reverse direction
+    const { data: existingReverse } = await sb
+      .from("channels")
+      .select("id")
+      .eq("collective_id", partnerCollectiveId)
+      .eq("partner_collective_id", myCollectiveId)
+      .eq("type", "collab")
+      .maybeSingle();
+
+    if (existingReverse) return { error: null, channelId: existingReverse.id };
+
+    // Get partner collective name for the channel
+    const { data: partner } = await sb
+      .from("collectives")
+      .select("name")
+      .eq("id", partnerCollectiveId)
+      .maybeSingle();
+
+    const { data: myCollective } = await sb
+      .from("collectives")
+      .select("name")
+      .eq("id", myCollectiveId)
+      .maybeSingle();
+
+    if (!partner || !myCollective) return { error: "Collective not found", channelId: null };
+
+    // Create the collab channel (owned by initiator, partner linked)
+    const { data: channel, error } = await sb
+      .from("channels")
+      .insert({
+        collective_id: myCollectiveId,
+        partner_collective_id: partnerCollectiveId,
+        name: `${myCollective.name} × ${partner.name}`,
+        type: "collab",
+        metadata: {
+          initiated_by: user.id,
+          my_collective_name: myCollective.name,
+          partner_collective_name: partner.name,
+        },
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (error || !channel) return { error: "Failed to create collab channel", channelId: null };
+
+    // Send a welcome message
+    await sb.from("messages").insert({
+      channel_id: channel.id,
+      user_id: user.id,
+      content: `Started a collab chat between ${myCollective.name} and ${partner.name}. Let's make something happen! 🌙`,
+      type: "system",
+    });
+
+    return { error: null, channelId: channel.id };
+  } catch (err) {
+    console.error("[startCollabChat]", err);
+    return { error: "Something went wrong", channelId: null };
   }
-
-  // Check if a collab channel already exists between these two
-  const { data: existing } = await sb
-    .from("channels")
-    .select("id")
-    .eq("collective_id", myCollectiveId)
-    .eq("partner_collective_id", partnerCollectiveId)
-    .eq("type", "collab")
-    .maybeSingle();
-
-  if (existing) return { error: null, channelId: existing.id };
-
-  // Also check the reverse direction
-  const { data: existingReverse } = await sb
-    .from("channels")
-    .select("id")
-    .eq("collective_id", partnerCollectiveId)
-    .eq("partner_collective_id", myCollectiveId)
-    .eq("type", "collab")
-    .maybeSingle();
-
-  if (existingReverse) return { error: null, channelId: existingReverse.id };
-
-  // Get partner collective name for the channel
-  const { data: partner } = await sb
-    .from("collectives")
-    .select("name")
-    .eq("id", partnerCollectiveId)
-    .maybeSingle();
-
-  const { data: myCollective } = await sb
-    .from("collectives")
-    .select("name")
-    .eq("id", myCollectiveId)
-    .maybeSingle();
-
-  if (!partner || !myCollective) return { error: "Collective not found", channelId: null };
-
-  // Create the collab channel (owned by initiator, partner linked)
-  const { data: channel, error } = await sb
-    .from("channels")
-    .insert({
-      collective_id: myCollectiveId,
-      partner_collective_id: partnerCollectiveId,
-      name: `${myCollective.name} × ${partner.name}`,
-      type: "collab",
-      metadata: {
-        initiated_by: user.id,
-        my_collective_name: myCollective.name,
-        partner_collective_name: partner.name,
-      },
-    })
-    .select("id")
-    .maybeSingle();
-
-  if (error) return { error: error.message, channelId: null };
-  if (!channel) return { error: "Failed to create channel", channelId: null };
-
-  // Send a welcome message
-  await sb.from("messages").insert({
-    channel_id: channel.id,
-    user_id: user.id,
-    content: `Started a collab chat between ${myCollective.name} and ${partner.name}. Let's make something happen! 🌙`,
-    type: "system",
-  });
-
-  return { error: null, channelId: channel.id };
 }
 
 /**
  * Get collab channels where this collective is either owner or partner.
  */
 export async function getCollabChannels(collectiveId: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  try {
+    if (!collectiveId?.trim()) return [];
 
-  const sb = createAdminClient();
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
 
-  // Verify user is a member of this collective
-  const { count: memberCount } = await sb
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", collectiveId)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
+    const sb = createAdminClient();
 
-  if (!memberCount || memberCount === 0) return [];
+    // Verify user is a member of this collective
+    const { count: memberCount } = await sb
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", collectiveId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
 
-  // Channels where we're the owner
-  const { data: owned } = await sb
-    .from("channels")
-    .select("*")
-    .eq("collective_id", collectiveId)
-    .eq("type", "collab");
+    if (!memberCount || memberCount === 0) return [];
 
-  // Channels where we're the partner
-  const { data: partnered } = await sb
-    .from("channels")
-    .select("*")
-    .eq("partner_collective_id", collectiveId)
-    .eq("type", "collab");
+    // Channels where we're the owner
+    const { data: owned } = await sb
+      .from("channels")
+      .select("*")
+      .eq("collective_id", collectiveId)
+      .eq("type", "collab");
 
-  return [...(owned ?? []), ...(partnered ?? [])];
+    // Channels where we're the partner
+    const { data: partnered } = await sb
+      .from("channels")
+      .select("*")
+      .eq("partner_collective_id", collectiveId)
+      .eq("type", "collab");
+
+    return [...(owned ?? []), ...(partnered ?? [])];
+  } catch (err) {
+    console.error("[getCollabChannels]", err);
+    return [];
+  }
 }
 
 /**
@@ -179,52 +201,62 @@ export async function getCollabChannels(collectiveId: string) {
  * When they sign up, the chat thread activates.
  */
 export async function inviteToCollab(myCollectiveId: string, email: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    if (!myCollectiveId?.trim() || !email?.trim()) {
+      return { error: "Collective ID and email are required" };
+    }
 
-  const sb = createAdminClient();
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated" };
 
-  // Verify user is a member of their collective
-  const { data: membership } = await sb
-    .from("collective_members")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("collective_id", myCollectiveId)
-    .is("deleted_at", null)
-    .maybeSingle();
+    const sb = createAdminClient();
 
-  if (!membership) return { error: "Not a member of this collective" };
+    // Verify user is a member of their collective
+    const { data: membership } = await sb
+      .from("collective_members")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("collective_id", myCollectiveId)
+      .is("deleted_at", null)
+      .maybeSingle();
 
-  // Check if already invited
-  const { data: existing } = await sb
-    .from("invitations")
-    .select("id, status")
-    .eq("collective_id", myCollectiveId)
-    .eq("email", email.toLowerCase().trim())
-    .eq("type", "collab")
-    .maybeSingle();
+    if (!membership) return { error: "Not a member of this collective" };
 
-  if (existing?.status === "pending") {
-    return { error: "Already invited" };
-  }
-
-  // Create or update invitation
-  if (existing) {
-    await sb
+    // Check if already invited
+    const { data: existing } = await sb
       .from("invitations")
-      .update({ status: "pending", invited_by: user.id, expires_at: new Date(Date.now() + 7 * 86400000).toISOString() })
-      .eq("id", existing.id);
-  } else {
-    const { error } = await sb.from("invitations").insert({
-      collective_id: myCollectiveId,
-      email: email.toLowerCase().trim(),
-      role: "collab",
-      type: "collab",
-      invited_by: user.id,
-    });
-    if (error) return { error: error.message };
-  }
+      .select("id, status")
+      .eq("collective_id", myCollectiveId)
+      .eq("email", email.toLowerCase().trim())
+      .eq("type", "collab")
+      .maybeSingle();
 
-  return { error: null };
+    if (existing?.status === "pending") {
+      return { error: "Already invited" };
+    }
+
+    // Create or update invitation
+    if (existing) {
+      const { error } = await sb
+        .from("invitations")
+        .update({ status: "pending", invited_by: user.id, expires_at: new Date(Date.now() + 7 * 86400000).toISOString() })
+        .eq("id", existing.id);
+      if (error) return { error: "Failed to send invitation" };
+    } else {
+      const { error } = await sb.from("invitations").insert({
+        collective_id: myCollectiveId,
+        email: email.toLowerCase().trim(),
+        role: "collab",
+        type: "collab",
+        invited_by: user.id,
+      });
+      if (error) return { error: "Failed to send invitation" };
+    }
+
+    return { error: null };
+  } catch (err) {
+    console.error("[inviteToCollab]", err);
+    return { error: "Something went wrong" };
+  }
 }

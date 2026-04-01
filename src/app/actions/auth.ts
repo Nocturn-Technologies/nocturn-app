@@ -58,7 +58,7 @@ export async function signUpUser(formData: {
 
   if (createError) {
     console.error("[signup] createUser failed:", createError.message);
-    return { error: createError.message };
+    return { error: "Failed to create account. Please try again." };
   }
 
   const userId = newUser.user.id;
@@ -131,7 +131,8 @@ export async function signUpUser(formData: {
   });
 
   if (signInError) {
-    return { error: signInError.message };
+    console.error("[signUpUser] sign-in after signup failed:", signInError.message);
+    return { error: "Account created but sign-in failed. Please try logging in." };
   }
 
   return { error: null };
@@ -276,7 +277,8 @@ export async function createCollective(formData: {
     .maybeSingle();
 
   if (collectiveError) {
-    return { error: collectiveError.message };
+    console.error("[createCollective] insert error:", collectiveError.message);
+    return { error: "Failed to create collective" };
   }
   if (!collective) return { error: "Failed to create collective" };
 
@@ -290,7 +292,8 @@ export async function createCollective(formData: {
     });
 
   if (memberError) {
-    return { error: memberError.message };
+    console.error("[createCollective] member insert error:", memberError.message);
+    return { error: "Failed to add you as admin" };
   }
 
   return { error: null };

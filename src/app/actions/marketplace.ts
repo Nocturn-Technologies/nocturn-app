@@ -79,12 +79,15 @@ export async function createMarketplaceProfile(data: {
     past_venues: data.pastVenues ?? null,
   });
 
-  if (error) return { error: (error as { message: string }).message, slug: null };
+  if (error) {
+    console.error("[createMarketplaceProfile]", error);
+    return { error: "Something went wrong", slug: null };
+  }
 
   revalidatePath("/dashboard/discover");
   return { error: null, slug };
   } catch (err) {
-    console.error("[createMarketplaceProfile] Unexpected error:", err);
+    console.error("[createMarketplaceProfile]", err);
     return { error: "Something went wrong", slug: null };
   }
 }
@@ -140,12 +143,15 @@ export async function updateMarketplaceProfile(data: {
     .update(updates)
     .eq("user_id", user.id);
 
-  if (error) return { error: (error as { message: string }).message };
+  if (error) {
+    console.error("[updateMarketplaceProfile]", error);
+    return { error: "Something went wrong" };
+  }
 
   revalidatePath("/dashboard/discover");
   return { error: null };
   } catch (err) {
-    console.error("[updateMarketplaceProfile] Unexpected error:", err);
+    console.error("[updateMarketplaceProfile]", err);
     return { error: "Something went wrong" };
   }
 }
@@ -208,46 +214,51 @@ export async function searchProfiles(filters: {
   city?: string | null;
   page?: number;
 }): Promise<{ profiles: Record<string, unknown>[]; total: number }> {
-  const admin = createAdminClient();
-  const page = filters.page ?? 1;
-  const perPage = 20;
-  const from = (page - 1) * perPage;
-  const to = from + perPage - 1;
+  try {
+    const admin = createAdminClient();
+    const page = filters.page ?? 1;
+    const perPage = 20;
+    const from = (page - 1) * perPage;
+    const to = from + perPage - 1;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query = (admin.from("marketplace_profiles") as any)
-    .select("id, slug, user_type, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, created_at", { count: "exact" })
-    .eq("is_active", true)
-    .order("created_at", { ascending: false })
-    .range(from, to);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query = (admin.from("marketplace_profiles") as any)
+      .select("id, slug, user_type, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, created_at", { count: "exact" })
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .range(from, to);
 
-  if (filters.type) {
-    query = query.eq("user_type", filters.type);
-  }
+    if (filters.type) {
+      query = query.eq("user_type", filters.type);
+    }
 
-  if (filters.city) {
-    const safeCity = sanitizeSearchInput(filters.city);
-    query = query.ilike("city", `%${safeCity}%`);
-  }
+    if (filters.city) {
+      const safeCity = sanitizeSearchInput(filters.city);
+      query = query.ilike("city", `%${safeCity}%`);
+    }
 
-  if (filters.query) {
-    const safeQuery = sanitizeSearchInput(filters.query);
-    query = query.or(
-      `display_name.ilike.%${safeQuery}%,bio.ilike.%${safeQuery}%`
-    );
-  }
+    if (filters.query) {
+      const safeQuery = sanitizeSearchInput(filters.query);
+      query = query.or(
+        `display_name.ilike.%${safeQuery}%,bio.ilike.%${safeQuery}%`
+      );
+    }
 
-  const { data, count, error } = await query;
+    const { data, count, error } = await query;
 
-  if (error) {
-    console.error("[marketplace] searchProfiles error:", error.message, error.details);
+    if (error) {
+      console.error("[searchProfiles]", error);
+      return { profiles: [], total: 0 };
+    }
+
+    return {
+      profiles: (data ?? []) as Record<string, unknown>[],
+      total: (count as number) ?? 0,
+    };
+  } catch (err) {
+    console.error("[searchProfiles]", err);
     return { profiles: [], total: 0 };
   }
-
-  return {
-    profiles: (data ?? []) as Record<string, unknown>[],
-    total: (count as number) ?? 0,
-  };
 }
 
 export async function saveProfile(
@@ -270,7 +281,8 @@ export async function saveProfile(
 
   // Ignore duplicate key (23505) — idempotent save
   if (error && (error as { code?: string }).code !== "23505") {
-    return { error: (error as { message: string }).message };
+    console.error("[saveProfile]", error);
+    return { error: "Something went wrong" };
   }
 
   // Contact upsert — best-effort industry sync for saved marketplace profile
@@ -337,12 +349,15 @@ export async function unsaveProfile(
     .eq("user_id", user.id)
     .eq("profile_id", profileId);
 
-  if (error) return { error: (error as { message: string }).message };
+  if (error) {
+    console.error("[unsaveProfile]", error);
+    return { error: "Something went wrong" };
+  }
 
   revalidatePath("/dashboard/discover");
   return { error: null };
   } catch (err) {
-    console.error("[unsaveProfile] Unexpected error:", err);
+    console.error("[unsaveProfile]", err);
     return { error: "Something went wrong" };
   }
 }
@@ -452,7 +467,10 @@ export async function sendInquiry(data: {
     status: "pending",
   });
 
-  if (error) return { error: (error as { message: string }).message };
+  if (error) {
+    console.error("[sendInquiry]", error);
+    return { error: "Something went wrong" };
+  }
 
   // Fire-and-forget: email the profile owner about the inquiry
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

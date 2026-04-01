@@ -15,6 +15,7 @@ function escapeHtml(str: string): string {
 
 // Generate a settlement report email and return it (for now, no Resend — just generates the content)
 export async function generateSettlementReport(settlementId: string) {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", report: null };
@@ -146,4 +147,8 @@ View full details: ${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.
       sent,
     },
   };
+  } catch (err) {
+    console.error("[generateSettlementReport]", err);
+    return { error: "Something went wrong", report: null };
+  }
 }

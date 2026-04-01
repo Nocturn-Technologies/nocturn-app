@@ -59,14 +59,15 @@ export async function generatePosterPrompt(eventData: {
   city?: string;
   styleDirection?: string;
 }): Promise<{ prompt: string; error: string | null }> {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { prompt: "", error: "Not authenticated" };
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { prompt: "", error: "Not authenticated" };
 
-  const { success: rlOk } = await rateLimitStrict(`ai-poster:${user.id}`, 10, 60_000);
-  if (!rlOk) return { prompt: "", error: "Too many requests. Please wait." };
+    const { success: rlOk } = await rateLimitStrict(`ai-poster:${user.id}`, 10, 60_000);
+    if (!rlOk) return { prompt: "", error: "Too many requests. Please wait." };
 
-  const userPrompt = `Design a poster for this event:
+    const userPrompt = `Design a poster for this event:
 
 EVENT: "${eventData.title}"
 GENRE: ${eventData.genre.length > 0 ? eventData.genre.join(", ") : "Electronic"}
@@ -76,21 +77,25 @@ ${eventData.styleDirection ? `PROMOTER'S VISION: "${eventData.styleDirection}"` 
 
 Generate the DALL-E image prompt. Make it iconic.`;
 
-  const result = await generateWithClaude(userPrompt, POSTER_SYSTEM_PROMPT);
+    const result = await generateWithClaude(userPrompt, POSTER_SYSTEM_PROMPT);
 
-  if (!result) {
-    // Smart fallback based on genre
-    const primaryGenre = (eventData.genre[0] || "").toLowerCase();
-    const fallback = GENRE_FALLBACKS[primaryGenre] || GENRE_FALLBACKS.default;
-    const styleBoost = eventData.styleDirection
-      ? `, ${eventData.styleDirection}`
-      : "";
+    if (!result) {
+      // Smart fallback based on genre
+      const primaryGenre = (eventData.genre[0] || "").toLowerCase();
+      const fallback = GENRE_FALLBACKS[primaryGenre] || GENRE_FALLBACKS.default;
+      const styleBoost = eventData.styleDirection
+        ? `, ${eventData.styleDirection}`
+        : "";
 
-    return {
-      prompt: `${fallback}${styleBoost}, no text no words no letters no typography, professional event poster design, 4K quality, Instagram-worthy`,
-      error: null,
-    };
+      return {
+        prompt: `${fallback}${styleBoost}, no text no words no letters no typography, professional event poster design, 4K quality, Instagram-worthy`,
+        error: null,
+      };
+    }
+
+    return { prompt: result.trim(), error: null };
+  } catch (err) {
+    console.error("[generatePosterPrompt]", err);
+    return { prompt: "", error: "Something went wrong" };
   }
-
-  return { prompt: result.trim(), error: null };
 }

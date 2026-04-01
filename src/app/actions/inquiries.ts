@@ -17,109 +17,124 @@ export interface InquiryItem {
 
 /** Get inquiries sent BY the current user */
 export async function getSentInquiries(): Promise<InquiryItem[]> {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
 
-  const sb = createAdminClient();
+    const sb = createAdminClient();
 
-  const { data } = await (sb.from("marketplace_inquiries") as any)
-    .select("id, message, inquiry_type, status, created_at, to_profile_id")
-    .eq("from_user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(50);
+    const { data } = await (sb.from("marketplace_inquiries") as any)
+      .select("id, message, inquiry_type, status, created_at, to_profile_id")
+      .eq("from_user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
 
-  if (!data || data.length === 0) return [];
+    if (!data || data.length === 0) return [];
 
-  // Enrich with profile display names
-  const enriched: InquiryItem[] = [];
-  for (const inq of data) {
-    const { data: profile } = await (sb.from("marketplace_profiles") as any)
-      .select("display_name, user_id")
-      .eq("id", inq.to_profile_id)
-      .maybeSingle();
-
-    let contactName = profile?.display_name || "Unknown";
-    let contactEmail: string | null = null;
-
-    if (profile?.user_id) {
-      const { data: u } = await sb
-        .from("users")
-        .select("full_name, email")
-        .eq("id", profile.user_id)
+    // Enrich with profile display names
+    const enriched: InquiryItem[] = [];
+    for (const inq of data) {
+      const { data: profile } = await (sb.from("marketplace_profiles") as any)
+        .select("display_name, user_id")
+        .eq("id", inq.to_profile_id)
         .maybeSingle();
-      if (u) {
-        contactName = u.full_name || contactName;
-        contactEmail = u.email;
+
+      let contactName = profile?.display_name || "Unknown";
+      let contactEmail: string | null = null;
+
+      if (profile?.user_id) {
+        const { data: u } = await sb
+          .from("users")
+          .select("full_name, email")
+          .eq("id", profile.user_id)
+          .maybeSingle();
+        if (u) {
+          contactName = u.full_name || contactName;
+          contactEmail = u.email;
+        }
       }
+
+      enriched.push({
+        id: inq.id,
+        message: inq.message,
+        inquiry_type: inq.inquiry_type,
+        status: inq.status,
+        created_at: inq.created_at,
+        contact_name: contactName,
+        contact_email: contactEmail,
+        profile_display_name: profile?.display_name || null,
+      });
     }
 
-    enriched.push({
-      id: inq.id,
-      message: inq.message,
-      inquiry_type: inq.inquiry_type,
-      status: inq.status,
-      created_at: inq.created_at,
-      contact_name: contactName,
-      contact_email: contactEmail,
-      profile_display_name: profile?.display_name || null,
-    });
+    return enriched;
+  } catch (err) {
+    console.error("[getSentInquiries]", err);
+    return [];
   }
-
-  return enriched;
 }
 
 /** Get inquiries sent TO the current user's marketplace profile */
 export async function getReceivedInquiries(): Promise<InquiryItem[]> {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
 
-  const sb = createAdminClient();
+    const sb = createAdminClient();
 
-  // Get marketplace profile
-  const { data: profile } = await (sb.from("marketplace_profiles") as any)
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!profile) return [];
-
-  const { data } = await (sb.from("marketplace_inquiries") as any)
-    .select("id, message, inquiry_type, status, created_at, from_user_id")
-    .eq("to_profile_id", profile.id)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  if (!data || data.length === 0) return [];
-
-  const enriched: InquiryItem[] = [];
-  for (const inq of data) {
-    const { data: sender } = await sb
-      .from("users")
-      .select("full_name, email")
-      .eq("id", inq.from_user_id)
+    // Get marketplace profile
+    const { data: profile } = await (sb.from("marketplace_profiles") as any)
+      .select("id")
+      .eq("user_id", user.id)
       .maybeSingle();
 
-    enriched.push({
-      id: inq.id,
-      message: inq.message,
-      inquiry_type: inq.inquiry_type,
-      status: inq.status,
-      created_at: inq.created_at,
-      contact_name: sender?.full_name || "Unknown",
-      contact_email: sender?.email || null,
-      profile_display_name: null,
-    });
-  }
+    if (!profile) return [];
 
-  return enriched;
+    const { data } = await (sb.from("marketplace_inquiries") as any)
+      .select("id, message, inquiry_type, status, created_at, from_user_id")
+      .eq("to_profile_id", profile.id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (!data || data.length === 0) return [];
+
+    const enriched: InquiryItem[] = [];
+    for (const inq of data) {
+      const { data: sender } = await sb
+        .from("users")
+        .select("full_name, email")
+        .eq("id", inq.from_user_id)
+        .maybeSingle();
+
+      enriched.push({
+        id: inq.id,
+        message: inq.message,
+        inquiry_type: inq.inquiry_type,
+        status: inq.status,
+        created_at: inq.created_at,
+        contact_name: sender?.full_name || "Unknown",
+        contact_email: sender?.email || null,
+        profile_display_name: null,
+      });
+    }
+
+    return enriched;
+  } catch (err) {
+    console.error("[getReceivedInquiries]", err);
+    return [];
+  }
 }
 
 export async function acceptInquiry(inquiryId: string): Promise<{
   error: string | null;
   channelId: string | null;
 }> {
+  try {
+  if (!inquiryId || typeof inquiryId !== "string" || inquiryId.length > 100) {
+    return { error: "Invalid inquiry ID", channelId: null };
+  }
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", channelId: null };
@@ -133,7 +148,7 @@ export async function acceptInquiry(inquiryId: string): Promise<{
     .maybeSingle();
 
   if (fetchErr || !inquiry) return { error: "Inquiry not found", channelId: null };
-  if (inquiry.status !== "pending") return { error: `Inquiry already ${inquiry.status}`, channelId: null };
+  if (inquiry.status !== "pending") return { error: "Inquiry has already been processed", channelId: null };
 
   // Verify the current user owns the target profile
   const { data: profile } = await (sb.from("marketplace_profiles") as any)
@@ -263,27 +278,44 @@ export async function acceptInquiry(inquiryId: string): Promise<{
     ? `${senderName} sent an inquiry: "${inquiry.message}"`
     : `${senderName} sent a ${inquiry.inquiry_type || "general"} inquiry. Start the conversation!`;
 
-  await sb.from("messages").insert({
+  const { error: msgErr } = await sb.from("messages").insert({
     channel_id: channelId,
     user_id: user.id,
     content: welcomeContent,
     type: "system",
   });
 
+  if (msgErr) {
+    console.error("[acceptInquiry] Failed to insert welcome message:", msgErr);
+  }
+
   // Update inquiry status to accepted
-  await (sb.from("marketplace_inquiries") as any)
+  const { error: statusErr } = await (sb.from("marketplace_inquiries") as any)
     .update({ status: "accepted" })
     .eq("id", inquiryId);
+
+  if (statusErr) {
+    console.error("[acceptInquiry] Failed to update inquiry status:", statusErr);
+  }
 
   revalidatePath("/dashboard/inquiries");
   revalidatePath("/dashboard/chat");
 
   return { error: null, channelId };
+  } catch (err) {
+    console.error("[acceptInquiry]", err);
+    return { error: "Something went wrong", channelId: null };
+  }
 }
 
 export async function rejectInquiry(inquiryId: string): Promise<{
   error: string | null;
 }> {
+  try {
+  if (!inquiryId || typeof inquiryId !== "string" || inquiryId.length > 100) {
+    return { error: "Invalid inquiry ID" };
+  }
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -297,7 +329,7 @@ export async function rejectInquiry(inquiryId: string): Promise<{
     .maybeSingle();
 
   if (!inquiry) return { error: "Inquiry not found" };
-  if (inquiry.status !== "pending") return { error: `Inquiry already ${inquiry.status}` };
+  if (inquiry.status !== "pending") return { error: "Inquiry has already been processed" };
 
   // Verify ownership
   const { data: profile } = await (sb.from("marketplace_profiles") as any)
@@ -309,11 +341,20 @@ export async function rejectInquiry(inquiryId: string): Promise<{
     return { error: "Not authorized" };
   }
 
-  await (sb.from("marketplace_inquiries") as any)
+  const { error: statusErr } = await (sb.from("marketplace_inquiries") as any)
     .update({ status: "rejected" })
     .eq("id", inquiryId);
+
+  if (statusErr) {
+    console.error("[rejectInquiry] Failed to update inquiry status:", statusErr);
+    return { error: "Something went wrong" };
+  }
 
   revalidatePath("/dashboard/inquiries");
 
   return { error: null };
+  } catch (err) {
+    console.error("[rejectInquiry]", err);
+    return { error: "Something went wrong" };
+  }
 }

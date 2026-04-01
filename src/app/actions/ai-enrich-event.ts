@@ -28,6 +28,7 @@ export async function enrichEventContent(input: {
   collectiveName?: string;
   tiers?: Array<{ name: string; price: number }>;
 }): Promise<EnrichedEventContent> {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { description: "", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
@@ -145,6 +146,10 @@ Return valid JSON:
     venueCapacity,
     venueAddress,
   };
+  } catch (err) {
+    console.error("[enrichEventContent]", err);
+    return { description: "", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
+  }
 }
 
 function formatDate(dateStr: string): string {

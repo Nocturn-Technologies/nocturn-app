@@ -54,6 +54,7 @@ export async function generateEventForecast(eventId: string): Promise<{
   error: string | null;
   forecast: ForecastData | null;
 }> {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", forecast: null };
@@ -301,6 +302,10 @@ Tier breakdown: ${tierData.map(t => `${t.name}: ${t.sold}/${t.capacity} @ $${t.p
       aiNarrative,
     },
   };
+  } catch (err) {
+    console.error("[generateEventForecast]", err);
+    return { error: "Something went wrong", forecast: null };
+  }
 }
 
 export interface PostEventRecap {
@@ -332,6 +337,7 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   error: string | null;
   recap: PostEventRecap | null;
 }> {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", recap: null };
@@ -611,4 +617,8 @@ Give specific, actionable advice. Reference the actual numbers.`;
       highlights,
     },
   };
+  } catch (err) {
+    console.error("[generatePostEventRecap]", err);
+    return { error: "Something went wrong", recap: null };
+  }
 }

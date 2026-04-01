@@ -148,7 +148,8 @@ export async function createEvent(input: CreateEventInput) {
       .maybeSingle();
 
     if (venueError) {
-      return { error: `Venue error: ${venueError.message}` };
+      console.error("[createEvent] venue error:", venueError.message);
+      return { error: "Failed to create venue" };
     }
     if (!newVenue) return { error: "Failed to create venue" };
     venueId = newVenue.id;
@@ -276,7 +277,8 @@ export async function createEvent(input: CreateEventInput) {
     .maybeSingle();
 
   if (eventError) {
-    return { error: `Event error: ${eventError.message}` };
+    console.error("[createEvent] event insert error:", eventError.message);
+    return { error: "Failed to create event" };
   }
   if (!event) return { error: "Failed to create event" };
 
@@ -296,7 +298,8 @@ export async function createEvent(input: CreateEventInput) {
       console.error("Ticket tier error:", tierError);
       // Cleanup: delete the event that was just created
       await admin.from("events").delete().eq("id", event.id);
-      return { error: `Ticket tier creation failed: ${tierError.message}` };
+      console.error("[createEvent] tier error:", tierError.message);
+      return { error: "Failed to create ticket tiers" };
     }
   }
 
@@ -384,7 +387,8 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
       .maybeSingle();
 
     if (venueError) {
-      return { error: `Venue error: ${venueError.message}` };
+      console.error("[updateEvent] venue error:", venueError.message);
+      return { error: "Failed to create venue" };
     }
     if (!newVenue) return { error: "Failed to create venue" };
     venueId = newVenue.id;
@@ -438,7 +442,8 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     .eq("id", eventId);
 
   if (eventError) {
-    return { error: `Event error: ${eventError.message}` };
+    console.error("[updateEvent] event update error:", eventError.message);
+    return { error: "Failed to update event" };
   }
 
   // Remove deleted tiers
@@ -450,7 +455,8 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
       .eq("event_id", eventId);
 
     if (deleteError) {
-      return { error: `Failed to remove tiers: ${deleteError.message}` };
+      console.error("[updateEvent] tier delete error:", deleteError.message);
+      return { error: "Failed to remove ticket tiers" };
     }
   }
 
@@ -471,7 +477,8 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
         .eq("event_id", eventId);
 
       if (tierError) {
-        return { error: `Tier update error: ${tierError.message}` };
+        console.error("[updateEvent] tier update error:", tierError.message);
+        return { error: "Failed to update ticket tier" };
       }
     } else {
       // Insert new tier
@@ -486,7 +493,8 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
         });
 
       if (tierError) {
-        return { error: `Tier insert error: ${tierError.message}` };
+        console.error("[updateEvent] tier insert error:", tierError.message);
+        return { error: "Failed to add ticket tier" };
       }
     }
   }
@@ -569,7 +577,10 @@ export async function publishEvent(eventId: string) {
     .update({ status: "published" })
     .eq("id", eventId);
 
-  if (error) return { error: `Failed to publish: ${error.message}` };
+  if (error) {
+    console.error("[publishEvent] update error:", error.message);
+    return { error: "Failed to publish event" };
+  }
 
   revalidatePath(`/dashboard/events/${eventId}`);
   revalidatePath("/dashboard/events");
@@ -612,7 +623,10 @@ export async function cancelEvent(eventId: string) {
     .update({ status: "cancelled" })
     .eq("id", eventId);
 
-  if (error) return { error: `Failed to cancel: ${error.message}` };
+  if (error) {
+    console.error("[cancelEvent] update error:", error.message);
+    return { error: "Failed to cancel event" };
+  }
 
   // --- Refund all paid and checked-in tickets ---
   const { data: paidTickets } = await admin
@@ -669,7 +683,8 @@ export async function cancelEvent(eventId: string) {
       if (result.status === "fulfilled") {
         refundResults.push({ ticketId: paidTickets[i].id, success: true });
       } else {
-        refundResults.push({ ticketId: paidTickets[i].id, success: false, error: result.reason?.message });
+        console.error(`[cancelEvent] refund failed for ticket ${paidTickets[i].id}:`, result.reason?.message);
+        refundResults.push({ ticketId: paidTickets[i].id, success: false, error: "Refund failed" });
       }
     });
   }
@@ -745,7 +760,10 @@ export async function completeEvent(eventId: string) {
     .update({ status: "completed" })
     .eq("id", eventId);
 
-  if (error) return { error: `Failed to complete: ${error.message}` };
+  if (error) {
+    console.error("[completeEvent] update error:", error.message);
+    return { error: "Failed to complete event" };
+  }
 
   revalidatePath(`/dashboard/events/${eventId}`);
   revalidatePath("/dashboard/events");
@@ -832,7 +850,10 @@ export async function updateEventDesign(eventId: string, input: EventDesignInput
     .update(updatePayload)
     .eq("id", eventId);
 
-  if (error) return { error: `Failed to update design: ${error.message}` };
+  if (error) {
+    console.error("[updateEventDesign] update error:", error.message);
+    return { error: "Failed to update event design" };
+  }
   return { error: null };
   } catch (err) {
     console.error("[updateEventDesign] Unexpected error:", err);

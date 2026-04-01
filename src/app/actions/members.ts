@@ -101,7 +101,8 @@ export async function inviteMember(
       });
 
     if (insertError) {
-      return { error: insertError.message };
+      console.error("[inviteMember] insert error:", insertError.message);
+      return { error: "Failed to add member" };
     }
 
     return { error: null, status: "added" as const };
@@ -136,7 +137,8 @@ export async function inviteMember(
       .eq("id", existingInvite.id);
 
     if (updateError) {
-      return { error: updateError.message };
+      console.error("[inviteMember] update error:", updateError.message);
+      return { error: "Failed to send invitation" };
     }
 
     // Send invitation email (non-blocking)
@@ -153,7 +155,8 @@ export async function inviteMember(
   });
 
   if (inviteError) {
-    return { error: inviteError.message };
+    console.error("[inviteMember] invite error:", inviteError.message);
+    return { error: "Failed to send invitation" };
   }
 
   // Send invitation email (non-blocking)
@@ -198,8 +201,10 @@ export async function getTeamMembers() {
     .is("deleted_at", null)
     .order("joined_at");
 
-  if (error)
-    return { error: error.message, userId: user.id, collectiveId, members: [] };
+  if (error) {
+    console.error("[getTeamMembers] members query error:", error.message);
+    return { error: "Failed to load team members", userId: user.id, collectiveId, members: [] };
+  }
 
   // Fetch user details separately via admin client
   const userIds = (memberRows ?? []).map((m) => m.user_id);
@@ -266,7 +271,8 @@ export async function getPendingInvitations(collectiveId: string) {
     .order("created_at", { ascending: false });
 
   if (error) {
-    return { error: error.message, data: null };
+    console.error("[getPendingInvitations] query error:", error.message);
+    return { error: "Failed to load invitations", data: null };
   }
 
   return { error: null, data };
@@ -313,7 +319,8 @@ export async function cancelInvitation(invitationId: string) {
     .eq("id", invitationId);
 
   if (error) {
-    return { error: error.message };
+    console.error("[cancelInvitation] delete error:", error.message);
+    return { error: "Failed to cancel invitation" };
   }
 
   return { error: null };
@@ -408,7 +415,8 @@ export async function acceptInvitation(token: string) {
     });
 
   if (memberError) {
-    return { error: memberError.message };
+    console.error("[acceptInvitation] member insert error:", memberError.message);
+    return { error: "Failed to join collective" };
   }
 
   // Mark invitation as accepted

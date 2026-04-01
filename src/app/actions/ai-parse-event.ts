@@ -49,6 +49,8 @@ export async function parseEventDetails(
   const { success: rlOk } = await rateLimitStrict(`ai-parse:${user.id}`, 20, 60_000);
   if (!rlOk) return { parsed: existingData as ParsedEventDetails, reply: "Too many requests. Please wait a moment." };
 
+  if (!message.trim()) return { parsed: existingData as ParsedEventDetails, reply: "I didn't catch that. Try telling me your event details." };
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const localParsed = localParse(message, existingData);
   const merged = { ...existingData, ...localParsed };

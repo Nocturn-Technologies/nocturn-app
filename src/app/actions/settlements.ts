@@ -128,7 +128,8 @@ export async function generateSettlement(eventId: string) {
         .maybeSingle();
       return { error: "Settlement already exists", settlementId: raceSettlement?.id };
     }
-    return { error: settlementError.message };
+    console.error("[generateSettlement] insert error:", settlementError.message);
+    return { error: "Failed to create settlement" };
   }
 
   if (!settlement) {
@@ -251,7 +252,10 @@ export async function approveSettlement(settlementId: string) {
     .eq("status", "draft")
     .select("id");
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[approveSettlement] update error:", error.message);
+    return { error: "Failed to approve settlement" };
+  }
 
   if (!updated || updated.length === 0) {
     return { error: "Settlement is not in draft status" };
@@ -362,7 +366,10 @@ export async function addEventExpense(input: {
     added_by: user.id,
   });
 
-  if (error) return { error: error.message };
+  if (error) {
+    console.error("[addEventExpense] insert error:", error.message);
+    return { error: "Failed to add expense" };
+  }
   revalidatePath("/dashboard/finance"); return { error: null };
   } catch (err) {
     console.error("[addEventExpense] Unexpected error:", err);

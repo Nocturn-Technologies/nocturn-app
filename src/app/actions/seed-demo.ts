@@ -11,6 +11,7 @@ import { randomUUID } from "crypto";
  * Call from browser console: fetch('/api/seed-demo', { method: 'POST' })
  */
 export async function seedDemoData(collectiveId: string) {
+  try {
   if (!process.env.ALLOW_SEED) {
     return { error: "Seeding is disabled" };
   }
@@ -68,7 +69,10 @@ export async function seedDemoData(collectiveId: string) {
     .upsert(artists, { onConflict: "slug" })
     .select("id, name, default_fee");
 
-  if (!insertedArtists) return { error: "Failed to create artists" };
+  if (!insertedArtists) {
+    console.error("[seedDemoData] Failed to create artists");
+    return { error: "Something went wrong" };
+  }
 
   // Create 3 past events (completed, with realistic dates)
   const now = new Date();
@@ -117,7 +121,8 @@ export async function seedDemoData(collectiveId: string) {
     .select("id, title, venue_id");
 
   if (eventError || !insertedEvents) {
-    return { error: `Failed to create events: ${eventError?.message}` };
+    console.error("[seedDemoData] Failed to create events:", eventError);
+    return { error: "Something went wrong" };
   }
 
   // Create ticket tiers + tickets + settlements for each event
@@ -175,16 +180,22 @@ export async function seedDemoData(collectiveId: string) {
 
     // Insert in batches of 100
     for (let batch = 0; batch < allTickets.length; batch += 100) {
-      await sb.from("tickets").insert(allTickets.slice(batch, batch + 100));
+      const { error: ticketErr } = await sb.from("tickets").insert(allTickets.slice(batch, batch + 100));
+      if (ticketErr) {
+        console.error("[seedDemoData] Failed to insert ticket batch:", ticketErr);
+      }
     }
 
     // Book artists
     const artistIndex = i % insertedArtists.length;
     const secondArtist = (i + 1) % insertedArtists.length;
-    await sb.from("event_artists").insert([
+    const { error: bookingErr } = await sb.from("event_artists").insert([
       { event_id: event.id, artist_id: insertedArtists[artistIndex].id, fee: insertedArtists[artistIndex].default_fee, status: "confirmed" },
       { event_id: event.id, artist_id: insertedArtists[secondArtist].id, fee: insertedArtists[secondArtist].default_fee, status: "confirmed" },
     ]);
+    if (bookingErr) {
+      console.error("[seedDemoData] Failed to book artists:", bookingErr);
+    }
 
     // Calculate and create settlement
     const grossRevenue = config.earlySold * config.earlyPrice
@@ -198,7 +209,7 @@ export async function seedDemoData(collectiveId: string) {
     const netRevenue = grossRevenue - stripeFees - platformFee;
     const profit = netRevenue - totalArtistFees;
 
-    await sb.from("settlements").insert({
+    const { error: settlementErr } = await sb.from("settlements").insert({
       event_id: event.id,
       collective_id: collectiveId,
       status: "approved",
@@ -210,6 +221,9 @@ export async function seedDemoData(collectiveId: string) {
       total_artist_fees: totalArtistFees,
       profit: profit,
     });
+    if (settlementErr) {
+      console.error("[seedDemoData] Failed to create settlement:", settlementErr);
+    }
   }
 
   // Summary
@@ -229,4 +243,8 @@ export async function seedDemoData(collectiveId: string) {
       artists: insertedArtists.length,
     },
   };
+  } catch (err) {
+    console.error("[seedDemoData]", err);
+    return { error: "Something went wrong" };
+  }
 }

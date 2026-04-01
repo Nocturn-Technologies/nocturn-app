@@ -142,24 +142,29 @@ Generate the morning briefing JSON array.`;
 // ─── Main Action ────────────────────────────────────────────────────────────
 
 export async function generateMorningBriefing(collectiveId: string): Promise<BriefingItem[]> {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
 
-  const { success: rlOk } = await rateLimitStrict(`ai-briefing:${user.id}`, 5, 60_000);
-  if (!rlOk) return [];
+    const { success: rlOk } = await rateLimitStrict(`ai-briefing:${user.id}`, 5, 60_000);
+    if (!rlOk) return [];
 
-  const sb = createAdminClient();
+    const sb = createAdminClient();
 
-  // Verify caller is a member of the supplied collective
-  const { count } = await sb
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", collectiveId)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-  if (!count) return [];
+    // Verify caller is a member of the supplied collective
+    const { count } = await sb
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", collectiveId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!count) return [];
 
-  // Generate (or return cached) briefing — cached per collective for 4 hours
-  return generateBriefingCached(collectiveId);
+    // Generate (or return cached) briefing — cached per collective for 4 hours
+    return generateBriefingCached(collectiveId);
+  } catch (err) {
+    console.error("[generateMorningBriefing]", err);
+    return [];
+  }
 }

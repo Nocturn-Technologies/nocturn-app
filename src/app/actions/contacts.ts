@@ -233,7 +233,8 @@ export async function getContacts(
   const { data, count: totalCount, error } = await query;
 
   if (error) {
-    return { ...empty, error: `Failed to fetch contacts: ${error.message}` };
+    console.error("[getContacts] query error:", error.message);
+    return { ...empty, error: "Failed to load contacts" };
   }
 
   const rows = (data ?? []) as Record<string, unknown>[];
@@ -329,7 +330,8 @@ export async function getContactDetail(
     .maybeSingle();
 
   if (contactError || !contactRow) {
-    return { error: contactError?.message ?? "Contact not found", detail: null };
+    if (contactError) console.error("[getContactDetail] query error:", contactError.message);
+    return { error: "Contact not found", detail: null };
   }
 
   // Verify user has access to this contact's collective
@@ -564,7 +566,8 @@ export async function importContacts(
       .select("id, created_at, updated_at");
 
     if (upsertError) {
-      result.errors.push(`Batch error: ${upsertError.message}`);
+      console.error("[importContacts] batch upsert error:", upsertError.message);
+      result.errors.push("Some contacts failed to import");
       result.skipped += rows.length;
       continue;
     }
@@ -642,7 +645,8 @@ export async function addContact(
     .maybeSingle();
 
   if (error || !row) {
-    return { error: error?.message ?? "Failed to add contact", contact: null };
+    if (error) console.error("[addContact] upsert error:", error.message);
+    return { error: "Failed to add contact", contact: null };
   }
 
   return { error: null, contact: rowToContact(row as Record<string, unknown>) };
@@ -715,7 +719,8 @@ export async function updateContact(
     .maybeSingle();
 
   if (error || !row) {
-    return { error: error?.message ?? "Failed to update contact", contact: null };
+    if (error) console.error("[updateContact] update error:", error.message);
+    return { error: "Failed to update contact", contact: null };
   }
 
   return { error: null, contact: rowToContact(row as Record<string, unknown>) };

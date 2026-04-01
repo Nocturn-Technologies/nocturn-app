@@ -20,6 +20,7 @@ export async function getEventReferralStats(eventId: string): Promise<{
   stats: ReferralStats[];
   totalReferrals: number;
 }> {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", stats: [], totalReferrals: 0 };
@@ -93,6 +94,10 @@ export async function getEventReferralStats(eventId: string): Promise<{
     stats,
     totalReferrals: tickets.length,
   };
+  } catch (err) {
+    console.error("[getEventReferralStats]", err);
+    return { error: "Something went wrong", stats: [], totalReferrals: 0 };
+  }
 }
 
 

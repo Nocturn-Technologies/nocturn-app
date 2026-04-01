@@ -58,44 +58,59 @@ export async function addGuest(input: {
   notes?: string | null;
   addedBy?: string | null;
 }) {
-  const { error: authError, userId } = await verifyEventAccess(input.eventId);
-  if (authError) return { error: authError };
+  try {
+    if (!input.eventId?.trim()) return { error: "Event ID is required" };
+    if (!input.name?.trim()) return { error: "Guest name is required" };
 
-  const supabase = createAdminClient();
+    const { error: authError, userId } = await verifyEventAccess(input.eventId);
+    if (authError) return { error: authError };
 
-  const { error } = await supabase.from("guest_list").insert({
-    event_id: input.eventId,
-    name: input.name.trim(),
-    email: input.email?.trim() || null,
-    phone: input.phone?.trim() || null,
-    plus_ones: input.plusOnes ?? 0,
-    status: "pending",
-    notes: input.notes?.trim() || null,
-    added_by: userId,
-  });
+    const supabase = createAdminClient();
 
-  if (error) return { error: error.message };
-  return { error: null };
+    const { error } = await supabase.from("guest_list").insert({
+      event_id: input.eventId,
+      name: input.name.trim(),
+      email: input.email?.trim() || null,
+      phone: input.phone?.trim() || null,
+      plus_ones: input.plusOnes ?? 0,
+      status: "pending",
+      notes: input.notes?.trim() || null,
+      added_by: userId,
+    });
+
+    if (error) return { error: "Failed to add guest" };
+    return { error: null };
+  } catch (err) {
+    console.error("[addGuest]", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function getGuestList(eventId: string): Promise<Guest[]> {
-  const { error: authError } = await verifyEventAccess(eventId);
-  if (authError) return [];
+  try {
+    if (!eventId?.trim()) return [];
 
-  const supabase = createAdminClient();
+    const { error: authError } = await verifyEventAccess(eventId);
+    if (authError) return [];
 
-  const { data, error } = await supabase
-    .from("guest_list")
-    .select("*")
-    .eq("event_id", eventId)
-    .order("created_at", { ascending: false });
+    const supabase = createAdminClient();
 
-  if (error) {
-    console.error("[guest-list] Failed to fetch:", error);
+    const { data, error } = await supabase
+      .from("guest_list")
+      .select("*")
+      .eq("event_id", eventId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[getGuestList]", error);
+      return [];
+    }
+
+    return (data ?? []) as Guest[];
+  } catch (err) {
+    console.error("[getGuestList]", err);
     return [];
   }
-
-  return (data ?? []) as Guest[];
 }
 
 /** Look up event_id from a guest record and verify access */
@@ -112,62 +127,83 @@ async function verifyGuestAccess(guestId: string): Promise<{ error: string | nul
 }
 
 export async function checkInGuest(guestId: string) {
-  const { error: authError } = await verifyGuestAccess(guestId);
-  if (authError) return { error: authError };
+  try {
+    if (!guestId?.trim()) return { error: "Guest ID is required" };
 
-  const supabase = createAdminClient();
+    const { error: authError } = await verifyGuestAccess(guestId);
+    if (authError) return { error: authError };
 
-  // Atomic status guard — only check in if not already checked in
-  const { data: updated, error } = await supabase
-    .from("guest_list")
-    .update({
-      status: "checked_in",
-      checked_in_at: new Date().toISOString(),
-    })
-    .eq("id", guestId)
-    .neq("status", "checked_in")
-    .select("id");
+    const supabase = createAdminClient();
 
-  if (error) return { error: error.message };
-  if (!updated || updated.length === 0) return { error: "Guest is already checked in" };
-  return { error: null };
+    // Atomic status guard — only check in if not already checked in
+    const { data: updated, error } = await supabase
+      .from("guest_list")
+      .update({
+        status: "checked_in",
+        checked_in_at: new Date().toISOString(),
+      })
+      .eq("id", guestId)
+      .neq("status", "checked_in")
+      .select("id");
+
+    if (error) return { error: "Failed to check in guest" };
+    if (!updated || updated.length === 0) return { error: "Guest is already checked in" };
+    return { error: null };
+  } catch (err) {
+    console.error("[checkInGuest]", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function updateGuestStatus(
   guestId: string,
   status: "pending" | "confirmed" | "checked_in" | "no_show"
 ) {
-  const { error: authError } = await verifyGuestAccess(guestId);
-  if (authError) return { error: authError };
+  try {
+    if (!guestId?.trim()) return { error: "Guest ID is required" };
 
-  const supabase = createAdminClient();
+    const { error: authError } = await verifyGuestAccess(guestId);
+    if (authError) return { error: authError };
 
-  const updates: Record<string, unknown> = { status };
+    const supabase = createAdminClient();
 
-  if (status === "checked_in") {
-    updates.checked_in_at = new Date().toISOString();
+    const updates: Record<string, unknown> = { status };
+
+    if (status === "checked_in") {
+      updates.checked_in_at = new Date().toISOString();
+    }
+
+    const { error } = await supabase
+      .from("guest_list")
+      .update(updates)
+      .eq("id", guestId);
+
+    if (error) return { error: "Failed to update guest status" };
+    return { error: null };
+  } catch (err) {
+    console.error("[updateGuestStatus]", err);
+    return { error: "Something went wrong" };
   }
-
-  const { error } = await supabase
-    .from("guest_list")
-    .update(updates)
-    .eq("id", guestId);
-
-  if (error) return { error: error.message };
-  return { error: null };
 }
 
 export async function removeGuest(guestId: string) {
-  const { error: authError } = await verifyGuestAccess(guestId);
-  if (authError) return { error: authError };
+  try {
+    if (!guestId?.trim()) return { error: "Guest ID is required" };
 
-  const supabase = createAdminClient();
+    const { error: authError } = await verifyGuestAccess(guestId);
+    if (authError) return { error: authError };
 
-  const { error } = await supabase
-    .from("guest_list")
-    .delete()
-    .eq("id", guestId);
+    const supabase = createAdminClient();
 
-  if (error) return { error: error.message };
-  return { error: null };
+    const { error } = await supabase
+      .from("guest_list")
+      .delete()
+      .eq("id", guestId);
+
+    if (error) return { error: "Failed to remove guest" };
+    return { error: null };
+  } catch (err) {
+    console.error("[removeGuest]", err);
+    return { error: "Something went wrong" };
+  }
 }

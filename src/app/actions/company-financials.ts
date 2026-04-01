@@ -75,226 +75,237 @@ export async function getCompanyFinancials(): Promise<{
   error: string | null;
   data: CompanyFinancials | null;
 }> {
-  const { user, collectiveIds } = await getCollectiveIds();
-  if (!user) return { error: "Not authenticated", data: null };
-  if (collectiveIds.length === 0)
+  try {
+    const { user, collectiveIds } = await getCollectiveIds();
+    if (!user) return { error: "Not authenticated", data: null };
+    if (collectiveIds.length === 0)
+      return {
+        error: null,
+        data: {
+          totalRevenue: 0,
+          totalExpenses: 0,
+          netProfit: 0,
+          totalTicketsSold: 0,
+          avgRevenuePerEvent: 0,
+          totalEvents: 0,
+          profitMargin: 0,
+        },
+      };
+
+    const admin = createAdminClient();
+
+    // Get all settlements for aggregates
+    const { data: settlements } = await admin
+      .from("settlements")
+      .select(
+        "gross_revenue, net_revenue, profit, platform_fee, stripe_fees, total_artist_fees, total_costs, event_id"
+      )
+      .in("collective_id", collectiveIds);
+
+    // Get ticket counts for settled events
+    const settledEventIds = (settlements ?? []).map((s) => s.event_id);
+    let totalTicketsSold = 0;
+
+    if (settledEventIds.length > 0) {
+      const { count } = await admin
+        .from("tickets")
+        .select("*", { count: "exact", head: true })
+        .in("event_id", settledEventIds)
+        .in("status", ["paid", "checked_in"]);
+      totalTicketsSold = count ?? 0;
+    }
+
+    // Also count tickets for unsettled completed events
+    const { data: allEvents } = await admin
+      .from("events")
+      .select("id")
+      .in("collective_id", collectiveIds)
+      .in("status", ["completed", "published"])
+      .is("deleted_at", null);
+
+    const unsettledIds = (allEvents ?? [])
+      .map((e) => e.id)
+      .filter((id) => !settledEventIds.includes(id));
+
+    if (unsettledIds.length > 0) {
+      const { count } = await admin
+        .from("tickets")
+        .select("*", { count: "exact", head: true })
+        .in("event_id", unsettledIds)
+        .in("status", ["paid", "checked_in"]);
+      totalTicketsSold += count ?? 0;
+    }
+
+    const totalRevenue = (settlements ?? []).reduce(
+      (sum, s) => sum + Number(s.gross_revenue),
+      0
+    );
+    const totalCosts = (settlements ?? []).reduce(
+      (sum, s) =>
+        sum +
+        Number(s.stripe_fees) +
+        Number(s.platform_fee) +
+        Number(s.total_artist_fees) +
+        Number(s.total_costs),
+      0
+    );
+    const netProfit = (settlements ?? []).reduce(
+      (sum, s) => sum + Number(s.profit),
+      0
+    );
+    // Count ALL events (not just settlements) so the overview shows even pre-revenue
+    const totalEvents = (allEvents ?? []).length;
+
     return {
       error: null,
       data: {
-        totalRevenue: 0,
-        totalExpenses: 0,
-        netProfit: 0,
-        totalTicketsSold: 0,
-        avgRevenuePerEvent: 0,
-        totalEvents: 0,
-        profitMargin: 0,
+        totalRevenue,
+        totalExpenses: totalCosts,
+        netProfit,
+        totalTicketsSold,
+        avgRevenuePerEvent: totalEvents > 0 ? totalRevenue / totalEvents : 0,
+        totalEvents,
+        profitMargin: totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0,
       },
     };
-
-  const admin = createAdminClient();
-
-  // Get all settlements for aggregates
-  const { data: settlements } = await admin
-    .from("settlements")
-    .select(
-      "gross_revenue, net_revenue, profit, platform_fee, stripe_fees, total_artist_fees, total_costs, event_id"
-    )
-    .in("collective_id", collectiveIds);
-
-  // Get ticket counts for settled events
-  const settledEventIds = (settlements ?? []).map((s) => s.event_id);
-  let totalTicketsSold = 0;
-
-  if (settledEventIds.length > 0) {
-    const { count } = await admin
-      .from("tickets")
-      .select("*", { count: "exact", head: true })
-      .in("event_id", settledEventIds)
-      .in("status", ["paid", "checked_in"]);
-    totalTicketsSold = count ?? 0;
+  } catch (err) {
+    console.error("[getCompanyFinancials]", err);
+    return { error: "Something went wrong", data: null };
   }
-
-  // Also count tickets for unsettled completed events
-  const { data: allEvents } = await admin
-    .from("events")
-    .select("id")
-    .in("collective_id", collectiveIds)
-    .in("status", ["completed", "published"])
-    .is("deleted_at", null);
-
-  const unsettledIds = (allEvents ?? [])
-    .map((e) => e.id)
-    .filter((id) => !settledEventIds.includes(id));
-
-  if (unsettledIds.length > 0) {
-    const { count } = await admin
-      .from("tickets")
-      .select("*", { count: "exact", head: true })
-      .in("event_id", unsettledIds)
-      .in("status", ["paid", "checked_in"]);
-    totalTicketsSold += count ?? 0;
-  }
-
-  const totalRevenue = (settlements ?? []).reduce(
-    (sum, s) => sum + Number(s.gross_revenue),
-    0
-  );
-  const totalCosts = (settlements ?? []).reduce(
-    (sum, s) =>
-      sum +
-      Number(s.stripe_fees) +
-      Number(s.platform_fee) +
-      Number(s.total_artist_fees) +
-      Number(s.total_costs),
-    0
-  );
-  const netProfit = (settlements ?? []).reduce(
-    (sum, s) => sum + Number(s.profit),
-    0
-  );
-  // Count ALL events (not just settlements) so the overview shows even pre-revenue
-  const totalEvents = (allEvents ?? []).length;
-
-  return {
-    error: null,
-    data: {
-      totalRevenue,
-      totalExpenses: totalCosts,
-      netProfit,
-      totalTicketsSold,
-      avgRevenuePerEvent: totalEvents > 0 ? totalRevenue / totalEvents : 0,
-      totalEvents,
-      profitMargin: totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0,
-    },
-  };
 }
 
 export async function getEventFinancialSummaries(): Promise<{
   error: string | null;
   data: EventFinancialSummary[];
 }> {
-  const { user, collectiveIds } = await getCollectiveIds();
-  if (!user) return { error: "Not authenticated", data: [] };
-  if (collectiveIds.length === 0) return { error: null, data: [] };
+  try {
+    const { user, collectiveIds } = await getCollectiveIds();
+    if (!user) return { error: "Not authenticated", data: [] };
+    if (collectiveIds.length === 0) return { error: null, data: [] };
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
 
-  // Get all events with settlements
-  const [{ data: settlements }, { data: allEvents }] = await Promise.all([
-    admin
-      .from("settlements")
-      .select(
-        "id, event_id, status, gross_revenue, net_revenue, profit, platform_fee, stripe_fees, total_artist_fees, total_costs, events(title, starts_at, status)"
-      )
-      .in("collective_id", collectiveIds)
-      .order("created_at", { ascending: false }),
-    admin
-      .from("events")
-      .select("id, title, starts_at, status")
-      .in("collective_id", collectiveIds)
-      .in("status", ["published", "completed", "draft"])
-      .is("deleted_at", null)
-      .order("starts_at", { ascending: false }),
-  ]);
+    // Get all events with settlements
+    const [{ data: settlements }, { data: allEvents }] = await Promise.all([
+      admin
+        .from("settlements")
+        .select(
+          "id, event_id, status, gross_revenue, net_revenue, profit, platform_fee, stripe_fees, total_artist_fees, total_costs, events(title, starts_at, status)"
+        )
+        .in("collective_id", collectiveIds)
+        .order("created_at", { ascending: false }),
+      admin
+        .from("events")
+        .select("id, title, starts_at, status")
+        .in("collective_id", collectiveIds)
+        .in("status", ["published", "completed", "draft"])
+        .is("deleted_at", null)
+        .order("starts_at", { ascending: false }),
+    ]);
 
-  const settledEventIds = (settlements ?? []).map((s) => s.event_id);
+    const settledEventIds = (settlements ?? []).map((s) => s.event_id);
 
-  // Get ticket counts per event
-  const eventIds = [
-    ...new Set([
-      ...settledEventIds,
-      ...(allEvents ?? []).map((e) => e.id),
-    ]),
-  ];
+    // Get ticket counts per event
+    const eventIds = [
+      ...new Set([
+        ...settledEventIds,
+        ...(allEvents ?? []).map((e) => e.id),
+      ]),
+    ];
 
-  let ticketCounts: Record<string, number> = {};
-  let ticketRevenue: Record<string, number> = {};
-  if (eventIds.length > 0) {
-    const { data: tickets } = await admin
-      .from("tickets")
-      .select("event_id, price_paid")
-      .in("event_id", eventIds)
-      .in("status", ["paid", "checked_in"]);
+    let ticketCounts: Record<string, number> = {};
+    let ticketRevenue: Record<string, number> = {};
+    if (eventIds.length > 0) {
+      const { data: tickets } = await admin
+        .from("tickets")
+        .select("event_id, price_paid")
+        .in("event_id", eventIds)
+        .in("status", ["paid", "checked_in"]);
 
-    (tickets ?? []).forEach((t) => {
-      ticketCounts[t.event_id] = (ticketCounts[t.event_id] || 0) + 1;
-      ticketRevenue[t.event_id] = (ticketRevenue[t.event_id] || 0) + Number(t.price_paid || 0);
-    });
-  }
+      (tickets ?? []).forEach((t) => {
+        ticketCounts[t.event_id] = (ticketCounts[t.event_id] || 0) + 1;
+        ticketRevenue[t.event_id] = (ticketRevenue[t.event_id] || 0) + Number(t.price_paid || 0);
+      });
+    }
 
-  const results: EventFinancialSummary[] = [];
+    const results: EventFinancialSummary[] = [];
 
-  // Add settled events
-  (settlements ?? []).forEach((s) => {
-    const event = s.events as unknown as {
-      title: string;
-      starts_at: string;
-      status: string;
-    } | null;
-    const gross = Number(s.gross_revenue);
-    const totalExp =
-      Number(s.stripe_fees) +
-      Number(s.platform_fee) +
-      Number(s.total_artist_fees) +
-      Number(s.total_costs);
-    const profit = Number(s.profit);
+    // Add settled events
+    (settlements ?? []).forEach((s) => {
+      const event = s.events as unknown as {
+        title: string;
+        starts_at: string;
+        status: string;
+      } | null;
+      const gross = Number(s.gross_revenue);
+      const totalExp =
+        Number(s.stripe_fees) +
+        Number(s.platform_fee) +
+        Number(s.total_artist_fees) +
+        Number(s.total_costs);
+      const profit = Number(s.profit);
 
-    results.push({
-      id: s.id,
-      eventId: s.event_id,
-      title: event?.title ?? "Unknown Event",
-      date: event?.starts_at ?? "",
-      ticketsSold: ticketCounts[s.event_id] ?? 0,
-      grossRevenue: gross,
-      totalExpenses: totalExp,
-      netRevenue: Number(s.net_revenue),
-      profit,
-      status: s.status,
-      eventStatus: event?.status ?? "unknown",
-      margin: gross > 0 ? (profit / gross) * 100 : 0,
-    });
-  });
-
-  // Add unsettled events — show estimated revenue from ticket sales
-  (allEvents ?? [])
-    .filter((e) => !settledEventIds.includes(e.id))
-    .forEach((e) => {
-      const sold = ticketCounts[e.id] ?? 0;
-      const gross = ticketRevenue[e.id] ?? 0;
       results.push({
-        id: e.id,
-        eventId: e.id,
-        title: e.title,
-        date: e.starts_at,
-        ticketsSold: sold,
-        grossRevenue: Math.round(gross * 100) / 100,
-        totalExpenses: 0,
-        netRevenue: Math.round(gross * 100) / 100,
-        profit: 0,
-        status: "unsettled",
-        eventStatus: e.status,
-        margin: 0,
+        id: s.id,
+        eventId: s.event_id,
+        title: event?.title ?? "Unknown Event",
+        date: event?.starts_at ?? "",
+        ticketsSold: ticketCounts[s.event_id] ?? 0,
+        grossRevenue: gross,
+        totalExpenses: totalExp,
+        netRevenue: Number(s.net_revenue),
+        profit,
+        status: s.status,
+        eventStatus: event?.status ?? "unknown",
+        margin: gross > 0 ? (profit / gross) * 100 : 0,
       });
     });
 
-  // Sort by date descending
-  results.sort(
-    (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-  );
+    // Add unsettled events — show estimated revenue from ticket sales
+    (allEvents ?? [])
+      .filter((e) => !settledEventIds.includes(e.id))
+      .forEach((e) => {
+        const sold = ticketCounts[e.id] ?? 0;
+        const gross = ticketRevenue[e.id] ?? 0;
+        results.push({
+          id: e.id,
+          eventId: e.id,
+          title: e.title,
+          date: e.starts_at,
+          ticketsSold: sold,
+          grossRevenue: Math.round(gross * 100) / 100,
+          totalExpenses: 0,
+          netRevenue: Math.round(gross * 100) / 100,
+          profit: 0,
+          status: "unsettled",
+          eventStatus: e.status,
+          margin: 0,
+        });
+      });
 
-  return { error: null, data: results };
+    // Sort by date descending
+    results.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+
+    return { error: null, data: results };
+  } catch (err) {
+    console.error("[getEventFinancialSummaries]", err);
+    return { error: "Something went wrong", data: [] };
+  }
 }
 
 export async function getRevenueForecast(): Promise<{
   error: string | null;
   data: RevenueForecastItem[];
 }> {
-  const { user, collectiveIds } = await getCollectiveIds();
-  if (!user) return { error: "Not authenticated", data: [] };
-  if (collectiveIds.length === 0) return { error: null, data: [] };
+  try {
+    const { user, collectiveIds } = await getCollectiveIds();
+    if (!user) return { error: "Not authenticated", data: [] };
+    if (collectiveIds.length === 0) return { error: null, data: [] };
 
-  const admin = createAdminClient();
-  const now = new Date();
+    const admin = createAdminClient();
+    const now = new Date();
 
   // Get upcoming published events (include events starting today)
   const todayStart = new Date(now);
@@ -416,5 +427,9 @@ export async function getRevenueForecast(): Promise<{
     };
   });
 
-  return { error: null, data: results };
+    return { error: null, data: results };
+  } catch (err) {
+    console.error("[getRevenueForecast]", err);
+    return { error: "Something went wrong", data: [] };
+  }
 }

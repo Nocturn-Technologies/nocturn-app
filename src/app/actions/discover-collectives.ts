@@ -28,6 +28,7 @@ export async function getDiscoverCollectives(opts?: {
   city?: string | null;
   page?: number;
 }): Promise<{ collectives: DiscoverCollective[]; total: number }> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -149,4 +150,8 @@ export async function getDiscoverCollectives(opts?: {
   }));
 
   return { collectives: result, total: count ?? 0 };
+  } catch (err) {
+    console.error("[getDiscoverCollectives]", err);
+    return { collectives: [], total: 0 };
+  }
 }

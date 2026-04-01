@@ -48,6 +48,7 @@ export async function getPostEventInsights(eventId: string): Promise<{
   error: string | null;
   insights: PostEventInsight[];
 }> {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", insights: [] };
@@ -214,4 +215,8 @@ export async function getPostEventInsights(eventId: string): Promise<{
   });
 
   return { error: null, insights };
+  } catch (err) {
+    console.error("[getPostEventInsights]", err);
+    return { error: "Something went wrong", insights: [] };
+  }
 }

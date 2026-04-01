@@ -234,7 +234,8 @@ export async function getEventSuggestions(
   }
 
   return suggestions;
-  } catch {
+  } catch (err) {
+    console.error("[getEventSuggestions]", err);
     return [];
   }
 }

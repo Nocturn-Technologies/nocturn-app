@@ -30,124 +30,146 @@ export async function addExternalEvent(data: {
   eventDate?: string;
   venueName?: string;
 }) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", link: null };
-
-  // Validate URL — only HTTPS allowed to prevent open redirect
   try {
-    const parsed = new URL(data.externalUrl);
-    if (parsed.protocol !== "https:") {
-      return { error: "Only HTTPS URLs are allowed", link: null };
+    if (!data.title?.trim() || !data.externalUrl?.trim()) {
+      return { error: "Title and URL are required", link: null };
     }
-  } catch {
-    return { error: "Invalid URL", link: null };
-  }
 
-  const admin = createAdminClient();
-  const platform = detectPlatform(data.externalUrl);
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", link: null };
 
-  // Create external event
-  const { data: extEvent, error: insertError } = await admin
-    .from("external_events")
-    .insert({
-      promoter_id: user.id,
-      title: data.title,
-      external_url: data.externalUrl,
-      platform,
-      event_date: data.eventDate || null,
-      venue_name: data.venueName || null,
-    })
-    .select("id")
-    .maybeSingle();
+    // Validate URL — only HTTPS allowed to prevent open redirect
+    try {
+      const parsed = new URL(data.externalUrl);
+      if (parsed.protocol !== "https:") {
+        return { error: "Only HTTPS URLs are allowed", link: null };
+      }
+    } catch {
+      return { error: "Invalid URL", link: null };
+    }
 
-  if (insertError || !extEvent) {
-    return { error: insertError?.message || "Failed to create event", link: null };
-  }
+    const admin = createAdminClient();
+    const platform = detectPlatform(data.externalUrl);
 
-  // Create tracked promo link with collision retry
-  let token = "";
-  let linkError = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    token = generateToken();
-    const { error } = await admin
-      .from("promo_links")
+    // Create external event
+    const { data: extEvent, error: insertError } = await admin
+      .from("external_events")
       .insert({
         promoter_id: user.id,
-        external_event_id: extEvent.id,
-        token,
-      });
+        title: data.title,
+        external_url: data.externalUrl,
+        platform,
+        event_date: data.eventDate || null,
+        venue_name: data.venueName || null,
+      })
+      .select("id")
+      .maybeSingle();
 
-    if (!error) {
-      linkError = null;
-      break;
+    if (insertError || !extEvent) {
+      return { error: "Failed to create event", link: null };
     }
 
-    // 23505 = unique_violation — retry with a new token
-    if (error.code === "23505") {
-      linkError = error;
-      continue;
+    // Create tracked promo link with collision retry
+    let token = "";
+    let linkError = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      token = generateToken();
+      const { error } = await admin
+        .from("promo_links")
+        .insert({
+          promoter_id: user.id,
+          external_event_id: extEvent.id,
+          token,
+        });
+
+      if (!error) {
+        linkError = null;
+        break;
+      }
+
+      // 23505 = unique_violation — retry with a new token
+      if (error.code === "23505") {
+        linkError = error;
+        continue;
+      }
+
+      // Any other error — bail immediately
+      return { error: "Failed to create promo link", link: null };
     }
 
-    // Any other error — bail immediately
-    return { error: error.message, link: null };
-  }
+    if (linkError) {
+      return { error: "Failed to generate unique link. Please try again.", link: null };
+    }
 
-  if (linkError) {
-    return { error: "Failed to generate unique link. Please try again.", link: null };
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+    return { error: null, link: `${APP_URL}/go/${token}` };
+  } catch (err) {
+    console.error("[addExternalEvent]", err);
+    return { error: "Something went wrong", link: null };
   }
-
-  const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
-  return { error: null, link: `${APP_URL}/go/${token}` };
 }
 
 export async function getPromoterExternalEvents() {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
 
-  const { data } = await admin
-    .from("external_events")
-    .select("id, title, external_url, platform, event_date, venue_name, promo_links(token, click_count)")
-    .eq("promoter_id", user.id)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    const { data } = await admin
+      .from("external_events")
+      .select("id, title, external_url, platform, event_date, venue_name, promo_links(token, click_count)")
+      .eq("promoter_id", user.id)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
 
-  return ((data ?? []) as unknown as {
-    id: string;
-    title: string;
-    external_url: string;
-    platform: string | null;
-    event_date: string | null;
-    venue_name: string | null;
-    promo_links: { token: string; click_count: number }[] | null;
-  }[]).map((e) => ({
-    id: e.id,
-    title: e.title,
-    externalUrl: e.external_url,
-    platform: e.platform,
-    eventDate: e.event_date,
-    venueName: e.venue_name,
-    token: e.promo_links?.[0]?.token ?? null,
-    clickCount: e.promo_links?.[0]?.click_count ?? 0,
-  }));
+    return ((data ?? []) as unknown as {
+      id: string;
+      title: string;
+      external_url: string;
+      platform: string | null;
+      event_date: string | null;
+      venue_name: string | null;
+      promo_links: { token: string; click_count: number }[] | null;
+    }[]).map((e) => ({
+      id: e.id,
+      title: e.title,
+      externalUrl: e.external_url,
+      platform: e.platform,
+      eventDate: e.event_date,
+      venueName: e.venue_name,
+      token: e.promo_links?.[0]?.token ?? null,
+      clickCount: e.promo_links?.[0]?.click_count ?? 0,
+    }));
+  } catch (err) {
+    console.error("[getPromoterExternalEvents]", err);
+    return [];
+  }
 }
 
 export async function deleteExternalEvent(eventId: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    if (!eventId?.trim()) return { error: "Event ID is required" };
 
-  const admin = createAdminClient();
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated" };
 
-  // Soft delete — only if owned by this user
-  const { error } = await admin
-    .from("external_events")
-    .update({ deleted_at: new Date().toISOString() })
-    .eq("id", eventId)
-    .eq("promoter_id", user.id);
+    const admin = createAdminClient();
 
-  return { error: error?.message ?? null };
+    // Soft delete — only if owned by this user
+    const { error } = await admin
+      .from("external_events")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", eventId)
+      .eq("promoter_id", user.id);
+
+    if (error) return { error: "Failed to delete event" };
+    return { error: null };
+  } catch (err) {
+    console.error("[deleteExternalEvent]", err);
+    return { error: "Something went wrong" };
+  }
 }

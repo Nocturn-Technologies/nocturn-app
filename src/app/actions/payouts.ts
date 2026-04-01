@@ -5,62 +5,67 @@ import { createAdminClient } from "@/lib/supabase/config";
 
 // Mark a settlement as paid (manual payout — e-transfer, Venmo, etc.)
 export async function markSettlementPaid(settlementId: string, payoutMethod?: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated" };
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
 
-  // Get settlement
-  const { data: settlement } = await admin
-    .from("settlements")
-    .select("id, status, collective_id")
-    .eq("id", settlementId)
-    .maybeSingle();
+    // Get settlement
+    const { data: settlement } = await admin
+      .from("settlements")
+      .select("id, status, collective_id")
+      .eq("id", settlementId)
+      .maybeSingle();
 
-  if (!settlement) return { error: "Settlement not found" };
-  if (settlement.status !== "approved") return { error: "Settlement must be approved first" };
+    if (!settlement) return { error: "Settlement not found" };
+    if (settlement.status !== "approved") return { error: "Settlement must be approved first" };
 
-  // Verify user is a member of this collective
-  const { count } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", settlement.collective_id)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
+    // Verify user is a member of this collective
+    const { count } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", settlement.collective_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
 
-  if (!count || count === 0) return { error: "You don't have permission" };
+    if (!count || count === 0) return { error: "You don't have permission" };
 
-  // Mark all pending line items as paid
-  const { error: linesError } = await admin
-    .from("settlement_lines")
-    .update({
-      payout_status: "paid",
-    })
-    .eq("settlement_id", settlementId)
-    .eq("payout_status", "pending");
+    // Mark all pending line items as paid
+    const { error: linesError } = await admin
+      .from("settlement_lines")
+      .update({
+        payout_status: "paid",
+      })
+      .eq("settlement_id", settlementId)
+      .eq("payout_status", "pending");
 
-  if (linesError) {
-    console.error("Failed to update settlement lines:", linesError);
-    return { error: linesError.message };
+    if (linesError) {
+      console.error("Failed to update settlement lines:", linesError);
+      return { error: "Something went wrong" };
+    }
+
+    // Update settlement status
+    const { error: settlementError } = await admin
+      .from("settlements")
+      .update({
+        status: "paid",
+        updated_at: new Date().toISOString(),
+        metadata: {
+          payout_method: payoutMethod || "manual",
+          paid_by: user.id,
+          paid_at: new Date().toISOString(),
+        },
+      })
+      .eq("id", settlementId);
+
+    if (settlementError) return { error: "Something went wrong" };
+
+    return { error: null };
+  } catch (err) {
+    console.error("[markSettlementPaid]", err);
+    return { error: "Something went wrong" };
   }
-
-  // Update settlement status
-  const { error: settlementError } = await admin
-    .from("settlements")
-    .update({
-      status: "paid",
-      updated_at: new Date().toISOString(),
-      metadata: {
-        payout_method: payoutMethod || "manual",
-        paid_by: user.id,
-        paid_at: new Date().toISOString(),
-      },
-    })
-    .eq("id", settlementId);
-
-  if (settlementError) return { error: settlementError.message };
-
-  return { error: null };
 }
 

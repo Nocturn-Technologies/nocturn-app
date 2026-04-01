@@ -48,7 +48,10 @@ export async function createArtist(formData: {
     .select("id, name, slug")
     .maybeSingle();
 
-  if (error) return { error: (error as { message: string }).message, artist: null };
+  if (error) {
+    console.error("[createArtist] insert error:", (error as { message: string }).message);
+    return { error: "Failed to create artist", artist: null };
+  }
   return { error: null, artist: artist as { id: string; name: string; slug: string } };
   } catch (err) {
     console.error("[createArtist] Unexpected error:", err);
@@ -101,7 +104,10 @@ export async function addArtistToEvent(formData: {
     notes: formData.notes,
   });
 
-  if (error) return { error: (error as { message: string }).message };
+  if (error) {
+    console.error("[addArtistToEvent] insert error:", (error as { message: string }).message);
+    return { error: "Failed to add artist to event" };
+  }
 
   // Contact upsert — best-effort industry sync for booked artist
   try {
@@ -178,7 +184,10 @@ export async function updateBookingStatus(formData: {
     .update({ status: formData.status })
     .eq("id", formData.eventArtistId);
 
-  if (error) return { error: (error as { message: string }).message };
+  if (error) {
+    console.error("[updateBookingStatus] update error:", (error as { message: string }).message);
+    return { error: "Failed to update booking status" };
+  }
   return { error: null };
   } catch (err) {
     console.error("[updateBookingStatus] Unexpected error:", err);

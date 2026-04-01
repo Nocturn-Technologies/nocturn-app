@@ -23,6 +23,7 @@ interface OnboardingEventInput {
  * Creates a draft event with one ticket tier — minimal fields, no venue required.
  */
 export async function createOnboardingEvent(input: OnboardingEventInput) {
+  try {
   // Input validation
   if (!input.collectiveSlug || input.collectiveSlug.length > 100) return { error: "Invalid collective slug.", eventSlug: null };
   if (!input.title || input.title.length > 200) return { error: "Title is required and must be under 200 characters.", eventSlug: null };
@@ -140,8 +141,8 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
     .maybeSingle();
 
   if (eventError) {
-    console.error("[onboarding-event] event insert failed:", eventError.message);
-    return { error: eventError.message, eventSlug: null };
+    console.error("[createOnboardingEvent]", eventError);
+    return { error: "Something went wrong", eventSlug: null };
   }
 
   if (!event) {
@@ -160,9 +161,13 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
     });
 
   if (tierError) {
-    console.error("[onboarding-event] tier insert failed:", tierError.message);
+    console.error("[createOnboardingEvent] tier insert failed:", tierError);
     // Non-fatal — event exists, tier can be added later
   }
 
   return { error: null, eventSlug: event.slug };
+  } catch (err) {
+    console.error("[createOnboardingEvent]", err);
+    return { error: "Something went wrong", eventSlug: null };
+  }
 }

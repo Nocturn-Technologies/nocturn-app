@@ -14,6 +14,7 @@ export async function sendCampaignEmail(input: {
   subject: string;
   body: string;
 }) {
+  try {
   // Input validation
   if (!input.eventId || typeof input.eventId !== "string") return { error: "Invalid event ID", sent: 0 };
   if (!input.subject || input.subject.length > 200) return { error: "Subject is required and must be under 200 characters", sent: 0 };
@@ -150,4 +151,8 @@ export async function sendCampaignEmail(input: {
     failed,
     total: emails.size,
   };
+  } catch (err) {
+    console.error("[sendCampaignEmail]", err);
+    return { error: "Something went wrong", sent: 0 };
+  }
 }

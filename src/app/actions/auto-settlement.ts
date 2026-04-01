@@ -21,7 +21,8 @@ export async function generateAutoSettlement(eventId: string) {
       .maybeSingle();
 
     if (eventError || !event) {
-      return { error: eventError?.message ?? "Event not found." };
+      if (eventError) console.error("[generateAutoSettlement] event query error:", eventError.message);
+      return { error: "Event not found" };
     }
 
     // Verify caller is a member of the event's collective
@@ -54,7 +55,8 @@ export async function generateAutoSettlement(eventId: string) {
       .in("status", ["paid", "checked_in"]);
 
     if (ticketsError) {
-      return { error: `Tickets query failed: ${ticketsError.message}` };
+      console.error("[generateAutoSettlement] tickets query error:", ticketsError.message);
+      return { error: "Failed to calculate ticket revenue" };
     }
 
     const ticketCount = tickets?.length ?? 0;
@@ -71,7 +73,8 @@ export async function generateAutoSettlement(eventId: string) {
       .eq("status", "refunded");
 
     if (refundsError) {
-      return { error: `Refunds query failed: ${refundsError.message}` };
+      console.error("[generateAutoSettlement] refunds query error:", refundsError.message);
+      return { error: "Failed to calculate refunds" };
     }
 
     const refundsTotal = (refundedTickets ?? []).reduce(
@@ -87,7 +90,8 @@ export async function generateAutoSettlement(eventId: string) {
       .eq("status", "confirmed");
 
     if (artistsError) {
-      return { error: `Artists query failed: ${artistsError.message}` };
+      console.error("[generateAutoSettlement] artists query error:", artistsError.message);
+      return { error: "Failed to calculate artist fees" };
     }
 
     const artistFeesTotal = (eventArtists ?? []).reduce(
@@ -144,7 +148,8 @@ export async function generateAutoSettlement(eventId: string) {
       if (settlementError.code === "23505") {
         return { error: null }; // Already exists, that's fine
       }
-      return { error: `Settlement insert failed: ${settlementError.message}` };
+      console.error("[generateAutoSettlement] settlement insert error:", settlementError.message);
+      return { error: "Failed to create settlement" };
     }
 
     if (!settlement) {
@@ -161,8 +166,6 @@ export async function generateAutoSettlement(eventId: string) {
     return { error: null, settlementId: settlement.id };
   } catch (err) {
     console.error("Auto-settlement error:", err);
-    return {
-      error: err instanceof Error ? err.message : "Unexpected settlement error.",
-    };
+    return { error: "Something went wrong" };
   }
 }

@@ -38,7 +38,8 @@ export async function enrichAttendeeCRM(eventId: string) {
       .in("status", ["paid", "checked_in"]);
 
     if (ticketsError) {
-      return { error: `Tickets query failed: ${ticketsError.message}` };
+      console.error("[enrichAttendeeCRM] tickets query error:", ticketsError.message);
+      return { error: "Failed to load ticket data" };
     }
 
     if (!tickets || tickets.length === 0) {
@@ -66,7 +67,10 @@ export async function enrichAttendeeCRM(eventId: string) {
         .select("id, user_id, email, total_events, total_spend, first_event_at, vip_status")
         .in("user_id", userIds);
 
-      if (err1) return { error: `Profiles query failed: ${err1.message}` };
+      if (err1) {
+        console.error("[enrichAttendeeCRM] profiles query error:", err1.message);
+        return { error: "Failed to load attendee profiles" };
+      }
       if (profilesByUserId) existingProfiles = profilesByUserId;
     }
 
@@ -76,7 +80,10 @@ export async function enrichAttendeeCRM(eventId: string) {
         .select("id, user_id, email, total_events, total_spend, first_event_at, vip_status")
         .in("email", emails);
 
-      if (err2) return { error: `Profiles query failed: ${err2.message}` };
+      if (err2) {
+        console.error("[enrichAttendeeCRM] profiles email query error:", err2.message);
+        return { error: "Failed to load attendee profiles" };
+      }
       if (profilesByEmail) {
         // Merge, deduplicating by id
         const existingIds = new Set(existingProfiles.map((p) => p.id));
@@ -189,7 +196,8 @@ export async function enrichAttendeeCRM(eventId: string) {
         .upsert(upsertRows, { onConflict: "id" });
 
       if (updateError) {
-        console.error("Batch update failed:", updateError.message);
+        console.error("[enrichAttendeeCRM] batch update failed:", updateError.message);
+        return { error: "Failed to update attendee profiles" };
       } else {
         enrichedCount += upsertRows.length;
       }
@@ -204,7 +212,8 @@ export async function enrichAttendeeCRM(eventId: string) {
         .insert(insertRows);
 
       if (insertError) {
-        console.error("Batch insert failed:", insertError.message);
+        console.error("[enrichAttendeeCRM] batch insert failed:", insertError.message);
+        return { error: "Failed to create attendee profiles" };
       } else {
         enrichedCount += insertRows.length;
       }
@@ -212,10 +221,7 @@ export async function enrichAttendeeCRM(eventId: string) {
 
     return { error: null, enriched: enrichedCount };
   } catch (err) {
-    console.error("CRM enrichment error:", err);
-    return {
-      error:
-        err instanceof Error ? err.message : "Unexpected CRM enrichment error.",
-    };
+    console.error("[enrichAttendeeCRM]", err);
+    return { error: "Something went wrong" };
   }
 }
