@@ -31,7 +31,6 @@ import {
   Compass,
   Megaphone,
   UserCircle,
-  Inbox,
   LifeBuoy,
   Bug,
   MessageCircle,
@@ -100,8 +99,7 @@ const marketplaceSidebarItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/my-profile", label: "My Profile", icon: UserCircle },
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
-  { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
-  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard/chat", label: "Messages", icon: MessageSquare },
 ];
 
 const marketplaceMobileTabItems = [
@@ -111,9 +109,7 @@ const marketplaceMobileTabItems = [
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
 ];
 
-const marketplaceMoreItems = [
-  { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
-];
+const marketplaceMoreItems: typeof marketplaceSidebarItems = [];
 
 /* ── Support Button — opens dropdown with Bug / Feedback / Inquiry options ── */
 function SupportButton({

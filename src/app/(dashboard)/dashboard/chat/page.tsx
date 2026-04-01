@@ -17,6 +17,9 @@ import {
   Mail,
   Send,
   Check,
+  Inbox,
+  ArrowUpRight,
+  Clock,
 } from "lucide-react";
 import {
   getCollabChannels,
@@ -24,6 +27,13 @@ import {
   startCollabChat,
   inviteToCollab,
 } from "@/app/actions/collab";
+import {
+  getSentInquiries,
+  getReceivedInquiries,
+  acceptInquiry,
+  rejectInquiry,
+  type InquiryItem,
+} from "@/app/actions/inquiries";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -221,6 +231,13 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(true);
   const [myCollectiveId, setMyCollectiveId] = useState<string | null>(null);
 
+  // Tabs: chats | requests | sent
+  const [activeTab, setActiveTab] = useState<"chats" | "requests" | "sent">("chats");
+  const [sentInquiries, setSentInquiries] = useState<InquiryItem[]>([]);
+  const [receivedInquiries, setReceivedInquiries] = useState<InquiryItem[]>([]);
+  const [inquiriesLoaded, setInquiriesLoaded] = useState(false);
+  const [processingInquiryId, setProcessingInquiryId] = useState<string | null>(null);
+
   // Search
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -402,6 +419,48 @@ export default function ChatPage() {
     loadChannels();
   }, [loadChannels]);
 
+  // Load inquiries when switching to requests/sent tabs
+  useEffect(() => {
+    if ((activeTab === "requests" || activeTab === "sent") && !inquiriesLoaded) {
+      setInquiriesLoaded(true);
+      Promise.all([getSentInquiries(), getReceivedInquiries()]).then(
+        ([sent, received]) => {
+          setSentInquiries(sent);
+          setReceivedInquiries(received);
+        }
+      );
+    }
+  }, [activeTab, inquiriesLoaded]);
+
+  async function handleAcceptInquiry(inquiryId: string) {
+    setProcessingInquiryId(inquiryId);
+    const result = await acceptInquiry(inquiryId);
+    setProcessingInquiryId(null);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    setReceivedInquiries((prev) =>
+      prev.map((inq) => (inq.id === inquiryId ? { ...inq, status: "accepted" } : inq))
+    );
+    if (result.channelId) {
+      router.push(`/dashboard/chat/${result.channelId}`);
+    }
+  }
+
+  async function handleRejectInquiry(inquiryId: string) {
+    setProcessingInquiryId(inquiryId);
+    const result = await rejectInquiry(inquiryId);
+    setProcessingInquiryId(null);
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+    setReceivedInquiries((prev) =>
+      prev.map((inq) => (inq.id === inquiryId ? { ...inq, status: "rejected" } : inq))
+    );
+  }
+
   // ─── Derived data ──────────────────────────────────────────────────────────
 
   const teamChannels = useMemo(
@@ -527,7 +586,35 @@ export default function ChatPage() {
         </Button>
       </div>
 
-      {/* Search bar */}
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4 bg-white/[0.03] rounded-xl p-1">
+        {([
+          { key: "chats" as const, label: "Chats", icon: MessageSquare },
+          { key: "requests" as const, label: "Requests", icon: Inbox, badge: receivedInquiries.filter((i) => i.status === "pending").length },
+          { key: "sent" as const, label: "Sent", icon: ArrowUpRight },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 min-h-[44px] ${
+              activeTab === tab.key
+                ? "bg-white/[0.08] text-foreground"
+                : "text-muted-foreground hover:text-foreground/80"
+            }`}
+          >
+            <tab.icon className="h-4 w-4" />
+            {tab.label}
+            {tab.badge ? (
+              <span className="min-w-[18px] h-[18px] rounded-full bg-nocturn text-white text-[10px] font-bold flex items-center justify-center px-1">
+                {tab.badge}
+              </span>
+            ) : null}
+          </button>
+        ))}
+      </div>
+
+      {/* Search bar — only on chats tab */}
+      {activeTab === "chats" && (
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
         <Input
@@ -545,119 +632,292 @@ export default function ChatPage() {
           </button>
         )}
       </div>
+      )}
 
-      {loading ? (
-        <div className="rounded-2xl border border-white/[0.06] bg-card overflow-hidden">
-          {/* Skeleton section header */}
-          <div className="flex items-center gap-2 px-4 py-2.5">
-            <div className="w-3 h-3 rounded bg-white/[0.06] animate-pulse" />
-            <div className="w-16 h-3 rounded bg-white/[0.06] animate-pulse" />
-          </div>
-          {/* Skeleton channel rows */}
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.04] last:border-b-0">
-              <div className="w-12 h-12 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
-              <div className="flex-1 min-w-0 space-y-2">
-                <div className="h-4 rounded bg-white/[0.06] animate-pulse w-2/3" />
-                <div className="h-3 rounded bg-white/[0.04] animate-pulse w-4/5" />
+      {/* ── CHATS TAB ──────────────────────────────────────────────────── */}
+      {activeTab === "chats" && (
+        <>
+          {loading ? (
+            <div className="rounded-2xl border border-white/[0.06] bg-card overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2.5">
+                <div className="w-3 h-3 rounded bg-white/[0.06] animate-pulse" />
+                <div className="w-16 h-3 rounded bg-white/[0.06] animate-pulse" />
               </div>
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
-                <div className="w-10 h-3 rounded bg-white/[0.04] animate-pulse" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : totalChannels === 0 ? (
-        /* Empty state */
-        <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-          <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-5">
-            <MessageSquare size={28} className="text-[#7B2FF7]" />
-          </div>
-          <p className="font-semibold text-lg mb-2 text-foreground">
-            Start a conversation
-          </p>
-          <p className="text-sm text-muted-foreground max-w-[280px] leading-relaxed">
-            Connect with other collectives and coordinate with your team.
-          </p>
-          <Button
-            onClick={() => setSheetOpen(true)}
-            className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 min-h-[44px] transition-all duration-200"
-          >
-            <Plus className="h-4 w-4 mr-1.5" />
-            New Chat
-          </Button>
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-white/[0.06] bg-card overflow-hidden divide-y divide-white/[0.04]">
-          {/* ── Collabs Section ─────────────────────────────────────── */}
-          {filteredCollabs.length > 0 && (
-            <div>
-              <SectionHeader
-                icon={<Users size={12} />}
-                label="Collabs"
-                count={filteredCollabs.length}
-              />
-              {filteredCollabs.map((ch) => (
-                <ChannelRow key={ch.id} ch={ch} />
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div key={i} className="flex items-center gap-3 px-4 py-3 border-b border-white/[0.04] last:border-b-0">
+                  <div className="w-12 h-12 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-2">
+                    <div className="h-4 rounded bg-white/[0.06] animate-pulse w-2/3" />
+                    <div className="h-3 rounded bg-white/[0.04] animate-pulse w-4/5" />
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                    <div className="w-10 h-3 rounded bg-white/[0.04] animate-pulse" />
+                  </div>
+                </div>
               ))}
             </div>
+          ) : totalChannels === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-5">
+                <MessageSquare size={28} className="text-[#7B2FF7]" />
+              </div>
+              <p className="font-semibold text-lg mb-2 text-foreground">
+                Start a conversation
+              </p>
+              <p className="text-sm text-muted-foreground max-w-[280px] leading-relaxed">
+                Connect with other collectives and coordinate with your team.
+              </p>
+              <Button
+                onClick={() => setSheetOpen(true)}
+                className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 min-h-[44px] transition-all duration-200"
+              >
+                <Plus className="h-4 w-4 mr-1.5" />
+                New Chat
+              </Button>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/[0.06] bg-card overflow-hidden divide-y divide-white/[0.04]">
+              {filteredCollabs.length > 0 && (
+                <div>
+                  <SectionHeader icon={<Users size={12} />} label="Collabs" count={filteredCollabs.length} />
+                  {filteredCollabs.map((ch) => (
+                    <ChannelRow key={ch.id} ch={ch} />
+                  ))}
+                </div>
+              )}
+              {filteredTeam.length > 0 && (
+                <div>
+                  <SectionHeader icon={<Hash size={12} />} label="Team" count={filteredTeam.length} />
+                  {filteredTeam.map((ch) => (
+                    <ChannelRow
+                      key={ch.id}
+                      ch={ch}
+                      icon={
+                        <div className="w-12 h-12 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center shrink-0">
+                          <Hash size={20} className="text-[#7B2FF7]" />
+                        </div>
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+              {filteredEvents.length > 0 && (
+                <div>
+                  <SectionHeader icon={<Calendar size={12} />} label="Events" count={filteredEvents.length} />
+                  {filteredEvents.map((ch) => (
+                    <ChannelRow
+                      key={ch.id}
+                      ch={ch}
+                      icon={
+                        <div className="w-12 h-12 rounded-full bg-zinc-800/80 flex items-center justify-center shrink-0">
+                          <Calendar size={20} className="text-zinc-400" />
+                        </div>
+                      }
+                    />
+                  ))}
+                </div>
+              )}
+              {searchQuery && filteredCollabs.length === 0 && filteredTeam.length === 0 && filteredEvents.length === 0 && (
+                <div className="py-10 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No conversations matching &ldquo;{searchQuery}&rdquo;
+                  </p>
+                </div>
+              )}
+            </div>
           )}
+        </>
+      )}
 
-          {/* ── Team Section ────────────────────────────────────────── */}
-          {filteredTeam.length > 0 && (
-            <div>
-              <SectionHeader
-                icon={<Hash size={12} />}
-                label="Team"
-                count={filteredTeam.length}
-              />
-              {filteredTeam.map((ch) => (
-                <ChannelRow
-                  key={ch.id}
-                  ch={ch}
-                  icon={
-                    <div className="w-12 h-12 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center shrink-0">
-                      <Hash size={20} className="text-[#7B2FF7]" />
+      {/* ── REQUESTS TAB ─────────────────────────────────────────────── */}
+      {activeTab === "requests" && (
+        <div className="space-y-3">
+          {!inquiriesLoaded ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-nocturn" />
+            </div>
+          ) : receivedInquiries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-5">
+                <Inbox size={28} className="text-[#7B2FF7]" />
+              </div>
+              <p className="font-semibold text-lg mb-2 text-foreground">
+                No requests yet
+              </p>
+              <p className="text-sm text-muted-foreground max-w-[280px] leading-relaxed">
+                When someone reaches out through Discover, their request will show up here.
+              </p>
+            </div>
+          ) : (
+            receivedInquiries.map((inq) => {
+              const isProcessing = processingInquiryId === inq.id;
+              return (
+                <div
+                  key={inq.id}
+                  className="rounded-xl border border-white/[0.06] bg-card p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={inq.contact_name} size="sm" />
+                      <div>
+                        <p className="font-medium text-sm text-foreground">
+                          {inq.contact_name}
+                        </p>
+                        {inq.contact_email && (
+                          <p className="text-xs text-muted-foreground">{inq.contact_email}</p>
+                        )}
+                      </div>
                     </div>
-                  }
-                />
-              ))}
-            </div>
-          )}
-
-          {/* ── Events Section ──────────────────────────────────────── */}
-          {filteredEvents.length > 0 && (
-            <div>
-              <SectionHeader
-                icon={<Calendar size={12} />}
-                label="Events"
-                count={filteredEvents.length}
-              />
-              {filteredEvents.map((ch) => (
-                <ChannelRow
-                  key={ch.id}
-                  ch={ch}
-                  icon={
-                    <div className="w-12 h-12 rounded-full bg-zinc-800/80 flex items-center justify-center shrink-0">
-                      <Calendar size={20} className="text-zinc-400" />
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        inq.status === "pending"
+                          ? "bg-amber-500/10 text-amber-400"
+                          : inq.status === "accepted"
+                          ? "bg-emerald-500/10 text-emerald-400"
+                          : "bg-zinc-500/10 text-zinc-400"
+                      }`}>
+                        {inq.status}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {new Date(inq.created_at).toLocaleDateString("en", { month: "short", day: "numeric" })}
+                      </span>
                     </div>
-                  }
-                />
-              ))}
-            </div>
-          )}
+                  </div>
 
-          {/* No search results */}
-          {searchQuery &&
-            filteredCollabs.length === 0 &&
-            filteredTeam.length === 0 &&
-            filteredEvents.length === 0 && (
-              <div className="py-10 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No conversations matching &ldquo;{searchQuery}&rdquo;
-                </p>
+                  {inq.message && (
+                    <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed">
+                      {inq.message}
+                    </div>
+                  )}
+
+                  {inq.status === "pending" && (
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button
+                        size="sm"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-10 text-xs font-semibold"
+                        disabled={isProcessing}
+                        onClick={() => handleAcceptInquiry(inq.id)}
+                      >
+                        {isProcessing ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5 mr-1.5" />
+                        )}
+                        Accept & Chat
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-10 text-xs text-muted-foreground hover:text-foreground"
+                        disabled={isProcessing}
+                        onClick={() => handleRejectInquiry(inq.id)}
+                      >
+                        <X className="h-3.5 w-3.5 mr-1.5" />
+                        Dismiss
+                      </Button>
+                    </div>
+                  )}
+
+                  {inq.status === "accepted" && (
+                    <p className="text-xs text-emerald-400/80 flex items-center gap-1">
+                      <Check className="h-3 w-3" /> Accepted — check your Chats
+                    </p>
+                  )}
+
+                  {inq.status === "rejected" && (
+                    <p className="text-xs text-muted-foreground/60 italic">Dismissed</p>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ── SENT TAB ─────────────────────────────────────────────────── */}
+      {activeTab === "sent" && (
+        <div className="space-y-3">
+          {!inquiriesLoaded ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-5 w-5 animate-spin text-nocturn" />
+            </div>
+          ) : sentInquiries.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-5">
+                <ArrowUpRight size={28} className="text-[#7B2FF7]" />
               </div>
-            )}
+              <p className="font-semibold text-lg mb-2 text-foreground">
+                No sent requests
+              </p>
+              <p className="text-sm text-muted-foreground max-w-[280px] leading-relaxed">
+                When you reach out to someone on Discover, your requests will appear here so you can track them.
+              </p>
+              <Button
+                onClick={() => router.push("/dashboard/discover")}
+                className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 min-h-[44px] transition-all duration-200"
+              >
+                <Search className="h-4 w-4 mr-1.5" />
+                Browse Discover
+              </Button>
+            </div>
+          ) : (
+            sentInquiries.map((inq) => (
+              <div
+                key={inq.id}
+                className="rounded-xl border border-white/[0.06] bg-card p-4 space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Avatar name={inq.profile_display_name || inq.contact_name} size="sm" />
+                    <div>
+                      <p className="font-medium text-sm text-foreground">
+                        {inq.profile_display_name || inq.contact_name}
+                      </p>
+                      {inq.inquiry_type !== "general" && (
+                        <p className="text-xs text-muted-foreground capitalize">{inq.inquiry_type}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      inq.status === "pending"
+                        ? "bg-amber-500/10 text-amber-400"
+                        : inq.status === "accepted"
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "bg-zinc-500/10 text-zinc-400"
+                    }`}>
+                      {inq.status === "pending" ? "awaiting reply" : inq.status}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {new Date(inq.created_at).toLocaleDateString("en", { month: "short", day: "numeric" })}
+                    </span>
+                  </div>
+                </div>
+
+                {inq.message && (
+                  <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed">
+                    {inq.message}
+                  </div>
+                )}
+
+                {inq.status === "pending" && (
+                  <p className="text-xs text-muted-foreground/60 flex items-center gap-1.5">
+                    <Clock className="h-3 w-3" /> Waiting for them to respond
+                  </p>
+                )}
+
+                {inq.status === "accepted" && (
+                  <p className="text-xs text-emerald-400/80 flex items-center gap-1">
+                    <Check className="h-3 w-3" /> Accepted — check your Chats
+                  </p>
+                )}
+
+                {inq.status === "rejected" && (
+                  <p className="text-xs text-muted-foreground/60 italic">They passed on this one</p>
+                )}
+              </div>
+            ))
+          )}
         </div>
       )}
 
