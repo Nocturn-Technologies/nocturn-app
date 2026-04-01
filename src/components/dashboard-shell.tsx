@@ -174,33 +174,40 @@ function SupportButton({
   }
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-white/[0.04] hover:text-foreground transition-colors">
+    <div className="relative">
+      <button
+        onClick={() => { setOpen(!open); haptic("light"); }}
+        className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-white/[0.04] hover:text-foreground transition-colors"
+      >
         <LifeBuoy className="h-4 w-4" />
         <span>Support</span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="top" className="w-52 mb-1">
-        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
-          Contact shawn@trynocturn.com
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {options.map((opt) => {
-          const Icon = opt.icon;
-          return (
-            <DropdownMenuItem
-              key={opt.label}
-              onClick={() => {
-                setOpen(false);
-                window.location.href = `mailto:shawn@trynocturn.com?subject=${encodeURIComponent(opt.subject)}&body=${encodeURIComponent(opt.body)}`;
-              }}
-            >
-              <Icon className="mr-2 h-4 w-4" />
-              {opt.label}
-            </DropdownMenuItem>
-          );
-        })}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 bottom-full mb-1 z-50 w-52 rounded-md border border-white/10 bg-popover p-1 shadow-md">
+            <p className="px-2 py-1.5 text-xs text-muted-foreground">
+              Contact shawn@trynocturn.com
+            </p>
+            <div className="my-1 h-px bg-white/10" />
+            {options.map((opt) => {
+              const Icon = opt.icon;
+              return (
+                <a
+                  key={opt.label}
+                  href={`mailto:shawn@trynocturn.com?subject=${encodeURIComponent(opt.subject)}&body=${encodeURIComponent(opt.body)}`}
+                  onClick={() => setOpen(false)}
+                  className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm text-foreground hover:bg-white/[0.06] cursor-pointer transition-colors"
+                >
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                  {opt.label}
+                </a>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
