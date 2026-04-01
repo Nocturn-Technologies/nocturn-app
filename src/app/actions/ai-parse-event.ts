@@ -79,8 +79,15 @@ Return ONLY valid JSON with any of these fields (omit what's not mentioned):
 - title (string), date (YYYY-MM-DD), startTime (HH:MM 24h), endTime (HH:MM 24h), doorsOpen (HH:MM 24h)
 - venueName (string), venueAddress (string), venueCity (string), venueCapacity (number)
 - description (string), ticketPrice (number), ticketQuantity (number), ticketTierName (string)
+- tiers (array of {name, price, capacity}): if user wants to update ticket tier prices or capacities
+- talentFee (number): if user mentions talent fee, DJ fee, artist fee, headliner fee
+- venueCost (number): if user mentions venue rental, room cost
+- barMinimum (number): if user mentions bar minimum
+- deposit (number): if user mentions deposit
+- otherExpenses (number): if user mentions other expenses, sound, lighting, security, promo costs
 - reply (string): casual 1-sentence acknowledgment of what you understood
 
+When the user says things like "increase talent fee to $800" or "change early bird to $20" or "add a VIP tier at $50 for 30 people", extract the updated values.
 Today is ${new Date().toISOString().split("T")[0]}. "10pm"="22:00". Assume PM for nightlife times without am/pm.`,
         }],
       }),
@@ -256,6 +263,23 @@ function localParse(message: string, existing: Partial<ParsedEventDetails>): Par
   // === QUANTITY ===
   const qtyMatch = lower.match(/(\d+)\s*tickets/);
   if (qtyMatch) result.ticketQuantity = parseInt(qtyMatch[1]);
+
+  // === BUDGET FIELDS ===
+  // "talent fee $800", "artist fee is $1200", "dj fee 500"
+  const talentFeeMatch = lower.match(/(?:talent|artist|dj|headliner)\s*(?:fee|cost)?\s*(?:is|to|=|:)?\s*\$?([\d,]+)/);
+  if (talentFeeMatch) result.talentFee = parseInt(talentFeeMatch[1].replace(/,/g, ""));
+
+  // "increase talent fee to $800"
+  const increaseTalentMatch = lower.match(/(?:increase|change|set|update|raise|lower|drop)\s*(?:the\s+)?(?:talent|artist|dj|headliner)\s*(?:fee|cost)?\s*(?:to|=|:)?\s*\$?([\d,]+)/);
+  if (increaseTalentMatch) result.talentFee = parseInt(increaseTalentMatch[1].replace(/,/g, ""));
+
+  // "venue cost $2000", "venue rental 1500"
+  const venueCostMatch = lower.match(/(?:venue|room)\s*(?:cost|rental|rent|fee)?\s*(?:is|to|=|:)?\s*\$?([\d,]+)/);
+  if (venueCostMatch) result.venueCost = parseInt(venueCostMatch[1].replace(/,/g, ""));
+
+  // "bar minimum $3000"
+  const barMinMatch = lower.match(/bar\s*(?:min(?:imum)?)\s*(?:is|to|=|:)?\s*\$?([\d,]+)/);
+  if (barMinMatch) result.barMinimum = parseInt(barMinMatch[1].replace(/,/g, ""));
 
   return result;
 }

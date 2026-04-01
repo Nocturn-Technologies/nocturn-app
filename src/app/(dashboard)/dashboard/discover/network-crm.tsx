@@ -19,7 +19,6 @@ import {
   Plus,
   Mail,
   Phone,
-  Pencil,
   Loader2,
 } from "lucide-react";
 import {
@@ -187,82 +186,74 @@ function ContactCard({
       className="overflow-hidden border-border/50 hover:border-border/80 transition-all group bg-card/60 cursor-pointer"
       onClick={() => onClick(contact)}
     >
-      {/* Gradient header strip */}
-      <div className="relative h-16 bg-gradient-to-br from-nocturn/20 via-nocturn/5 to-transparent">
-        {/* Edit indicator */}
-        {(contact as IndustryContact & { _contactsTableId?: string })._contactsTableId && (
-          <span className="absolute top-2.5 left-2.5 text-muted-foreground/70 group-hover:text-muted-foreground transition-colors">
-            <Pencil className="h-3 w-3" />
-          </span>
-        )}
-        {/* Type badge */}
+      {/* Header row: avatar + name + badge */}
+      <div className="flex items-center gap-2.5 px-3 pt-2.5">
+        <div className="h-8 w-8 shrink-0 rounded-full bg-nocturn/10 flex items-center justify-center overflow-hidden ring-1 ring-nocturn/20">
+          {contact.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={contact.avatarUrl}
+              alt={contact.name}
+              className="h-full w-full object-cover"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          ) : (
+            <span className="text-[10px] font-bold text-nocturn/60 select-none">
+              {initials || <User className="h-3.5 w-3.5 text-nocturn/50" />}
+            </span>
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-sm leading-tight truncate">
+            {contact.name}
+          </h3>
+          {contact.city && (
+            <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              <MapPin className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{contact.city}</span>
+            </div>
+          )}
+        </div>
         <span
-          className={`absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badgeColor}`}
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badgeColor}`}
         >
           {typeLabel}
         </span>
       </div>
 
-      {/* Avatar + name */}
-      <div className="px-3 pb-1">
-        {/* Avatar overlapping header */}
-        <div className="flex items-end -mt-5 mb-2">
-          <div className="h-10 w-10 shrink-0 rounded-full border-2 border-card bg-nocturn/10 flex items-center justify-center overflow-hidden shadow-md">
-            {contact.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={contact.avatarUrl}
-                alt={contact.name}
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            ) : (
-              <span className="text-xs font-bold text-nocturn/60 select-none">
-                {initials || <User className="h-4 w-4 text-nocturn/50" />}
+      {/* Body */}
+      <div className="flex flex-col gap-1.5 px-3 pt-1.5 pb-1">
+        {/* Events + last collab */}
+        {(contact.eventsWorked > 0 || lastDate) && (
+          <div className="flex items-center gap-2 text-[11px]">
+            {contact.eventsWorked > 0 && (
+              <span className="text-nocturn font-medium">
+                {contact.eventsWorked} event{contact.eventsWorked !== 1 ? "s" : ""} together
               </span>
             )}
+            {contact.eventsWorked > 0 && lastDate && (
+              <span className="text-muted-foreground/40">·</span>
+            )}
+            {lastDate && (
+              <span className="text-muted-foreground/60">Last: {lastDate}</span>
+            )}
           </div>
-        </div>
-
-        {/* Name */}
-        <h3 className="font-semibold text-sm leading-tight truncate">
-          {contact.name}
-        </h3>
-
-        {/* City */}
-        {contact.city && (
-          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-            <MapPin className="h-2.5 w-2.5 shrink-0" />
-            <span className="truncate">{contact.city}</span>
-          </div>
-        )}
-
-        {/* Events together */}
-        {contact.eventsWorked > 0 && (
-          <p className="mt-1.5 text-[11px] text-nocturn font-medium">
-            {contact.eventsWorked} event{contact.eventsWorked !== 1 ? "s" : ""} together
-          </p>
-        )}
-
-        {/* Last collab */}
-        {lastDate && (
-          <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-            Last: {lastDate}
-          </p>
         )}
 
         {/* Relationship badges */}
-        <div className="mt-2 flex flex-wrap gap-1">
-          {contact.relationships.map((tag) => (
-            <RelBadge key={tag} tag={tag} />
-          ))}
-        </div>
+        {contact.relationships.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {contact.relationships.map((tag) => (
+              <RelBadge key={tag} tag={tag} />
+            ))}
+          </div>
+        )}
 
         {/* Contact info */}
         {(contact.email || contact.phone) && (
-          <div className="mt-2 space-y-0.5">
+          <div className="space-y-0.5">
             {contact.email && (
               <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground truncate">
                 <Mail className="h-2.5 w-2.5 shrink-0" />
@@ -285,7 +276,7 @@ function ContactCard({
         )}
 
         {/* Social links */}
-        <div className="mt-2 flex items-center gap-2">
+        <div className="flex items-center gap-2">
           {contact.instagramHandle && (
             <a
               href={`https://instagram.com/${contact.instagramHandle.replace(/^@/, "")}`}
@@ -347,7 +338,7 @@ function ContactCard({
       </div>
 
       {/* Action buttons */}
-      <div className="flex items-center gap-1.5 px-3 pb-3 pt-2">
+      <div className="flex items-center gap-1.5 px-3 pb-2.5 pt-1">
         {contact.profileId ? (
           <Button
             size="sm"

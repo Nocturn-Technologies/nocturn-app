@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
 import { getEventContext, getCollectiveContext } from "@/lib/ai-context";
 import { rateLimitStrict } from "@/lib/rate-limit";
+import { addExpense } from "@/app/actions/event-financials";
 
 import { SYSTEM_PROMPTS } from "@/lib/ai-prompts";
 
@@ -111,6 +112,45 @@ export async function generateChatResponse(
   }
 
   return { content: aiContent, messageId };
+}
+
+/**
+ * Add an expense from chat context.
+ * Called when a user types something like "add $500 venue rental expense" in an event channel.
+ */
+export async function addExpenseFromChat(
+  channelId: string,
+  description: string,
+  amount: number,
+  category: string = "other"
+): Promise<{ error: string | null; success: boolean }> {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", success: false };
+
+  const sb = createAdminClient();
+
+  // Get channel to find event_id
+  const { data: channel } = await sb
+    .from("channels")
+    .select("event_id")
+    .eq("id", channelId)
+    .maybeSingle();
+
+  if (!channel?.event_id) return { error: "This channel is not linked to an event", success: false };
+
+  const result = await addExpense(channel.event_id, { description, category, amount });
+  if (result.error) return { error: result.error, success: false };
+
+  // Post a system message confirming the expense was added
+  await sb.from("messages").insert({
+    channel_id: channelId,
+    user_id: user.id,
+    content: `Added expense: ${description} — $${amount.toFixed(2)} (${category})`,
+    type: "system",
+  });
+
+  return { error: null, success: true };
 }
 
 function fallbackResponse(message: string): string {

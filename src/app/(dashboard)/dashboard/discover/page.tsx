@@ -80,7 +80,7 @@ export default function DiscoverPage() {
     city: string;
   } | null>(null);
 
-  const isCollectivesCategory = category === "collective";
+  const isCollectivesCategory = category === "collective" || category === "promoter";
 
   // Fetch collectiveId for the current user
   const collectiveIdFetched = useRef(false);
@@ -294,7 +294,7 @@ export default function DiscoverPage() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={isCollectivesCategory ? "Search collectives..." : "Search profiles..."}
+              placeholder={isCollectivesCategory ? (category === "promoter" ? "Search promoters..." : "Search collectives...") : "Search profiles..."}
               className="w-full pl-10"
             />
           </div>
@@ -332,11 +332,13 @@ export default function DiscoverPage() {
                     <Users2 className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <div className="text-center max-w-xs">
-                    <p className="font-semibold">No collectives found</p>
+                    <p className="font-semibold">{category === "promoter" ? "No promoters found" : "No collectives found"}</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {query || cityFilter
                         ? "Try a different search or city"
-                        : "No other collectives on Nocturn yet"}
+                        : category === "promoter"
+                          ? "No promoters on Nocturn yet"
+                          : "No other collectives on Nocturn yet"}
                     </p>
                   </div>
                 </CardContent>
@@ -356,7 +358,7 @@ export default function DiscoverPage() {
                 </div>
 
                 <p className="text-xs text-muted-foreground text-center pt-2">
-                  {`${collectivesTotal} ${collectivesTotal === 1 ? "collective" : "collectives"} on Nocturn${
+                  {`${collectivesTotal} ${category === "promoter" ? (collectivesTotal === 1 ? "promoter" : "promoters") : (collectivesTotal === 1 ? "collective" : "collectives")} on Nocturn${
                     totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""
                   }`}
                 </p>

@@ -16,12 +16,13 @@ export async function getEventContext(eventId: string): Promise<string> {
 
   const sb = createAdminClient();
 
-  const [eventRes, tiersRes, ticketsRes, artistsRes, tasksRes] = await Promise.all([
+  const [eventRes, tiersRes, ticketsRes, artistsRes, tasksRes, expensesRes] = await Promise.all([
     sb.from("events").select("title, description, status, starts_at, ends_at, doors_at, flyer_url, collective_id, venues(name, city, capacity)").eq("id", eventId).is("deleted_at", null).maybeSingle(),
     sb.from("ticket_tiers").select("id, name, price, capacity").eq("event_id", eventId),
     sb.from("tickets").select("ticket_tier_id, status, price_paid, created_at").eq("event_id", eventId),
     sb.from("event_artists").select("artists(name), fee, set_time, status").eq("event_id", eventId),
     sb.from("event_tasks").select("title, status").eq("event_id", eventId),
+    sb.from("expenses").select("description, category, amount").eq("event_id", eventId),
   ]);
 
   const event = eventRes.data;
@@ -32,9 +33,11 @@ export async function getEventContext(eventId: string): Promise<string> {
   const tickets = ticketsRes.data || [];
   const artists = artistsRes.data || [];
   const tasks = tasksRes.data || [];
+  const expenses = expensesRes.data || [];
 
   const paidTickets = tickets.filter((t) => ["paid", "checked_in"].includes(t.status));
   const totalRevenue = paidTickets.reduce((sum, t) => sum + Number(t.price_paid || 0), 0);
+  const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
   const totalCapacity = tiers.reduce((sum, t) => sum + (t.capacity || 0), 0);
   const checkedIn = tickets.filter((t) => t.status === "checked_in").length;
 
@@ -67,6 +70,11 @@ export async function getEventContext(eventId: string): Promise<string> {
     }),
     "",
     tasks.length > 0 ? `TASKS: ${tasks.filter((t) => t.status !== "done").length} open, ${tasks.filter((t) => t.status === "done").length} done` : "",
+    "",
+    expenses.length > 0 ? "EXPENSES:" : "",
+    ...expenses.map((e) => `  ${e.description} (${e.category}): $${Number(e.amount).toFixed(2)}`),
+    expenses.length > 0 ? `Total expenses: $${totalExpenses.toFixed(2)}` : "",
+    expenses.length > 0 ? `Net profit: $${(totalRevenue - totalExpenses).toFixed(2)}` : "",
   ];
 
   const result = lines.filter(Boolean).join("\n");

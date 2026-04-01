@@ -32,6 +32,10 @@ import {
   Megaphone,
   UserCircle,
   Inbox,
+  LifeBuoy,
+  Bug,
+  MessageCircle,
+  Mail,
 } from "lucide-react";
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -110,6 +114,95 @@ const marketplaceMobileTabItems = [
 const marketplaceMoreItems = [
   { href: "/dashboard/inquiries", label: "Inquiries", icon: Inbox },
 ];
+
+/* ── Support Button — opens dropdown with Bug / Feedback / Inquiry options ── */
+function SupportButton({
+  userName,
+  collectiveName,
+  variant = "sidebar",
+  onClose,
+}: {
+  userName?: string;
+  collectiveName?: string;
+  variant?: "sidebar" | "drawer";
+  onClose?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const fromLine = [userName, collectiveName].filter(Boolean).join(" — ");
+
+  const options = [
+    {
+      label: "Report a Bug",
+      icon: Bug,
+      subject: "Bug Report",
+      body: `Hi Shawn,\n\nI found a bug:\n\n**What happened:**\n\n**What I expected:**\n\n**Steps to reproduce:**\n\n---\nFrom: ${fromLine}`,
+    },
+    {
+      label: "Send Feedback",
+      icon: MessageCircle,
+      subject: "Feedback",
+      body: `Hi Shawn,\n\nHere's my feedback:\n\n\n---\nFrom: ${fromLine}`,
+    },
+    {
+      label: "General Inquiry",
+      icon: Mail,
+      subject: "General Inquiry",
+      body: `Hi Shawn,\n\n\n---\nFrom: ${fromLine}`,
+    },
+  ];
+
+  if (variant === "drawer") {
+    return (
+      <>
+        {options.map((opt) => {
+          const Icon = opt.icon;
+          return (
+            <a
+              key={opt.label}
+              href={`mailto:shawn@trynocturn.com?subject=${encodeURIComponent(opt.subject)}&body=${encodeURIComponent(opt.body)}`}
+              onClick={() => { haptic("light"); onClose?.(); }}
+              className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-foreground hover:bg-white/[0.04] transition-all duration-200"
+            >
+              <Icon className="h-5 w-5 text-muted-foreground" />
+              {opt.label}
+            </a>
+          );
+        })}
+      </>
+    );
+  }
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-white/[0.04] hover:text-foreground transition-colors">
+        <LifeBuoy className="h-4 w-4" />
+        <span>Support</span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" side="top" className="w-52 mb-1">
+        <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">
+          Contact shawn@trynocturn.com
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {options.map((opt) => {
+          const Icon = opt.icon;
+          return (
+            <DropdownMenuItem
+              key={opt.label}
+              onClick={() => {
+                setOpen(false);
+                window.location.href = `mailto:shawn@trynocturn.com?subject=${encodeURIComponent(opt.subject)}&body=${encodeURIComponent(opt.body)}`;
+              }}
+            >
+              <Icon className="mr-2 h-4 w-4" />
+              {opt.label}
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 export function DashboardShell({ user, collectives, userType, children }: DashboardShellProps) {
   const pathname = usePathname();
@@ -256,6 +349,11 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
             );
           })}
         </nav>
+
+        {/* Support button */}
+        <div className="px-3 pb-1 relative z-10">
+          <SupportButton userName={user.fullName} collectiveName={activeColl?.name} />
+        </div>
 
         <div className="border-t border-white/[0.06] p-3 relative z-10">
           <DropdownMenu>
@@ -412,7 +510,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
                 <div className="w-10 h-1 rounded-full bg-white/20" />
               </div>
               {/* Nav items */}
-              <nav className="space-y-0.5 mb-4">
+              <nav className="space-y-0.5 mb-2">
                 {currentMoreItems.map((item) => {
                   const Icon = item.icon;
                   const active = isActive(item.href);
@@ -433,6 +531,10 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
                   );
                 })}
               </nav>
+              {/* Support in more drawer */}
+              <div className="border-t border-white/[0.08] pt-2 mb-2">
+                <SupportButton userName={user.fullName} collectiveName={activeColl?.name} variant="drawer" onClose={() => setMoreOpen(false)} />
+              </div>
             </div>
           </div>
         </div>

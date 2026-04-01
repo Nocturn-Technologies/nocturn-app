@@ -1,8 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { Loader2, MessageSquare, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, MessageSquare, User, Check, X, ExternalLink } from "lucide-react";
+import { acceptInquiry, rejectInquiry } from "@/app/actions/inquiries";
 
 interface Inquiry {
   id: string;
@@ -12,11 +15,14 @@ interface Inquiry {
   created_at: string;
   from_user: { full_name: string; email: string } | null;
   event: { title: string } | null;
+  channel_id?: string | null;
 }
 
 export default function InquiriesPage() {
+  const router = useRouter();
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadInquiries();
@@ -70,6 +76,47 @@ export default function InquiriesPage() {
     setLoading(false);
   }
 
+  async function handleAccept(inquiryId: string) {
+    setProcessingId(inquiryId);
+    const result = await acceptInquiry(inquiryId);
+    setProcessingId(null);
+
+    if (result.error) {
+      // Update local state to show error briefly
+      alert(result.error);
+      return;
+    }
+
+    // Update local state
+    setInquiries((prev) =>
+      prev.map((inq) =>
+        inq.id === inquiryId ? { ...inq, status: "accepted" } : inq
+      )
+    );
+
+    // Navigate to the new chat channel
+    if (result.channelId) {
+      router.push(`/dashboard/chat/${result.channelId}`);
+    }
+  }
+
+  async function handleReject(inquiryId: string) {
+    setProcessingId(inquiryId);
+    const result = await rejectInquiry(inquiryId);
+    setProcessingId(null);
+
+    if (result.error) {
+      alert(result.error);
+      return;
+    }
+
+    setInquiries((prev) =>
+      prev.map((inq) =>
+        inq.id === inquiryId ? { ...inq, status: "rejected" } : inq
+      )
+    );
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -99,57 +146,110 @@ export default function InquiriesPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {inquiries.map((inq) => (
-            <div
-              key={inq.id}
-              className="rounded-xl border border-border bg-card p-4 space-y-2"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-8 w-8 rounded-full bg-nocturn/20 flex items-center justify-center">
-                    <User className="h-4 w-4 text-nocturn" />
+          {inquiries.map((inq) => {
+            const isProcessing = processingId === inq.id;
+
+            return (
+              <div
+                key={inq.id}
+                className="rounded-xl border border-border bg-card p-4 space-y-3"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full bg-nocturn/20 flex items-center justify-center">
+                      <User className="h-4 w-4 text-nocturn" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">
+                        {inq.from_user?.full_name ?? "Unknown"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {inq.from_user?.email}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-sm">
-                      {inq.from_user?.full_name ?? "Unknown"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {inq.from_user?.email}
-                    </p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      inq.status === "pending"
+                        ? "bg-amber-500/10 text-amber-400"
+                        : inq.status === "accepted"
+                        ? "bg-emerald-500/10 text-emerald-400"
+                        : "bg-zinc-500/10 text-zinc-400"
+                    }`}>
+                      {inq.status}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {new Date(inq.created_at).toLocaleDateString("en", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    inq.status === "pending"
-                      ? "bg-amber-500/10 text-amber-400"
-                      : inq.status === "accepted"
-                      ? "bg-emerald-500/10 text-emerald-400"
-                      : "bg-zinc-500/10 text-zinc-400"
-                  }`}>
-                    {inq.status}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(inq.created_at).toLocaleDateString("en", {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </span>
-                </div>
+
+                {inq.message && (
+                  <div className="bg-background rounded-lg p-3 text-sm text-foreground/90">
+                    {inq.message}
+                  </div>
+                )}
+
+                {inq.inquiry_type !== "general" && (
+                  <p className="text-xs text-muted-foreground">
+                    Type: {inq.inquiry_type}
+                  </p>
+                )}
+
+                {/* Action buttons */}
+                {inq.status === "pending" && (
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-9 text-xs"
+                      disabled={isProcessing}
+                      onClick={() => handleAccept(inq.id)}
+                    >
+                      {isProcessing ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                      ) : (
+                        <Check className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Accept & Chat
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-9 text-xs text-muted-foreground hover:text-foreground"
+                      disabled={isProcessing}
+                      onClick={() => handleReject(inq.id)}
+                    >
+                      {isProcessing ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Dismiss
+                    </Button>
+                  </div>
+                )}
+
+                {inq.status === "accepted" && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 text-xs border-nocturn/30 text-nocturn hover:bg-nocturn/10"
+                    onClick={() => router.push("/dashboard/chat")}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                    View Chat
+                  </Button>
+                )}
+
+                {inq.status === "rejected" && (
+                  <p className="text-xs text-muted-foreground/60 italic">Dismissed</p>
+                )}
               </div>
-
-              {inq.message && (
-                <div className="bg-background rounded-lg p-3 text-sm text-foreground/90">
-                  {inq.message}
-                </div>
-              )}
-
-              {inq.inquiry_type !== "general" && (
-                <p className="text-xs text-muted-foreground">
-                  Type: {inq.inquiry_type}
-                </p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

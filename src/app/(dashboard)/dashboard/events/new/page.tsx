@@ -1202,6 +1202,76 @@ export default function NewEventPage() {
         }]);
       }
 
+      // ── Budget field update from chat (e.g. "increase talent fee to $800") ──
+      const budgetFieldUpdated =
+        parsed.talentFee !== undefined ||
+        parsed.venueCost !== undefined ||
+        parsed.barMinimum !== undefined ||
+        parsed.deposit !== undefined ||
+        parsed.otherExpenses !== undefined;
+
+      if (budgetFieldUpdated && step === "review") {
+        // Update budget inputs with the new values
+        const updatedBudget = {
+          ...budgetInput,
+          ...(parsed.talentFee !== undefined && { talentFee: parsed.talentFee }),
+          ...(parsed.venueCost !== undefined && { venueCost: parsed.venueCost }),
+          ...(parsed.barMinimum !== undefined && { barMinimum: parsed.barMinimum }),
+          ...(parsed.deposit !== undefined && { deposit: parsed.deposit }),
+          ...(parsed.otherExpenses !== undefined && { otherExpenses: parsed.otherExpenses }),
+        };
+        setBudgetInput(updatedBudget);
+
+        // Recalculate budget with updated inputs
+        try {
+          const result = await calculateBudget(updatedBudget as BudgetInput);
+          setBudgetResult(result);
+
+          // Update tiers from recalculated budget (unless user explicitly set tiers)
+          if (!parsed.tiers && result.suggestedTiers.length > 0) {
+            setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+          }
+
+          const changes: string[] = [];
+          if (parsed.talentFee !== undefined) changes.push(`talent fee → $${parsed.talentFee.toLocaleString()}`);
+          if (parsed.venueCost !== undefined) changes.push(`venue cost → $${parsed.venueCost.toLocaleString()}`);
+          if (parsed.barMinimum !== undefined) changes.push(`bar minimum → $${parsed.barMinimum.toLocaleString()}`);
+          if (parsed.deposit !== undefined) changes.push(`deposit → $${parsed.deposit.toLocaleString()}`);
+          if (parsed.otherExpenses !== undefined) changes.push(`other expenses → $${parsed.otherExpenses.toLocaleString()}`);
+
+          const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
+
+          setThinking(false);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "ai",
+              content: `Updated ${changes.join(", ")}.\n\n📊 **Revised Budget**\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Updated tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()}`).join("\n")}`,
+            },
+          ]);
+          setPhase("review");
+        } catch {
+          setThinking(false);
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: reply || "Updated! Here's the revised plan:" },
+          ]);
+          setPhase("review");
+        }
+        return;
+      }
+
+      // If coming back from review with tier updates only, go straight back to review
+      if (step === "review" && (parsed.tiers || parsed.ticketPrice !== undefined)) {
+        setThinking(false);
+        setMessages((prev) => [
+          ...prev,
+          { role: "ai", content: reply || "Updated the tiers. Here's the revised plan:" },
+        ]);
+        setPhase("review");
+        return;
+      }
+
       setThinking(false);
 
       // Check what's still missing
@@ -1222,6 +1292,17 @@ export default function NewEventPage() {
           advanceToStep("headliner-type");
           return;
         }
+
+        // If coming back from review with any field update, go back to review
+        if (step === "review") {
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: reply || "Updated! Here's the revised plan:" },
+          ]);
+          setPhase("review");
+          return;
+        }
+
         // Everything we need — go to review
         setMessages((prev) => [
           ...prev,
@@ -1324,12 +1405,12 @@ export default function NewEventPage() {
 
   function handleBackToChat() {
     setPhase("chat");
-    // Keep existing data — just let them make changes
+    // Keep existing data — just let them make changes via chat
     setMessages((prev) => [
       ...prev,
       {
         role: "ai",
-        content: "What would you like to change? Tell me and I\u2019ll update it.",
+        content: "What would you like to change? You can say things like:\n• \"Increase talent fee to $800\"\n• \"Change Early Bird to $20\"\n• \"Add a VIP tier at $50 for 30 people\"\n• \"Move the date to May 10\"",
       },
     ]);
     setTimeout(() => inputRef.current?.focus(), 100);

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, memo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft, Info, Send, Sparkles } from "lucide-react";
+import { ArrowLeft, Send, Sparkles, DollarSign, Loader2, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EventCardLive } from "@/components/event-card-live";
 import { MicButton, VoicePlayback } from "@/components/voice-note";
@@ -26,7 +26,7 @@ interface Channel {
   collective_id: string;
   event_id: string | null;
   name: string;
-  type: "general" | "event";
+  type: "general" | "event" | "collab";
 }
 
 export default function ChatRoomPage() {
@@ -246,12 +246,21 @@ export default function ChatRoomPage() {
         }
       });
 
-    // AI always responds — this is a copilot, not a dumb chatroom
-    if (!aiTyping) {
+    // AI responds based on channel type:
+    // - General channel: always responds (copilot mode)
+    // - Event/collab channels: only responds when invoked with @ai, @nocturn, /ai, or /nocturn
+    const shouldTriggerAI =
+      channel?.type === "general" ||
+      /^[@/](ai|nocturn)\b/i.test(content) ||
+      /\b@(ai|nocturn)\b/i.test(content);
+
+    if (shouldTriggerAI && !aiTyping) {
       setAiTyping(true);
       scrollToBottom();
       try {
-        await generateAIResponse(content);
+        // Strip the @ai / @nocturn prefix before sending to AI
+        const aiInput = content.replace(/^[@/](ai|nocturn)\s*/i, "").replace(/\b@(ai|nocturn)\b/i, "").trim() || content;
+        await generateAIResponse(aiInput);
       } finally {
         setAiTyping(false);
       }
@@ -316,6 +325,17 @@ export default function ChatRoomPage() {
           created_at: new Date().toISOString(),
         },
       ]);
+    }
+  };
+
+  // Add expense from AI suggestion — calls server action
+  const handleAddExpense = async (description: string, amount: number, category: string) => {
+    if (!channelId) return;
+    try {
+      const { addExpenseFromChat } = await import("@/app/actions/ai-chat");
+      await addExpenseFromChat(channelId, description, amount, category);
+    } catch (err) {
+      console.error("[chat] Failed to add expense:", err);
     }
   };
 
@@ -418,9 +438,6 @@ export default function ChatRoomPage() {
             <p className="text-[11px] text-nocturn font-medium">Event Channel</p>
           )}
         </div>
-        <Button variant="ghost" size="icon" className="-mr-2 rounded-xl transition-colors duration-200 hover:bg-accent active:bg-accent/80 active:scale-95" aria-label="Channel settings">
-          <Info size={20} className="text-muted-foreground" />
-        </Button>
       </header>
 
       {/* Connection status banner */}
@@ -520,6 +537,7 @@ export default function ChatRoomPage() {
               userName={getUserName(msg)}
               formatTime={formatTime}
               onFollowUp={(text) => setInput(text)}
+              onAddExpense={channel?.type === "event" ? handleAddExpense : undefined}
             />
           ))
         )}
@@ -564,7 +582,7 @@ export default function ChatRoomPage() {
                   sendMessage();
                 }
               }}
-              placeholder="Ask Nocturn anything..."
+              placeholder={channel?.type === "general" ? "Ask Nocturn anything..." : "Message your team... (@ai for Nocturn)"}
               className="w-full bg-transparent text-[16px] placeholder:text-muted-foreground/50 resize-none outline-none max-h-[120px] leading-5"
               rows={1}
               style={{ fontSize: "16px" }}
@@ -596,6 +614,50 @@ export default function ChatRoomPage() {
   );
 }
 
+/* ── Expense Action Button ── */
+function ExpenseActionButton({
+  description,
+  amount,
+  category,
+  onAdd,
+}: {
+  description: string;
+  amount: number;
+  category: string;
+  onAdd: (description: string, amount: number, category: string) => Promise<void>;
+}) {
+  const [state, setState] = useState<"idle" | "loading" | "done">("idle");
+
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  return (
+    <button
+      disabled={state !== "idle"}
+      onClick={async () => {
+        setState("loading");
+        await onAdd(description, amount, category);
+        setState("done");
+      }}
+      className={`ml-1 flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
+        state === "done"
+          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+          : "border-nocturn/20 bg-nocturn/5 text-nocturn hover:bg-nocturn/10 hover:border-nocturn/30 active:scale-[0.97]"
+      }`}
+    >
+      {state === "loading" ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : state === "done" ? (
+        <Check className="h-3.5 w-3.5" />
+      ) : (
+        <DollarSign className="h-3.5 w-3.5" />
+      )}
+      {state === "done"
+        ? "Expense added"
+        : `Add expense: ${description} — $${amount.toFixed(2)}`}
+    </button>
+  );
+}
+
 /* ── Message Bubble ── */
 const MessageBubble = memo(function MessageBubble({
   msg,
@@ -603,12 +665,14 @@ const MessageBubble = memo(function MessageBubble({
   userName,
   formatTime,
   onFollowUp,
+  onAddExpense,
 }: {
   msg: Message;
   isOwn: boolean;
   userName: string;
   formatTime: (d: string) => string;
   onFollowUp?: (text: string) => void;
+  onAddExpense?: (description: string, amount: number, category: string) => Promise<void>;
 }) {
   // System messages
   if (msg.type === "system") {
@@ -691,6 +755,14 @@ const MessageBubble = memo(function MessageBubble({
 
     const followUps = getFollowUps(msg.content);
 
+    // Parse expense block from AI message: [EXPENSE:description|amount|category]
+    const expenseMatch = msg.content.match(/\[EXPENSE:([^|]+)\|([^|]+)\|([^\]]+)\]/);
+    const expenseParsed = expenseMatch
+      ? { description: expenseMatch[1], amount: parseFloat(expenseMatch[2]), category: expenseMatch[3] }
+      : null;
+    // Strip expense block from displayed content
+    const displayContent = msg.content.replace(/\[EXPENSE:[^\]]+\]/g, "").trim();
+
     return (
       <div className="flex justify-start animate-in fade-in slide-in-from-bottom-1 duration-200">
         <div className="max-w-[88%] space-y-2">
@@ -701,10 +773,20 @@ const MessageBubble = memo(function MessageBubble({
             </span>
           </div>
           <div className="rounded-2xl rounded-tl-md px-4 py-3 bg-nocturn/10 space-y-1">
-            <div className="text-[14px] leading-relaxed text-white/90">
-              {renderAIContent(msg.content)}
+            <div className="text-[14px] leading-relaxed text-white/90 break-words overflow-hidden">
+              {renderAIContent(displayContent)}
             </div>
           </div>
+
+          {/* Expense action button */}
+          {expenseParsed && onAddExpense && (
+            <ExpenseActionButton
+              description={expenseParsed.description}
+              amount={expenseParsed.amount}
+              category={expenseParsed.category}
+              onAdd={onAddExpense}
+            />
+          )}
 
           {/* Follow-up suggestions */}
           {followUps.length > 0 && (
@@ -780,7 +862,7 @@ const MessageBubble = memo(function MessageBubble({
               : "bg-card border border-border rounded-tl-md"
           }`}
         >
-          <p className="text-[14px] leading-relaxed whitespace-pre-wrap">
+          <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words overflow-hidden">
             {msg.content}
           </p>
         </div>
