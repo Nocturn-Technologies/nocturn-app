@@ -30,6 +30,7 @@ export async function GET(request: Request) {
     inactiveNudge: 0,
   };
 
+  try {
   const sb = createAdminClient();
   const now = new Date();
 
@@ -256,7 +257,7 @@ export async function GET(request: Request) {
           ? new Date(lastEvent.created_at).toLocaleDateString("en", { month: "long", day: "numeric" })
           : null;
 
-        const html = inactiveNudgeEmail(col.name, admin.full_name.split(" ")[0], lastDate);
+        const html = inactiveNudgeEmail(col.name, admin.full_name?.split(" ")[0] ?? "there", lastDate);
 
         await sendEmail({
           to: admin.email,
@@ -281,4 +282,11 @@ export async function GET(request: Request) {
     timestamp: now.toISOString(),
     results,
   });
+  } catch (err) {
+    console.error("[cron/reminders]", err);
+    return NextResponse.json(
+      { ok: false, error: "Internal cron error" },
+      { status: 500 }
+    );
+  }
 }

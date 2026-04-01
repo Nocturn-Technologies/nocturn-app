@@ -23,7 +23,8 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { eventId, tierId, quantity, buyerEmail, promoCode } = body;
+    const { eventId, tierId, quantity, buyerEmail: rawBuyerEmail, promoCode } = body;
+    const buyerEmail = typeof rawBuyerEmail === "string" ? rawBuyerEmail.trim().toLowerCase() : rawBuyerEmail;
     // Validate referrerToken as UUID to prevent FK violations downstream
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const referrerToken = body.referrerToken && uuidRegex.test(body.referrerToken) ? body.referrerToken : undefined;

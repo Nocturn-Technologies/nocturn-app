@@ -89,47 +89,48 @@ export function generateApprovalUrls(userId: string): { approveUrl: string; deny
 }
 
 export async function GET(request: NextRequest) {
-  if (!APPROVAL_SECRET) {
-    return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 }
-    );
-  }
+  try {
+    if (!APPROVAL_SECRET) {
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
 
-  const { searchParams } = new URL(request.url);
-  const userId = searchParams.get("user_id");
-  const action = searchParams.get("action") ?? "approve";
-  const token = searchParams.get("token");
+    const { searchParams } = new URL(request.url);
+    const userId = searchParams.get("user_id");
+    const action = searchParams.get("action") ?? "approve";
+    const token = searchParams.get("token");
 
-  if (!userId || !token) {
-    return NextResponse.json({ error: "Missing user_id or token" }, { status: 400 });
-  }
+    if (!userId || !token) {
+      return NextResponse.json({ error: "Missing user_id or token" }, { status: 400 });
+    }
 
-  // Verify HMAC-signed token (per-user, per-action, time-limited)
-  if (!verifyActionToken(userId, action, token)) {
-    return NextResponse.json({ error: "Invalid or expired approval link" }, { status: 401 });
-  }
+    // Verify HMAC-signed token (per-user, per-action, time-limited)
+    if (!verifyActionToken(userId, action, token)) {
+      return NextResponse.json({ error: "Invalid or expired approval link" }, { status: 401 });
+    }
 
-  // Fetch user info to display on the confirmation page
-  const admin = createAdminClient();
-  const { data: userData } = await admin.auth.admin.getUserById(userId);
-  const email = userData?.user?.email ?? "unknown";
-  const name = userData?.user?.user_metadata?.full_name ?? "Unknown";
-  const userType = userData?.user?.user_metadata?.user_type ?? "unknown";
+    // Fetch user info to display on the confirmation page
+    const admin = createAdminClient();
+    const { data: userData } = await admin.auth.admin.getUserById(userId);
+    const email = userData?.user?.email ?? "unknown";
+    const name = userData?.user?.user_metadata?.full_name ?? "Unknown";
+    const userType = userData?.user?.user_metadata?.user_type ?? "unknown";
 
-  const safeUserId = escapeHtml(userId);
-  const safeEmail = escapeHtml(email);
-  const safeName = escapeHtml(name);
-  const safeUserType = escapeHtml(userType);
-  const safeAction = escapeHtml(action);
+    const safeUserId = escapeHtml(userId);
+    const safeEmail = escapeHtml(email);
+    const safeName = escapeHtml(name);
+    const safeUserType = escapeHtml(userType);
+    const safeAction = escapeHtml(action);
 
-  // Generate per-action CSRF tokens (single-use, not the master secret)
-  const csrfApprove = generateActionToken(userId, "approve");
-  const csrfDeny = generateActionToken(userId, "deny");
+    // Generate per-action CSRF tokens (single-use, not the master secret)
+    const csrfApprove = generateActionToken(userId, "approve");
+    const csrfDeny = generateActionToken(userId, "deny");
 
-  // Render an HTML confirmation page — no action is taken on GET
-  return new NextResponse(
-    `<!DOCTYPE html>
+    // Render an HTML confirmation page — no action is taken on GET
+    return new NextResponse(
+      `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nocturn - ${safeAction === "approve" ? "Approve" : "Deny"} User</title></head>
 <body style="background:#09090B;color:#FAFAFA;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
@@ -167,126 +168,138 @@ export async function GET(request: NextRequest) {
   </div>
 </body>
 </html>`,
-    { headers: { "Content-Type": "text/html" } }
-  );
+      { headers: { "Content-Type": "text/html" } }
+    );
+  } catch (err) {
+    console.error("[approve-user] GET", err);
+    return new NextResponse(
+      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error</title></head><body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;"><div><h1 style="color:#FB7185;">Something went wrong</h1><p style="color:#A1A1AA;">Please try again later.</p></div></body></html>`,
+      { status: 500, headers: { "Content-Type": "text/html" } }
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
-  if (!APPROVAL_SECRET) {
-    return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 }
-    );
-  }
+  try {
+    if (!APPROVAL_SECRET) {
+      return NextResponse.json(
+        { error: "Server configuration error" },
+        { status: 500 }
+      );
+    }
 
-  const formData = await request.formData();
-  const userId = formData.get("user_id") as string | null;
-  const action = formData.get("action") as string | null;
-  const token = formData.get("token") as string | null;
+    const formData = await request.formData();
+    const userId = formData.get("user_id") as string | null;
+    const action = formData.get("action") as string | null;
+    const token = formData.get("token") as string | null;
 
-  if (!userId || !token) {
-    return NextResponse.json({ error: "Missing user_id or token" }, { status: 400 });
-  }
+    if (!userId || !token) {
+      return NextResponse.json({ error: "Missing user_id or token" }, { status: 400 });
+    }
 
-  // Verify HMAC-signed token (per-user, per-action, time-limited)
-  if (!verifyActionToken(userId, action ?? "approve", token)) {
-    return NextResponse.json({ error: "Invalid or expired approval token" }, { status: 401 });
-  }
+    // Verify HMAC-signed token (per-user, per-action, time-limited)
+    if (!verifyActionToken(userId, action ?? "approve", token)) {
+      return NextResponse.json({ error: "Invalid or expired approval token" }, { status: 401 });
+    }
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
 
-  if (action === "deny") {
-    // Set is_approved to false in users table and mark as denied in auth metadata
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (admin.from("users") as any)
-      .update({ is_approved: false })
-      .eq("id", userId);
+    if (action === "deny") {
+      // Set is_approved to false in users table and mark as denied in auth metadata
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (admin.from("users") as any)
+        .update({ is_approved: false })
+        .eq("id", userId);
 
-    await admin.auth.admin.updateUserById(userId, {
-      user_metadata: { is_approved: false, is_denied: true },
-    });
+      await admin.auth.admin.updateUserById(userId, {
+        user_metadata: { is_approved: false, is_denied: true },
+      });
 
-    const safeUserId = escapeHtml(userId);
+      const safeUserId = escapeHtml(userId);
 
-    return new NextResponse(
-      `<!DOCTYPE html>
+      return new NextResponse(
+        `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Account Denied</title></head>
 <body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;">
   <div><h1 style="color:#FB7185;">Account Denied</h1><p style="color:#A1A1AA;">User ${safeUserId} has been denied.</p></div>
 </body></html>`,
-      { headers: { "Content-Type": "text/html" } }
-    );
-  }
+        { headers: { "Content-Type": "text/html" } }
+      );
+    }
 
-  // Approve: update users table and auth metadata
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  await (admin.from("users") as any)
-    .update({ is_approved: true })
-    .eq("id", userId);
+    // Approve: update users table and auth metadata
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (admin.from("users") as any)
+      .update({ is_approved: true })
+      .eq("id", userId);
 
-  await admin.auth.admin.updateUserById(userId, {
-    user_metadata: { is_approved: true, is_denied: false },
-  });
+    await admin.auth.admin.updateUserById(userId, {
+      user_metadata: { is_approved: true, is_denied: false },
+    });
 
-  // Get user email to send approval notification
-  const { data: userData } = await admin.auth.admin.getUserById(userId);
-  const email = userData?.user?.email;
-  const name = userData?.user?.user_metadata?.full_name ?? "there";
+    // Get user email to send approval notification
+    const { data: userData } = await admin.auth.admin.getUserById(userId);
+    const email = userData?.user?.email;
+    const name = userData?.user?.user_metadata?.full_name ?? "there";
 
-  // Send approval email
-  if (email) {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (apiKey) {
-      const safeName = escapeHtml(name.split(" ")[0]);
-      try {
-        await fetch("https://api.resend.com/emails", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            from: "Nocturn <nocturn@trynocturn.com>",
-            to: email,
-            subject: "You're approved! Welcome to Nocturn",
-            html: `
-              <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
-                <div style="margin-bottom: 32px;">
-                  <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
+    // Send approval email
+    if (email) {
+      const apiKey = process.env.RESEND_API_KEY;
+      if (apiKey) {
+        const safeName = escapeHtml(name.split(" ")[0]);
+        try {
+          await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              from: "Nocturn <nocturn@trynocturn.com>",
+              to: email,
+              subject: "You're approved! Welcome to Nocturn",
+              html: `
+                <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
+                  <div style="margin-bottom: 32px;">
+                    <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
+                  </div>
+                  <h1 style="font-size: 28px; font-weight: 800; margin: 0 0 16px; line-height: 1.2;">
+                    You're in, ${safeName}!
+                  </h1>
+                  <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
+                    Your account has been approved. You now have full access to Nocturn — create events, sell tickets, manage your crew, and grow your collective.
+                  </p>
+                  <a href="https://app.trynocturn.com/dashboard" style="display: inline-block; background: #7B2FF7; color: white; padding: 12px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 14px;">
+                    Open Nocturn
+                  </a>
+                  <p style="color: #71717A; font-size: 12px; margin-top: 40px; line-height: 1.5;">
+                    You run the night. Nocturn runs the business.<br>
+                    <a href="https://trynocturn.com" style="color: #7B2FF7; text-decoration: none;">trynocturn.com</a>
+                  </p>
                 </div>
-                <h1 style="font-size: 28px; font-weight: 800; margin: 0 0 16px; line-height: 1.2;">
-                  You're in, ${safeName}!
-                </h1>
-                <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
-                  Your account has been approved. You now have full access to Nocturn — create events, sell tickets, manage your crew, and grow your collective.
-                </p>
-                <a href="https://app.trynocturn.com/dashboard" style="display: inline-block; background: #7B2FF7; color: white; padding: 12px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 14px;">
-                  Open Nocturn
-                </a>
-                <p style="color: #71717A; font-size: 12px; margin-top: 40px; line-height: 1.5;">
-                  You run the night. Nocturn runs the business.<br>
-                  <a href="https://trynocturn.com" style="color: #7B2FF7; text-decoration: none;">trynocturn.com</a>
-                </p>
-              </div>
-            `,
-          }),
-        });
-      } catch {
-        // Non-critical
+              `,
+            }),
+          });
+        } catch {
+          // Non-critical
+        }
       }
     }
-  }
 
-  const safeEmail = escapeHtml(email ?? userId);
+    const safeEmail = escapeHtml(email ?? userId);
 
-  return new NextResponse(
-    `<!DOCTYPE html>
+    return new NextResponse(
+      `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Account Approved</title></head>
 <body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;">
   <div><h1 style="color:#2DD4BF;">Account Approved!</h1><p style="color:#A1A1AA;">${safeEmail} now has full access to Nocturn.</p></div>
 </body></html>`,
-    { headers: { "Content-Type": "text/html" } }
-  );
+      { headers: { "Content-Type": "text/html" } }
+    );
+  } catch (err) {
+    console.error("[approve-user] POST", err);
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+  }
 }

@@ -29,50 +29,68 @@ const torontoArtists = [
 ];
 
 export async function POST() {
-  // Block in production
-  if (!process.env.ALLOW_SEED) {
-    return NextResponse.json({ error: 'Seed routes disabled in production' }, { status: 403 });
-  }
+  try {
+    // Block in production
+    if (!process.env.ALLOW_SEED) {
+      return NextResponse.json({ error: 'Seed routes disabled in production' }, { status: 403 });
+    }
 
-  // Auth check — only admins can seed data
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
+    // Auth check — only admins can seed data
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
 
-  const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+    // Admin role check — only collective owners can seed
+    const { data: ownership } = await supabase
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", user.id)
+      .eq("role", "owner")
+      .is("deleted_at", null)
+      .maybeSingle();
 
-  let inserted = 0;
-  let skipped = 0;
+    if (!ownership) {
+      return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    }
 
-  for (const artist of torontoArtists) {
-    const slug = artist.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "-" + Math.random().toString(36).slice(2, 6);
-
-    const { error } = await admin.from("artists").insert({
-      name: artist.name,
-      slug,
-      bio: artist.bio,
-      genre: artist.genre,
-      instagram: artist.instagram,
-      soundcloud: artist.soundcloud,
-      spotify: artist.spotify,
-      booking_email: artist.booking_email,
-      default_fee: artist.default_fee,
-      metadata: { location: "Toronto, ON" },
+    const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    if (error) {
-      skipped++;
-    } else {
-      inserted++;
-    }
-  }
+    let inserted = 0;
+    let skipped = 0;
 
-  return NextResponse.json({
-    message: `Seeded ${inserted} Toronto artists (${skipped} skipped)`,
-    total: torontoArtists.length,
-  });
+    for (const artist of torontoArtists) {
+      const slug = artist.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "-" + Math.random().toString(36).slice(2, 6);
+
+      const { error } = await admin.from("artists").insert({
+        name: artist.name,
+        slug,
+        bio: artist.bio,
+        genre: artist.genre,
+        instagram: artist.instagram,
+        soundcloud: artist.soundcloud,
+        spotify: artist.spotify,
+        booking_email: artist.booking_email,
+        default_fee: artist.default_fee,
+        metadata: { location: "Toronto, ON" },
+      });
+
+      if (error) {
+        skipped++;
+      } else {
+        inserted++;
+      }
+    }
+
+    return NextResponse.json({
+      message: `Seeded ${inserted} Toronto artists (${skipped} skipped)`,
+      total: torontoArtists.length,
+    });
+  } catch (err) {
+    console.error("[seed-artists]", err);
+    return NextResponse.json({ error: "Something went wrong" }, { status: 500 });
+  }
 }

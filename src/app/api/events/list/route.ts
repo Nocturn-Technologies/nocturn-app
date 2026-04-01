@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
 
 export async function GET(request: Request) {
@@ -26,9 +25,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const admin = createAdminClient();
-
-    const { data: memberships } = await admin
+    const { data: memberships } = await supabase
       .from("collective_members")
       .select("collective_id")
       .eq("user_id", user.id)
@@ -40,7 +37,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ events: [], page, limit, total: 0 });
     }
 
-    const { data: events, count } = await admin
+    const { data: events, count } = await supabase
       .from("events")
       .select("id, title, status, starts_at", { count: "exact" })
       .in("collective_id", collectiveIds)

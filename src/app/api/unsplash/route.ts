@@ -107,8 +107,16 @@ export async function POST(req: NextRequest) {
 
   try {
     const { downloadUrl } = await req.json();
-    if (!downloadUrl || typeof downloadUrl !== "string" || !downloadUrl.startsWith("https://api.unsplash.com/")) {
-      return NextResponse.json({ error: "Invalid downloadUrl" }, { status: 400 });
+    if (!downloadUrl || typeof downloadUrl !== "string") {
+      return NextResponse.json({ error: "Invalid download URL" }, { status: 400 });
+    }
+    try {
+      const parsed = new URL(downloadUrl);
+      if (parsed.hostname !== "api.unsplash.com") {
+        return NextResponse.json({ error: "Invalid download URL" }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid download URL" }, { status: 400 });
     }
 
     // Trigger download tracking (Unsplash requirement)

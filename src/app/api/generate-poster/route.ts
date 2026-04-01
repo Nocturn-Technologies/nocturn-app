@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   if (!REPLICATE_API_TOKEN) {
     return NextResponse.json(
-      { error: "Add REPLICATE_API_TOKEN to Vercel environment variables." },
+      { error: "Image generation service not configured" },
       { status: 503 }
     );
   }
