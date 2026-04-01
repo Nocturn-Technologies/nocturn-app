@@ -171,7 +171,7 @@ function getSmartActions(props: DashboardHomeProps) {
     // Zero-event state: show venue discovery instead
     actions.push({
       title: "Find a Venue",
-      description: "Browse Toronto venues for your first event",
+      description: "Browse venues for your first event",
       href: "/dashboard/venues",
       icon: <MapPin className="h-5 w-5" />,
       color: "text-nocturn-teal",

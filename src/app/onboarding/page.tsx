@@ -16,6 +16,12 @@ import { type VibeKey, VIBE_OPTIONS } from "@/lib/event-templates";
 
 type Step = "name_city" | "vibe" | "event" | "creating" | "share";
 
+const STORAGE_KEY = "nocturn_onboarding";
+
+function saveProgress(data: { step: Step; name: string; slug: string; city: string; selectedVibe: VibeKey | null; eventData: EventCardData | null }) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+}
+
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
@@ -41,6 +47,34 @@ export default function OnboardingPage() {
   const [createdEventSlug, setCreatedEventSlug] = useState("");
 
   const [error, setError] = useState<string | null>(null);
+
+  // Restore progress from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const data = JSON.parse(saved);
+        if (data.name) setName(data.name);
+        if (data.slug) setSlug(data.slug);
+        if (data.city) setCity(data.city);
+        if (data.selectedVibe) setSelectedVibe(data.selectedVibe);
+        if (data.eventData) {
+          // Restore date as Date object
+          setEventData({ ...data.eventData, date: new Date(data.eventData.date) });
+        }
+        // Restore to the step they were on (but not "creating" or "share")
+        if (data.step && data.step !== "creating" && data.step !== "share") {
+          setStep(data.step);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Save progress whenever state changes (but not on terminal steps)
+  useEffect(() => {
+    if (step === "creating" || step === "share") return;
+    saveProgress({ step, name, slug, city, selectedVibe, eventData });
+  }, [step, name, slug, city, selectedVibe, eventData]);
 
   // Auth guard
   useEffect(() => {
@@ -105,6 +139,7 @@ export default function OnboardingPage() {
       }
     }
 
+    localStorage.removeItem(STORAGE_KEY);
     setStep("share");
   }
 
@@ -114,6 +149,7 @@ export default function OnboardingPage() {
   }
 
   function goToDashboard() {
+    localStorage.removeItem(STORAGE_KEY);
     router.push("/dashboard");
     router.refresh();
   }

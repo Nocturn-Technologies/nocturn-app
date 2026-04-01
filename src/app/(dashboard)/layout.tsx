@@ -18,6 +18,13 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  // Defense-in-depth: check approval status (middleware should catch this, but belt-and-suspenders)
+  const userType = user.user_metadata?.user_type;
+  const isApproved = user.user_metadata?.is_approved;
+  if ((userType === "collective" || userType === "promoter") && isApproved === false) {
+    redirect("/pending-approval");
+  }
+
   // Use admin client to check memberships (bypasses RLS chicken-and-egg issue)
   const admin = createAdminClient();
 
@@ -35,9 +42,9 @@ export default async function DashboardLayout({
       .select("user_type")
       .eq("id", user.id)
       .maybeSingle();
-    const userType = (userRow as { user_type?: string } | null)?.user_type;
+    const dbUserType = (userRow as { user_type?: string } | null)?.user_type;
     const skipOnboarding = ["promoter", "artist", "venue", "photographer", "videographer", "sound_production", "lighting_production", "sponsor", "artist_manager", "tour_manager", "booking_agent", "event_staff", "mc_host", "graphic_designer", "pr_publicist"];
-    if (!skipOnboarding.includes(userType ?? "")) {
+    if (!skipOnboarding.includes(dbUserType ?? "")) {
       redirect("/onboarding");
     }
   }
@@ -62,8 +69,8 @@ export default async function DashboardLayout({
       return { ...c, role: m.role };
     });
 
-  // Get user type from auth metadata or DB
-  const userType = user.user_metadata?.user_type ?? (profile as { user_type?: string } | null)?.user_type ?? "collective";
+  // Get user type from auth metadata or DB (reuse early `userType` or fall back to DB)
+  const resolvedUserType = userType ?? (profile as { user_type?: string } | null)?.user_type ?? "collective";
 
   return (
     <>
@@ -71,7 +78,7 @@ export default async function DashboardLayout({
     <DashboardShell
       user={{ id: user.id, email: user.email ?? "", fullName: (profile as { full_name?: string } | null)?.full_name ?? "" }}
       collectives={collectives}
-      userType={userType}
+      userType={resolvedUserType}
     >
       {children}
     </DashboardShell>

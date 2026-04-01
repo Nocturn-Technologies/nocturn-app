@@ -42,6 +42,17 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // Check approval gate for onboarding too — prevent unapproved collectives from creating records
+  if (user && request.nextUrl.pathname.startsWith("/onboarding")) {
+    const userType = user.user_metadata?.user_type;
+    const isApproved = user.user_metadata?.is_approved;
+    if ((userType === "collective" || userType === "promoter") && isApproved === false) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/pending-approval";
+      return NextResponse.redirect(url);
+    }
+  }
+
   // Check if user has been denied
   if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
     const isDenied = user.user_metadata?.is_denied;

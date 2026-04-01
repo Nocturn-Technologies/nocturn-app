@@ -14,7 +14,10 @@ interface ShareScreenProps {
 export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard }: ShareScreenProps) {
   const [copied, setCopied] = useState(false);
   const [showConfetti, setShowConfetti] = useState(true);
-  const eventUrl = `https://app.trynocturn.com/${collectiveSlug}/${eventSlug}`;
+  const hasEvent = !!eventSlug;
+  const shareUrl = hasEvent
+    ? `https://app.trynocturn.com/${collectiveSlug}/${eventSlug}`
+    : `https://app.trynocturn.com/${collectiveSlug}`;
 
   useEffect(() => {
     const timer = setTimeout(() => setShowConfetti(false), 3000);
@@ -23,13 +26,13 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard
 
   async function handleCopy() {
     try {
-      await navigator.clipboard.writeText(eventUrl);
+      await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Fallback for mobile
       const input = document.createElement("input");
-      input.value = eventUrl;
+      input.value = shareUrl;
       document.body.appendChild(input);
       input.select();
       document.execCommand("copy");
@@ -41,7 +44,7 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard
 
   function handleEmailShare() {
     const subject = encodeURIComponent(`${eventTitle} — Grab your tickets`);
-    const body = encodeURIComponent(`Just dropped ${eventTitle}. Grab tickets here: ${eventUrl}`);
+    const body = encodeURIComponent(`Just dropped ${eventTitle}. Grab tickets here: ${shareUrl}`);
     window.open(`mailto:?subject=${subject}&body=${body}`, "_blank");
   }
 
@@ -86,7 +89,9 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard
 
       <div className="text-center space-y-1">
         <h2 className="text-2xl font-bold">{eventTitle}</h2>
-        <p className="text-lg text-nocturn font-semibold">is LIVE</p>
+        <p className="text-lg text-nocturn font-semibold">
+          {hasEvent ? "is LIVE" : "is ready"}
+        </p>
       </div>
 
       {/* Event URL */}
@@ -97,7 +102,7 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard
         >
           <div className="flex items-center gap-2 min-w-0">
             <Link2 className="h-4 w-4 text-nocturn shrink-0" />
-            <span className="text-sm text-muted-foreground truncate">{eventUrl}</span>
+            <span className="text-sm text-muted-foreground truncate">{shareUrl}</span>
           </div>
           {copied ? (
             <div className="flex items-center gap-1 shrink-0">
@@ -112,12 +117,14 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard
 
       {/* Share actions */}
       <div className="w-full max-w-sm space-y-2.5">
-        <Button
-          onClick={handleInstagramShare}
-          className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 py-5 text-base"
-        >
-          Share to IG Story
-        </Button>
+        {hasEvent && (
+          <Button
+            onClick={handleInstagramShare}
+            className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 py-5 text-base"
+          >
+            Share to IG Story
+          </Button>
+        )}
 
         <Button
           onClick={handleEmailShare}
@@ -139,13 +146,13 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard
       </div>
 
       {/* Dashboard CTA */}
-      <button
+      <Button
         onClick={onDashboard}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors mt-2"
+        className="w-full max-w-sm bg-nocturn hover:bg-nocturn-light py-5 text-base mt-2"
       >
         Go to Dashboard
-        <ArrowRight className="h-3.5 w-3.5" />
-      </button>
+        <ArrowRight className="ml-2 h-4 w-4" />
+      </Button>
     </div>
   );
 }
