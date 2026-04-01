@@ -239,7 +239,7 @@ export default function VenuesPage() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
+    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300">
       {/* Header */}
       <div className="px-4 md:px-0">
         <h1 className="text-2xl font-bold font-heading">Venues</h1>
@@ -260,7 +260,7 @@ export default function VenuesPage() {
           <div className="flex gap-2">
             <Button
               size="sm"
-              className="bg-nocturn hover:bg-nocturn-light text-white min-h-[44px]"
+              className="bg-nocturn hover:bg-nocturn-light text-white min-h-[44px] active:scale-95 transition-all duration-200"
               onClick={() =>
                 setScoutingVenue({ placeId: nearbyVenue.place_id, name: nearbyVenue.name })
               }
@@ -271,7 +271,7 @@ export default function VenuesPage() {
             <Button
               size="sm"
               variant="outline"
-              className="min-h-[44px]"
+              className="min-h-[44px] active:scale-95 transition-all duration-200"
               onClick={() => {
                 const sv = nearbyVenue;
                 openDetail({
@@ -332,7 +332,7 @@ export default function VenuesPage() {
               {query && (
                 <button
                   onClick={() => setQuery("")}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-muted-foreground hover:bg-muted-foreground/30"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-muted-foreground hover:bg-muted-foreground/30 active:scale-90 transition-all duration-200"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -347,10 +347,10 @@ export default function VenuesPage() {
                 <button
                   key={f}
                   onClick={() => setFilter(f)}
-                  className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors min-h-[44px] ${
+                  className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-all duration-200 min-h-[44px] active:scale-95 ${
                     filter === f
                       ? "bg-nocturn text-white"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80"
                   }`}
                 >
                   {f}
@@ -362,12 +362,18 @@ export default function VenuesPage() {
           {/* Venue list — single column mobile, 2-col md+ */}
           <div className="px-4 md:px-0">
             {loadingDiscover ? (
-              <LoadingSpinner />
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <VenueCardSkeleton key={i} />
+                ))}
+              </div>
             ) : venues.length === 0 ? (
               <EmptyState
                 icon={<Search className="h-10 w-10 text-muted-foreground" />}
                 title="No venues found"
                 subtitle="Try a different search or filter"
+                ctaLabel="Clear Search"
+                onCta={() => { setQuery(""); setFilter("All"); }}
               />
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -398,12 +404,18 @@ export default function VenuesPage() {
       {activeTab === "saved" && (
         <div className="space-y-4 px-4 md:px-0">
           {loadingSaved ? (
-            <LoadingSpinner />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <SavedVenueCardSkeleton key={i} />
+              ))}
+            </div>
           ) : savedVenues.length === 0 ? (
             <EmptyState
               icon={<Bookmark className="h-10 w-10 text-muted-foreground" />}
               title="No saved venues yet"
               subtitle="Save venues from Discover to build your go-to list"
+              ctaLabel="Discover Venues"
+              onCta={() => setActiveTab("discover")}
             />
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -530,7 +542,7 @@ function VenueDetailContent({
 
       <div className="space-y-5 px-4 pb-6">
         {/* Rating bar */}
-        <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
+        <div className="flex items-center gap-3 rounded-xl bg-muted p-3">
           <div className="flex items-center gap-1.5">
             <Star className="h-5 w-5 fill-amber-400 text-amber-400" />
             <span className="text-lg font-bold text-amber-500">
@@ -589,7 +601,7 @@ function VenueDetailContent({
           <Button
             onClick={() => (isSaved ? onRemove() : onSave())}
             disabled={isSaving}
-            className={`flex-1 min-h-[44px] ${
+            className={`flex-1 min-h-[44px] active:scale-95 transition-all duration-200 ${
               isSaved
                 ? "bg-destructive/15 text-destructive hover:bg-destructive/25"
                 : "bg-nocturn hover:bg-nocturn-light text-white"
@@ -610,7 +622,7 @@ function VenueDetailContent({
               </>
             )}
           </Button>
-          <Button variant="secondary" className="min-h-[44px]" onClick={onDirections}>
+          <Button variant="secondary" className="min-h-[44px] active:scale-95 transition-all duration-200" onClick={onDirections}>
             <Navigation className="mr-2 h-4 w-4" />
             Directions
           </Button>
@@ -634,7 +646,7 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all min-h-[44px] ${
+      className={`flex-1 rounded-md py-2 text-sm font-semibold transition-all duration-200 min-h-[44px] active:scale-95 ${
         active
           ? "bg-background text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground"
@@ -691,7 +703,7 @@ function VenueCard({
 }) {
   return (
     <Card
-      className="cursor-pointer overflow-hidden transition-colors hover:border-nocturn/30 p-0"
+      className="cursor-pointer overflow-hidden rounded-2xl transition-all duration-200 hover:border-nocturn/30 active:scale-[0.98] p-0"
       onClick={onTap}
     >
       {/* Photo placeholder gradient */}
@@ -758,7 +770,7 @@ function SavedVenueCard({
 }) {
   return (
     <Card
-      className="cursor-pointer transition-colors hover:border-nocturn/30"
+      className="cursor-pointer rounded-2xl transition-all duration-200 hover:border-nocturn/30 active:scale-[0.98]"
       onClick={onTap}
     >
       <CardContent className="flex items-center gap-3 p-3">
@@ -830,7 +842,7 @@ function HeartButton({
     <button
       onClick={onClick}
       disabled={loading}
-      className={`flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full backdrop-blur-sm transition-all ${
+      className={`flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full backdrop-blur-sm transition-all duration-200 active:scale-90 ${
         filled
           ? "bg-red-500/30 text-red-400"
           : "bg-black/40 text-white/70 hover:text-white"
@@ -859,7 +871,7 @@ function DetailRow({
 
   if (href) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" className="block">
+      <a href={href} target="_blank" rel="noopener noreferrer" className="block rounded-lg px-1 -mx-1 transition-colors duration-200 hover:bg-accent">
         {content}
       </a>
     );
@@ -867,10 +879,30 @@ function DetailRow({
   return content;
 }
 
-function LoadingSpinner() {
+function VenueCardSkeleton() {
   return (
-    <div className="flex items-center justify-center py-12">
-      <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+    <div className="rounded-2xl border border-border overflow-hidden">
+      <div className="h-32 bg-muted animate-pulse" />
+      <div className="p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+          <div className="h-3 w-10 rounded bg-muted animate-pulse" />
+        </div>
+        <div className="h-3 w-24 rounded bg-muted animate-pulse" />
+      </div>
+    </div>
+  );
+}
+
+function SavedVenueCardSkeleton() {
+  return (
+    <div className="rounded-2xl border border-border p-3 flex items-center gap-3">
+      <div className="h-14 w-14 shrink-0 rounded-lg bg-muted animate-pulse" />
+      <div className="flex-1 space-y-2">
+        <div className="h-4 w-28 rounded bg-muted animate-pulse" />
+        <div className="h-3 w-20 rounded bg-muted animate-pulse" />
+      </div>
+      <div className="h-8 w-8 rounded bg-muted animate-pulse" />
     </div>
   );
 }
@@ -879,21 +911,33 @@ function EmptyState({
   icon,
   title,
   subtitle,
+  ctaLabel,
+  onCta,
 }: {
   icon: React.ReactNode;
   title: string;
   subtitle: string;
+  ctaLabel?: string;
+  onCta?: () => void;
 }) {
   return (
-    <Card>
+    <Card className="rounded-2xl">
       <CardContent className="flex flex-col items-center gap-4 py-12">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
           {icon}
         </div>
         <div className="text-center">
-          <p className="font-medium">{title}</p>
+          <p className="font-bold">{title}</p>
           <p className="text-sm text-muted-foreground">{subtitle}</p>
         </div>
+        {ctaLabel && onCta && (
+          <Button
+            onClick={onCta}
+            className="bg-nocturn hover:bg-nocturn-light text-white active:scale-95 transition-all duration-200 min-h-[44px]"
+          >
+            {ctaLabel}
+          </Button>
+        )}
       </CardContent>
     </Card>
   );
