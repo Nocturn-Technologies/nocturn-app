@@ -238,7 +238,7 @@ export function DashboardHome(props: DashboardHomeProps) {
   const ambience = getAmbienceColor();
 
   return (
-    <div className="space-y-6 gradient-mesh relative overflow-x-hidden">
+    <div className="space-y-6 gradient-mesh relative overflow-x-hidden animate-fade-in">
       {/* Time-of-day ambient glow */}
       <div className="absolute -top-20 -left-20 w-[400px] h-[400px] rounded-full blur-[120px] pointer-events-none overflow-hidden" style={{ background: ambience.glow }} />
 
@@ -321,7 +321,7 @@ export function DashboardHome(props: DashboardHomeProps) {
               <Link
                 key={action.href}
                 href={action.href}
-                className="flex items-center gap-2 shrink-0 rounded-full border border-nocturn/20 bg-nocturn/[0.06] px-4 py-2.5 min-h-[44px] hover:bg-nocturn/15 hover:border-nocturn/40 hover:shadow-[0_0_16px_rgba(123,47,247,0.12)] active:scale-95 transition-all duration-300"
+                className="flex items-center gap-2 shrink-0 rounded-full border border-nocturn/20 bg-nocturn/[0.06] px-4 py-2.5 min-h-[44px] hover:bg-nocturn/15 hover:border-nocturn/40 hover:shadow-[0_0_16px_rgba(123,47,247,0.12)] active:scale-95 active:bg-nocturn/20 transition-all duration-200"
               >
                 <Icon className="h-4 w-4 text-nocturn-light" />
                 <span className="text-sm font-medium text-white whitespace-nowrap">
@@ -334,12 +334,12 @@ export function DashboardHome(props: DashboardHomeProps) {
       </div>
 
       {/* ── Bento Grid: Financial Pulse (wide) + Stats (narrow) ── */}
-      <div className={`grid grid-cols-1 ${props.financialPulse ? "md:grid-cols-3" : "md:grid-cols-3"} gap-4 animate-fade-in-up delay-100 relative z-10`}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-fade-in-up delay-100 relative z-10">
         {/* Financial Pulse — spans 2 cols on desktop */}
         {props.financialPulse ? (
           <Link href="/dashboard/finance" className="block md:col-span-2">
-            <Card className="h-full rounded-2xl transition-all duration-300 hover:ring-nocturn/30 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98]">
-              <CardContent className="p-5">
+            <Card className="h-full rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn/30 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98]">
+              <CardContent className="p-4">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn-teal/10">
@@ -396,7 +396,7 @@ export function DashboardHome(props: DashboardHomeProps) {
           </Link>
         ) : (
           <Link href="/dashboard/events/new" className="block md:col-span-2">
-            <Card className="h-full rounded-2xl border-dashed ring-white/[0.04] transition-all duration-300 hover:ring-nocturn/20 hover:shadow-lg hover:shadow-nocturn/5 active:scale-[0.98]">
+            <Card className="h-full rounded-2xl border-dashed ring-1 ring-white/[0.04] transition-all duration-200 hover:ring-nocturn/20 hover:shadow-lg hover:shadow-nocturn/5 active:scale-[0.98]">
               <CardContent className="flex flex-col items-center justify-center p-6 text-center min-h-[160px]">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-nocturn/10 mb-3">
                   <TrendingUp className="h-6 w-6 text-nocturn-light/60" />
@@ -415,8 +415,8 @@ export function DashboardHome(props: DashboardHomeProps) {
         )}
 
         {/* Stats column — stacked */}
-        <div className="grid grid-cols-2 min-[400px]:grid-cols-3 md:grid-cols-1 gap-4">
-          <Card className="rounded-2xl transition-all duration-300 hover:ring-nocturn/20 hover:shadow-md hover:shadow-nocturn/5 active:scale-[0.98]">
+        <div className="grid grid-cols-3 md:grid-cols-1 gap-4">
+          <Card className="rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn/20 hover:shadow-md hover:shadow-nocturn/5 active:scale-[0.98]">
             <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn/5">
                 <Calendar className="h-5 w-5 text-nocturn-light" />
@@ -427,7 +427,7 @@ export function DashboardHome(props: DashboardHomeProps) {
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-2xl transition-all duration-300 hover:ring-nocturn-teal/20 hover:shadow-md hover:shadow-nocturn-teal/5 active:scale-[0.98]">
+          <Card className="rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn-teal/20 hover:shadow-md hover:shadow-nocturn-teal/5 active:scale-[0.98]">
             <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn-teal/20 to-nocturn-teal/5">
                 <DollarSign className="h-5 w-5 text-nocturn-teal" />
@@ -440,7 +440,7 @@ export function DashboardHome(props: DashboardHomeProps) {
               </div>
             </CardContent>
           </Card>
-          <Card className="rounded-2xl transition-all duration-300 hover:ring-nocturn-coral/20 hover:shadow-md hover:shadow-nocturn-coral/5 active:scale-[0.98]">
+          <Card className="rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn-coral/20 hover:shadow-md hover:shadow-nocturn-coral/5 active:scale-[0.98]">
             <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn-coral/20 to-nocturn-coral/5">
                 <Users className="h-5 w-5 text-nocturn-coral" />
@@ -457,9 +457,9 @@ export function DashboardHome(props: DashboardHomeProps) {
       {/* ── Smart Actions — enhanced cards ── */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 animate-fade-in-up delay-200 relative z-10">
         {actions.map((action, i) => (
-          <Link key={action.href + i} href={action.href}>
-            <Card className={`h-full rounded-2xl transition-all duration-300 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98] ${
-              action.priority === "primary" ? "ring-nocturn/20 hover:ring-nocturn/40" : "hover:ring-white/[0.12]"
+          <Link key={action.href + i} href={action.href} className="group">
+            <Card className={`h-full rounded-2xl transition-all duration-200 hover:shadow-lg hover:shadow-nocturn/10 active:scale-[0.98] ${
+              action.priority === "primary" ? "ring-1 ring-nocturn/20 hover:ring-nocturn/40" : "hover:ring-1 hover:ring-white/[0.12]"
             }`}>
               <CardContent className="flex items-start gap-3 p-4">
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${action.iconBg} ${action.color}`}>
@@ -471,7 +471,7 @@ export function DashboardHome(props: DashboardHomeProps) {
                     {action.description}
                   </p>
                 </div>
-                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
+                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5 transition-transform duration-200 group-hover:translate-x-0.5" />
               </CardContent>
             </Card>
           </Link>
@@ -543,10 +543,19 @@ function LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string
               </div>
               <h2 className="text-xs font-bold uppercase tracking-widest text-nocturn-light">AI Briefing</h2>
             </div>
-            <div className="space-y-2">
-              <div className="h-4 w-3/4 rounded bg-nocturn/10 animate-pulse" />
-              <div className="h-4 w-2/3 rounded bg-nocturn/10 animate-pulse" />
-              <div className="h-4 w-1/2 rounded bg-nocturn/10 animate-pulse" />
+            <div className="space-y-3">
+              <div className="flex items-center gap-2.5">
+                <div className="h-5 w-5 rounded bg-nocturn/10 animate-pulse shrink-0" />
+                <div className="h-4 w-3/4 rounded bg-nocturn/10 animate-pulse" />
+              </div>
+              <div className="flex items-center gap-2.5">
+                <div className="h-5 w-5 rounded bg-nocturn/10 animate-pulse shrink-0" />
+                <div className="h-4 w-2/3 rounded bg-nocturn/10 animate-pulse" />
+              </div>
+              <div className="flex items-center gap-2.5">
+                <div className="h-5 w-5 rounded bg-nocturn/10 animate-pulse shrink-0" />
+                <div className="h-4 w-1/2 rounded bg-nocturn/10 animate-pulse" />
+              </div>
             </div>
           </CardContent>
         </Card>
