@@ -341,7 +341,7 @@ export default async function EventDetailPage({ params }: Props) {
       <Separator />
 
       {/* Event Details */}
-      <Card className="rounded-2xl transition-colors duration-200">
+      <Card className="rounded-2xl border-border hover:border-nocturn/20 transition-all duration-200">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-lg font-bold">
             <Calendar className="h-4 w-4 text-nocturn" />
@@ -406,7 +406,7 @@ export default async function EventDetailPage({ params }: Props) {
           {/* Description */}
           {event.description && (
             <div className="rounded-xl bg-muted/50 p-4">
-              <p className="text-sm text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed line-clamp-6">
                 {event.description}
               </p>
             </div>
@@ -415,7 +415,7 @@ export default async function EventDetailPage({ params }: Props) {
       </Card>
 
       {/* Ticket Tiers — Inline Editor */}
-      <Card className="rounded-2xl transition-colors duration-200">
+      <Card className="rounded-2xl border-border hover:border-nocturn/20 transition-all duration-200">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-lg font-bold">
             <Ticket className="h-4 w-4 text-nocturn" />
@@ -432,13 +432,13 @@ export default async function EventDetailPage({ params }: Props) {
 
       {/* Flyer Preview */}
       {event.flyer_url && (
-        <Card className="rounded-2xl overflow-hidden transition-colors duration-200">
+        <Card className="rounded-2xl overflow-hidden border-border hover:border-nocturn/20 transition-all duration-200">
           <CardHeader className="pb-4">
             <CardTitle className="text-lg font-bold">Event Flyer</CardTitle>
           </CardHeader>
           <CardContent>
             <div
-              className="h-48 rounded-xl bg-cover bg-center"
+              className="h-48 md:h-64 rounded-xl bg-cover bg-center transition-all duration-200 hover:scale-[1.01]"
               style={{ backgroundImage: safeBgUrl(event.flyer_url) }}
             />
           </CardContent>

@@ -49,7 +49,7 @@ export function EventStatusActions({
       <div className="flex flex-wrap gap-2">
         {status === "draft" && (
           <Button
-            className="bg-green-600 hover:bg-green-700 active:scale-95 text-white transition-all duration-200"
+            className="bg-green-600 hover:bg-green-700 active:scale-95 text-white transition-all duration-200 min-h-[44px]"
             onClick={() => handleAction(publishEvent, "publish")}
             disabled={loading !== null}
           >
@@ -70,7 +70,7 @@ export function EventStatusActions({
         {status === "published" && (
           <>
             <Button
-              className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200"
+              className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200 min-h-[44px]"
               onClick={() => handleAction(completeEvent, "complete")}
               disabled={loading !== null}
             >
@@ -89,7 +89,7 @@ export function EventStatusActions({
 
             <Button
               variant="destructive"
-              className="active:scale-95 transition-all duration-200"
+              className="active:scale-95 transition-all duration-200 min-h-[44px]"
               onClick={() => handleAction(cancelEvent, "cancel")}
               disabled={loading !== null}
             >

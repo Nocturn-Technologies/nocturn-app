@@ -84,7 +84,7 @@ export function ExternalTicketsForm({ eventId, initial }: ExternalTicketsFormPro
   }
 
   return (
-    <Card className="rounded-2xl border-nocturn/20">
+    <Card className="rounded-2xl border-nocturn/20 transition-all duration-200">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base font-bold">
@@ -93,7 +93,7 @@ export function ExternalTicketsForm({ eventId, initial }: ExternalTicketsFormPro
           </CardTitle>
           <button
             onClick={() => setExpanded(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent"
+            className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent active:scale-95 transition-all duration-200"
           >
             <ChevronUp className="h-4 w-4" />
           </button>
@@ -113,10 +113,10 @@ export function ExternalTicketsForm({ eventId, initial }: ExternalTicketsFormPro
                   key={p}
                   type="button"
                   onClick={() => setPlatform(p)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[36px] ${
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200 min-h-[36px] active:scale-95 ${
                     platform === p
-                      ? "bg-nocturn text-white"
-                      : "bg-accent text-muted-foreground hover:text-foreground"
+                      ? "bg-nocturn text-white shadow-sm shadow-nocturn/20"
+                      : "bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80"
                   }`}
                 >
                   {p}
@@ -173,7 +173,7 @@ export function ExternalTicketsForm({ eventId, initial }: ExternalTicketsFormPro
           <Button
             type="submit"
             disabled={saving || !platform}
-            className="w-full bg-nocturn hover:bg-nocturn-light min-h-[44px]"
+            className="w-full bg-nocturn hover:bg-nocturn-light min-h-[44px] active:scale-[0.98] transition-all duration-200"
           >
             {saving ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
