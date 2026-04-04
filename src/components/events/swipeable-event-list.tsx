@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { SwipeableCard } from "@/components/swipeable-card";
 import { publishEvent, cancelEvent } from "@/app/actions/events";
 import { haptic } from "@/lib/haptics";
-import { MapPin, Clock, Loader2 } from "lucide-react";
+import { MapPin, Clock, Loader2, ChevronRight } from "lucide-react";
 
 interface EventItem {
   id: string;
@@ -65,7 +65,7 @@ export function SwipeableEventList({ events }: { events: EventItem[] }) {
             <div className="flex gap-3">
               <button
                 onClick={() => setArchiveConfirm(null)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent active:scale-95 transition-all duration-200"
+                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent active:scale-95 transition-all duration-200 min-h-[44px]"
               >
                 Cancel
               </button>
@@ -82,7 +82,7 @@ export function SwipeableEventList({ events }: { events: EventItem[] }) {
                   }
                 }}
                 disabled={archiving}
-                className={`flex-1 rounded-xl bg-red-500/15 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/25 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 ${archiving ? "opacity-50" : ""}`}
+                className={`flex-1 rounded-xl bg-red-500/15 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/25 active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 min-h-[44px] ${archiving ? "opacity-50" : ""}`}
               >
                 {archiving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {archiving ? "Archiving..." : "Archive"}
@@ -105,10 +105,10 @@ function SwipeableEventCard({ event }: { event: EventItem }) {
   };
 
   return (
-    <Card className="rounded-2xl transition-all duration-200 hover:border-nocturn/30 active:scale-[0.98] cursor-pointer">
-      <CardContent className="flex items-center gap-4 p-4">
-        <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-nocturn/10 text-nocturn">
-          <span className="text-xs font-medium uppercase">
+    <Card className="group rounded-2xl transition-all duration-200 hover:border-nocturn/30 active:scale-[0.98] cursor-pointer">
+      <CardContent className="flex items-center gap-4 p-4 min-h-[72px]">
+        <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-nocturn/10 text-nocturn transition-colors duration-200 group-hover:bg-nocturn/15">
+          <span className="text-xs font-medium uppercase leading-tight">
             {date.toLocaleDateString("en", { month: "short" })}
           </span>
           <span className="text-lg font-bold leading-none">
@@ -116,7 +116,7 @@ function SwipeableEventCard({ event }: { event: EventItem }) {
           </span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="font-medium truncate">{event.title}</p>
+          <p className="font-bold truncate">{event.title}</p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
             {event.venues && (
               <span className="flex items-center gap-1 truncate">
@@ -133,13 +133,16 @@ function SwipeableEventCard({ event }: { event: EventItem }) {
             </span>
           </div>
         </div>
-        <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium capitalize transition-colors duration-200 ${
-            statusColors[event.status] ?? ""
-          }`}
-        >
-          {event.status}
-        </span>
+        <div className="flex items-center gap-2 shrink-0">
+          <span
+            className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize transition-colors duration-200 ${
+              statusColors[event.status] ?? ""
+            }`}
+          >
+            {event.status}
+          </span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground/50 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-muted-foreground" />
+        </div>
       </CardContent>
     </Card>
   );

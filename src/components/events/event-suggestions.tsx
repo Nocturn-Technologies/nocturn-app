@@ -38,7 +38,7 @@ export function EventSuggestions({
         {suggestions.map((suggestion, i) => (
           <Card
             key={i}
-            className="rounded-2xl border-border/50 transition-all duration-200 hover:border-nocturn/30"
+            className="group rounded-2xl border-border/50 transition-all duration-200 hover:border-nocturn/30 active:scale-[0.98]"
           >
             <CardContent className="p-4 space-y-3">
               <div className="flex items-start justify-between gap-3">
@@ -70,17 +70,17 @@ export function EventSuggestions({
                   </span>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground leading-relaxed">
+              <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
                 {suggestion.reason}
               </p>
               <Link href="/dashboard/calendar">
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-8 px-3 text-xs text-nocturn hover:text-nocturn-light hover:bg-nocturn/10 active:scale-95 transition-all duration-200"
+                  className="h-8 px-3 text-xs text-nocturn hover:text-nocturn-light hover:bg-nocturn/10 active:scale-95 transition-all duration-200 min-h-[44px]"
                 >
                   Plan this event
-                  <ArrowRight className="ml-1 h-3 w-3" />
+                  <ArrowRight className="ml-1 h-3 w-3 transition-transform duration-200 group-hover:translate-x-0.5" />
                 </Button>
               </Link>
             </CardContent>

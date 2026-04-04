@@ -38,13 +38,13 @@ export function CollapsibleEventSection({
         onClick={() => setIsOpen(!isOpen)}
         className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 -mx-2 min-h-[44px] group cursor-pointer hover:bg-accent/50 active:scale-[0.98] transition-all duration-200"
       >
-        <div className={`h-2 w-2 rounded-full ${dotColor}`} />
+        <div className={`h-2 w-2 rounded-full ${dotColor} transition-transform duration-200 group-hover:scale-125`} />
         <h2
           className={`text-lg font-bold ${muted ? "text-muted-foreground" : ""}`}
         >
           {title}
         </h2>
-        <span className="inline-flex items-center justify-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+        <span className="inline-flex items-center justify-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
           {events.length}
         </span>
         <ChevronDown
