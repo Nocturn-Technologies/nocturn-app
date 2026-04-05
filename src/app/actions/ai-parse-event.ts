@@ -60,15 +60,18 @@ export async function parseEventDetails(
   }
 
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 512,
         messages: [{
           role: "user",
@@ -95,6 +98,7 @@ Today is ${new Date().toISOString().split("T")[0]}. "10pm"="22:00". Assume PM fo
       }),
     });
 
+    clearTimeout(timeout);
     if (!response.ok) throw new Error(`API ${response.status}`);
     const data = await response.json();
     const text = data.content?.[0]?.text ?? "";

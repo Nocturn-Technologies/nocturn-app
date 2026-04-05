@@ -86,15 +86,18 @@ export async function generatePostEventEmail(eventId: string) {
 
   // Call Claude API
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 1024,
         system: "You are Promo, Nocturn's marketing agent. You help nightlife collectives create content that fills rooms. Write like a promoter — short sentences, punchy, no corporate jargon. Match the energy of the event. You say 'operators' not 'users', 'collectives' not 'teams'. Be confident, warm, and precise.",
         messages: [
@@ -114,6 +117,7 @@ Return JSON with "subject" and "body" fields. The body should be plain text with
       }),
     });
 
+    clearTimeout(timeout);
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);
     }

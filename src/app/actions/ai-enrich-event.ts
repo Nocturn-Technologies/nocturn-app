@@ -81,15 +81,18 @@ export async function enrichEventContent(input: {
   try {
     const tierInfo = input.tiers?.map(t => `${t.name}: $${t.price}`).join(", ") ?? "";
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-6",
         max_tokens: 800,
         messages: [{
           role: "user",
@@ -115,6 +118,7 @@ Return valid JSON:
       }),
     });
 
+    clearTimeout(timeout);
     if (!response.ok) throw new Error(`API ${response.status}`);
     const data = await response.json();
     const text = data.content?.[0]?.text ?? "";
