@@ -549,9 +549,9 @@ export default function EventDesignPage() {
               </div>
             )}
 
-            {/* AI Generation — conversational flow */}
+            {/* AI Generation — gated for MVP */}
             {!flyerUrl && !generatedUrl && (
-              <div className="rounded-2xl border border-nocturn/20 bg-nocturn/5 p-5 space-y-4">
+              <div className="rounded-2xl border border-nocturn/20 bg-nocturn/5 p-5 space-y-4 opacity-60 pointer-events-none">
                 <div className="flex items-center gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-nocturn/10">
                     <Sparkles className="h-5 w-5 text-nocturn" />
@@ -560,6 +560,7 @@ export default function EventDesignPage() {
                     <p className="text-sm font-semibold">AI Poster Generator</p>
                     <p className="text-xs text-muted-foreground">Tell me about your event and I'll design the flyer</p>
                   </div>
+                  <span className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-nocturn/10 text-nocturn text-xs font-medium">Coming Soon</span>
                 </div>
 
                 {/* DJ / Artist names */}

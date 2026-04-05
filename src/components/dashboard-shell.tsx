@@ -35,6 +35,7 @@ import {
   Bug,
   MessageCircle,
   Mail,
+  Lock,
 } from "lucide-react";
 import { NotificationToast } from "@/components/notification-toast";
 import { useNotifications } from "@/hooks/use-notifications";
@@ -49,7 +50,7 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
-/* ── Desktop sidebar nav items (7 core sections) ── */
+/* ── Desktop sidebar nav items (6 core sections) ── */
 const sidebarNavItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
@@ -57,22 +58,20 @@ const sidebarNavItems = [
   { href: "/dashboard/events", label: "Ops", icon: Calendar },
   { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
-  { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
 ];
 
 /* ── Mobile bottom tab bar items (4 tabs) ── */
 const mobileTabItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/events", label: "Ops", icon: Calendar },
-  { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
+  { href: "/dashboard/finance", label: "Money", icon: DollarSign },
 ];
 
 /* ── More drawer items (items not in mobile tabs) ── */
 const moreDrawerItems = [
+  { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
-  { href: "/dashboard/finance", label: "Money", icon: DollarSign },
-  { href: "/dashboard/marketing", label: "Promo", icon: Sparkles },
 ];
 
 /* ── Promoter-specific nav ── */
@@ -351,6 +350,17 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
               </Link>
             );
           })}
+          {/* Coming Soon — gated features */}
+          {!isPromoter && !isMarketplace && (
+            <Link
+              href="/dashboard/marketing"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
+            >
+              <Lock className="h-4 w-4" />
+              <span>Promo</span>
+              <span className="ml-auto text-[10px] font-medium text-nocturn/60">Soon</span>
+            </Link>
+          )}
         </nav>
 
         {/* Support button */}

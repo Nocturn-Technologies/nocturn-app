@@ -282,12 +282,7 @@ export default async function EventDetailPage({ params }: Props) {
             Refunds
           </Button>
         </Link>
-        <Link href={`/dashboard/events/${event.id}/referrals`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] border-amber-400/30 text-amber-400 hover:bg-amber-400/10 active:scale-95 transition-all duration-200">
-            <Share2 className="mr-2 h-3 w-3" />
-            Referrals
-          </Button>
-        </Link>
+{/* Referrals — gated for MVP, restore post-launch */}
         <Link href={`/dashboard/events/${event.id}/financials`}>
           <Button variant="outline" size="sm" className="min-h-[44px] border-green-400/30 text-green-400 hover:bg-green-400/10 active:scale-95 transition-all duration-200">
             <Sheet className="mr-2 h-3 w-3" />

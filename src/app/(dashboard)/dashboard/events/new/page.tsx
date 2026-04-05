@@ -475,8 +475,8 @@ function EventConfirmationCard({
     : "";
 
   return (
-    <div className="ml-11 rounded-2xl border border-[#7B2FF7]/20 bg-zinc-900 overflow-hidden animate-scale-in flex flex-col max-h-[70vh] md:max-h-none">
-      <div className="p-4 space-y-3 overflow-y-auto min-h-0 flex-1">
+    <div className="ml-11 rounded-2xl border border-[#7B2FF7]/20 bg-zinc-900 overflow-hidden animate-scale-in flex flex-col">
+      <div className="p-4 space-y-3">
         {/* Status badge */}
         <div className="flex items-center gap-2">
           <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -1195,11 +1195,48 @@ export default function NewEventPage() {
       if (parsed.tiers && parsed.tiers.length > 0) {
         setTiers(parsed.tiers);
       } else if (parsed.ticketPrice !== undefined && tiers.length === 0) {
+        const cap = parsed.ticketQuantity || merged.venueCapacity || 100;
         setTiers([{
           name: parsed.ticketTierName || "General Admission",
           price: parsed.ticketPrice,
-          capacity: parsed.ticketQuantity || 100,
+          capacity: cap,
         }]);
+      }
+
+      // Handle tickets step — free event ask about bar revenue, or advance
+      if (step === "tickets") {
+        if (parsed.ticketPrice === 0 && !merged.barMinimum) {
+          setThinking(false);
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: "Got it, free event! 🆓\n\nAre you earning revenue another way? For example:\n• **Bar revenue** — percentage of bar sales\n• **Sponsorship** or **door donations**\n\nOr just say \"no\" and we'll skip the budget planner." },
+          ]);
+          return;
+        }
+
+        // User answered the bar revenue question or provided pricing — advance
+        const lower = userMsg.toLowerCase();
+        const isNo = /^(no|nah|nope|skip|none|not really)/.test(lower);
+        if (isNo || parsed.ticketPrice !== undefined || parsed.barMinimum !== undefined || parsed.venueCapacity !== undefined) {
+          setThinking(false);
+          if (isNo && merged.ticketPrice === 0) {
+            // Free event, no other revenue — skip budget planner, go to review
+            setMessages((prev) => [
+              ...prev,
+              { role: "ai", content: "All good! Let's get this event created. Here's what I've set up:" },
+            ]);
+            setStep("review");
+            setPhase("review");
+            return;
+          }
+          // Has pricing info — advance to budget planning
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: reply || "Got it!" },
+          ]);
+          advanceToStep("headliner-type");
+          return;
+        }
       }
 
       // ── Budget field update from chat (e.g. "increase talent fee to $800") ──
@@ -1263,6 +1300,10 @@ export default function NewEventPage() {
 
       // If coming back from review with tier updates only, go straight back to review
       if (step === "review" && (parsed.tiers || parsed.ticketPrice !== undefined)) {
+        // Update existing tiers if user changed the price (e.g. "make it free")
+        if (parsed.ticketPrice !== undefined && !parsed.tiers && tiers.length > 0) {
+          setTiers(tiers.map(t => ({ ...t, price: parsed.ticketPrice! })));
+        }
         setThinking(false);
         setMessages((prev) => [
           ...prev,
@@ -1282,8 +1323,28 @@ export default function NewEventPage() {
       if (!merged.venueName) missing.push("venue");
 
       const currentStep = step as string;
-      if (missing.length === 0 && !["headliner-type", "headliner-origin", "talent-fee", "venue-costs", "budget-calc"].includes(currentStep)) {
-        // All basic info collected — now ask about budget planning
+      if (missing.length === 0 && !["headliner-type", "headliner-origin", "talent-fee", "venue-costs", "budget-calc", "tickets"].includes(currentStep)) {
+        // All basic info collected — ask about capacity and pricing before budget
+        if (!merged.venueCapacity && !merged.ticketPrice && merged.ticketPrice !== 0 && step !== "tickets") {
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: `${reply || "Got it!"}\n\nDoes this look right so far?\n\n🎤 **${merged.title}**\n📅 ${merged.date}${merged.startTime ? ` at ${merged.startTime}` : ""}\n📍 ${merged.venueName}${merged.venueCity ? `, ${merged.venueCity}` : ""}\n\nWhat's the **capacity** and **ticket price**? E.g. "200 cap, $25" or "free"` },
+          ]);
+          setStep("tickets");
+          return;
+        }
+
+        // If we have capacity but no price, ask about price specifically
+        if (merged.venueCapacity && merged.ticketPrice === undefined && step !== "tickets") {
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: `${reply || "Got it!"}\n\nWhat's the **ticket price**? E.g. "$25" or "free"\n\nIf it's free, are you earning revenue another way? (e.g. bar revenue percentage)` },
+          ]);
+          setStep("tickets");
+          return;
+        }
+
+        // Now ask about budget planning
         if (!eventData.headlinerType && !budgetInput.headlinerType) {
           setMessages((prev) => [
             ...prev,

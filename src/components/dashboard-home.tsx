@@ -172,7 +172,7 @@ function getSmartActions(props: DashboardHomeProps) {
     actions.push({
       title: "Find a Venue",
       description: "Browse venues for your first event",
-      href: "/dashboard/venues",
+      href: "/dashboard/discover?tab=venues",
       icon: <MapPin className="h-5 w-5" />,
       color: "text-nocturn-teal",
       iconBg: "bg-nocturn-teal/15",
@@ -229,8 +229,7 @@ export function DashboardHome(props: DashboardHomeProps) {
   const insights = getInsights(props);
 
   const quickActions = [
-    { href: "/dashboard/record", label: "Record Call", icon: Mic },
-    { href: "/dashboard/venues", label: "Find Venue", icon: MapPin },
+    { href: "/dashboard/discover?tab=venues", label: "Find Venue", icon: MapPin },
     { href: "/dashboard/events/new", label: "New Event", icon: Sparkles },
     { href: "/dashboard/chat", label: "Team Chat", icon: MessageSquare },
   ];
@@ -253,8 +252,7 @@ export function DashboardHome(props: DashboardHomeProps) {
         <p className="text-sm text-muted-foreground mt-2 line-clamp-2 max-w-lg">{message}</p>
       </div>
 
-      {/* ── AI Briefing — lazy loaded so it doesn't block page render ── */}
-      <LazyBriefing collectiveId={props.collectiveId} initialBriefing={props.briefing} />
+{/* AI Briefing — gated for MVP, restore post-launch */}
 
       {/* ── Needs Attention — action items / alerts ── */}
       {props.actionItems && props.actionItems.length > 0 && (

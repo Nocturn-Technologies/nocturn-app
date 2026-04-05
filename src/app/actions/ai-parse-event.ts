@@ -83,8 +83,8 @@ User says: "${message}"
 Return ONLY valid JSON with any of these fields (omit what's not mentioned):
 - title (string), date (YYYY-MM-DD), startTime (HH:MM 24h), endTime (HH:MM 24h), doorsOpen (HH:MM 24h)
 - venueName (string), venueAddress (string), venueCity (string), venueCapacity (number)
-- description (string), ticketPrice (number), ticketQuantity (number), ticketTierName (string)
-- tiers (array of {name, price, capacity}): if user wants to update ticket tier prices or capacities
+- description (string), ticketPrice (number — use 0 for free events), ticketQuantity (number), ticketTierName (string)
+- tiers (array of {name, price, capacity}): if user wants to update ticket tier prices or capacities. For free events, set price to 0.
 - talentFee (number): if user mentions talent fee, DJ fee, artist fee, headliner fee
 - venueCost (number): if user mentions venue rental, room cost
 - barMinimum (number): if user mentions bar minimum
@@ -92,6 +92,7 @@ Return ONLY valid JSON with any of these fields (omit what's not mentioned):
 - otherExpenses (number): if user mentions other expenses, sound, lighting, security, promo costs
 - reply (string): casual 1-sentence acknowledgment of what you understood
 
+IMPORTANT: If the user says "free", "no charge", "free event", "it's free", etc., set ticketPrice to 0.
 When the user says things like "increase talent fee to $800" or "change early bird to $20" or "add a VIP tier at $50 for 30 people", extract the updated values.
 Today is ${new Date().toISOString().split("T")[0]}. "10pm"="22:00". Assume PM for nightlife times without am/pm.`,
         }],
@@ -263,8 +264,12 @@ function localParse(message: string, existing: Partial<ParsedEventDetails>): Par
   if (capMatch) result.venueCapacity = parseInt(capMatch[1] || capMatch[2]);
 
   // === PRICE ===
+  // Handle "free" / "no charge" / "free event" explicitly
+  if (/\bfree\b|no\s*charge|no\s*cost|\$0\b|zero\s*dollars/.test(lower)) {
+    result.ticketPrice = 0;
+  }
   const priceMatch = lower.match(/\$(\d+(?:\.\d{2})?)|(\d+)\s*(?:dollars|bucks)|price\s+(?:is\s+)?(\d+)/);
-  if (priceMatch) result.ticketPrice = parseFloat(priceMatch[1] || priceMatch[2] || priceMatch[3]);
+  if (priceMatch && result.ticketPrice === undefined) result.ticketPrice = parseFloat(priceMatch[1] || priceMatch[2] || priceMatch[3]);
 
   // === QUANTITY ===
   const qtyMatch = lower.match(/(\d+)\s*tickets/);
