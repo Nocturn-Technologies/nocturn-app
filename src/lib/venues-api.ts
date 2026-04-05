@@ -1,34 +1,43 @@
-// TODO: Replace with Google Places API when key is available
-// This module abstracts venue search/detail so swapping in the real API
-// only requires changing the implementation of these two functions.
-
 import { MOCK_VENUES, type VenueResult } from "./mock-venues";
 
 export type VenueType = "Club" | "Bar" | "Warehouse" | "Gallery" | "Rooftop" | "Live Music" | "Underground";
 export type { VenueResult } from "./mock-venues";
 
-const ALL_TYPES: VenueType[] = ["Club", "Bar", "Warehouse", "Gallery", "Rooftop", "Live Music", "Underground"];
-
 /**
- * Search venues by query string and optional type filter.
- * Currently returns filtered mock data.
- * When Google Places is connected, this will call the Nearby Search / Text Search endpoint.
+ * Search venues via Google Places API (through our API route).
+ * Falls back to mock data if the API call fails.
  */
 export async function searchVenues(
   query: string,
   filter: VenueType | "All" = "All"
 ): Promise<VenueResult[]> {
-  // Simulate network latency
-  await new Promise((r) => setTimeout(r, 300));
+  try {
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+    if (filter !== "All") params.set("filter", filter);
 
+    const res = await fetch(`/api/venues-search?${params.toString()}`);
+    if (!res.ok) throw new Error(`API ${res.status}`);
+
+    const data = await res.json();
+    if (data.venues && data.venues.length > 0) {
+      return data.venues as VenueResult[];
+    }
+  } catch {
+    // Fall through to mock data
+  }
+
+  // Fallback to mock data
+  return searchMockVenues(query, filter);
+}
+
+function searchMockVenues(query: string, filter: VenueType | "All"): VenueResult[] {
   let results = [...MOCK_VENUES];
 
-  // Filter by type
-  if (filter !== "All" && ALL_TYPES.includes(filter)) {
+  if (filter !== "All") {
     results = results.filter((v) => v.venue_type === filter);
   }
 
-  // Filter by search query
   if (query.trim()) {
     const q = query.toLowerCase();
     results = results.filter(
@@ -40,9 +49,6 @@ export async function searchVenues(
     );
   }
 
-  // Sort by rating (descending) as default relevance proxy
   results.sort((a, b) => b.rating - a.rating);
-
   return results;
 }
-

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -18,9 +18,15 @@ import {
   type DiscoverCollective,
 } from "@/app/actions/discover-collectives";
 import { startCollabChat } from "@/app/actions/collab";
+import { searchVenues, type VenueResult } from "@/lib/venues-api";
+import {
+  saveVenue as saveVenueAction,
+  removeSavedVenue,
+  getSavedVenues,
+} from "@/app/actions/venues";
 import { haptic } from "@/lib/haptics";
-import { Search, Compass, ChevronLeft, ChevronRight, Users2 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { Search, Compass, ChevronLeft, ChevronRight, Users2, Star, MapPin, Heart } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { NetworkCRM } from "./network-crm";
 import { createClient } from "@/lib/supabase/client";
 
@@ -51,7 +57,16 @@ const CATEGORY_TABS = [
 const PER_PAGE = 20;
 
 export default function DiscoverPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" /></div>}>
+      <DiscoverContent />
+    </Suspense>
+  );
+}
+
+function DiscoverContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<"discover" | "network">("discover");
   const [collectiveId, setCollectiveId] = useState<string | undefined>(undefined);
   const [category, setCategory] = useState("all");
@@ -59,6 +74,14 @@ export default function DiscoverPage() {
   const [cityFilter, setCityFilter] = useState("");
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+
+  // Handle ?tab=venues query param
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "venues") {
+      setCategory("venue");
+    }
+  }, [searchParams]);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [profiles, setProfiles] = useState<any[]>([]);
@@ -73,6 +96,12 @@ export default function DiscoverPage() {
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
 
+  // Venues state (when "Venues" category chip is active)
+  const [venues, setVenues] = useState<VenueResult[]>([]);
+  const [loadingVenues, setLoadingVenues] = useState(false);
+  const [savedVenueIds, setSavedVenueIds] = useState<Set<string>>(new Set());
+  const [savingVenueId, setSavingVenueId] = useState<string | null>(null);
+
   const [contactProfile, setContactProfile] = useState<{
     id: string;
     name: string;
@@ -81,6 +110,7 @@ export default function DiscoverPage() {
   } | null>(null);
 
   const isCollectivesCategory = category === "collective" || category === "promoter";
+  const isVenuesCategory = category === "venue";
 
   // Fetch collectiveId for the current user
   const collectiveIdFetched = useRef(false);
@@ -113,10 +143,10 @@ export default function DiscoverPage() {
     setPage(1);
   }, [category, query, cityFilter]);
 
-  // ── Fetch discover profiles (non-collective categories) ──────────────
+  // ── Fetch discover profiles (non-collective, non-venue categories) ──────
 
   const fetchProfiles = useCallback(async () => {
-    if (isCollectivesCategory) return; // handled separately
+    if (isCollectivesCategory || isVenuesCategory) return; // handled separately
     setLoadingDiscover(true);
     const result = await searchProfiles({
       type: category === "all" ? null : category,
@@ -127,14 +157,14 @@ export default function DiscoverPage() {
     setProfiles(result.profiles);
     setTotalCount(result.total);
     setLoadingDiscover(false);
-  }, [category, query, cityFilter, page, isCollectivesCategory]);
+  }, [category, query, cityFilter, page, isCollectivesCategory, isVenuesCategory]);
 
   useEffect(() => {
-    if (!isCollectivesCategory) {
+    if (!isCollectivesCategory && !isVenuesCategory) {
       const timer = setTimeout(fetchProfiles, 200);
       return () => clearTimeout(timer);
     }
-  }, [fetchProfiles, isCollectivesCategory]);
+  }, [fetchProfiles, isCollectivesCategory, isVenuesCategory]);
 
   // ── Fetch collectives (when "Collectives" chip is selected) ──────────
 
@@ -156,6 +186,58 @@ export default function DiscoverPage() {
       return () => clearTimeout(timer);
     }
   }, [isCollectivesCategory, fetchCollectives]);
+
+  // ── Fetch venues (when "Venues" chip is selected) ───────────────────
+
+  const fetchVenues = useCallback(async () => {
+    setLoadingVenues(true);
+    const results = await searchVenues(query.trim(), "All");
+    setVenues(results);
+    setLoadingVenues(false);
+  }, [query]);
+
+  useEffect(() => {
+    if (isVenuesCategory) {
+      const timer = setTimeout(fetchVenues, 200);
+      return () => clearTimeout(timer);
+    }
+  }, [isVenuesCategory, fetchVenues]);
+
+  // ── Fetch saved venue IDs ───────────────────────────────────────────
+
+  const fetchSavedVenues = useCallback(async () => {
+    const { venues: list } = await getSavedVenues();
+    if (list) {
+      setSavedVenueIds(new Set((list as { place_id: string }[]).map((v) => v.place_id)));
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSavedVenues();
+  }, [fetchSavedVenues]);
+
+  async function handleSaveVenue(venue: VenueResult) {
+    if (savingVenueId) return;
+    haptic("light");
+    setSavingVenueId(venue.place_id);
+    const { error } = await saveVenueAction(venue);
+    if (!error) {
+      setSavedVenueIds((prev) => new Set(prev).add(venue.place_id));
+    }
+    setSavingVenueId(null);
+  }
+
+  async function handleRemoveVenue(placeId: string) {
+    if (savingVenueId) return;
+    setSavingVenueId(placeId);
+    await removeSavedVenue(placeId);
+    setSavedVenueIds((prev) => {
+      const next = new Set(prev);
+      next.delete(placeId);
+      return next;
+    });
+    setSavingVenueId(null);
+  }
 
   async function handleConnect(targetCollectiveId: string) {
     if (!collectiveId) return;
@@ -218,10 +300,10 @@ export default function DiscoverPage() {
 
   // ── Computed ──────────────────────────────────────────────────────────
 
-  const currentTotal = isCollectivesCategory ? collectivesTotal : totalCount;
-  const totalPages = Math.ceil(currentTotal / PER_PAGE);
+  const currentTotal = isCollectivesCategory ? collectivesTotal : isVenuesCategory ? venues.length : totalCount;
+  const totalPages = isVenuesCategory ? 1 : Math.ceil(currentTotal / PER_PAGE);
   const showPagination = totalPages > 1;
-  const isLoading = isCollectivesCategory ? loadingCollectives : loadingDiscover;
+  const isLoading = isCollectivesCategory ? loadingCollectives : isVenuesCategory ? loadingVenues : loadingDiscover;
 
   // ── Render ─────────────────────────────────────────────────────────────
 
@@ -323,6 +405,41 @@ export default function DiscoverPage() {
             <div className="flex items-center justify-center py-12">
               <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
             </div>
+          ) : isVenuesCategory ? (
+            /* ── Venues results ── */
+            venues.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center gap-4 py-12">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
+                    <MapPin className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <div className="text-center max-w-xs">
+                    <p className="font-semibold">No venues found</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {query ? "Try a different search" : "No venues available"}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {venues.map((venue) => (
+                    <DiscoverVenueCard
+                      key={venue.place_id}
+                      venue={venue}
+                      isSaved={savedVenueIds.has(venue.place_id)}
+                      isSaving={savingVenueId === venue.place_id}
+                      onSave={() => handleSaveVenue(venue)}
+                      onRemove={() => handleRemoveVenue(venue.place_id)}
+                    />
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground text-center pt-2">
+                  {venues.length} venue{venues.length !== 1 ? "s" : ""} in Toronto
+                </p>
+              </>
+            )
           ) : isCollectivesCategory ? (
             /* ── Collectives results ── */
             collectives.length === 0 ? (
@@ -482,5 +599,107 @@ export default function DiscoverPage() {
         }}
       />
     </div>
+  );
+}
+
+// ─── Venue Card for Discover ────────────────────────────────────────────────
+
+const VENUE_TYPE_COLORS: Record<string, string> = {
+  Club: "bg-purple-500/20 text-purple-300",
+  Bar: "bg-amber-500/20 text-amber-300",
+  Warehouse: "bg-emerald-500/20 text-emerald-300",
+  Gallery: "bg-pink-500/20 text-pink-300",
+  Rooftop: "bg-sky-500/20 text-sky-300",
+  "Live Music": "bg-orange-500/20 text-orange-300",
+  Underground: "bg-red-500/20 text-red-300",
+};
+
+const VENUE_GRADIENTS = [
+  "from-nocturn/60 to-purple-900/40",
+  "from-indigo-600/50 to-blue-900/40",
+  "from-pink-600/50 to-rose-900/40",
+  "from-emerald-600/50 to-teal-900/40",
+  "from-amber-600/50 to-orange-900/40",
+  "from-sky-600/50 to-cyan-900/40",
+];
+
+function DiscoverVenueCard({
+  venue,
+  isSaved,
+  isSaving,
+  onSave,
+  onRemove,
+}: {
+  venue: VenueResult;
+  isSaved: boolean;
+  isSaving: boolean;
+  onSave: () => void;
+  onRemove: () => void;
+}) {
+  const gradientIdx = venue.name.charCodeAt(0) % VENUE_GRADIENTS.length;
+  const typeCls = VENUE_TYPE_COLORS[venue.venue_type] ?? "bg-muted text-muted-foreground";
+
+  return (
+    <Card className="overflow-hidden rounded-2xl transition-all duration-200 hover:border-nocturn/30 active:scale-[0.98] p-0">
+      {/* Photo / gradient header */}
+      <div className={`relative flex h-28 items-end bg-gradient-to-br ${VENUE_GRADIENTS[gradientIdx]} p-3`}>
+        {venue.photo_url && (
+          <img
+            src={venue.photo_url}
+            alt={venue.name}
+            className="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+          />
+        )}
+        <div className="absolute left-3 top-3 z-10">
+          <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${typeCls}`}>
+            {venue.venue_type}
+          </span>
+        </div>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            haptic("light");
+            isSaved ? onRemove() : onSave();
+          }}
+          disabled={isSaving}
+          className={`absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition-all duration-200 active:scale-90 ${
+            isSaved
+              ? "bg-red-500/30 text-red-400"
+              : "bg-black/40 text-white/70 hover:text-white"
+          }`}
+        >
+          <Heart className={`h-4 w-4 ${isSaved ? "fill-red-400" : ""}`} />
+        </button>
+      </div>
+
+      {/* Info */}
+      <CardContent className="space-y-1.5 p-3 min-w-0">
+        <div className="flex items-start justify-between gap-2 min-w-0">
+          <h3 className="text-sm font-semibold leading-tight truncate">{venue.name}</h3>
+          {venue.rating > 0 && (
+            <div className="flex items-center gap-1 shrink-0">
+              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+              <span className="text-xs font-medium text-amber-500">{venue.rating.toFixed(1)}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+          <MapPin className="h-3 w-3 shrink-0" />
+          <span className="truncate">{venue.neighbourhood || venue.address}</span>
+          {venue.review_count > 0 && (
+            <>
+              <span className="shrink-0 text-muted-foreground/30">|</span>
+              <span className="shrink-0">{venue.review_count.toLocaleString()} reviews</span>
+            </>
+          )}
+        </div>
+        {venue.capacity && (
+          <div className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{venue.capacity.toLocaleString()}</span> capacity
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
