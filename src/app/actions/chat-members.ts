@@ -23,7 +23,7 @@ export interface InvitableUser {
   name: string | null;
   email: string | null;
   role: string | null;
-  source: "team" | "artist" | "collaborator";
+  source: "team" | "artist" | "collaborator" | "platform_artist" | "platform_collective";
 }
 
 // ---------------------------------------------------------------------------
@@ -412,6 +412,80 @@ export async function searchInvitableUsers(
               source: "artist",
             });
             existingUserIds.add(artist.user_id);
+          }
+        }
+      }
+    }
+
+    // For event channels with a search query, also search platform-wide artists and collectives
+    if (channel.type === "event" && query?.trim()) {
+      const lowerQuery = query.toLowerCase().trim();
+      const sanitized = query
+        .replace(/\\/g, "")
+        .replace(/[%_.,()'"`]/g, "")
+        .trim();
+
+      if (sanitized) {
+        const escaped = sanitized
+          .replace(/\\/g, "\\\\")
+          .replace(/%/g, "\\%")
+          .replace(/_/g, "\\_");
+
+        // Search platform artists (with linked user accounts) not already in results
+        const { data: platformArtists } = await sb
+          .from("artists")
+          .select("id, user_id, name, users!inner(id, full_name, email)")
+          .not("user_id", "is", null)
+          .or(`name.ilike.%${escaped}%,users.full_name.ilike.%${escaped}%,users.email.ilike.%${escaped}%`)
+          .limit(10);
+
+        if (platformArtists) {
+          for (const artist of platformArtists) {
+            const u = artist.users as unknown as {
+              id: string;
+              full_name: string | null;
+              email: string | null;
+            };
+            if (artist.user_id && !existingUserIds.has(artist.user_id)) {
+              results.push({
+                id: artist.user_id,
+                name: u?.full_name ?? artist.name ?? null,
+                email: u?.email ?? null,
+                role: "artist",
+                source: "platform_artist",
+              });
+              existingUserIds.add(artist.user_id);
+            }
+          }
+        }
+
+        // Search platform collectives (admin users) not already in results
+        const { data: platformCollectives } = await sb
+          .from("collectives")
+          .select("id, name, collective_members!inner(user_id, role, users!inner(id, full_name, email))")
+          .ilike("name", `%${escaped}%`)
+          .neq("id", channel.collective_id)
+          .limit(10);
+
+        if (platformCollectives) {
+          for (const collective of platformCollectives) {
+            const members = collective.collective_members as unknown as Array<{
+              user_id: string;
+              role: string;
+              users: { id: string; full_name: string | null; email: string | null };
+            }>;
+            // Add the admin/owner of the collective
+            const admin = members?.find((m) => m.role === "admin" || m.role === "owner");
+            if (admin && !existingUserIds.has(admin.user_id)) {
+              results.push({
+                id: admin.user_id,
+                name: collective.name ?? admin.users?.full_name ?? null,
+                email: admin.users?.email ?? null,
+                role: "collective",
+                source: "platform_collective",
+              });
+              existingUserIds.add(admin.user_id);
+            }
           }
         }
       }

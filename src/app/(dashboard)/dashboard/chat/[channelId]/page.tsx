@@ -657,6 +657,7 @@ export default function ChatRoomPage() {
     {/* Invite Member Modal */}
     <InviteMemberModal
       channelId={channelId}
+      collectiveId={channel?.collective_id ?? null}
       isOpen={inviteModalOpen}
       onClose={() => setInviteModalOpen(false)}
       onMemberAdded={() => {

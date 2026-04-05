@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, Search, UserPlus, Users } from "lucide-react";
+import { Loader2, Mail, Search, UserPlus, Users, Check } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -14,9 +14,11 @@ import {
   addChannelMember,
 } from "@/app/actions/chat-members";
 import type { InvitableUser } from "@/app/actions/chat-members";
+import { inviteMember } from "@/app/actions/members";
 
 interface InviteMemberModalProps {
   channelId: string;
+  collectiveId: string | null;
   isOpen: boolean;
   onClose: () => void;
   onMemberAdded: () => void;
@@ -24,14 +26,18 @@ interface InviteMemberModalProps {
 
 const SOURCE_LABELS: Record<InvitableUser["source"], string> = {
   team: "Team",
-  artist: "Artist",
+  artist: "Lineup",
   collaborator: "Collaborator",
+  platform_artist: "Artist",
+  platform_collective: "Collective",
 };
 
 const SOURCE_COLORS: Record<InvitableUser["source"], string> = {
   team: "bg-nocturn/20 text-nocturn-light",
   artist: "bg-amber-500/20 text-amber-400",
   collaborator: "bg-emerald-500/20 text-emerald-400",
+  platform_artist: "bg-amber-500/20 text-amber-400",
+  platform_collective: "bg-cyan-500/20 text-cyan-400",
 };
 
 function getInitials(name: string | null, email: string | null): string {
@@ -49,6 +55,7 @@ function getInitials(name: string | null, email: string | null): string {
 
 export function InviteMemberModal({
   channelId,
+  collectiveId,
   isOpen,
   onClose,
   onMemberAdded,
@@ -58,6 +65,9 @@ export function InviteMemberModal({
   const [isSearching, setIsSearching] = useState(false);
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [hasSearched, setHasSearched] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteState, setInviteState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -87,6 +97,9 @@ export function InviteMemberModal({
       setUsers([]);
       setAddingIds(new Set());
       setHasSearched(false);
+      setInviteEmail("");
+      setInviteState("idle");
+      setInviteError(null);
       search("");
     }
     return () => {
@@ -119,6 +132,24 @@ export function InviteMemberModal({
 
   const isEmpty = hasSearched && users.length === 0 && !isSearching;
 
+  const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(inviteEmail.trim());
+
+  async function handleInviteByEmail() {
+    if (!collectiveId || !isValidEmail) return;
+    setInviteState("sending");
+    setInviteError(null);
+
+    const result = await inviteMember(collectiveId, inviteEmail.trim(), "member");
+
+    if (result?.error) {
+      setInviteState("error");
+      setInviteError(result.error);
+    } else {
+      setInviteState("sent");
+      setInviteEmail("");
+    }
+  }
+
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent
@@ -131,7 +162,7 @@ export function InviteMemberModal({
             Add Members
           </SheetTitle>
           <SheetDescription className="text-muted-foreground">
-            Search and invite people to this chat
+            Search your team, artists, and collectives — or invite by email
           </SheetDescription>
         </SheetHeader>
 
@@ -155,17 +186,6 @@ export function InviteMemberModal({
 
         {/* Results */}
         <div className="flex-1 overflow-y-auto px-4 pb-4">
-          {isEmpty && (
-            <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-              <UserPlus className="h-8 w-8 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">
-                {query.trim()
-                  ? "No users found"
-                  : "All team members are already in this chat"}
-              </p>
-            </div>
-          )}
-
           {users.map((user) => {
             const isAdding = addingIds.has(user.id);
             return (
@@ -219,6 +239,76 @@ export function InviteMemberModal({
               </div>
             );
           })}
+
+          {/* Empty state + invite by email */}
+          {isEmpty && (
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <UserPlus className="h-8 w-8 text-muted-foreground/50" />
+              <p className="text-sm text-muted-foreground">
+                {query.trim()
+                  ? "No users found matching your search"
+                  : "All team members are already in this chat"}
+              </p>
+            </div>
+          )}
+
+          {/* Invite by email — always visible at the bottom */}
+          {collectiveId && (
+            <div className="mt-4 border-t border-border pt-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                Invite by email
+              </p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Send an invite to join your collective. They&apos;ll be added to this chat once they accept.
+              </p>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="email"
+                    placeholder="name@email.com"
+                    value={inviteEmail}
+                    onChange={(e) => {
+                      setInviteEmail(e.target.value);
+                      if (inviteState !== "idle") {
+                        setInviteState("idle");
+                        setInviteError(null);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && isValidEmail) handleInviteByEmail();
+                    }}
+                    className="w-full bg-accent text-foreground placeholder:text-muted-foreground rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none ring-1 ring-transparent focus:ring-nocturn/50 transition-shadow min-h-[44px]"
+                    maxLength={254}
+                  />
+                </div>
+                <button
+                  onClick={handleInviteByEmail}
+                  disabled={!isValidEmail || inviteState === "sending"}
+                  className="bg-nocturn hover:bg-nocturn-light text-white rounded-xl px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 min-h-[44px] flex items-center gap-2 shrink-0"
+                >
+                  {inviteState === "sending" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : inviteState === "sent" ? (
+                    <>
+                      <Check className="h-4 w-4" />
+                      Sent
+                    </>
+                  ) : (
+                    "Invite"
+                  )}
+                </button>
+              </div>
+              {inviteState === "sent" && (
+                <p className="text-xs text-emerald-400 mt-2">
+                  Invitation sent! They&apos;ll appear here once they accept.
+                </p>
+              )}
+              {inviteState === "error" && inviteError && (
+                <p className="text-xs text-red-400 mt-2">{inviteError}</p>
+              )}
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>
