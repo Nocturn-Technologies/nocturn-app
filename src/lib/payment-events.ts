@@ -8,6 +8,7 @@
  */
 
 import { createAdminClient } from "@/lib/supabase/config";
+import type { Json } from "@/lib/supabase/database.types";
 
 export type PaymentEventType =
   | "payment_created"
@@ -48,7 +49,7 @@ export async function logPaymentEvent(params: LogPaymentEventParams): Promise<vo
       currency: params.currency ?? "usd",
       buyer_email: params.buyer_email ?? null,
       error_message: params.error_message ?? null,
-      metadata: params.metadata ?? {},
+      metadata: (params.metadata ?? {}) as Json,
     });
     if (error) {
       console.error("[payment-events] Failed to log event:", params.event_type, error.message);

@@ -29,7 +29,7 @@ interface TicketTier {
   id: string;
   name: string;
   price: number;
-  capacity: number;
+  capacity: number | null;
 }
 
 interface CheckIn {

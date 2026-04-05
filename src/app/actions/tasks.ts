@@ -40,8 +40,8 @@ export async function getPlaybookTemplates() {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("playbook_templates")
-      .select("id, name, description, event_type, is_default")
-      .order("event_type");
+      .select("id, name, description, category, is_global")
+      .order("category");
     if (error) {
       console.error("[getPlaybookTemplates]", error);
       return [];
@@ -96,7 +96,7 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
       .from("playbook_task_templates")
       .select("*")
       .eq("playbook_id", playbookId)
-      .order("sort_order");
+      .order("position");
 
     if (templatesError) return { error: "Failed to fetch playbook templates" };
     if (!templates || templates.length === 0) return { error: "No tasks in playbook" };
@@ -105,23 +105,30 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
 
     // Generate tasks
     const tasks = templates.map((t, _i) => {
+      // due_offset_hours is stored in hours (negative = before event)
       const dueDate = new Date(eventDate);
-      dueDate.setDate(dueDate.getDate() + (t.days_before_event < 0 ? Math.abs(t.days_before_event) : -t.days_before_event));
+      const offsetHours = t.due_offset_hours ?? 0;
+      dueDate.setHours(dueDate.getHours() + offsetHours);
 
       // Try to auto-assign based on role
-      const assignedTo = t.default_role ? (membersByRole.get(t.default_role) || membersByRole.get("admin") || null) : null;
+      const assignedTo = t.default_assignee_role ? (membersByRole.get(t.default_assignee_role) || membersByRole.get("admin") || null) : null;
+
+      // Determine priority: tasks due within 72 hours of event are high priority
+      const isHighPriority = Math.abs(offsetHours) <= 72;
 
       return {
         event_id: eventId,
         title: t.title,
         description: t.description,
-        category: t.category,
-        status: "todo" as const,
-        priority: t.days_before_event <= 3 ? "high" : "medium" as const,
+        status: "todo",
+        priority: isHighPriority ? "high" : "medium",
         assigned_to: assignedTo,
-        due_date: dueDate.toISOString().split("T")[0],
-        sort_order: t.sort_order,
-        created_by: user.id,
+        due_at: dueDate.toISOString(),
+        metadata: {
+          created_by: user.id,
+          source_template_id: t.id,
+          position: t.position,
+        },
       };
     });
 
@@ -132,8 +139,8 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
     await admin.from("event_activity").insert({
       event_id: eventId,
       user_id: user.id,
-      type: "system",
-      content: `Applied playbook and generated ${tasks.length} tasks`,
+      action: "system",
+      description: `Applied playbook and generated ${tasks.length} tasks`,
     });
 
     return { error: null, taskCount: tasks.length };
@@ -157,8 +164,8 @@ export async function getEventTasks(eventId: string) {
       .from("event_tasks")
       .select("*, assigned_user:users!event_tasks_assigned_to_fkey(full_name, email)")
       .eq("event_id", eventId)
-      .order("due_date", { ascending: true })
-      .order("sort_order", { ascending: true });
+      .order("due_at", { ascending: true })
+      .order("created_at", { ascending: true });
 
     if (error) {
       console.error("[getEventTasks]", error);
@@ -194,15 +201,20 @@ export async function createEventTask(input: {
 
     const admin = createAdminClient();
 
+    if (input.title.trim().length > 200) return { error: "Task title must be under 200 characters" };
+    if (input.description && input.description.length > 5000) return { error: "Task description is too long" };
+
     const { error } = await admin.from("event_tasks").insert({
       event_id: input.eventId,
       title: input.title,
       description: input.description || null,
-      category: input.category || "general",
       priority: input.priority || "medium",
       assigned_to: input.assignedTo || null,
-      due_date: input.dueDate || null,
-      created_by: user.id,
+      due_at: input.dueDate || null,
+      metadata: {
+        created_by: user.id,
+        category: input.category || "general",
+      },
     });
 
     if (error) return { error: "Failed to create task" };
@@ -210,8 +222,8 @@ export async function createEventTask(input: {
     await admin.from("event_activity").insert({
       event_id: input.eventId,
       user_id: user.id,
-      type: "task_update",
-      content: `Created task: ${input.title}`,
+      action: "task_update",
+      description: `Created task: ${input.title}`,
     });
 
     return { error: null };
@@ -245,7 +257,6 @@ export async function updateTaskStatus(taskId: string, status: string) {
 
     if (status === "done") {
       updates.completed_at = new Date().toISOString();
-      updates.completed_by = user.id;
     }
 
     const { data: task, error } = await admin
@@ -261,8 +272,8 @@ export async function updateTaskStatus(taskId: string, status: string) {
     await admin.from("event_activity").insert({
       event_id: task.event_id,
       user_id: user.id,
-      type: "task_update",
-      content: `Marked "${task.title}" as ${status}`,
+      action: "task_update",
+      description: `Marked "${task.title}" as ${status}`,
     });
 
     return { error: null };
@@ -291,8 +302,8 @@ export async function postEventMessage(eventId: string, content: string) {
     const { error } = await admin.from("event_activity").insert({
       event_id: eventId,
       user_id: user.id,
-      type: "message",
-      content: sanitizedContent,
+      action: "message",
+      description: sanitizedContent,
     });
 
     if (error) return { error: "Failed to post message" };

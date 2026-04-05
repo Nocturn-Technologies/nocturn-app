@@ -59,7 +59,7 @@ export async function enrichAttendeeCRM(eventId: string) {
     }
 
     // 3. Fetch existing attendee profiles using separate parameterized queries to avoid PostgREST injection
-    let existingProfiles: { id: string; user_id: string | null; email: string | null; total_events: number; total_spend: number; first_event_at: string | null; vip_status: boolean }[] = [];
+    let existingProfiles: { id: string; user_id: string | null; email: string | null; total_events: number | null; total_spend: number | null; first_event_at: string | null; vip_status: boolean | null }[] = [];
 
     if (userIds.length > 0) {
       const { data: profilesByUserId, error: err1 } = await admin
@@ -108,11 +108,11 @@ export async function enrichAttendeeCRM(eventId: string) {
     // Track updates keyed by profile ID to handle duplicate user_ids across tickets
     const updatesById = new Map<
       string,
-      { total_events: number; total_spend: number; last_event_at: string; vip_status: boolean }
+      { user_id: string; total_events: number; total_spend: number; last_event_at: string; vip_status: boolean }
     >();
     const insertsById = new Map<
       string,
-      { user_id?: string; email?: string; total_events: number; total_spend: number; first_event_at: string; last_event_at: string; vip_status: boolean }
+      { user_id: string; email?: string; total_events: number; total_spend: number; first_event_at: string; last_event_at: string; vip_status: boolean }
     >();
 
     for (const ticket of tickets) {
@@ -145,6 +145,7 @@ export async function enrichAttendeeCRM(eventId: string) {
             newTotalSpend >= VIP_SPEND_THRESHOLD;
 
           updatesById.set(existing.id, {
+            user_id: existing.user_id ?? userId,
             total_events: newTotalEvents,
             total_spend: newTotalSpend,
             last_event_at: now,
@@ -165,7 +166,11 @@ export async function enrichAttendeeCRM(eventId: string) {
           const isVip =
             1 >= VIP_EVENT_THRESHOLD || ticketPrice >= VIP_SPEND_THRESHOLD;
 
-          const insertData: { user_id?: string; email?: string; total_events: number; total_spend: number; first_event_at: string; last_event_at: string; vip_status: boolean } = {
+          // Skip profiles without a user_id — DB requires it
+          if (!userId) continue;
+
+          const insertData: { user_id: string; email?: string; total_events: number; total_spend: number; first_event_at: string; last_event_at: string; vip_status: boolean } = {
+            user_id: userId,
             total_events: 1,
             total_spend: Math.round(ticketPrice * 100) / 100,
             first_event_at: now,
@@ -173,7 +178,6 @@ export async function enrichAttendeeCRM(eventId: string) {
             vip_status: isVip,
           };
 
-          if (userId) insertData.user_id = userId;
           if (email) insertData.email = email;
 
           insertsById.set(key, insertData);

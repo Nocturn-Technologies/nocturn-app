@@ -129,10 +129,11 @@ export async function POST(request: NextRequest) {
 
     // Atomic capacity check — lock + count + validate in a single DB transaction
     const supabaseAdmin = createAdminClient();
-    const { data: capacityCheck, error: capacityError } = await supabaseAdmin.rpc("check_and_reserve_capacity", {
+    const { data: capacityCheckRaw, error: capacityError } = await supabaseAdmin.rpc("check_and_reserve_capacity", {
       p_tier_id: tierId,
       p_quantity: quantity,
     });
+    const capacityCheck = capacityCheckRaw as { success: boolean; error?: string; remaining?: number } | null;
 
     if (capacityError || !capacityCheck?.success) {
       if (capacityError) {
@@ -290,8 +291,7 @@ export async function POST(request: NextRequest) {
       // Contact upsert — best-effort fan sync for free tickets
       try {
         if (event.collective_id) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabaseAdmin.from("contacts") as any).upsert({
+          await supabaseAdmin.from("contacts").upsert({
             collective_id: event.collective_id,
             contact_type: "fan",
             email: buyerEmail,

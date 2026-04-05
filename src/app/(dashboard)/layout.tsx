@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { SessionTimeout } from "@/components/session-timeout";
 import { createAdminClient } from "@/lib/supabase/config";
+import { MARKETPLACE_USER_TYPES } from "@/lib/utils";
 
 export default async function DashboardLayout({
   children,
@@ -43,8 +44,7 @@ export default async function DashboardLayout({
       .eq("id", user.id)
       .maybeSingle();
     const dbUserType = (userRow as { user_type?: string } | null)?.user_type;
-    const skipOnboarding = ["promoter", "artist", "venue", "photographer", "videographer", "sound_production", "lighting_production", "sponsor", "artist_manager", "tour_manager", "booking_agent", "event_staff", "mc_host", "graphic_designer", "pr_publicist"];
-    if (!skipOnboarding.includes(dbUserType ?? "")) {
+    if (!(MARKETPLACE_USER_TYPES as readonly string[]).includes(dbUserType ?? "")) {
       redirect("/onboarding");
     }
   }

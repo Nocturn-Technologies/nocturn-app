@@ -380,7 +380,8 @@ export async function getAudienceInsights(
       if (!emailEventMap.has(normalized)) {
         emailEventMap.set(normalized, new Set());
       }
-      emailEventMap.get(normalized)!.add(ticket.event_id);
+      const eventSet = emailEventMap.get(normalized);
+      if (eventSet) eventSet.add(ticket.event_id);
 
       // City from metadata (if available)
       const city = (meta?.city as string) || (meta?.customer_city as string);

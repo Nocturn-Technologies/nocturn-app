@@ -145,7 +145,7 @@ export default function SignupPage() {
     if (userType === "collective" || userType === "promoter") {
       router.push("/pending-approval");
     } else {
-      router.push("/onboarding/marketplace");
+      router.push("/dashboard");
     }
     router.refresh();
   }

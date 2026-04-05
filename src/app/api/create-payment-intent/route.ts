@@ -97,10 +97,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Atomic capacity check — lock + count + validate in a single DB transaction
-    const { data: capacityCheck, error: capacityError } = await supabase.rpc("check_and_reserve_capacity", {
+    const { data: capacityCheckRaw, error: capacityError } = await supabase.rpc("check_and_reserve_capacity", {
       p_tier_id: tierId,
       p_quantity: quantity,
     });
+    const capacityCheck = capacityCheckRaw as { success: boolean; error?: string; remaining?: number } | null;
 
     if (capacityError || !capacityCheck?.success) {
       if (capacityError) {

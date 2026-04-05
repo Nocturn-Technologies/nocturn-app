@@ -84,15 +84,13 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
       eventsResult,
     ] = await Promise.all([
       // 1. Saved marketplace profiles
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (admin.from("marketplace_saved") as any)
+      admin.from("marketplace_saved")
         .select("profile_id, saved_at:created_at, marketplace_profiles(*)")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false }),
 
       // 2. Marketplace profiles the user has contacted (sent inquiry to)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (admin.from("marketplace_inquiries") as any)
+      admin.from("marketplace_inquiries")
         .select("to_profile_id, created_at")
         .eq("from_user_id", user.id)
         .order("created_at", { ascending: false }),
@@ -138,8 +136,7 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
     );
 
     if (missingProfileIds.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: missingProfiles } = await (admin.from("marketplace_profiles") as any)
+      const { data: missingProfiles } = await admin.from("marketplace_profiles")
         .select("*")
         .in("id", missingProfileIds);
 
@@ -172,8 +169,7 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
 
     let eventArtistRows: EventArtistRow[] = [];
     if (eventIds.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: eaData } = await (admin.from("event_artists") as any)
+      const { data: eaData } = await admin.from("event_artists")
         .select("artist_id, event_id, artists(id, name, slug, instagram, soundcloud, spotify, bio, genre, metadata)")
         .in("event_id", eventIds)
         .in("status", ["confirmed", "pending"]);

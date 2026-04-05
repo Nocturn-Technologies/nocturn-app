@@ -2,15 +2,27 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { verifyAdminSecret } from "./actions";
 
 export default function AdminGate() {
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password.trim()) {
-      router.push(`/admin?secret=${encodeURIComponent(password.trim())}`);
+    if (!password.trim()) return;
+
+    setLoading(true);
+    setError("");
+
+    const result = await verifyAdminSecret(password.trim());
+    if (result.error) {
+      setError(result.error);
+      setLoading(false);
+    } else {
+      router.refresh();
     }
   }
 
@@ -26,6 +38,9 @@ export default function AdminGate() {
         <p className="text-sm text-zinc-400 text-center">
           Enter the admin password to continue.
         </p>
+        {error && (
+          <p className="text-sm text-red-400 text-center">{error}</p>
+        )}
         <input
           type="password"
           value={password}
@@ -36,9 +51,10 @@ export default function AdminGate() {
         />
         <button
           type="submit"
-          className="w-full rounded-lg bg-[#7B2FF7] px-4 py-3 font-medium text-white hover:bg-[#9D5CFF] transition-colors"
+          disabled={loading}
+          className="w-full rounded-lg bg-[#7B2FF7] px-4 py-3 font-medium text-white hover:bg-[#9D5CFF] transition-colors disabled:opacity-50"
         >
-          Enter
+          {loading ? "Verifying..." : "Enter"}
         </button>
       </form>
     </div>

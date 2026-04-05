@@ -139,29 +139,28 @@ export async function generateSettlement(eventId: string) {
   // Create line items
   const lines: Array<{
     settlement_id: string;
-    type: string;
-    label: string;
+    description: string;
     amount: number;
-    recipient_type?: string;
-    recipient_id?: string;
+    category?: string;
+    metadata?: { type: string; recipient_type?: string; recipient_id?: string };
   }> = [];
 
   // Stripe fee line
   lines.push({
     settlement_id: settlement.id,
-    type: "stripe_fee",
-    label: "Stripe processing fees",
+    description: "Stripe processing fees",
     amount: stripeFees,
-    recipient_type: "platform",
+    category: "stripe_fee",
+    metadata: { type: "stripe_fee", recipient_type: "platform" },
   });
 
   // Nocturn service fee (paid by buyer, not deducted from collective)
   lines.push({
     settlement_id: settlement.id,
-    type: "platform_fee",
-    label: `Nocturn service fee (${PLATFORM_FEE_PERCENT}% + $0.50/ticket — paid by buyer)`,
+    description: `Nocturn service fee (${PLATFORM_FEE_PERCENT}% + $0.50/ticket — paid by buyer)`,
     amount: nocturnRevenue,
-    recipient_type: "platform",
+    category: "platform_fee",
+    metadata: { type: "platform_fee", recipient_type: "platform" },
   });
 
   // Artist fee lines
@@ -169,11 +168,10 @@ export async function generateSettlement(eventId: string) {
     const artist = booking.artists as unknown as { name: string } | null;
     lines.push({
       settlement_id: settlement.id,
-      type: "artist_fee",
-      label: `Artist fee: ${artist?.name ?? "Unknown"}`,
+      description: `Artist fee: ${artist?.name ?? "Unknown"}`,
       amount: Number(booking.fee) || 0,
-      recipient_type: "artist",
-      recipient_id: booking.artist_id,
+      category: "artist_fee",
+      metadata: { type: "artist_fee", recipient_type: "artist", recipient_id: booking.artist_id },
     });
   }
 
@@ -181,9 +179,10 @@ export async function generateSettlement(eventId: string) {
   for (const expense of expenses ?? []) {
     lines.push({
       settlement_id: settlement.id,
-      type: "expense",
-      label: `${expense.category}: ${expense.description}`,
+      description: `${expense.category}: ${expense.description}`,
       amount: Number(expense.amount),
+      category: "expense",
+      metadata: { type: "expense" },
     });
   }
 

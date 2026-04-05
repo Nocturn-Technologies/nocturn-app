@@ -32,25 +32,11 @@ export async function markSettlementPaid(settlementId: string, payoutMethod?: st
 
     if (!count || count === 0) return { error: "You don't have permission" };
 
-    // Mark all pending line items as paid
-    const { error: linesError } = await admin
-      .from("settlement_lines")
-      .update({
-        payout_status: "paid",
-      })
-      .eq("settlement_id", settlementId)
-      .eq("payout_status", "pending");
-
-    if (linesError) {
-      console.error("Failed to update settlement lines:", linesError);
-      return { error: "Something went wrong" };
-    }
-
     // Update settlement status
     const { error: settlementError } = await admin
       .from("settlements")
       .update({
-        status: "paid",
+        status: "paid_out",
         updated_at: new Date().toISOString(),
         metadata: {
           payout_method: payoutMethod || "manual",

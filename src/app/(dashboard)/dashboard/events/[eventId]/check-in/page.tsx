@@ -2,11 +2,21 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
-import { QrScanner } from "@/components/qr-scanner";
+import dynamic from "next/dynamic";
 import { checkInTicket, getCheckInStats, type CheckInStats } from "@/app/actions/check-in";
+
+const QrScanner = dynamic(() => import("@/components/qr-scanner").then(m => m.QrScanner), {
+  ssr: false,
+  loading: () => (
+    <div className="flex h-[250px] sm:h-[300px] items-center justify-center rounded-xl border border-border bg-muted">
+      <p className="text-sm text-muted-foreground">Loading camera...</p>
+    </div>
+  ),
+});
+import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, ScanLine, CheckCircle2, XCircle, Users } from "lucide-react";
+import { ArrowLeft, ScanLine, CheckCircle2, XCircle, Users, RotateCcw, Keyboard } from "lucide-react";
 import Link from "next/link";
 import { haptic } from "@/lib/haptics";
 
@@ -15,6 +25,7 @@ type ScanResult = {
   message: string;
   guestName?: string;
   tierName?: string;
+  failedToken?: string; // for retry
 };
 
 export default function CheckInScannerPage() {
@@ -29,6 +40,8 @@ export default function CheckInScannerPage() {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [showManualEntry, setShowManualEntry] = useState(false);
+  const [manualToken, setManualToken] = useState("");
   const scannedTokensRef = useRef<Set<string>>(new Set());
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -40,14 +53,39 @@ export default function CheckInScannerPage() {
     });
   }, [eventId]);
 
-  // Refresh stats periodically (every 15 seconds)
+  // Supabase Realtime: listen for ticket status changes → refresh stats instantly
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`checkin:${eventId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "tickets",
+          filter: `event_id=eq.${eventId}`,
+        },
+        () => {
+          // A ticket was updated (likely checked in) — refresh stats
+          getCheckInStats(eventId).then(setStats).catch(() => {});
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [eventId]);
+
+  // Fallback polling every 30s in case Realtime connection drops
   useEffect(() => {
     const interval = setInterval(() => {
       getCheckInStats(eventId).then(setStats).catch((err) => {
         console.error("[check-in] Failed to refresh stats:", err);
         setStatsError("Failed to load stats");
       });
-    }, 15000);
+    }, 30000);
     return () => clearInterval(interval);
   }, [eventId]);
 
@@ -120,12 +158,19 @@ export default function CheckInScannerPage() {
         ).catch(() => {});
       } else {
         haptic('heavy');
+        // Include the failed token so user can retry
+        const isNetworkError = !result.error || result.error === "Something went wrong" || result.error === "Failed to check in ticket. Please try again.";
         setScanResult({
           type: "error",
           message: result.error ?? "Check-in failed",
           guestName: result.ticket?.guestName,
           tierName: result.ticket?.tierName,
+          failedToken: isNetworkError ? ticketToken : undefined,
         });
+        // Allow re-scan of this token if it was a network error
+        if (isNetworkError) {
+          scannedTokensRef.current.delete(decodedText);
+        }
       }
 
       setProcessing(false);
@@ -133,6 +178,24 @@ export default function CheckInScannerPage() {
     },
     [eventId, processing]
   );
+
+  const handleRetry = useCallback(
+    (token: string) => {
+      setScanResult(null);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      // Re-run the check-in with the stored token
+      handleScan(`${token}`);
+    },
+    [handleScan]
+  );
+
+  const handleManualSubmit = useCallback(() => {
+    const trimmed = manualToken.trim();
+    if (!trimmed) return;
+    setManualToken("");
+    setShowManualEntry(false);
+    handleScan(trimmed);
+  }, [manualToken, handleScan]);
 
   function clearAfterDelay() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -199,6 +262,46 @@ export default function CheckInScannerPage() {
         <QrScanner onScan={handleScan} paused={processing} />
       </div>
 
+      {/* Manual Token Entry — fallback when camera fails */}
+      {showManualEntry && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Enter the ticket code manually (UUID from the QR code URL)
+            </p>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleManualSubmit();
+              }}
+              className="flex gap-2"
+            >
+              <input
+                placeholder="e.g. a1b2c3d4-e5f6-..."
+                value={manualToken}
+                onChange={(e) => setManualToken(e.target.value)}
+                className="flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-nocturn"
+                autoFocus
+              />
+              <Button type="submit" disabled={!manualToken.trim() || processing} size="sm">
+                Check In
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Toggle manual entry */}
+      <div className="flex justify-center">
+        <button
+          onClick={() => setShowManualEntry((v) => !v)}
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Keyboard className="h-3.5 w-3.5" />
+          {showManualEntry ? "Hide manual entry" : "Enter code manually"}
+        </button>
+      </div>
+
       {/* Scan Feedback — large and visible in dark venues */}
       {scanResult && (
         <div
@@ -214,7 +317,7 @@ export default function CheckInScannerPage() {
             ) : (
               <XCircle className="h-10 w-10 shrink-0 text-red-400" />
             )}
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p
                 className={`text-xl font-bold ${
                   scanResult.type === "success"
@@ -231,6 +334,17 @@ export default function CheckInScannerPage() {
                 </p>
               )}
             </div>
+            {scanResult.failedToken && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleRetry(scanResult.failedToken!)}
+                className="shrink-0"
+              >
+                <RotateCcw className="h-4 w-4 mr-1" />
+                Retry
+              </Button>
+            )}
           </div>
         </div>
       )}

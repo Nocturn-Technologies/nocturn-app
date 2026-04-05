@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { PublicCheckInButton } from "./check-in-button";
+import { isValidUUID } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Check In — Nocturn",
@@ -17,6 +18,10 @@ interface Props {
 
 export default async function PublicCheckInPage({ params }: Props) {
   const { token } = await params;
+
+  if (!isValidUUID(token)) {
+    notFound();
+  }
 
   const { ticket, error } = await getTicketByToken(token);
 
@@ -161,7 +166,7 @@ export default async function PublicCheckInPage({ params }: Props) {
                   </p>
                   {typedTicket.checked_in_at && (
                     <p className="text-sm text-muted-foreground">
-                      {new Date(typedTicket.checked_in_at!).toLocaleString("en-US")}
+                      {typedTicket.checked_in_at ? new Date(typedTicket.checked_in_at).toLocaleString("en-US") : ""}
                     </p>
                   )}
                 </div>

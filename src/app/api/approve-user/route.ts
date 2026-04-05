@@ -206,8 +206,7 @@ export async function POST(request: NextRequest) {
 
     if (action === "deny") {
       // Set is_approved to false in users table and mark as denied in auth metadata
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (admin.from("users") as any)
+      await admin.from("users")
         .update({ is_approved: false })
         .eq("id", userId);
 
@@ -229,8 +228,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Approve: update users table and auth metadata
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (admin.from("users") as any)
+    await admin.from("users")
       .update({ is_approved: true })
       .eq("id", userId);
 

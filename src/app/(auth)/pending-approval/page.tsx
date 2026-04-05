@@ -48,8 +48,7 @@ export default function PendingApprovalPage() {
     }
 
     if (user) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase.from("users") as any)
+      const { data } = await supabase.from("users")
         .select("is_approved, is_denied")
         .eq("id", user.id)
         .maybeSingle();

@@ -48,8 +48,7 @@ export async function rateLimitStrict(
 ): Promise<{ success: boolean; remaining: number }> {
   try {
     const admin = createAdminClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = admin as any;
+    const db = admin;
     const windowStart = new Date(Date.now() - windowMs).toISOString();
 
     // Count recent entries in the window
@@ -82,8 +81,7 @@ export async function rateLimitStrict(
 async function persistRateLimit(key: string, _limit: number, _windowMs: number) {
   try {
     const admin = createAdminClient();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const db = admin as any;
+    const db = admin;
     await db.from("rate_limits").insert({
       key,
       created_at: new Date().toISOString(),

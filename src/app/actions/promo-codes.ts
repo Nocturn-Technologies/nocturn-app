@@ -34,16 +34,44 @@ async function verifyEventAccess(eventId: string) {
 
 export interface PromoCode {
   id: string;
-  event_id: string;
+  event_id: string | null;
   code: string;
-  discount_type: "percentage" | "fixed";
-  discount_value: number;
+  discount_type: string | null;
+  discount_value: number | null;
   max_uses: number | null;
-  current_uses: number;
-  promoter_id: string | null;
-  expires_at: string | null;
+  current_uses: number | null;
+  promoter_id: string;
+  collective_id: string;
+  valid_from: string | null;
+  valid_until: string | null;
+  /** Virtual field computed from valid_until — true if valid_until is null or in the future */
   is_active: boolean;
+  /** Alias for valid_until, for backward compat with UI */
+  expires_at: string | null;
   created_at: string;
+}
+
+/** Map a raw promo_codes DB row to a PromoCode with computed fields */
+function toPromoCode(row: Record<string, unknown>): PromoCode {
+  const validUntil = row.valid_until as string | null;
+  const isActive =
+    validUntil === null || new Date(validUntil) > new Date();
+  return {
+    id: row.id as string,
+    event_id: (row.event_id as string | null) ?? null,
+    code: row.code as string,
+    discount_type: (row.discount_type as string | null) ?? null,
+    discount_value: (row.discount_value as number | null) ?? null,
+    max_uses: (row.max_uses as number | null) ?? null,
+    current_uses: (row.current_uses as number | null) ?? null,
+    promoter_id: row.promoter_id as string,
+    collective_id: row.collective_id as string,
+    valid_from: (row.valid_from as string | null) ?? null,
+    valid_until: validUntil,
+    is_active: isActive,
+    expires_at: validUntil,
+    created_at: row.created_at as string,
+  };
 }
 
 export async function createPromoCode(input: {
@@ -83,6 +111,20 @@ export async function createPromoCode(input: {
 
     const supabase = createAdminClient();
 
+    if (!/^[A-Z0-9_-]+$/i.test(input.code.trim()) || input.code.trim().length > 50) {
+      return { error: "Promo code must be alphanumeric and under 50 characters" };
+    }
+
+    // Look up the event's collective_id for the required FK
+    const { data: eventRow } = await supabase
+      .from("events")
+      .select("collective_id")
+      .eq("id", input.eventId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (!eventRow) return { error: "Event not found" };
+
     // Check for duplicate code on this event
     const { data: existing } = await supabase
       .from("promo_codes")
@@ -102,9 +144,9 @@ export async function createPromoCode(input: {
       discount_value: input.discountValue,
       max_uses: input.maxUses ?? null,
       current_uses: 0,
-      promoter_id: input.promoterId ?? null,
-      expires_at: input.expiresAt ?? null,
-      is_active: true,
+      collective_id: eventRow.collective_id,
+      promoter_id: input.promoterId ?? access.userId!,
+      valid_until: input.expiresAt ?? null,
     });
 
     if (error) return { error: "Failed to create promo code" };
@@ -135,7 +177,7 @@ export async function getPromoCodes(eventId: string): Promise<PromoCode[]> {
       return [];
     }
 
-    return (data ?? []) as PromoCode[];
+    return (data ?? []).map((row) => toPromoCode(row as unknown as Record<string, unknown>));
   } catch (err) {
     console.error("[getPromoCodes]", err);
     return [];
@@ -155,22 +197,26 @@ export async function validatePromoCode(eventId: string, code: string) {
       .select("*")
       .eq("event_id", eventId)
       .ilike("code", code.trim())
-      .eq("is_active", true)
       .maybeSingle();
 
     if (error || !data) {
       return { valid: false, error: "Invalid promo code", discount: null };
     }
 
-    const promo = data as PromoCode;
+    const promo = toPromoCode(data as unknown as Record<string, unknown>);
+
+    // Check if deactivated (valid_until in the past)
+    if (!promo.is_active) {
+      return { valid: false, error: "This promo code is no longer active", discount: null };
+    }
 
     // Check expiry
-    if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+    if (promo.valid_until && new Date(promo.valid_until) < new Date()) {
       return { valid: false, error: "This promo code has expired", discount: null };
     }
 
     // Check usage limit
-    if (promo.max_uses !== null && promo.current_uses >= promo.max_uses) {
+    if (promo.max_uses !== null && (promo.current_uses ?? 0) >= promo.max_uses) {
       return { valid: false, error: "This promo code has reached its usage limit", discount: null };
     }
 
@@ -179,8 +225,8 @@ export async function validatePromoCode(eventId: string, code: string) {
       error: null,
       discount: {
         code: promo.code,
-        discountType: promo.discount_type,
-        discountValue: promo.discount_value,
+        discountType: promo.discount_type ?? "percentage",
+        discountValue: promo.discount_value ?? 0,
       },
     };
   } catch (err) {
@@ -207,6 +253,7 @@ export async function togglePromoCode(codeId: string, isActive: boolean) {
       .maybeSingle();
 
     if (!promo) return { error: "Promo code not found" };
+    if (!promo.event_id) return { error: "Promo code has no associated event" };
 
     const { data: event } = await admin
       .from("events")
@@ -226,9 +273,11 @@ export async function togglePromoCode(codeId: string, isActive: boolean) {
 
     if (!count || count === 0) return { error: "You don't have access to this event" };
 
+    // The DB has no is_active column — use valid_until to control activation.
+    // Deactivate = set valid_until to now (past date). Reactivate = set to null (no expiry).
     const { error } = await admin
       .from("promo_codes")
-      .update({ is_active: isActive })
+      .update({ valid_until: isActive ? null : new Date().toISOString() })
       .eq("id", codeId);
 
     if (error) return { error: "Failed to update promo code" };

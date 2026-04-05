@@ -516,9 +516,10 @@ function LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string
 
     let cancelled = false;
     async function load() {
+      if (!collectiveId) return;
       try {
         const { generateMorningBriefing } = await import("@/app/actions/ai-briefing");
-        const result = await generateMorningBriefing(collectiveId!);
+        const result = await generateMorningBriefing(collectiveId);
         if (!cancelled && Array.isArray(result)) {
           setBriefing(result);
         }

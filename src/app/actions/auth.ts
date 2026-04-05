@@ -64,8 +64,7 @@ export async function signUpUser(formData: {
   const userId = newUser.user.id;
 
   // Insert public.users row
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error: usersInsertError } = await (admin.from("users") as any)
+  const { error: usersInsertError } = await admin.from("users")
     .upsert(
       {
         id: userId,

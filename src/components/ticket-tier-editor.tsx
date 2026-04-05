@@ -26,8 +26,8 @@ interface Tier {
   id: string;
   name: string;
   price: number;
-  capacity: number;
-  sort_order: number;
+  capacity: number | null;
+  sort_order: number | null;
   sold: number;
 }
 
@@ -89,7 +89,7 @@ export function TicketTierEditor({
     setEditValues({
       name: tier.name,
       price: tier.price.toString(),
-      capacity: tier.capacity.toString(),
+      capacity: (tier.capacity ?? 0).toString(),
     });
     setDeleteConfirmId(null);
   }
@@ -243,7 +243,7 @@ export function TicketTierEditor({
     }
   }
 
-  const totalCapacity = tiers.reduce((sum, t) => sum + t.capacity, 0);
+  const totalCapacity = tiers.reduce((sum, t) => sum + (t.capacity ?? 0), 0);
   const totalSold = tiers.reduce((sum, t) => sum + t.sold, 0);
 
   return (
@@ -392,7 +392,7 @@ export function TicketTierEditor({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="text-sm font-medium truncate">{tier.name}</p>
-                  {tier.sold >= tier.capacity && tier.capacity > 0 && (
+                  {tier.sold >= (tier.capacity ?? 0) && (tier.capacity ?? 0) > 0 && (
                     <Badge
                       variant="secondary"
                       className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px] px-1.5 py-0"

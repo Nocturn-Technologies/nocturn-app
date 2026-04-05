@@ -32,9 +32,13 @@ function checkFulfillRateLimit(paymentIntentId: string): boolean {
  */
 export async function generateTicketQRCode(ticketToken: string) {
   try {
+  // Verify caller is authenticated and owns this ticket
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated", qrCode: null };
+
   const admin = createAdminClient();
 
-  // Verify the ticket exists — the token itself is the auth (only the buyer has it)
   const { data: ticket, error: fetchError } = await admin
     .from("tickets")
     .select("id, qr_code, user_id, event_id")
@@ -43,6 +47,11 @@ export async function generateTicketQRCode(ticketToken: string) {
 
   if (fetchError || !ticket) {
     return { error: "Ticket not found", qrCode: null };
+  }
+
+  // Verify the authenticated user owns this ticket
+  if (ticket.user_id && ticket.user_id !== user.id) {
+    return { error: "You don't have access to this ticket", qrCode: null };
   }
 
   // If QR code already exists, return it
@@ -537,16 +546,15 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
   let wasNewlyCreated = true; // Track if tickets were newly created vs pre-existing
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: atomicResult, error: atomicError } = await (admin as any).rpc("fulfill_tickets_atomic", {
+    const { data: atomicResult, error: atomicError } = await admin.rpc("fulfill_tickets_atomic", {
       p_payment_intent_id: paymentIntentId,
       p_event_id: eventId,
       p_tier_id: tierId,
       p_quantity: quantity,
       p_price_paid: pricePaid,
       p_currency: ticketCurrency,
-      p_buyer_email: buyerEmail ?? null,
-      p_referrer_token: referrerToken,
+      p_buyer_email: buyerEmail ?? undefined,
+      p_referrer_token: referrerToken ?? undefined,
       p_metadata: {
         payment_intent_id: paymentIntentId,
         customer_email: buyerEmail,
@@ -556,7 +564,7 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     });
 
     if (atomicError) throw atomicError;
-    insertedTickets = atomicResult;
+    insertedTickets = atomicResult as unknown as { id: string; ticket_token: string; is_new?: boolean }[];
 
     // The atomic function returns is_new=false for pre-existing tickets.
     // Use this deterministic flag to avoid double-counting promo/analytics.

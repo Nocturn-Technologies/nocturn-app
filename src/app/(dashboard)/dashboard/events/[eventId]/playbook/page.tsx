@@ -159,7 +159,7 @@ export default function PlaybookPage() {
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {isAll ? "All" : conf!.label}
+              {isAll ? "All" : conf?.label ?? "All"}
               <span className="text-[10px] opacity-60">{count}</span>
             </button>
           );

@@ -68,7 +68,7 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
         checked_in_at,
         ticket_token,
         ticket_tiers:ticket_tier_id (name),
-        profiles:user_id (full_name, email)
+        users!tickets_user_id_fkey (full_name, email)
       `
       )
       .eq("ticket_token", ticketToken)
@@ -105,8 +105,8 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
         error: `Already checked in at ${checkedInTime}`,
         ticket: {
           tierName: ((ticket.ticket_tiers as Record<string, unknown> | null)?.name as string) ?? "General",
-          guestName: ((ticket.profiles as Record<string, unknown> | null)?.full_name as string) ?? "Guest",
-          guestEmail: ((ticket.profiles as Record<string, unknown> | null)?.email as string) ?? null,
+          guestName: ((ticket.users as Record<string, unknown> | null)?.full_name as string) ?? "Guest",
+          guestEmail: ((ticket.users as Record<string, unknown> | null)?.email as string) ?? null,
         },
       };
     }
@@ -153,8 +153,8 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
       error: null,
       ticket: {
         tierName: (ticket.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
-        guestName: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
-        guestEmail: (ticket.profiles as unknown as { full_name: string; email: string } | null)?.email ?? null,
+        guestName: (ticket.users as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
+        guestEmail: (ticket.users as unknown as { full_name: string; email: string } | null)?.email ?? null,
       },
     };
   } catch (err) {
@@ -211,7 +211,7 @@ export async function getCheckInStats(eventId: string): Promise<CheckInStats> {
         `
         id,
         checked_in_at,
-        profiles:user_id (full_name),
+        users!tickets_user_id_fkey (full_name),
         ticket_tiers:ticket_tier_id (name)
       `
       )
@@ -224,7 +224,7 @@ export async function getCheckInStats(eventId: string): Promise<CheckInStats> {
     const recentCheckIns = (recentData ?? []).map((t) => ({
       id: t.id,
       guestName:
-        (t.profiles as unknown as { full_name: string } | null)?.full_name ?? "Guest",
+        (t.users as unknown as { full_name: string } | null)?.full_name ?? "Guest",
       tierName:
         (t.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
       checkedInAt: t.checked_in_at!,

@@ -24,8 +24,7 @@ export async function getProfilePerformanceWithCollective(
     const admin = createAdminClient();
 
     // Only show performance data for the viewer's own collective — prevents privacy leaks
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: membership } = await (admin.from("collective_members") as any)
+    const { data: membership } = await admin.from("collective_members")
       .select("collective_id")
       .eq("user_id", user.id)
       .in("role", ["admin", "owner"])
@@ -37,8 +36,7 @@ export async function getProfilePerformanceWithCollective(
     const collectiveId = (membership as { collective_id: string }).collective_id;
 
     // Find artist record linked to this profile user
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: artist } = await (admin.from("artists") as any)
+    const { data: artist } = await admin.from("artists")
       .select("id")
       .eq("user_id", profileUserId)
       .maybeSingle();
@@ -47,8 +45,7 @@ export async function getProfilePerformanceWithCollective(
     const artistId = (artist as { id: string }).id;
 
     // Get collective's events
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: events } = await (admin.from("events") as any)
+    const { data: events } = await admin.from("events")
       .select("id")
       .eq("collective_id", collectiveId)
       .is("deleted_at", null);
@@ -57,8 +54,7 @@ export async function getProfilePerformanceWithCollective(
     const eventIds = (events as { id: string }[]).map((e) => e.id);
 
     // Get bookings for this artist at these events
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: bookings } = await (admin.from("event_artists") as any)
+    const { data: bookings } = await admin.from("event_artists")
       .select("event_id, events(starts_at, title)")
       .eq("artist_id", artistId)
       .in("event_id", eventIds)
@@ -73,8 +69,7 @@ export async function getProfilePerformanceWithCollective(
       ),
     ];
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: tickets } = await (admin.from("tickets") as any)
+    const { data: tickets } = await admin.from("tickets")
       .select("id, event_id")
       .in("event_id", bookedEventIds)
       .neq("status", "refunded");
@@ -101,8 +96,8 @@ export async function getProfilePerformanceWithCollective(
       .filter((b) => b.events?.starts_at)
       .sort(
         (a, b) =>
-          new Date(b.events!.starts_at).getTime() -
-          new Date(a.events!.starts_at).getTime()
+          new Date(b.events?.starts_at ?? "").getTime() -
+          new Date(a.events?.starts_at ?? "").getTime()
       );
 
     const lastBooked = sortedBookings[0]?.events?.starts_at ?? null;

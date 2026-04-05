@@ -167,14 +167,14 @@ export async function POST(request: NextRequest) {
           const supabase = createAdminClient();
           const { data: disputedTickets, error: disputeErr } = await supabase
             .from("tickets")
-            .update({ status: "disputed" })
+            .update({ status: "cancelled" })
             .eq("stripe_payment_intent_id", disputePiId)
             .select("id");
           if (disputeErr) {
-            console.error("[stripe-webhook] Failed to update tickets to disputed:", disputeErr);
+            console.error("[stripe-webhook] Failed to update tickets to cancelled:", disputeErr);
           } else if (disputedTickets && disputedTickets.length > 0) {
             console.info(
-              `[stripe-webhook] Marked ${disputedTickets.length} ticket(s) as disputed for PI ${disputePiId}`
+              `[stripe-webhook] Marked ${disputedTickets.length} ticket(s) as cancelled (dispute) for PI ${disputePiId}`
             );
           }
         } else {
@@ -418,8 +418,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         .is("deleted_at", null)
         .maybeSingle();
       if (eventForContact?.collective_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from("contacts") as any).upsert({
+        await supabase.from("contacts").upsert({
           collective_id: eventForContact.collective_id,
           contact_type: "fan",
           email: contactEmail,
@@ -757,21 +756,20 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   // Fallback: Use atomic fulfillment RPC or plain insert if no pending tickets were updated.
   if (!insertedTickets || insertedTickets.length === 0) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: atomicResult, error: atomicError } = await (supabase as any).rpc("fulfill_tickets_atomic", {
+      const { data: atomicResult, error: atomicError } = await supabase.rpc("fulfill_tickets_atomic", {
         p_payment_intent_id: paymentIntent.id,
         p_event_id: eventId,
         p_tier_id: tierId,
         p_quantity: quantity,
         p_price_paid: pricePaid,
         p_currency: ticketCurrency,
-        p_buyer_email: buyerEmail ?? null,
-        p_referrer_token: referrerToken ?? null,
+        p_buyer_email: buyerEmail ?? undefined,
+        p_referrer_token: referrerToken ?? undefined,
         p_metadata: ticketMetadata,
       });
 
       if (atomicError) throw atomicError;
-      insertedTickets = atomicResult;
+      insertedTickets = atomicResult as unknown as { id: string; ticket_token: string; is_new?: boolean }[];
 
       // Deterministic: the RPC returns is_new=false for pre-existing tickets
       if (insertedTickets && insertedTickets.length > 0) {
@@ -831,8 +829,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
           .is("deleted_at", null)
           .maybeSingle();
         if (eventForContact?.collective_id) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await (supabase.from("contacts") as any).upsert({
+          await supabase.from("contacts").upsert({
             collective_id: eventForContact.collective_id,
             contact_type: "fan",
             email: contactEmail,

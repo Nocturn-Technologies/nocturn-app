@@ -4,6 +4,17 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
 
+/**
+ * Strip HTML tags and control characters from AI-generated text.
+ * Prevents XSS if the output is later rendered in email HTML or dashboard UI.
+ */
+function sanitizeAIText(text: string): string {
+  return text
+    .replace(/<[^>]*>/g, "") // strip HTML tags
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "") // strip control chars (keep \n, \r, \t)
+    .trim();
+}
+
 // Generate a post-event recap email using Claude API
 export async function generatePostEventEmail(eventId: string) {
   const supabase = await createServerClient();
@@ -114,7 +125,10 @@ Return JSON with "subject" and "body" fields. The body should be plain text with
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return { error: null, email: parsed };
+      // Sanitize AI output: strip HTML tags and control characters
+      const safeSubject = sanitizeAIText(parsed.subject ?? "");
+      const safeBody = sanitizeAIText(parsed.body ?? "");
+      return { error: null, email: { subject: safeSubject, body: safeBody } };
     }
 
     // Fallback if JSON parsing fails
@@ -122,7 +136,7 @@ Return JSON with "subject" and "body" fields. The body should be plain text with
       error: null,
       email: {
         subject: `Thank you for coming to ${event.title}! 🎉`,
-        body: text,
+        body: sanitizeAIText(text),
       },
     };
   } catch (err: unknown) {

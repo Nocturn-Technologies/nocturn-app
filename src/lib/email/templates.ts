@@ -1,14 +1,6 @@
 // Nocturn branded email templates
 
-// Escape HTML entities to prevent XSS in email templates
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
+import { escapeHtml } from "@/lib/html";
 
 // Sanitize URLs for use in href/src attributes — only allow safe protocols
 function sanitizeUrl(url: string): string {

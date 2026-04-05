@@ -99,8 +99,7 @@ export async function generateChatResponse(
   // 6. Insert AI response server-side using admin client (bypasses RLS)
   let messageId: string | null = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: insertedMsg } = await (sb.from("messages") as any).insert({
+    const { data: insertedMsg } = await sb.from("messages").insert({
       channel_id: channelId,
       user_id: null,
       content: aiContent,

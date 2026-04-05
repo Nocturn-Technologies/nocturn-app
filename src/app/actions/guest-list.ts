@@ -26,7 +26,7 @@ async function verifyEventAccess(eventId: string): Promise<{ error: string | nul
     .select("role")
     .eq("user_id", user.id)
     .eq("collective_id", event.collective_id)
-    .in("role", ["admin", "promoter", "event_staff"])
+    .in("role", ["admin", "promoter", "door_staff"])
     .is("deleted_at", null)
     .maybeSingle();
 
@@ -66,6 +66,8 @@ export async function addGuest(input: {
     if (authError) return { error: authError };
 
     const supabase = createAdminClient();
+
+    if (input.notes && input.notes.length > 500) return { error: "Notes must be under 500 characters" };
 
     const { error } = await supabase.from("guest_list").insert({
       event_id: input.eventId,

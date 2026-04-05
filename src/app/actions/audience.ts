@@ -126,7 +126,8 @@ export async function getPostEventInsights(eventId: string): Promise<{
     if (!email) continue;
 
     if (!emailEventCount.has(email)) emailEventCount.set(email, new Set());
-    emailEventCount.get(email)!.add(t.event_id);
+    const eventCount = emailEventCount.get(email);
+    if (eventCount) eventCount.add(t.event_id);
 
     // Count referrals they've generated
     if (t.referred_by) {

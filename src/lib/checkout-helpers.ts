@@ -35,9 +35,8 @@ export async function validatePromo(
 
   const { data: promo } = await admin
     .from("promo_codes")
-    .select("id, code, discount_type, discount_value, max_uses, current_uses, expires_at")
+    .select("id, code, discount_type, discount_value, max_uses, current_uses, valid_until")
     .eq("event_id", eventId)
-    .eq("is_active", true)
     .ilike("code", promoCode)
     .maybeSingle();
 
@@ -45,8 +44,8 @@ export async function validatePromo(
     return { error: "Promo code not found" };
   }
 
-  // Expiry check
-  if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+  // Active check: valid_until in the past means deactivated
+  if (promo.valid_until && new Date(promo.valid_until) < new Date()) {
     return { error: "Promo code expired" };
   }
 

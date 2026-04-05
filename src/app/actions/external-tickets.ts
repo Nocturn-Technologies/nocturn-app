@@ -31,16 +31,14 @@ export async function saveExternalTicketData(data: ExternalTicketData): Promise<
     const admin = createAdminClient();
 
     // Verify user owns this event
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: event } = await (admin.from("events") as any)
+    const { data: event } = await admin.from("events")
       .select("id, collective_id, metadata")
       .eq("id", data.eventId)
       .maybeSingle();
 
     if (!event) return { error: "Event not found" };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: membership } = await (admin.from("collective_members") as any)
+    const { data: membership } = await admin.from("collective_members")
       .select("id")
       .eq("collective_id", (event as { collective_id: string }).collective_id)
       .eq("user_id", user.id)
@@ -63,8 +61,7 @@ export async function saveExternalTicketData(data: ExternalTicketData): Promise<
       },
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (admin.from("events") as any)
+    const { error } = await admin.from("events")
       .update({ metadata: updatedMeta })
       .eq("id", data.eventId);
 
@@ -94,16 +91,14 @@ export async function getExternalTicketData(eventId: string): Promise<{
     const admin = createAdminClient();
 
     // Verify collective membership
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: event } = await (admin.from("events") as any)
+    const { data: event } = await admin.from("events")
       .select("metadata, collective_id")
       .eq("id", eventId)
       .maybeSingle();
 
     if (!event) return null;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: membership } = await (admin.from("collective_members") as any)
+    const { data: membership } = await admin.from("collective_members")
       .select("id")
       .eq("collective_id", (event as { collective_id: string }).collective_id)
       .eq("user_id", user.id)

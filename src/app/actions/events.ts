@@ -692,7 +692,7 @@ export async function cancelEvent(eventId: string) {
   // --- Cancel remaining non-refunded tickets (pending, free, etc.) ---
   await admin
     .from("tickets")
-    .update({ status: "cancelled" })
+    .update({ status: "cancelled" as const })
     .eq("event_id", eventId)
     .not("status", "in", "(refunded,cancelled)");
 
@@ -709,7 +709,7 @@ export async function cancelEvent(eventId: string) {
     .insert({
       event_id: eventId,
       user_id: user.id,
-      type: "event_cancelled",
+      action: "event_cancelled",
       metadata: {
         cancelled_at: new Date().toISOString(),
         tickets_refunded: refundResults.filter((r) => r.success).length,

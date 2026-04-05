@@ -7,7 +7,6 @@
  * Tables: event_analytics (per-event cache) + attendee_profiles (CRM segments)
  * NOTE: These tables are defined in 20260329_event_analytics.sql migration.
  * Atomic RPCs defined in 20260329_atomic_analytics_and_fixes.sql.
- * TypeScript types are cast via `as any` until supabase types are regenerated.
  */
 
 import { createAdminClient } from "@/lib/supabase/config";
@@ -23,8 +22,7 @@ export function trackEventPageView(eventId: string): void {
   void (async () => {
     try {
       const admin = createAdminClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const db = admin as any;
+      const db = admin;
 
       await db.rpc("increment_analytics_counter", {
         p_event_id: eventId,
@@ -46,8 +44,7 @@ export function trackCheckoutStart(eventId: string): void {
   void (async () => {
     try {
       const admin = createAdminClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const db = admin as any;
+      const db = admin;
 
       await db.rpc("increment_analytics_counter", {
         p_event_id: eventId,
@@ -73,8 +70,7 @@ export function trackTicketSold(
   void (async () => {
     try {
       const admin = createAdminClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const db = admin as any;
+      const db = admin;
 
       await db.rpc("track_ticket_sale", {
         p_event_id: eventId,
@@ -99,8 +95,7 @@ export function trackTicketRefunded(
   void (async () => {
     try {
       const admin = createAdminClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const db = admin as any;
+      const db = admin;
 
       await db.rpc("track_ticket_refund", {
         p_event_id: eventId,
@@ -132,8 +127,7 @@ export function upsertAttendeeProfile(
   void (async () => {
     try {
       const admin = createAdminClient();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const db = admin as any;
+      const db = admin;
       const now = new Date().toISOString();
       const segment = deriveSegment(spent, 1);
 
@@ -170,41 +164,14 @@ export function upsertAttendeeProfile(
 
       // Atomically increment counters for existing profiles (handles the conflict case)
       // This is safe to run even on new rows (it just re-sets the same values)
-      await db.rpc("increment_attendee_profile", {
+      const { error: rpcError } = await db.rpc("increment_attendee_profile", {
         p_collective_id: collectiveId,
         p_email: email,
         p_spent: spent,
-      }).catch(() => {
-        // RPC may not exist yet — fall back to read-then-write
-        // This path only runs if the migration hasn't been applied
-        void (async () => {
-          const { data: existing } = await db
-            .from("attendee_profiles")
-            .select("id, total_spent, total_tickets, total_events")
-            .eq("collective_id", collectiveId)
-            .eq("email", email)
-            .maybeSingle();
-
-          if (existing) {
-            const newTotalSpent = Number(existing.total_spent ?? 0) + spent;
-            const newTotalTickets = (Number(existing.total_tickets) || 0) + 1;
-            const newTotalEvents = (Number(existing.total_events) || 0) + 1;
-            const seg = deriveSegment(newTotalSpent, newTotalEvents);
-
-            await db
-              .from("attendee_profiles")
-              .update({
-                total_spent: newTotalSpent,
-                total_tickets: newTotalTickets,
-                total_events: newTotalEvents,
-                last_purchase_at: now,
-                segment: seg,
-                updated_at: now,
-              })
-              .eq("id", existing.id);
-          }
-        })();
       });
+      if (rpcError) {
+        console.warn("[analytics] increment_attendee_profile RPC failed:", rpcError.message);
+      }
     } catch (err) {
       console.error("[analytics] upsertAttendeeProfile failed:", err);
     }

@@ -352,7 +352,7 @@ export async function getRevenueForecast(): Promise<{
     );
 
     const ticketsSold = eventTickets.length;
-    const totalCapacity = eventTiers.reduce((s, t) => s + t.capacity, 0);
+    const totalCapacity = eventTiers.reduce((s, t) => s + (t.capacity ?? 0), 0);
     const currentRevenue = eventTickets.reduce(
       (s, t) => s + Number(t.price_paid),
       0

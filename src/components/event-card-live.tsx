@@ -14,32 +14,41 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-interface EventCardData {
-  id: string;
-  event_id: string;
-  channel_id: string;
-  lineup: { name: string; role?: string }[] | null;
-  venue_deal: {
+interface EventCardMetadata {
+  lineup?: { name: string; role?: string }[] | null;
+  venue_deal?: {
     venue?: string;
     terms?: string;
     rental_fee?: string;
   } | null;
-  ticket_pricing: {
+  ticket_pricing?: {
     tier?: string;
     price?: number;
     capacity?: number;
   }[] | null;
-  action_items: {
+  action_items?: {
     task: string;
     assignee?: string;
     done?: boolean;
   }[] | null;
-  financials: {
+  financials?: {
     estimated_revenue?: number;
     estimated_costs?: number;
     estimated_profit?: number;
   } | null;
-  last_updated_at: string;
+}
+
+interface EventCardData {
+  id: string;
+  event_id: string;
+  card_type: string;
+  content: string | null;
+  title: string | null;
+  metadata: EventCardMetadata | null;
+  position: number | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
 }
 
 interface EventCardLiveProps {
@@ -58,7 +67,6 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
     supabase
       .from("event_cards")
       .select("*")
-      .eq("channel_id", channelId)
       .eq("event_id", eventId)
       .limit(1)
       .then(({ data, error: queryError }) => {
@@ -69,7 +77,7 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
         }
         setLoading(false);
       });
-  }, [channelId, eventId]);
+  }, [eventId]);
 
   if (loading) return null;
 
@@ -85,13 +93,14 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
     );
   }
 
+  const meta = card?.metadata;
   const isEmpty =
     !card ||
-    (!card.lineup?.length &&
-      !card.venue_deal?.venue &&
-      !card.ticket_pricing?.length &&
-      !card.action_items?.length &&
-      !card.financials?.estimated_revenue);
+    (!meta?.lineup?.length &&
+      !meta?.venue_deal?.venue &&
+      !meta?.ticket_pricing?.length &&
+      !meta?.action_items?.length &&
+      !meta?.financials?.estimated_revenue);
 
   return (
     <div className="mx-3 mt-2 mb-1 rounded-2xl border border-nocturn/30 bg-card overflow-hidden">
@@ -121,10 +130,10 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
           ) : (
             <>
               {/* Lineup */}
-              {card?.lineup && card.lineup.length > 0 && (
+              {meta?.lineup && meta.lineup.length > 0 && (
                 <CardSection icon={Users} title="Lineup">
                   <div className="space-y-1">
-                    {card.lineup.map((a, i) => (
+                    {meta.lineup.map((a, i) => (
                       <div
                         key={`${a.name}-${a.role ?? i}`}
                         className="flex items-center gap-2 text-xs"
@@ -142,29 +151,29 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
               )}
 
               {/* Venue Deal */}
-              {card?.venue_deal?.venue && (
+              {meta?.venue_deal?.venue && (
                 <CardSection icon={MapPin} title="Venue & Deal">
                   <p className="text-xs text-foreground">
-                    {card.venue_deal.venue}
+                    {meta.venue_deal.venue}
                   </p>
-                  {card.venue_deal.terms && (
+                  {meta.venue_deal.terms && (
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {card.venue_deal.terms}
+                      {meta.venue_deal.terms}
                     </p>
                   )}
-                  {card.venue_deal.rental_fee && (
+                  {meta.venue_deal.rental_fee && (
                     <p className="text-xs text-nocturn mt-0.5">
-                      Fee: {card.venue_deal.rental_fee}
+                      Fee: {meta.venue_deal.rental_fee}
                     </p>
                   )}
                 </CardSection>
               )}
 
               {/* Ticket Pricing */}
-              {card?.ticket_pricing && card.ticket_pricing.length > 0 && (
+              {meta?.ticket_pricing && meta.ticket_pricing.length > 0 && (
                 <CardSection icon={Ticket} title="Pricing">
                   <div className="space-y-1">
-                    {card.ticket_pricing.map((t, i) => (
+                    {meta.ticket_pricing.map((t, i) => (
                       <div
                         key={`${t.tier ?? "general"}-${i}`}
                         className="flex items-center justify-between text-xs"
@@ -182,11 +191,11 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
               )}
 
               {/* Action Items */}
-              {card?.action_items && card.action_items.length > 0 && (
+              {meta?.action_items && meta.action_items.length > 0 && (
                 <CardSection icon={CheckSquare} title="Action Items">
                   <div className="space-y-1.5">
                     {/* task text isn't guaranteed unique; index fallback is acceptable */}
-                    {card.action_items.map((item, i) => (
+                    {meta.action_items.map((item, i) => (
                       <div
                         key={`${item.task}-${i}`}
                         className="flex items-start gap-2 text-xs"
@@ -221,37 +230,37 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
               )}
 
               {/* Financials */}
-              {card?.financials?.estimated_revenue != null && (
+              {meta?.financials?.estimated_revenue != null && (
                 <CardSection icon={DollarSign} title="Financial Estimates">
                   <div className="space-y-1 text-xs">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Revenue</span>
                       <span className="text-green-400">
                         $
-                        {card.financials.estimated_revenue?.toLocaleString()}
+                        {meta.financials.estimated_revenue?.toLocaleString()}
                       </span>
                     </div>
-                    {card.financials.estimated_costs != null && (
+                    {meta.financials.estimated_costs != null && (
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Costs</span>
                         <span className="text-red-400">
                           $
-                          {card.financials.estimated_costs.toLocaleString()}
+                          {meta.financials.estimated_costs.toLocaleString()}
                         </span>
                       </div>
                     )}
-                    {card.financials.estimated_profit != null && (
+                    {meta.financials.estimated_profit != null && (
                       <div className="flex justify-between border-t border-border pt-1">
                         <span className="text-muted-foreground">Profit</span>
                         <span
                           className={
-                            card.financials.estimated_profit >= 0
+                            meta.financials.estimated_profit >= 0
                               ? "text-green-400 font-medium"
                               : "text-red-400 font-medium"
                           }
                         >
                           $
-                          {card.financials.estimated_profit.toLocaleString()}
+                          {meta.financials.estimated_profit.toLocaleString()}
                         </span>
                       </div>
                     )}

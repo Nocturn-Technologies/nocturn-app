@@ -14,6 +14,15 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+/** Validate an optional URL: must start with http(s)://, no javascript: protocol, max 500 chars. Returns null if invalid. */
+function sanitizeUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  if (url.length > 500) return null;
+  if (/^\s*javascript:/i.test(url)) return null;
+  if (!/^https?:\/\//i.test(url)) return null;
+  return url;
+}
+
 // ── Actions ──────────────────────────────────────────────────────────
 
 export async function createMarketplaceProfile(data: {
@@ -44,8 +53,7 @@ export async function createMarketplaceProfile(data: {
   const userType = user.user_metadata?.user_type ?? "artist";
 
   // Check for existing marketplace profile
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (admin.from("marketplace_profiles") as any)
+  const { data: existing } = await admin.from("marketplace_profiles")
     .select("id")
     .eq("user_id", user.id)
     .maybeSingle();
@@ -54,13 +62,16 @@ export async function createMarketplaceProfile(data: {
     return { error: "You already have a marketplace profile", slug: null };
   }
 
+  if (data.bio && data.bio.length > 500) {
+    return { error: "Bio must be under 500 characters", slug: null };
+  }
+
   const slug =
     slugify(data.displayName) +
     "-" +
     Math.random().toString(36).slice(2, 8);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin.from("marketplace_profiles") as any).insert({
+  const { error } = await admin.from("marketplace_profiles").insert({
     user_id: user.id,
     user_type: userType,
     display_name: data.displayName,
@@ -68,9 +79,9 @@ export async function createMarketplaceProfile(data: {
     bio: data.bio ?? null,
     city: data.city ?? null,
     instagram_handle: data.instagramHandle ?? null,
-    website_url: data.websiteUrl ?? null,
-    soundcloud_url: data.soundcloudUrl ?? null,
-    spotify_url: data.spotifyUrl ?? null,
+    website_url: sanitizeUrl(data.websiteUrl),
+    soundcloud_url: sanitizeUrl(data.soundcloudUrl),
+    spotify_url: sanitizeUrl(data.spotifyUrl),
     genres: data.genres ?? null,
     services: data.services ?? null,
     rate_range: data.rateRange ?? null,
@@ -118,6 +129,10 @@ export async function updateMarketplaceProfile(data: {
 
   const admin = createAdminClient();
 
+  if (data.bio && data.bio.length > 500) {
+    return { error: "Bio must be under 500 characters" };
+  }
+
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
@@ -126,9 +141,9 @@ export async function updateMarketplaceProfile(data: {
   if (data.city !== undefined) updates.city = data.city;
   if (data.bio !== undefined) updates.bio = data.bio;
   if (data.instagramHandle !== undefined) updates.instagram_handle = data.instagramHandle;
-  if (data.websiteUrl !== undefined) updates.website_url = data.websiteUrl;
-  if (data.soundcloudUrl !== undefined) updates.soundcloud_url = data.soundcloudUrl;
-  if (data.spotifyUrl !== undefined) updates.spotify_url = data.spotifyUrl;
+  if (data.websiteUrl !== undefined) updates.website_url = sanitizeUrl(data.websiteUrl);
+  if (data.soundcloudUrl !== undefined) updates.soundcloud_url = sanitizeUrl(data.soundcloudUrl);
+  if (data.spotifyUrl !== undefined) updates.spotify_url = sanitizeUrl(data.spotifyUrl);
   if (data.genres !== undefined) updates.genres = data.genres;
   if (data.services !== undefined) updates.services = data.services;
   if (data.rateRange !== undefined) updates.rate_range = data.rateRange;
@@ -138,8 +153,7 @@ export async function updateMarketplaceProfile(data: {
   if (data.avatarUrl !== undefined) updates.avatar_url = data.avatarUrl;
   if (data.coverPhotoUrl !== undefined) updates.cover_photo_url = data.coverPhotoUrl;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin.from("marketplace_profiles") as any)
+  const { error } = await admin.from("marketplace_profiles")
     .update(updates)
     .eq("user_id", user.id);
 
@@ -166,8 +180,7 @@ export async function getMarketplaceProfile() {
 
   const admin = createAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (admin.from("marketplace_profiles") as any)
+  const { data } = await admin.from("marketplace_profiles")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
@@ -185,9 +198,8 @@ export async function getProfileBySlug(slug: string) {
 
   const admin = createAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data } = await (admin.from("marketplace_profiles") as any)
-    .select("id, slug, user_type, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, created_at, users(full_name)")
+  const { data } = await admin.from("marketplace_profiles")
+    .select("id, slug, user_type, user_id, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, is_verified, created_at, users(full_name)")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -221,8 +233,7 @@ export async function searchProfiles(filters: {
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let query = (admin.from("marketplace_profiles") as any)
+    let query = admin.from("marketplace_profiles")
       .select("id, slug, user_type, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, created_at", { count: "exact" })
       .eq("is_active", true)
       .order("created_at", { ascending: false })
@@ -273,8 +284,7 @@ export async function saveProfile(
 
   const admin = createAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin.from("marketplace_saved") as any).insert({
+  const { error } = await admin.from("marketplace_saved").insert({
     user_id: user.id,
     profile_id: profileId,
   });
@@ -288,8 +298,7 @@ export async function saveProfile(
   // Contact upsert — best-effort industry sync for saved marketplace profile
   try {
     // Fetch the saved profile details + owner email for contact record
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: savedProfile } = await (admin.from("marketplace_profiles") as any)
+    const { data: savedProfile } = await admin.from("marketplace_profiles")
       .select("id, display_name, instagram_handle, user_type, users(email)")
       .eq("id", profileId)
       .maybeSingle();
@@ -305,8 +314,7 @@ export async function saveProfile(
         .maybeSingle();
 
       if (membership?.collective_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (admin.from("contacts") as any).upsert({
+        await admin.from("contacts").upsert({
           collective_id: membership.collective_id,
           contact_type: "industry",
           email: savedProfile.users.email.toLowerCase().trim(),
@@ -343,8 +351,7 @@ export async function unsaveProfile(
 
   const admin = createAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin.from("marketplace_saved") as any)
+  const { error } = await admin.from("marketplace_saved")
     .delete()
     .eq("user_id", user.id)
     .eq("profile_id", profileId);
@@ -372,8 +379,7 @@ export async function isProfileSaved(profileId: string): Promise<boolean> {
 
   const admin = createAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { count } = await (admin.from("marketplace_saved") as any)
+  const { count } = await admin.from("marketplace_saved")
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id)
     .eq("profile_id", profileId);
@@ -398,8 +404,7 @@ export async function getSavedProfiles(): Promise<{
 
   const admin = createAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (admin.from("marketplace_saved") as any)
+  const { data, error } = await admin.from("marketplace_saved")
     .select("profile_id, marketplace_profiles(*)")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
@@ -447,8 +452,7 @@ export async function sendInquiry(data: {
   const admin = createAdminClient();
 
   // Prevent self-inquiry
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: targetProfile } = await (admin.from("marketplace_profiles") as any)
+  const { data: targetProfile } = await admin.from("marketplace_profiles")
     .select("user_id")
     .eq("id", data.toProfileId)
     .maybeSingle();
@@ -457,8 +461,11 @@ export async function sendInquiry(data: {
     return { error: "You cannot send an inquiry to yourself" };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin.from("marketplace_inquiries") as any).insert({
+  if (data.message && data.message.length > 5000) {
+    return { error: "Message is too long" };
+  }
+
+  const { error } = await admin.from("marketplace_inquiries").insert({
     from_user_id: user.id,
     to_profile_id: data.toProfileId,
     event_id: data.eventId ?? null,
@@ -473,8 +480,7 @@ export async function sendInquiry(data: {
   }
 
   // Fire-and-forget: email the profile owner about the inquiry
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: profile } = await (admin.from("marketplace_profiles") as any)
+  const { data: profile } = await admin.from("marketplace_profiles")
     .select("user_id, display_name, users(email)")
     .eq("id", data.toProfileId)
     .maybeSingle();
@@ -520,8 +526,7 @@ export async function sendInquiry(data: {
         .maybeSingle();
 
       if (membership?.collective_id) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (admin.from("contacts") as any).upsert({
+        await admin.from("contacts").upsert({
           collective_id: membership.collective_id,
           contact_type: "industry",
           email: profile.users.email.toLowerCase().trim(),

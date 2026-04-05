@@ -59,7 +59,7 @@ interface Channel {
 
 interface ChannelWithMeta extends Channel {
   last_message?: string;
-  last_message_at?: string;
+  last_message_at?: string | null;
   unread: boolean;
   unread_count: number;
   event_date?: string;

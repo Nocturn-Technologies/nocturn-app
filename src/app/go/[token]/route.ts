@@ -3,11 +3,19 @@ import { createAdminClient } from "@/lib/supabase/config";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
+// Promo tokens: alphanumeric + hyphens, 1-100 chars
+const TOKEN_FORMAT = /^[a-zA-Z0-9-]{1,100}$/;
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
+
+  if (!TOKEN_FORMAT.test(token)) {
+    return NextResponse.redirect(APP_URL);
+  }
+
   const admin = createAdminClient();
 
   // Look up the promo link

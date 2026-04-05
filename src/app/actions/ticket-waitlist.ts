@@ -37,7 +37,7 @@ export async function joinWaitlist(eventId: string, tierId: string, waitlistEmai
       .eq("ticket_tier_id", tierId)
       .in("status", ["paid", "checked_in"]);
 
-    const remaining = tier.capacity - (soldCount ?? 0);
+    const remaining = (tier.capacity ?? 0) - (soldCount ?? 0);
     if (remaining > 0) {
       return { error: "This tier still has tickets available — no need to waitlist!" };
     }

@@ -3,6 +3,7 @@ import { getTicketByToken, generateTicketQRCode } from "@/app/actions/tickets";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { FlippableTicket } from "@/components/ticket/flippable-ticket";
+import { isValidUUID } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Your Ticket — Nocturn",
@@ -15,6 +16,10 @@ interface TicketPageProps {
 
 export default async function TicketPage({ params }: TicketPageProps) {
   const { token } = await params;
+
+  if (!isValidUUID(token)) {
+    notFound();
+  }
 
   const { ticket, error } = await getTicketByToken(token);
 

@@ -182,8 +182,7 @@ export async function getContacts(
   const offset = (page - 1) * PAGE_SIZE;
 
   // Build query
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let query = (admin.from("contacts") as any)
+  let query = admin.from("contacts")
     .select("*", { count: "exact" })
     .eq("collective_id", collectiveId)
     .is("deleted_at", null);
@@ -260,8 +259,7 @@ export async function getContacts(
     }
 
     // Compute segment counts — fetch all fan contacts for counts
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: allFans } = await (admin.from("contacts") as any)
+    const { data: allFans } = await admin.from("contacts")
       .select("total_events, total_spend, tags, metadata")
       .eq("collective_id", collectiveId)
       .eq("contact_type", "fan")
@@ -322,8 +320,7 @@ export async function getContactDetail(
   const admin = createAdminClient();
 
   // Fetch the contact row
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: contactRow, error: contactError } = await (admin.from("contacts") as any)
+  const { data: contactRow, error: contactError } = await admin.from("contacts")
     .select("*")
     .eq("id", contactId)
     .is("deleted_at", null)
@@ -383,8 +380,7 @@ export async function getContactDetail(
 
   // Marketplace inquiries (if marketplace_profile_id is set)
   if (contact.marketplaceProfileId) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: inquiries } = await (admin.from("marketplace_inquiries") as any)
+    const { data: inquiries } = await admin.from("marketplace_inquiries")
       .select("id, message, created_at, from_user_id")
       .eq("to_profile_id", contact.marketplaceProfileId)
       .order("created_at", { ascending: false })
@@ -403,8 +399,7 @@ export async function getContactDetail(
 
   // Event bookings (if artist_id is set)
   if (contact.artistId && eventIds.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: bookings } = await (admin.from("event_artists") as any)
+    const { data: bookings } = await admin.from("event_artists")
       .select("id, event_id, status, created_at")
       .eq("artist_id", contact.artistId)
       .in("event_id", eventIds);
@@ -557,8 +552,7 @@ export async function importContacts(
     if (rows.length === 0) continue;
 
     // Upsert with ON CONFLICT on (collective_id, email)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: upserted, error: upsertError } = await (admin.from("contacts") as any)
+    const { data: upserted, error: upsertError } = await admin.from("contacts")
       .upsert(rows, {
         onConflict: "collective_id,email",
         ignoreDuplicates: false,
@@ -622,8 +616,7 @@ export async function addContact(
 
   const admin = createAdminClient();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: row, error } = await (admin.from("contacts") as any)
+  const { data: row, error } = await admin.from("contacts")
     .upsert(
       {
         collective_id: collectiveId,
@@ -686,8 +679,7 @@ export async function updateContact(
   const admin = createAdminClient();
 
   // First fetch the contact to verify access
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: existing } = await (admin.from("contacts") as any)
+  const { data: existing } = await admin.from("contacts")
     .select("collective_id")
     .eq("id", contactId)
     .is("deleted_at", null)
@@ -711,8 +703,7 @@ export async function updateContact(
   if (updates.instagram !== undefined) payload.instagram = updates.instagram;
   if (updates.role !== undefined) payload.role = updates.role;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: row, error } = await (admin.from("contacts") as any)
+  const { data: row, error } = await admin.from("contacts")
     .update(payload)
     .eq("id", contactId)
     .select("*")

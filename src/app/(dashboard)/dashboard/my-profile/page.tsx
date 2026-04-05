@@ -18,6 +18,7 @@ import {
   Check,
   Video,
 } from "lucide-react";
+import { validateFileUpload, ALLOWED_IMAGE_TYPES } from "@/lib/utils";
 
 interface ProfileData {
   id: string;
@@ -121,8 +122,11 @@ export default function MyProfilePage() {
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !profile) return;
+    const err = validateFileUpload(file, { allowedTypes: [...ALLOWED_IMAGE_TYPES], maxSizeMB: 5 });
+    if (err) { alert(err); return; }
     setUploading("avatar");
-    const url = await uploadFile(file, `${profile.id}/avatar-${Date.now()}.${file.name.split(".").pop()}`);
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const url = await uploadFile(file, `${profile.id}/avatar-${Date.now()}.${ext}`);
     if (url) {
       setAvatarUrl(url);
       await updateMarketplaceProfile({ avatarUrl: url });
@@ -133,8 +137,11 @@ export default function MyProfilePage() {
   async function handleCoverUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !profile) return;
+    const err = validateFileUpload(file, { allowedTypes: [...ALLOWED_IMAGE_TYPES], maxSizeMB: 10 });
+    if (err) { alert(err); return; }
     setUploading("cover");
-    const url = await uploadFile(file, `${profile.id}/cover-${Date.now()}.${file.name.split(".").pop()}`);
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const url = await uploadFile(file, `${profile.id}/cover-${Date.now()}.${ext}`);
     if (url) {
       setCoverPhotoUrl(url);
       await updateMarketplaceProfile({ coverPhotoUrl: url });
@@ -147,9 +154,12 @@ export default function MyProfilePage() {
     if (!files || files.length === 0 || !profile) return;
     setUploading("media");
 
+    const allowedMedia = [...ALLOWED_IMAGE_TYPES, "video/mp4", "video/webm"] as string[];
     const newUrls: string[] = [];
     for (const file of Array.from(files)) {
-      const ext = file.name.split(".").pop();
+      const err = validateFileUpload(file, { allowedTypes: allowedMedia, maxSizeMB: 50 });
+      if (err) { alert(err); continue; }
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
       const url = await uploadFile(file, `${profile.id}/media-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`);
       if (url) newUrls.push(url);
     }
@@ -239,7 +249,7 @@ export default function MyProfilePage() {
             </div>
           )}
         </div>
-        <input ref={coverRef} type="file" accept="image/*" className="hidden" onChange={handleCoverUpload} />
+        <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleCoverUpload} />
 
         {/* Avatar */}
         <div
@@ -259,7 +269,7 @@ export default function MyProfilePage() {
             </div>
           )}
         </div>
-        <input ref={avatarRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+        <input ref={avatarRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarUpload} />
       </div>
 
       <div className="pt-8" />

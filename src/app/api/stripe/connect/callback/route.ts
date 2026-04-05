@@ -61,8 +61,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Store the Stripe account ID on the collective
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: updateError } = await (admin.from("collectives") as any)
+    const { error: updateError } = await admin.from("collectives")
       .update({ stripe_account_id: stripeAccountId })
       .eq("id", state);
 

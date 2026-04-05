@@ -32,8 +32,7 @@ export async function getArtistPerformanceAnalytics(): Promise<{
     const admin = createAdminClient();
 
     // Get user's active collective
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: membership } = await (admin.from("collective_members") as any)
+    const { data: membership } = await admin.from("collective_members")
       .select("collective_id")
       .eq("user_id", user.id)
       .is("deleted_at", null)
@@ -44,8 +43,7 @@ export async function getArtistPerformanceAnalytics(): Promise<{
     const collectiveId = (membership as { collective_id: string }).collective_id;
 
     // Get all events for this collective (include metadata for external ticket data)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: events } = await (admin.from("events") as any)
+    const { data: events } = await admin.from("events")
       .select("id, metadata")
       .eq("collective_id", collectiveId)
       .is("deleted_at", null);
@@ -66,8 +64,7 @@ export async function getArtistPerformanceAnalytics(): Promise<{
     }
 
     // Get all artist bookings for these events
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: bookings } = await (admin.from("event_artists") as any)
+    const { data: bookings } = await admin.from("event_artists")
       .select("artist_id, event_id, created_at, artists(id, name, genre, instagram, metadata), events(starts_at)")
       .in("event_id", eventIds)
       .neq("status", "cancelled");
@@ -77,8 +74,7 @@ export async function getArtistPerformanceAnalytics(): Promise<{
     }
 
     // Get all tickets for these events
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: tickets } = await (admin.from("tickets") as any)
+    const { data: tickets } = await admin.from("tickets")
       .select("id, event_id")
       .in("event_id", eventIds)
       .neq("status", "refunded");

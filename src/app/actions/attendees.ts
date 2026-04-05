@@ -103,16 +103,24 @@ export async function getAttendees(collectiveId?: string): Promise<{
     const eventMap = new Map(events.map((e) => [e.id, e]));
 
     // Get all paid/checked-in tickets for these events
+    // Fetch in batches of 5000 to avoid single-query memory pressure
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: ticketsRaw, error: ticketError } = await admin
-      .from("tickets")
-      .select("id, event_id, price_paid, metadata, created_at")
-      .in("event_id", eventIds)
-      .in("status", ["paid", "checked_in"])
-      // TODO: Implement proper pagination (page/perPage params returning { attendees, total }).
-      // Supabase default limit is 1000 rows; this override handles large events but will
-      // need cursor-based pagination for collectives with 50k+ tickets.
-      .limit(50000);
+    const allTickets: { id: string; event_id: string; price_paid: number | null; metadata: Record<string, unknown> | null; created_at: string }[] = [];
+    let ticketError: unknown = null;
+    const BATCH_SIZE = 5000;
+    for (let offset = 0; ; offset += BATCH_SIZE) {
+      const { data: batch, error: batchError } = await admin
+        .from("tickets")
+        .select("id, event_id, price_paid, metadata, created_at")
+        .in("event_id", eventIds)
+        .in("status", ["paid", "checked_in"])
+        .range(offset, offset + BATCH_SIZE - 1);
+      if (batchError) { ticketError = batchError; break; }
+      if (!batch || batch.length === 0) break;
+      allTickets.push(...(batch as typeof allTickets));
+      if (batch.length < BATCH_SIZE) break; // last page
+    }
+    const ticketsRaw = allTickets;
     const tickets = ticketsRaw as { id: string; event_id: string; price_paid: number | null; metadata: Record<string, unknown> | null; created_at: string }[] | null;
 
     if (ticketError) {

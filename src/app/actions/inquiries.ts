@@ -24,7 +24,7 @@ export async function getSentInquiries(): Promise<InquiryItem[]> {
 
     const sb = createAdminClient();
 
-    const { data } = await (sb.from("marketplace_inquiries") as any)
+    const { data } = await sb.from("marketplace_inquiries")
       .select("id, message, inquiry_type, status, created_at, to_profile_id")
       .eq("from_user_id", user.id)
       .order("created_at", { ascending: false })
@@ -35,7 +35,7 @@ export async function getSentInquiries(): Promise<InquiryItem[]> {
     // Enrich with profile display names
     const enriched: InquiryItem[] = [];
     for (const inq of data) {
-      const { data: profile } = await (sb.from("marketplace_profiles") as any)
+      const { data: profile } = await sb.from("marketplace_profiles")
         .select("display_name, user_id")
         .eq("id", inq.to_profile_id)
         .maybeSingle();
@@ -60,7 +60,7 @@ export async function getSentInquiries(): Promise<InquiryItem[]> {
         message: inq.message,
         inquiry_type: inq.inquiry_type,
         status: inq.status,
-        created_at: inq.created_at,
+        created_at: inq.created_at ?? "",
         contact_name: contactName,
         contact_email: contactEmail,
         profile_display_name: profile?.display_name || null,
@@ -84,14 +84,14 @@ export async function getReceivedInquiries(): Promise<InquiryItem[]> {
     const sb = createAdminClient();
 
     // Get marketplace profile
-    const { data: profile } = await (sb.from("marketplace_profiles") as any)
+    const { data: profile } = await sb.from("marketplace_profiles")
       .select("id")
       .eq("user_id", user.id)
       .maybeSingle();
 
     if (!profile) return [];
 
-    const { data } = await (sb.from("marketplace_inquiries") as any)
+    const { data } = await sb.from("marketplace_inquiries")
       .select("id, message, inquiry_type, status, created_at, from_user_id")
       .eq("to_profile_id", profile.id)
       .order("created_at", { ascending: false })
@@ -112,7 +112,7 @@ export async function getReceivedInquiries(): Promise<InquiryItem[]> {
         message: inq.message,
         inquiry_type: inq.inquiry_type,
         status: inq.status,
-        created_at: inq.created_at,
+        created_at: inq.created_at ?? "",
         contact_name: sender?.full_name || "Unknown",
         contact_email: sender?.email || null,
         profile_display_name: null,
@@ -142,7 +142,7 @@ export async function acceptInquiry(inquiryId: string): Promise<{
   const sb = createAdminClient();
 
   // Fetch the inquiry
-  const { data: inquiry, error: fetchErr } = await (sb.from("marketplace_inquiries") as any)
+  const { data: inquiry, error: fetchErr } = await sb.from("marketplace_inquiries")
     .select("id, status, from_user_id, to_profile_id, message, inquiry_type")
     .eq("id", inquiryId)
     .maybeSingle();
@@ -151,7 +151,7 @@ export async function acceptInquiry(inquiryId: string): Promise<{
   if (inquiry.status !== "pending") return { error: "Inquiry has already been processed", channelId: null };
 
   // Verify the current user owns the target profile
-  const { data: profile } = await (sb.from("marketplace_profiles") as any)
+  const { data: profile } = await sb.from("marketplace_profiles")
     .select("id, user_id, display_name")
     .eq("id", inquiry.to_profile_id)
     .maybeSingle();
@@ -290,7 +290,7 @@ export async function acceptInquiry(inquiryId: string): Promise<{
   }
 
   // Update inquiry status to accepted
-  const { error: statusErr } = await (sb.from("marketplace_inquiries") as any)
+  const { error: statusErr } = await sb.from("marketplace_inquiries")
     .update({ status: "accepted" })
     .eq("id", inquiryId);
 
@@ -323,7 +323,7 @@ export async function rejectInquiry(inquiryId: string): Promise<{
   const sb = createAdminClient();
 
   // Fetch and verify
-  const { data: inquiry } = await (sb.from("marketplace_inquiries") as any)
+  const { data: inquiry } = await sb.from("marketplace_inquiries")
     .select("id, status, to_profile_id")
     .eq("id", inquiryId)
     .maybeSingle();
@@ -332,7 +332,7 @@ export async function rejectInquiry(inquiryId: string): Promise<{
   if (inquiry.status !== "pending") return { error: "Inquiry has already been processed" };
 
   // Verify ownership
-  const { data: profile } = await (sb.from("marketplace_profiles") as any)
+  const { data: profile } = await sb.from("marketplace_profiles")
     .select("user_id")
     .eq("id", inquiry.to_profile_id)
     .maybeSingle();
@@ -341,7 +341,7 @@ export async function rejectInquiry(inquiryId: string): Promise<{
     return { error: "Not authorized" };
   }
 
-  const { error: statusErr } = await (sb.from("marketplace_inquiries") as any)
+  const { error: statusErr } = await sb.from("marketplace_inquiries")
     .update({ status: "rejected" })
     .eq("id", inquiryId);
 

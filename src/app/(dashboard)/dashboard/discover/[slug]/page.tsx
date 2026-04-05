@@ -43,7 +43,7 @@ export default async function ProfileDetailPage({
     notFound();
   }
 
-  const type = profile.user_type ?? profile.type ?? "artist";
+  const type = profile.user_type ?? "artist";
 
   // Fetch performance analytics (only meaningful for artist-type profiles)
   const performance =
@@ -62,7 +62,7 @@ export default async function ProfileDetailPage({
     {
       url: profile.instagram_handle
         ? `https://instagram.com/${profile.instagram_handle.replace(/^@/, "")}`
-        : profile.instagram_url,
+        : null,
       label: "Instagram",
       icon: Instagram,
     },
@@ -184,7 +184,7 @@ export default async function ProfileDetailPage({
       )}
 
       {/* Rate range */}
-      {(profile.rate_range || profile.rate_min) && (
+      {profile.rate_range && (
         <div className="px-4 md:px-0">
           <Card>
             <CardContent className="p-4">
@@ -192,13 +192,7 @@ export default async function ProfileDetailPage({
                 Rate
               </h3>
               <p className="text-lg font-semibold">
-                {profile.rate_range
-                  ? `$${profile.rate_range}`
-                  : profile.rate_min && profile.rate_max
-                  ? `$${profile.rate_min} - $${profile.rate_max}`
-                  : profile.rate_min
-                  ? `From $${profile.rate_min}`
-                  : `Up to $${profile.rate_max}`}
+                {profile.rate_range}
               </p>
             </CardContent>
           </Card>

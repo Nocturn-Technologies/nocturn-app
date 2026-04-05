@@ -294,8 +294,11 @@ export async function reorderTicketTiers(tierIds: string[]) {
       return { error: "One or more tiers not found." };
     }
 
+    if (!ownership.tier) return { error: "Tier not found" };
+    const ownerEventId = ownership.tier.event_id;
+
     const eventIds = new Set(allTiers.map((t) => t.event_id));
-    if (eventIds.size > 1 || !eventIds.has(ownership.tier!.event_id)) {
+    if (eventIds.size > 1 || !eventIds.has(ownerEventId)) {
       return { error: "All tiers must belong to the same event." };
     }
 
@@ -305,7 +308,7 @@ export async function reorderTicketTiers(tierIds: string[]) {
         .from("ticket_tiers")
         .update({ sort_order: index })
         .eq("id", id)
-        .eq("event_id", ownership.tier!.event_id)
+        .eq("event_id", ownerEventId)
     );
 
     const results = await Promise.all(updates);

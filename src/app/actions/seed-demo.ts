@@ -31,15 +31,19 @@ export async function seedDemoData(collectiveId: string) {
 
   if (!collective) return { error: "Collective not found" };
 
-  // Verify user is a member of this collective
-  const { count: memberCount } = await sb
+  // Verify user is an owner or admin of this collective (not just any member)
+  const { data: membership } = await sb
     .from("collective_members")
-    .select("*", { count: "exact", head: true })
+    .select("role")
     .eq("collective_id", collectiveId)
     .eq("user_id", user.id)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  if (!memberCount || memberCount === 0) return { error: "Not a member of this collective" };
+  if (!membership) return { error: "Not a member of this collective" };
+  if (!["owner", "admin"].includes(membership.role)) {
+    return { error: "Only collective owners and admins can seed demo data" };
+  }
 
   // Create 3 demo venues
   const venues = [
@@ -82,7 +86,7 @@ export async function seedDemoData(collectiveId: string) {
       venue_id: insertedVenues[0].id,
       title: "Deep Frequencies Vol. 3",
       slug: "deep-frequencies-vol-3",
-      status: "completed",
+      status: "completed" as const,
       starts_at: new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000).toISOString(), // 3 weeks ago
       ends_at: new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000 + 5 * 60 * 60 * 1000).toISOString(),
       doors_at: new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000 - 1 * 60 * 60 * 1000).toISOString(),
@@ -94,7 +98,7 @@ export async function seedDemoData(collectiveId: string) {
       venue_id: insertedVenues[1].id,
       title: "Nocturnal Sounds: Opening Night",
       slug: "nocturnal-sounds-opening",
-      status: "completed",
+      status: "completed" as const,
       starts_at: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString(), // 2 weeks ago
       ends_at: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000 + 6 * 60 * 60 * 1000).toISOString(),
       doors_at: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000 - 1 * 60 * 60 * 1000).toISOString(),
@@ -106,7 +110,7 @@ export async function seedDemoData(collectiveId: string) {
       venue_id: insertedVenues[2].id,
       title: "Warehouse Sessions 001",
       slug: "warehouse-sessions-001",
-      status: "completed",
+      status: "completed" as const,
       starts_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 1 week ago
       ends_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000).toISOString(),
       doors_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000 - 1 * 60 * 60 * 1000).toISOString(),
@@ -155,11 +159,11 @@ export async function seedDemoData(collectiveId: string) {
     const allTickets: Array<{
       event_id: string;
       ticket_tier_id: string;
-      status: string;
+      status: "reserved" | "paid" | "checked_in" | "refunded" | "cancelled" | "free" | "pending";
       price_paid: number;
       currency: string;
       ticket_token: string;
-      metadata: Record<string, unknown>;
+      metadata: { demo: boolean; customer_email: string };
     }> = [];
 
     for (let t = 0; t < insertedTiers.length; t++) {

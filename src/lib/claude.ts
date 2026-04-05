@@ -105,8 +105,7 @@ export async function generateWithClaude(
     clearTimeout(timeout);
 
     // Log cache performance for monitoring
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const usage = response.usage as any;
+    const usage = response.usage as { input_tokens: number; output_tokens: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
     if (usage?.cache_read_input_tokens || usage?.cache_creation_input_tokens) {
       console.info(
         `[claude] Cache: ${usage.cache_read_input_tokens ?? 0} read, ${usage.cache_creation_input_tokens ?? 0} created, ${usage.input_tokens ?? 0} uncached`

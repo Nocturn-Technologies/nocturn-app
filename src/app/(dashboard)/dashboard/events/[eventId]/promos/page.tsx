@@ -133,7 +133,7 @@ export default function PromosPage() {
     );
   }
 
-  const totalUses = codes.reduce((sum, c) => sum + c.current_uses, 0);
+  const totalUses = codes.reduce((sum, c) => sum + (c.current_uses ?? 0), 0);
   const activeCodes = codes.filter((c) => c.is_active).length;
 
   return (
@@ -339,7 +339,7 @@ export default function PromosPage() {
             const isExpired =
               promo.expires_at && new Date(promo.expires_at) < new Date();
             const isMaxedOut =
-              promo.max_uses !== null && promo.current_uses >= promo.max_uses;
+              promo.max_uses !== null && (promo.current_uses ?? 0) >= promo.max_uses;
             const effectivelyActive =
               promo.is_active && !isExpired && !isMaxedOut;
 
@@ -385,8 +385,8 @@ export default function PromosPage() {
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                       <span className="rounded-full bg-nocturn/10 text-nocturn px-2 py-0.5 text-[10px] font-medium">
                         {promo.discount_type === "percentage"
-                          ? `${promo.discount_value}% off`
-                          : `$${promo.discount_value.toFixed(2)} off`}
+                          ? `${promo.discount_value ?? 0}% off`
+                          : `$${(promo.discount_value ?? 0).toFixed(2)} off`}
                       </span>
                       {isExpired && (
                         <span className="rounded-full bg-red-500/10 text-red-500 px-2 py-0.5 text-[10px] font-medium">
@@ -418,7 +418,7 @@ export default function PromosPage() {
                   {/* Usage */}
                   <div className="text-right shrink-0">
                     <p className="text-sm font-semibold">
-                      {promo.current_uses}
+                      {promo.current_uses ?? 0}
                       {promo.max_uses !== null && (
                         <span className="text-muted-foreground font-normal">
                           {" "}

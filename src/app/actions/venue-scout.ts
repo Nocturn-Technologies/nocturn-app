@@ -24,7 +24,7 @@ export async function saveVenueScoutNotes(notes: ScoutNote) {
     // Get the saved venue row for this place_id
     const { data: savedVenue } = await admin
       .from("saved_venues")
-      .select("id, venue_notes")
+      .select("id, notes")
       .eq("user_id", user.id)
       .eq("place_id", notes.place_id)
       .maybeSingle();
@@ -34,8 +34,8 @@ export async function saveVenueScoutNotes(notes: ScoutNote) {
     }
 
     // Append to existing notes array (stored as JSONB)
-    const existingNotes = Array.isArray(savedVenue.venue_notes)
-      ? savedVenue.venue_notes
+    const existingNotes = Array.isArray(savedVenue.notes)
+      ? savedVenue.notes
       : [];
 
     const updatedNotes = [
@@ -50,7 +50,7 @@ export async function saveVenueScoutNotes(notes: ScoutNote) {
 
     const { error } = await admin
       .from("saved_venues")
-      .update({ venue_notes: JSON.stringify(updatedNotes) })
+      .update({ notes: JSON.stringify(updatedNotes) })
       .eq("id", savedVenue.id);
 
     if (error) return { error: "Something went wrong" };

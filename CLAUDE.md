@@ -1,9 +1,22 @@
 # Nocturn — AI for Music Collectives and Promoters
 
-> ⚠️ This is the ONLY active codebase. The mobile repo (nocturn-mobile) is archived — all features were merged here.
+> This is the ONLY active codebase. The mobile repo (nocturn-mobile) is archived — all features were merged here.
 
 ## What is this?
 Mobile-first web app for nightlife promoters and collectives. Manage events, sell tickets, coordinate teams, discover venues, and record calls — all from your phone or desktop. Built with Next.js + Supabase + Stripe.
+
+## Codebase Stats (audited 2026-04-04)
+- **310 TypeScript files** (118 .ts + 192 .tsx) — **~68,800 lines of code**
+- **61 app routes** (page.tsx) + **17 API routes** (route.ts) + **7 layouts**
+- **61 server action files** — 130+ exported functions (16,070 lines)
+- **31 lib files** (7,328 lines)
+- **58 components** across 10 subdirectories
+- **3 custom hooks** (notifications, speech, shake)
+- **48 database tables** + 2 views + 13 custom DB functions
+- **176 indexes**, **66 RLS policies**, **10 applied migrations**
+- **28 dependencies** + **12 devDependencies**
+- **0 `as any` casts**, **0 `eslint-disable` comments**, **0 unsafe non-null assertions**
+- **Zero TypeScript errors** — build passes clean
 
 ## Current Priority: Customer Pitch & Onboarding
 Shawn is actively pitching collectives as potential customers. The primary workflow right now is:
@@ -54,12 +67,17 @@ When asked to create pitch decks, slides, or marketing materials:
 - Competitors to reference: Posh (10% + $0.99), Eventbrite (dated UX), RA (24hr approval delay), Partiful (casual only)
 
 ## Tech Stack
-- **Framework**: Next.js 16 (App Router) + TypeScript
-- **Styling**: Tailwind CSS v4 + shadcn/ui components
-- **Auth & DB**: Supabase (PostgreSQL + Auth + Realtime + RLS)
-- **Payments**: Stripe (direct checkout + Connect for payouts)
-- **Analytics**: PostHog (user analytics), Vercel Analytics (web vitals), Sentry (errors)
-- **Email**: Resend (transactional email from trynocturn.com)
+- **Framework**: Next.js 16.1.7 (App Router) + TypeScript 5.x
+- **Styling**: Tailwind CSS v4 (PostCSS plugin, no config file) + shadcn/ui v4
+- **Auth & DB**: Supabase (PostgreSQL + Auth + Realtime + RLS) — @supabase/supabase-js 2.99, @supabase/ssr 0.9
+- **Payments**: Stripe 20.4 (direct checkout + Connect for payouts) — @stripe/react-stripe-js 5.6
+- **AI**: Anthropic Claude (@anthropic-ai/sdk 0.80) + OpenAI Whisper (openai 6.32) + Replicate (replicate 1.4)
+- **Analytics**: PostHog (posthog-js 1.363), Vercel Analytics 2.0, Sentry 10.45
+- **Email**: Resend 6.9 (transactional email from trynocturn.com)
+- **State**: Zustand 5.0 + TanStack React Query 5.90
+- **Validation**: Zod 4.3
+- **QR**: html5-qrcode 2.3 (scanning) + qrcode 1.5 (generation)
+- **Testing**: Vitest 4.1
 - **PWA**: manifest.json + service worker
 - **Deploy**: Vercel (auto-deploys from main branch)
 
@@ -70,6 +88,7 @@ When asked to create pitch decks, slides, or marketing materials:
 - **GitHub (site)**: https://github.com/Nocturn-Technologies/nocturn-site
 - **Supabase project**: zvmslijvdkcnkrjjgaie
 - **Supabase URL**: https://zvmslijvdkcnkrjjgaie.supabase.co
+- **Project management**: Linear
 
 ## Brand
 - **Primary**: #7B2FF7 (Nocturn Purple)
@@ -100,58 +119,69 @@ When asked to create pitch decks, slides, or marketing materials:
 ```
 src/
 ├── app/
-│   ├── (auth)/          — Login, signup, password reset
-│   ├── (dashboard)/     — All authenticated pages
+│   ├── (auth)/          — Login, signup, pending-approval, account-denied (4 routes)
+│   ├── (dashboard)/     — All authenticated pages (45 routes)
 │   │   └── dashboard/
 │   │       ├── page.tsx         — Home/dashboard
-│   │       ├── events/          — Events CRUD + sub-pages (lineup, tasks, promos, guests, check-in, recap, forecast, refunds)
-│   │       ├── calendar/        — Calendar heat map (best nights to throw)
-│   │       ├── artists/         — Artist directory + detail
-│   │       ├── attendees/       — Attendee CRM + CSV export
-│   │       ├── chat/            — Team Sync (channels + real-time messaging + collabs)
-│   │       ├── venues/          — Venue discovery + saved venues
-│   │       ├── record/          — Voice recording + AI transcription (supports 50+ min calls)
-│   │       ├── marketing/       — AI email composer + send to attendees
-│   │       ├── finance/         — Event P&L + settlements + refunds
 │   │       ├── analytics/       — Founder analytics dashboard
+│   │       ├── artists/         — Artist directory + detail + analytics + me (4 routes)
+│   │       ├── attendees/       — Attendee CRM + CSV export
+│   │       ├── audience/        — Audience insights
+│   │       ├── calendar/        — Calendar heat map (best nights to throw)
+│   │       ├── chat/            — Team Sync (channels + real-time messaging + collabs) (2 routes)
+│   │       ├── discover/        — Marketplace discovery + profile pages (2 routes)
+│   │       ├── events/          — Events CRUD + 17 sub-pages per event (21 routes)
+│   │       ├── finance/         — Event P&L + settlements + per-event financials (2 routes)
+│   │       ├── inquiries/       — Marketplace inquiry management
+│   │       ├── marketing/       — AI email composer + send to attendees (2 routes)
 │   │       ├── members/         — Team management + invitations
-│   │       └── settings/        — Profile + Stripe Connect
-│   ├── (public)/        — Public event pages, ticket view, check-in
-│   ├── api/             — Stripe checkout, webhooks, cron jobs
+│   │       ├── my-profile/      — User profile editing
+│   │       ├── promo-insights/  — Promoter performance dashboard
+│   │       ├── promote/         — Promo tools
+│   │       ├── record/          — Voice recording + AI transcription
+│   │       ├── settings/        — Profile + Stripe Connect
+│   │       └── venues/          — Venue discovery + saved venues + my venues (2 routes)
+│   ├── (public)/        — Public event pages, ticket view, check-in, invites (6 routes)
+│   ├── admin/           — Admin dashboard (cookie-based auth with timing-safe comparison)
+│   ├── api/             — 15 API routes (checkout, webhooks, cron, seeding, OG images)
+│   ├── auth/            — Confirm + reset password
+│   ├── go/              — Short URL redirects
 │   ├── legal/           — Terms of Service, Privacy Policy
-│   └── actions/         — Server actions (events, artists, tickets, budget-planner, pricing-suggestion, transcribe, etc.)
-├── components/          — Shared UI (dashboard-shell, voice-note, event-card-live, public-event/*)
-└── lib/                 — Supabase clients, Stripe, mock data, utilities, tracking
+│   ├── og-image/        — Dynamic OG image generation (2 routes)
+│   ├── onboarding/      — Collective onboarding + marketplace onboarding (2 routes)
+│   └── actions/         — 61 server action files (130+ exported functions)
+├── components/          — 58 components (ui/, public-event/, onboarding/, finance/, etc.)
+├── hooks/               — 3 hooks (notifications, speech, shake)
+└── lib/                 — 31 utility files (supabase, stripe, email, analytics, AI, etc.)
 ```
+
+### Event Sub-Pages (17 routes per event)
+`/dashboard/events/[eventId]/` → chat, check-in, design, edit, financials, forecast, guests, lineup, live, playbook, promos, recap, referrals, refunds, tasks, wrap
 
 ## Key Features (Shipped)
 - **Event creation** with AI chat + budget planning (headliner type, travel estimation, break-even pricing)
-- **Ticketing**: Paid (Stripe) + free, QR codes, check-in, promo codes, waitlist for sold-out tiers
+- **Ticketing**: Paid (Stripe) + free, QR codes, check-in with Realtime live stats, promo codes, waitlist for sold-out tiers, atomic fulfillment (race-condition safe)
 - **Budget planner**: Suggests 4 tiers (Early Bird → Tier 1 → Tier 2 → Tier 3) based on expenses
 - **Market pricing**: Shows avg ticket prices in your city + competing events
 - **Calendar heat map**: Color-coded months showing best nights to throw events
 - **Refunds**: Per-ticket Stripe refund with buyer email notification + waitlist notify
-- **Email campaigns**: Generate + send to attendees via Resend
+- **Email campaigns**: Generate + send to attendees via Resend (6 email-sending actions)
 - **Event reminders**: Auto-email 24hr before (Vercel cron)
 - **Call recording**: Supports 50+ min calls via Supabase Storage + Whisper transcription
 - **Collab chat**: Search and message other collectives
+- **Marketplace**: Discover profiles, send inquiries, save profiles, analytics
+- **AI features**: 9 Claude-powered actions (briefings, forecasts, email generation, event parsing, enrichment, poster prompts, ask-nocturn chat, content playbooks)
 - **Legal pages**: Terms + Privacy
-- **Analytics**: PostHog + Vercel Analytics + Sentry + founder dashboard
+- **Analytics**: PostHog + Vercel Analytics + Sentry + founder dashboard + per-event analytics tracking
 
 ## Key Patterns
 
 ### Server Actions
 All DB mutations use server actions with `"use server"` directive + admin client:
 ```typescript
-import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
-
-function createAdminClient() {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false }
-  });
-}
+import { createAdminClient } from "@/lib/supabase/config";
 ```
+The admin client is a singleton per serverless function instance, typed with `Database` generic, and re-created if the service role key changes.
 
 ### Client Components
 Interactive pages use `"use client"` with the browser Supabase client:
@@ -164,6 +194,19 @@ import { createClient } from "@/lib/supabase/client";
 - Always null-guard results with `?.` and `??`
 - Prices stored in dollars (NUMERIC), NOT cents
 - Use `Promise.all()` for parallel queries wherever possible
+- Generated types from live DB — regenerate with Supabase MCP `generate_typescript_types`
+- Relationship joins typed with `as unknown as SomeType` pattern (not `as any`)
+
+### Security Patterns
+- **RLS on all 48 tables** — 66 policies, no exceptions
+- **Admin panel**: Cookie-based auth with `crypto.timingSafeEqual` + HMAC-signed session token
+- **UUID validation**: Shared `isValidUUID()` utility, layout-level validation for `[eventId]` routes
+- **PostgREST injection**: `sanitizePostgRESTInput()` strips dangerous chars before `.or()` filters
+- **AI output sanitization**: `sanitizeAIText()` strips HTML tags + control chars from LLM responses
+- **File upload validation**: MIME whitelist + blocked extensions (SVG/HTML) + size limits
+- **URL sanitization**: `sanitizeUrl()` rejects `javascript:`, enforces `https://`, caps length
+- **Input limits**: Max lengths on all text inputs (titles, bios, messages, promo codes)
+- **Atomic DB operations**: `fulfill_tickets_atomic` uses advisory locks to prevent duplicate tickets
 
 ### Responsive Layout
 - Mobile (< 768px): bottom tab bar with 4 tabs (Home, Events, Chat, Venues) — pill-style active state, 48px tap targets
@@ -176,15 +219,90 @@ import { createClient } from "@/lib/supabase/client";
 - Brand accents: `bg-nocturn`, `text-nocturn`, `hover:bg-nocturn-light`
 - Never use light theme
 
-## Database Tables (Supabase)
-collectives, collective_members, users, events, venues, ticket_tiers, tickets, artists, event_artists, channels, messages, event_cards, event_tasks, event_activity, playbook_templates, recordings, saved_venues, invitations, settlements, expenses, waitlist_entries
+## Database (48 tables + 2 views)
+
+### Tables
+artists, attendee_profiles, audit_logs, campaign_segments, channels, collective_members, collectives, contacts, email_campaigns, event_activity, event_analytics, event_artists, event_cards, event_collectives, event_expenses, event_reactions, event_tasks, events, expenses, external_events, guest_list, invitations, marketplace_inquiries, marketplace_profiles, marketplace_saved, messages, payment_events, payouts, playbook_task_templates, playbook_templates, promo_clicks, promo_codes, promo_links, rate_limits, recordings, saved_venues, segment_members, segments, settlement_lines, settlements, split_items, ticket_tiers, ticket_waitlist, tickets, transactions, users, venues, waitlist_entries
+
+### Views
+event_dashboard, promoter_performance
+
+### Custom DB Functions (13)
+acquire_ticket_lock, audit_financial_change (trigger), check_and_reserve_capacity, claim_promo_code, fulfill_tickets_atomic, get_user_collectives, has_collective_role, increment_analytics_counter, increment_attendee_profile, increment_promo_click, track_ticket_refund, track_ticket_sale, update_updated_at (trigger)
 
 ### Key Column Notes
 - `events.starts_at` / `ends_at` / `doors_at` — TIMESTAMPTZ (NOT `date`, `start_time`, etc.)
 - `events.flyer_url` (NOT `cover_image_url`)
 - `ticket_tiers.price` — dollars as NUMERIC(10,2) (NOT cents)
-- `ticket_tiers.capacity` (NOT `quantity`)
+- `ticket_tiers.capacity` (NOT `quantity`) — nullable
 - `venues.slug` — NOT NULL, auto-generated via slugify()
+- `attendee_profiles.user_id` — nullable (guest checkouts)
+- `audit_logs.action` — TEXT (not enum, stores custom action strings)
+
+### Migrations (10 applied)
+1. `fix_security_definer_views_and_audit_logs` — Security definer fixes
+2. `add_vibe_tags_and_min_age_columns` — Event vibe tags
+3. `create_channels_and_messages` — Chat infrastructure
+4. `payment_events_log` — Payment event tracking
+5. `unified_contacts` — Contact management
+6. `enable_rls_event_analytics_and_payment_events` — RLS on analytics tables
+7. `add_compound_indexes_for_hot_paths` — Performance indexes
+8. `add_missing_enums_columns_tables` — Schema alignment (13 tables, 6 enum values)
+9. `add_missing_rpcs_table_column` — 6 RPCs, rate_limits table, is_denied column
+10. `fix_attendee_profiles_user_id_nullable` — Guest checkout support
+
+## API Routes (15)
+
+### Payments
+- `POST /api/checkout` — Stripe checkout session creation
+- `POST /api/create-payment-intent` — Direct payment intent
+- `POST /api/webhooks/stripe` — Stripe webhook handler (payment success, refunds, disputes)
+- `GET /api/stripe/connect/callback` — Stripe Connect OAuth callback
+
+### Auth
+- `GET /api/auth/callback` — Supabase auth callback
+- `GET /api/approve-user` — Admin user approval/denial
+
+### Cron
+- `GET /api/cron/reminders` — Event reminder emails (24hr before)
+
+### Data
+- `GET /api/events/list` — Public event listing
+- `POST /api/marketplace-inquiry-email` — Marketplace inquiry notifications
+- `GET /api/unsplash` — Unsplash image proxy
+
+### Seeding
+- `POST /api/seed-demo` — Demo data seeder
+- `POST /api/seed-artists` — Artist data seeder
+- `POST /api/seed-venues` — Venue data seeder
+
+### Utilities
+- `GET /api/generate-poster` — AI poster generation
+- `POST /api/setup-storage` — Supabase storage bucket setup
+
+## AI-Powered Server Actions (10 total)
+
+### Claude-Powered (9)
+1. `ai-briefing.ts` — `generateMorningBriefing` (daily collective summary)
+2. `ai-chat.ts` — `generateChatResponse` (ask-nocturn conversational AI)
+3. `ai-email.ts` — `generatePostEventEmail` (post-event email drafts)
+4. `ai-enrich-event.ts` — `enrichEventContent` (event description enhancement)
+5. `ai-finance.ts` — `generateEventForecast`, `getRevenueForecast`, `analyzeTicketSalesPatterns`
+6. `ai-parse-event.ts` — `parseEventDetails` (natural language → structured event)
+7. `ai-poster.ts` — `generatePosterPrompt` (image generation prompts)
+8. `ask-nocturn.ts` — `askNocturn` (general Q&A about collective data)
+9. `import-profile.ts` — `importProfileFromUrl` (scrape + parse artist profiles)
+
+### OpenAI Whisper (1)
+10. `transcribe.ts` — `transcribeAudio`, `transcribeFromStorage` (voice → text)
+
+## Email Actions (6 files sending via Resend)
+1. `event-reminders.ts` — 24hr event reminder emails
+2. `members.ts` — Team invitation, acceptance, cancellation emails
+3. `post-purchase-hooks.ts` — Milestone notification emails (batched with Promise.all)
+4. `refunds.ts` — Refund confirmation emails
+5. `send-campaign.ts` — Marketing campaign emails to attendees
+6. `ticket-waitlist.ts` — Waitlist notification emails
 
 ## Environment Variables
 ```
@@ -198,7 +316,8 @@ RESEND_API_KEY=re_...
 NEXT_PUBLIC_SENTRY_DSN=https://...@sentry.io/...
 NEXT_PUBLIC_POSTHOG_KEY=phc_...
 OPENAI_API_KEY=sk-... (for Whisper transcription)
-ANTHROPIC_API_KEY=sk-ant-... (for AI event parsing)
+ANTHROPIC_API_KEY=sk-ant-... (for Claude AI features)
+CRON_SECRET=... (for admin panel + cron job auth)
 ```
 
 ## Roadmap
@@ -212,6 +331,9 @@ ANTHROPIC_API_KEY=sk-ant-... (for AI event parsing)
 - [x] Email campaigns
 - [x] Legal pages
 - [x] Analytics (PostHog + Sentry + Vercel)
+- [x] Security hardening (RLS, input validation, auth, timing-safe admin)
+- [x] TypeScript strictness (zero `as any`, generated DB types)
+- [x] Performance optimization (compound indexes, batched queries, dynamic imports)
 - [ ] Stripe live keys in production
 - [ ] Full lifecycle test (buy ticket → scan → settle → refund)
 - [ ] First 3 collectives onboarded
