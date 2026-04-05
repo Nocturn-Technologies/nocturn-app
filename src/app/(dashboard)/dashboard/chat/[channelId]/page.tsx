@@ -69,7 +69,7 @@ export default function ChatRoomPage() {
         .select("role")
         .eq("user_id", user.id)
         .is("deleted_at", null);
-      const adminRoles = ["admin", "owner", "manager", "promoter"];
+      const adminRoles = ["admin", "owner", "promoter"];
       setIsAdmin(memberships?.some((m) => adminRoles.includes(m.role)) ?? false);
     });
   }, [supabase]);

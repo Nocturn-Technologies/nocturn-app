@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
   Users,
@@ -335,23 +335,26 @@ export function ChatMemberList({
   isAdmin,
   onMemberCountChange,
 }: ChatMemberListProps) {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const [members, setMembers] = useState<ChatMember[]>([]);
   const [loading, setLoading] = useState(true);
   const presenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const onMemberCountChangeRef = useRef(onMemberCountChange);
+  onMemberCountChangeRef.current = onMemberCountChange;
 
   // ── Fetch members ──
   const fetchMembers = useCallback(async () => {
     const data = await getChannelMembers(channelId);
     setMembers(data);
-    onMemberCountChange?.(data.length);
+    onMemberCountChangeRef.current?.(data.length);
     setLoading(false);
-  }, [channelId, onMemberCountChange]);
+  }, [channelId]);
 
   // ── Remove member ──
   const handleRemove = useCallback(
     async (userId: string) => {
+      if (!confirm("Remove this member from the chat?")) return;
       const { error } = await removeChannelMember(channelId, userId);
       if (error) {
         console.error("[ChatMemberList] remove error:", error);

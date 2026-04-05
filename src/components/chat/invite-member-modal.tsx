@@ -100,6 +100,7 @@ export function InviteMemberModal({
       setInviteEmail("");
       setInviteState("idle");
       setInviteError(null);
+      setAddError(null);
       search("");
     }
     return () => {
@@ -112,13 +113,17 @@ export function InviteMemberModal({
     search(value);
   }
 
+  const [addError, setAddError] = useState<string | null>(null);
+
   async function handleAdd(userId: string) {
     setAddingIds((prev) => new Set(prev).add(userId));
+    setAddError(null);
 
     const { error } = await addChannelMember(channelId, userId, "member");
 
-    if (!error) {
-      // Remove user from results on success
+    if (error) {
+      setAddError(error);
+    } else {
       setUsers((prev) => prev.filter((u) => u.id !== userId));
       onMemberAdded();
     }
@@ -186,6 +191,11 @@ export function InviteMemberModal({
 
         {/* Results */}
         <div className="flex-1 overflow-y-auto px-4 pb-4">
+          {addError && (
+            <div className="mb-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-400">
+              {addError}
+            </div>
+          )}
           {users.map((user) => {
             const isAdding = addingIds.has(user.id);
             return (

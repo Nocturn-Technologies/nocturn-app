@@ -419,7 +419,6 @@ export async function searchInvitableUsers(
 
     // For event channels with a search query, also search platform-wide artists and collectives
     if (channel.type === "event" && query?.trim()) {
-      const lowerQuery = query.toLowerCase().trim();
       const sanitized = query
         .replace(/\\/g, "")
         .replace(/[%_.,()'"`]/g, "")
@@ -430,14 +429,15 @@ export async function searchInvitableUsers(
           .replace(/\\/g, "\\\\")
           .replace(/%/g, "\\%")
           .replace(/_/g, "\\_");
+        const lowerQuery = sanitized.toLowerCase();
 
-        // Search platform artists (with linked user accounts) not already in results
+        // Search platform artists by name (PostgREST .or() can't cross into joined tables)
         const { data: platformArtists } = await sb
           .from("artists")
           .select("id, user_id, name, users!inner(id, full_name, email)")
           .not("user_id", "is", null)
-          .or(`name.ilike.%${escaped}%,users.full_name.ilike.%${escaped}%,users.email.ilike.%${escaped}%`)
-          .limit(10);
+          .ilike("name", `%${escaped}%`)
+          .limit(20);
 
         if (platformArtists) {
           for (const artist of platformArtists) {
@@ -459,7 +459,35 @@ export async function searchInvitableUsers(
           }
         }
 
-        // Search platform collectives (admin users) not already in results
+        // Also search artists by user email/name (separate query)
+        const { data: platformArtistsByUser } = await sb
+          .from("artists")
+          .select("id, user_id, name, users!inner(id, full_name, email)")
+          .not("user_id", "is", null)
+          .or(`full_name.ilike.%${escaped}%,email.ilike.%${escaped}%`, { referencedTable: "users" })
+          .limit(20);
+
+        if (platformArtistsByUser) {
+          for (const artist of platformArtistsByUser) {
+            const u = artist.users as unknown as {
+              id: string;
+              full_name: string | null;
+              email: string | null;
+            };
+            if (artist.user_id && !existingUserIds.has(artist.user_id)) {
+              results.push({
+                id: artist.user_id,
+                name: u?.full_name ?? artist.name ?? null,
+                email: u?.email ?? null,
+                role: "artist",
+                source: "platform_artist",
+              });
+              existingUserIds.add(artist.user_id);
+            }
+          }
+        }
+
+        // Search platform collectives by name
         const { data: platformCollectives } = await sb
           .from("collectives")
           .select("id, name, collective_members!inner(user_id, role, users!inner(id, full_name, email))")
