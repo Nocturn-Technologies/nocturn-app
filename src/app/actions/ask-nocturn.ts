@@ -112,15 +112,14 @@ export async function askNocturn(
         .maybeSingle(),
     ]);
 
-    // Build context string — cast Supabase results (no generated DB types)
-    /* eslint-disable @typescript-eslint/no-explicit-any */
+    // Build context string
     const contextLines: string[] = [];
-    const collectiveName = (collectiveRes.data as any)?.name || "Your collective";
+    const collectiveName = collectiveRes.data?.name || "Your collective";
     contextLines.push(`Collective: ${collectiveName}`);
     contextLines.push("");
 
     // Upcoming events
-    const upcoming = (upcomingRes.data || []) as any[];
+    const upcoming = upcomingRes.data || [];
     if (upcoming.length > 0) {
       contextLines.push("UPCOMING EVENTS:");
       for (const e of upcoming) {
@@ -130,14 +129,14 @@ export async function askNocturn(
         const totalCap = tiers.reduce((s, t) => s + (t.capacity || 0), 0);
         const date = e.starts_at
           ? new Date(e.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })
-          : "TBD";
+          : "Date TBA";
         contextLines.push(`  ${e.title} — ${date} | ${sold}/${totalCap} tickets sold (${e.status})`);
       }
       contextLines.push("");
     }
 
     // Recent completed events
-    const recent = (recentRes.data || []) as any[];
+    const recent = recentRes.data || [];
     if (recent.length > 0) {
       contextLines.push("RECENT COMPLETED EVENTS:");
       for (const e of recent) {
@@ -153,15 +152,15 @@ export async function askNocturn(
     }
 
     // Monthly revenue
-    const monthTickets = (monthTicketsRes.data || []) as any[];
+    const monthTickets = monthTicketsRes.data || [];
     const monthRevenue = monthTickets.reduce((s, t) => s + Number(t.price_paid || 0), 0);
     contextLines.push(`THIS MONTH: $${monthRevenue.toFixed(0)} revenue from ${monthTickets.length} tickets`);
     contextLines.push("");
 
     // Audience stats — email stored in metadata jsonb
-    const allTickets = (audienceRes.data || []) as any[];
-    const getEmail = (t: { metadata?: Record<string, unknown> | null }) =>
-      (t.metadata?.customer_email as string) ?? null;
+    const allTickets = audienceRes.data || [];
+    const getEmail = (t: { metadata?: unknown }) =>
+      ((t.metadata as Record<string, unknown> | null)?.customer_email as string) ?? null;
     const uniqueEmails = new Set(allTickets.map(getEmail).filter(Boolean));
     const emailCounts: Record<string, number> = {};
     for (const t of allTickets) {
@@ -176,7 +175,7 @@ export async function askNocturn(
     contextLines.push("");
 
     // Open tasks
-    const openTasks = (tasksRes.data || []) as any[];
+    const openTasks = tasksRes.data || [];
     if (openTasks.length > 0) {
       contextLines.push("OPEN ACTION ITEMS:");
       for (const t of openTasks) {

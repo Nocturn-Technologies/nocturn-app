@@ -159,7 +159,7 @@ export async function refundTicket(ticketId: string) {
           .eq("id", ticket.event_id)
           .maybeSingle();
 
-        function escapeHtml(s: string) { return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+        const { escapeHtml } = await import("@/lib/html");
 
         const safeSubjectTitle = (eventData?.title || "Event").replace(/[\r\n\x00-\x1f]/g, "");
         await sendEmail({

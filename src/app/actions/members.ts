@@ -4,6 +4,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { sendEmail } from "@/lib/email/send";
 import { invitationEmail } from "@/lib/email/templates";
+import { syncTeamMembers } from "@/app/actions/chat-members";
 
 async function sendInvitationEmail(
   collectiveId: string,
@@ -50,9 +51,11 @@ export async function inviteMember(
     return { error: "You must be logged in." };
   }
 
-  // Validate email format
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email.trim())) {
+  // Validate email format (RFC 5322 subset + minimum 2-char TLD)
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+  const trimmedEmail = email.trim();
+  const tld = trimmedEmail.split(".").pop() || "";
+  if (!emailRegex.test(trimmedEmail) || tld.length < 2) {
     return { error: "Please enter a valid email address." };
   }
 
@@ -97,13 +100,16 @@ export async function inviteMember(
       .insert({
         collective_id: collectiveId,
         user_id: existingUser.id,
-        role,
+        role: role as "admin" | "promoter" | "talent_buyer" | "door_staff" | "member" | "owner",
       });
 
     if (insertError) {
       console.error("[inviteMember] insert error:", insertError.message);
       return { error: "Failed to add member" };
     }
+
+    // Auto-add new member to team chat (non-blocking)
+    void syncTeamMembers(collectiveId).catch((err) => console.error("[members] sync chat failed:", err));
 
     return { error: null, status: "added" as const };
   }
@@ -203,7 +209,7 @@ export async function getTeamMembers() {
 
   if (error) {
     console.error("[getTeamMembers] members query error:", error.message);
-    return { error: "Failed to load team members", userId: user.id, collectiveId, members: [] };
+    return { error: "Failed to load collective members", userId: user.id, collectiveId, members: [] };
   }
 
   // Fetch user details separately via admin client
@@ -411,7 +417,7 @@ export async function acceptInvitation(token: string) {
     .insert({
       collective_id: invitation.collective_id,
       user_id: user.id,
-      role: invitation.role,
+      role: invitation.role as "admin" | "promoter" | "talent_buyer" | "door_staff" | "member" | "owner",
     });
 
   if (memberError) {
@@ -424,6 +430,9 @@ export async function acceptInvitation(token: string) {
     .from("invitations")
     .update({ status: "accepted" })
     .eq("id", invitation.id);
+
+  // Auto-add new member to team chat (non-blocking)
+  void syncTeamMembers(invitation.collective_id).catch((err) => console.error("[members] sync chat failed:", err));
 
   return { error: null, alreadyMember: false };
   } catch (err) {

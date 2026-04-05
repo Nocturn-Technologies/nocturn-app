@@ -34,7 +34,7 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
     // Clean up previous scanner instance if retrying
     if (scannerRef.current) {
       if (scannerRef.current.isScanning) {
-        scannerRef.current.stop().catch(() => {});
+        scannerRef.current.stop().catch((err) => console.warn("[qr-scanner] cleanup:", err));
       }
       scannerRef.current = null;
     }
@@ -80,7 +80,7 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
 
     return () => {
       if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().catch(() => {});
+        scannerRef.current.stop().catch((err) => console.warn("[qr-scanner] cleanup:", err));
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

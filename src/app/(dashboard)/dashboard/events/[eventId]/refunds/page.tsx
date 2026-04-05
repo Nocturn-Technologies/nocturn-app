@@ -120,6 +120,7 @@ export default function RefundsPage() {
         </div>
         <button
           onClick={async () => {
+            if (!confirm("Change the refund policy for this event?")) return;
             setTogglingPolicy(true);
             const result = await toggleRefundPolicy(eventId, !refundsEnabled);
             if (!result.error) setRefundsEnabled(!refundsEnabled);

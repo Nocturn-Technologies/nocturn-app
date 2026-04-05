@@ -202,7 +202,7 @@ export default function ArtistMePage() {
 
             <div className="space-y-2">
               <Label>Default Fee ($)</Label>
-              <Input type="number" value={defaultFee} onChange={(e) => setDefaultFee(e.target.value)} placeholder="e.g. 500" />
+              <Input type="number" value={defaultFee} onChange={(e) => setDefaultFee(e.target.value)} placeholder="e.g. 500" min="0" />
               <p className="text-xs text-muted-foreground">Your standard booking rate. Collectives will see this when browsing.</p>
             </div>
 

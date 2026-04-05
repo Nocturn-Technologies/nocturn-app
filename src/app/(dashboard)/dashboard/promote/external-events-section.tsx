@@ -38,6 +38,8 @@ export function ExternalEventsSection({
 }) {
   const router = useRouter();
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
 
   async function handleCopy(token: string, eventId: string) {
     const link = `${appUrl}/go/${token}`;
@@ -47,7 +49,13 @@ export function ExternalEventsSection({
   }
 
   async function handleDelete(eventId: string) {
+    if (!confirm("Delete this external event?")) return;
+    setDeletingId(eventId);
+    setDeleteSuccess(null);
     await deleteExternalEvent(eventId);
+    setDeletingId(null);
+    setDeleteSuccess("External event deleted");
+    setTimeout(() => setDeleteSuccess(null), 3000);
     router.refresh();
   }
 
@@ -63,6 +71,11 @@ export function ExternalEventsSection({
         </div>
       </CardHeader>
       <CardContent>
+        {deleteSuccess && (
+          <div className="rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-500 animate-in fade-in duration-200">
+            {deleteSuccess}
+          </div>
+        )}
         {initialEvents.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6 text-center">
             Promote events from any platform. Paste a link to get started.
@@ -116,8 +129,13 @@ export function ExternalEventsSection({
                     size="sm"
                     className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
                     onClick={() => handleDelete(event.id)}
+                    disabled={deletingId === event.id}
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
+                    {deletingId === event.id ? (
+                      <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent inline-block" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
                   </Button>
                 </div>
               </div>

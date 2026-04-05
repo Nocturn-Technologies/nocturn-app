@@ -23,6 +23,7 @@ export default function InquiriesPage() {
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     loadInquiries();
@@ -66,7 +67,7 @@ export default function InquiriesPage() {
         message: inq.message,
         inquiry_type: inq.inquiry_type,
         status: inq.status,
-        created_at: inq.created_at,
+        created_at: inq.created_at ?? new Date().toISOString(),
         from_user: sender ? { full_name: sender.full_name, email: sender.email } : null,
         event: null,
       });
@@ -77,13 +78,13 @@ export default function InquiriesPage() {
   }
 
   async function handleAccept(inquiryId: string) {
+    setErrorMessage(null);
     setProcessingId(inquiryId);
     const result = await acceptInquiry(inquiryId);
     setProcessingId(null);
 
     if (result.error) {
-      // Update local state to show error briefly
-      alert(result.error);
+      setErrorMessage(result.error);
       return;
     }
 
@@ -101,12 +102,13 @@ export default function InquiriesPage() {
   }
 
   async function handleReject(inquiryId: string) {
+    setErrorMessage(null);
     setProcessingId(inquiryId);
     const result = await rejectInquiry(inquiryId);
     setProcessingId(null);
 
     if (result.error) {
-      alert(result.error);
+      setErrorMessage(result.error);
       return;
     }
 
@@ -133,6 +135,12 @@ export default function InquiriesPage() {
           Messages from collectives and promoters who want to work with you
         </p>
       </div>
+
+      {errorMessage && (
+        <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          {errorMessage}
+        </div>
+      )}
 
       {inquiries.length === 0 ? (
         <div className="rounded-xl border border-border bg-card p-12 text-center">

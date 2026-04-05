@@ -232,7 +232,10 @@ export default function MembersPage() {
   }
 
   // Remove member
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
   async function handleRemove(memberId: string) {
+    if (!confirm("Remove this member from the collective?")) return;
     const member = members.find((m) => m.id === memberId);
     if (member?.role === "admin") {
       const adminCount = members.filter((m) => m.role === "admin").length;
@@ -242,6 +245,7 @@ export default function MembersPage() {
       }
     }
 
+    setRemovingId(memberId);
     const { error } = await supabase
       .from("collective_members")
       .delete()
@@ -249,10 +253,13 @@ export default function MembersPage() {
 
     if (error) {
       setError(error.message);
+      setRemovingId(null);
       return;
     }
 
     setMembers((prev) => prev.filter((m) => m.id !== memberId));
+    setSuccess("Member removed from collective");
+    setRemovingId(null);
   }
 
   // Search collectives
@@ -533,8 +540,9 @@ export default function MembersPage() {
                           <DropdownMenuItem
                             className="text-destructive"
                             onClick={() => handleRemove(member.id)}
+                            disabled={removingId === member.id}
                           >
-                            Remove from collective
+                            {removingId === member.id ? "Removing..." : "Remove from collective"}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

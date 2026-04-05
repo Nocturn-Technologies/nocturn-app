@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { DEFAULT_TIMEZONE } from "@/lib/utils";
@@ -164,6 +165,9 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
     console.error("[createOnboardingEvent] tier insert failed:", tierError);
     // Non-fatal — event exists, tier can be added later
   }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/events");
 
   return { error: null, eventSlug: event.slug };
   } catch (err) {

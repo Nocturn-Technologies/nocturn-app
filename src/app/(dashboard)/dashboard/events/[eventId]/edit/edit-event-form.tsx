@@ -196,6 +196,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
+                min={new Date().toISOString().split("T")[0]}
               />
             </div>
             <div className="space-y-2">

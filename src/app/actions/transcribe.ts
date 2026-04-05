@@ -1,11 +1,16 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import OpenAI from "openai";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+function stripHtmlTags(str: string): string {
+  return str.replace(/<[^>]*>/g, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+}
 
 /**
  * Transcribe audio from a Supabase Storage URL (for long recordings).
@@ -120,12 +125,14 @@ If the transcript is casual conversation with no clear action items or decisions
 
     const parsed = JSON.parse(analysis.choices[0].message.content ?? "{}");
 
+    revalidatePath("/dashboard/record");
+
     return {
       error: null,
       transcript,
-      summary: parsed.summary ?? "No summary available.",
-      action_items: parsed.action_items ?? [],
-      key_decisions: parsed.key_decisions ?? [],
+      summary: stripHtmlTags(parsed.summary ?? "No summary available."),
+      action_items: (parsed.action_items ?? []).map((item: string) => stripHtmlTags(item)),
+      key_decisions: (parsed.key_decisions ?? []).map((item: string) => stripHtmlTags(item)),
     };
   } catch (err: unknown) {
     console.error("[transcribeFromStorage]", err);
@@ -208,12 +215,14 @@ If the transcript is casual conversation with no clear action items or decisions
 
     const parsed = JSON.parse(analysis.choices[0].message.content ?? "{}");
 
+    revalidatePath("/dashboard/record");
+
     return {
       error: null,
       transcript,
-      summary: parsed.summary ?? "No summary available.",
-      action_items: parsed.action_items ?? [],
-      key_decisions: parsed.key_decisions ?? [],
+      summary: stripHtmlTags(parsed.summary ?? "No summary available."),
+      action_items: (parsed.action_items ?? []).map((item: string) => stripHtmlTags(item)),
+      key_decisions: (parsed.key_decisions ?? []).map((item: string) => stripHtmlTags(item)),
     };
   } catch (err: unknown) {
     console.error("[transcribeAudio]", err);

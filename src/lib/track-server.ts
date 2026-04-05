@@ -15,7 +15,7 @@ export async function trackServerEvent(
       table_name: "analytics",
       record_id: crypto.randomUUID(),
       action: event,
-      new_data: properties || {},
+      new_data: (properties || {}) as Record<string, string | number | boolean | null>,
     });
   } catch {
     // Analytics should never break the app

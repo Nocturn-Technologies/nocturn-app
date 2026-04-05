@@ -98,7 +98,7 @@ export async function getEventSuggestions(
   const sortedVenues = Object.entries(venueFrequency).sort(
     (a, b) => b[1] - a[1]
   );
-  const topVenue = sortedVenues[0]?.[0] ?? "TBD";
+  const topVenue = sortedVenues[0]?.[0] ?? "Scout a venue";
   const secondVenue = sortedVenues[1]?.[0] ?? topVenue;
 
   // Find the best-attended event
@@ -226,7 +226,7 @@ export async function getEventSuggestions(
       title: "Venue Showcase",
       vibe: "open format",
       suggestedDate: date3,
-      suggestedVenue: "TBD",
+      suggestedVenue: "Venue TBA",
       reason:
         "Scout a new venue this month and lock in a date -- first-mover advantage matters.",
       confidence: "low",

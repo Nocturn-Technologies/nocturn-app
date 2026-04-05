@@ -349,7 +349,7 @@ export function ContactDetailSheet({
                         (contact.metadata as Record<string, unknown>)
                           .avatar_url as string
                       }
-                      alt=""
+                      alt="Contact avatar"
                       className="h-full w-full rounded-full object-cover"
                     />
                   ) : (

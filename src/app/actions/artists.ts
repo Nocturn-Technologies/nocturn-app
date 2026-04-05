@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { syncEventMembers } from "@/app/actions/chat-members";
 
 function slugify(text: string): string {
   return text
@@ -31,8 +32,7 @@ export async function createArtist(formData: {
   const admin = createAdminClient();
   const slug = slugify(formData.name) + "-" + Math.random().toString(36).slice(2, 6);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: artist, error } = await (admin.from("artists") as any)
+  const { data: artist, error } = await admin.from("artists")
     .insert({
       name: formData.name,
       slug,
@@ -92,8 +92,7 @@ export async function addArtistToEvent(formData: {
     .is("deleted_at", null);
   if (!memberCount || memberCount === 0) return { error: "Not authorized" };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin.from("event_artists") as any).insert({
+  const { error } = await admin.from("event_artists").insert({
     event_id: formData.eventId,
     artist_id: formData.artistId,
     fee: formData.fee,
@@ -109,17 +108,18 @@ export async function addArtistToEvent(formData: {
     return { error: "Failed to add artist to event" };
   }
 
+  // Auto-add artist to event chat (non-blocking)
+  void syncEventMembers(formData.eventId).catch((err) => console.error("[artists] sync event chat failed:", err));
+
   // Contact upsert — best-effort industry sync for booked artist
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: artist } = await (admin.from("artists") as any)
+    const { data: artist } = await admin.from("artists")
       .select("id, name, booking_email, instagram, soundcloud, spotify")
       .eq("id", formData.artistId)
       .maybeSingle();
 
     if (artist?.booking_email) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (admin.from("contacts") as any).upsert({
+      await admin.from("contacts").upsert({
         collective_id: event.collective_id,
         contact_type: "industry",
         email: artist.booking_email.toLowerCase().trim(),
@@ -157,8 +157,7 @@ export async function updateBookingStatus(formData: {
   const admin = createAdminClient();
 
   // Look up the event_artist to get event_id, then verify ownership
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: ea } = await (admin.from("event_artists") as any)
+  const { data: ea } = await admin.from("event_artists")
     .select("event_id")
     .eq("id", formData.eventArtistId)
     .maybeSingle();
@@ -179,8 +178,7 @@ export async function updateBookingStatus(formData: {
     .is("deleted_at", null);
   if (!memberCount || memberCount === 0) return { error: "Not authorized" };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (admin.from("event_artists") as any)
+  const { error } = await admin.from("event_artists")
     .update({ status: formData.status })
     .eq("id", formData.eventArtistId);
 

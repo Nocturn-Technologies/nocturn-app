@@ -90,7 +90,10 @@ export function EventStatusActions({
             <Button
               variant="destructive"
               className="active:scale-95 transition-all duration-200 min-h-[44px]"
-              onClick={() => handleAction(cancelEvent, "cancel")}
+              onClick={() => {
+                if (!confirm("Are you sure you want to cancel this event? All ticket holders will be refunded.")) return;
+                handleAction(cancelEvent, "cancel");
+              }}
               disabled={loading !== null}
             >
               {loading === "cancel" ? (

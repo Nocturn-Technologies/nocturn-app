@@ -44,27 +44,23 @@ export default function MarketingPage() {
           icon={<Instagram className="h-5 w-5" />}
           title="Instagram"
           description="Captions, stories, reels scripts"
-          count={0}
         />
         <ChannelCard
           icon={<MessageSquare className="h-5 w-5" />}
           title="Twitter / X"
           description="Threads, announcements, hype posts"
-          count={0}
         />
         <Link href="/dashboard/marketing/email">
           <ChannelCard
             icon={<Mail className="h-5 w-5" />}
             title="Email"
             description="Event announcements, recaps, promos"
-            count={0}
           />
         </Link>
         <ChannelCard
           icon={<Sparkles className="h-5 w-5" />}
           title="Press / Bio"
           description="Artist bios, event descriptions, press kits"
-          count={0}
         />
       </div>
 
@@ -89,12 +85,10 @@ function ChannelCard({
   icon,
   title,
   description,
-  count,
 }: {
   icon: React.ReactNode;
   title: string;
   description: string;
-  count: number;
 }) {
   return (
     <Card className="transition-colors hover:border-nocturn/30">
@@ -106,7 +100,6 @@ function ChannelCard({
           <p className="text-sm font-medium">{title}</p>
           <p className="text-xs text-muted-foreground">{description}</p>
         </div>
-        <span className="text-xs text-muted-foreground">{count} posts</span>
       </CardContent>
     </Card>
   );

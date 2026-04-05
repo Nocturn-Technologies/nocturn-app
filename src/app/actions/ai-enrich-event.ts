@@ -96,13 +96,13 @@ export async function enrichEventContent(input: {
           content: `You write event descriptions for a nightlife platform used by music collectives and promoters. Generate rich content for this event's public page.
 
 Event: "${input.title}"
-Date: ${input.date ?? "TBD"}
-Time: ${input.startTime ?? "TBD"}
-Venue: ${input.venueName ?? "TBD"} ${input.venueCity ? `in ${input.venueCity}` : ""}
+Date: ${input.date ?? "TBA"}
+Time: ${input.startTime ?? "TBA"}
+Venue: ${input.venueName ?? "TBA"} ${input.venueCity ? `in ${input.venueCity}` : ""}
 ${venueDescription ? `Venue info: ${venueDescription}` : ""}
 Type: ${input.headlinerType ?? "local event"}
 Collective: ${input.collectiveName ?? ""}
-Tickets: ${tierInfo || "TBD"}
+Tickets: ${tierInfo || "TBA"}
 
 Return valid JSON:
 {

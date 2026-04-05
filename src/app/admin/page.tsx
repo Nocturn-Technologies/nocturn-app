@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateApprovalUrls } from "@/app/api/approve-user/route";
 import AdminGate from "./admin-gate";
+import { isAdminAuthenticated } from "./actions";
+import { sanitizePostgRESTInput } from "@/lib/utils";
 
 export const metadata: Metadata = {
   title: "Admin — Nocturn",
@@ -12,7 +14,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ secret?: string; tab?: string; q?: string; page?: string; type?: string }>;
+  searchParams: Promise<{ tab?: string; q?: string; page?: string; type?: string }>;
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -83,11 +85,10 @@ const USER_TYPES = [
 
 export default async function AdminPage({ searchParams }: Props) {
   const params = await searchParams;
-  const secret = params.secret ?? "";
-  const cronSecret = process.env.CRON_SECRET ?? "";
 
-  // Gate: if no secret or wrong secret, show password form
-  if (!cronSecret || secret !== cronSecret) {
+  // Gate: verify admin session cookie (timing-safe, no secret in URL)
+  const isAuthed = await isAdminAuthenticated();
+  if (!isAuthed) {
     return <AdminGate />;
   }
 
@@ -95,7 +96,6 @@ export default async function AdminPage({ searchParams }: Props) {
   const searchQuery = params.q ?? "";
   const pageNum = Math.max(1, parseInt(params.page ?? "1", 10));
   const filterType = params.type ?? "";
-  const encodedSecret = encodeURIComponent(secret);
 
   const supabase = createAdminClient();
 
@@ -182,7 +182,7 @@ export default async function AdminPage({ searchParams }: Props) {
     supabase
       .from("users")
       .select("id, email, user_type, full_name, created_at")
-      .eq("is_approved" as any, false)
+      .eq("is_approved", false)
       .order("created_at", { ascending: false }),
     // Recent signups (30)
     supabase
@@ -216,24 +216,24 @@ export default async function AdminPage({ searchParams }: Props) {
 
   const totalMarketplace = marketplaceRes.count ?? 0;
   const totalEventsCount = eventsCountRes.count ?? 0;
-  const pendingUsers = (pendingRes.data as any[]) ?? [];
-  const recentUsers = (recentUsersRes.data as any[]) ?? [];
+  const pendingUsers = pendingRes.data ?? [];
+  const recentUsers = recentUsersRes.data ?? [];
 
   // Tickets & GMV
-  const allPaidTickets = (allPaidTicketsRes.data as any[]) ?? [];
+  const allPaidTickets = allPaidTicketsRes.data ?? [];
   const totalTicketsSold = allPaidTickets.length;
-  const totalGMV = allPaidTickets.reduce((s: number, t: any) => s + Number(t.price_paid || 0), 0);
+  const totalGMV = allPaidTickets.reduce((s, t) => s + Number(t.price_paid || 0), 0);
   const platformRevenue = totalGMV * 0.07;
 
   // Growth calculations
   const usersLast30 = usersLast30Res.count ?? 0;
   const usersPrev30 = usersPrev30Res.count ?? 0;
-  const ticketsLast30 = (ticketsLast30Res.data as any[]) ?? [];
-  const ticketsPrev30 = (ticketsPrev30Res.data as any[]) ?? [];
+  const ticketsLast30 = ticketsLast30Res.data ?? [];
+  const ticketsPrev30 = ticketsPrev30Res.data ?? [];
   const ticketsLast30Count = ticketsLast30.length;
   const ticketsPrev30Count = ticketsPrev30.length;
-  const gmvLast30 = ticketsLast30.reduce((s: number, t: any) => s + Number(t.price_paid || 0), 0);
-  const gmvPrev30 = ticketsPrev30.reduce((s: number, t: any) => s + Number(t.price_paid || 0), 0);
+  const gmvLast30 = ticketsLast30.reduce((s, t) => s + Number(t.price_paid || 0), 0);
+  const gmvPrev30 = ticketsPrev30.reduce((s, t) => s + Number(t.price_paid || 0), 0);
   const eventsLast30 = eventsLast30Res.count ?? 0;
   const eventsPrev30 = eventsPrev30Res.count ?? 0;
 
@@ -254,15 +254,15 @@ export default async function AdminPage({ searchParams }: Props) {
     ticketsByDay[key] = 0;
     eventsByDay[key] = 0;
   }
-  for (const row of (recentSignupsRaw.data ?? []) as any[]) {
+  for (const row of recentSignupsRaw.data ?? []) {
     const key = new Date(row.created_at).toISOString().split("T")[0];
     if (key in signupsByDay) signupsByDay[key]++;
   }
-  for (const row of (recentTicketSalesRaw.data ?? []) as any[]) {
+  for (const row of recentTicketSalesRaw.data ?? []) {
     const key = new Date(row.created_at).toISOString().split("T")[0];
     if (key in ticketsByDay) ticketsByDay[key]++;
   }
-  for (const row of (recentEventsCreatedRaw.data ?? []) as any[]) {
+  for (const row of recentEventsCreatedRaw.data ?? []) {
     const key = new Date(row.created_at).toISOString().split("T")[0];
     if (key in eventsByDay) eventsByDay[key]++;
   }
@@ -270,17 +270,17 @@ export default async function AdminPage({ searchParams }: Props) {
   // Marketplace breakdown
   const mpBreakdown: Record<string, number> = {};
   if (marketplaceBreakdownRes.data) {
-    for (const row of marketplaceBreakdownRes.data as any[]) {
+    for (const row of marketplaceBreakdownRes.data) {
       const t = row.user_type ?? "unknown";
       mpBreakdown[t] = (mpBreakdown[t] ?? 0) + 1;
     }
   }
 
   // Events data
-  const allEvents = (allEventsRes.data as any[]) ?? [];
+  const allEvents = allEventsRes.data ?? [];
 
   // Settlements
-  const settlements = (settlementsRes.data as any[]) ?? [];
+  const settlements = settlementsRes.data ?? [];
   const settlementsByStatus: Record<string, number> = {};
   for (const s of settlements) {
     const st = s.status ?? "unknown";
@@ -288,7 +288,7 @@ export default async function AdminPage({ searchParams }: Props) {
   }
 
   // Revenue by month (last 6 months)
-  const revenueTickets = (revenueTicketsRes.data as any[]) ?? [];
+  const revenueTickets = revenueTicketsRes.data ?? [];
   const revenueByMonth: Record<string, { tickets: number; gmv: number }> = {};
   for (let i = 5; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -306,7 +306,7 @@ export default async function AdminPage({ searchParams }: Props) {
 
   // Top 5 events by revenue
   const eventRevMap: Record<string, { title: string; revenue: number; tickets: number }> = {};
-  for (const t of (topEventsTicketsRes.data as any[]) ?? []) {
+  for (const t of topEventsTicketsRes.data ?? []) {
     const eid = t.event_id;
     if (!eventRevMap[eid]) {
       eventRevMap[eid] = { title: t.events?.title ?? "Unknown", revenue: 0, tickets: 0 };
@@ -319,13 +319,13 @@ export default async function AdminPage({ searchParams }: Props) {
     .slice(0, 5);
 
   // Stripe Connect
-  const allCollectivesForStripe = (stripeConnectedRes.data as any[]) ?? [];
-  const stripeConnected = allCollectivesForStripe.filter((c: any) => c.stripe_account_id).length;
+  const allCollectivesForStripe = stripeConnectedRes.data ?? [];
+  const stripeConnected = allCollectivesForStripe.filter((c) => c.stripe_account_id).length;
   const stripeNotConnected = allCollectivesForStripe.length - stripeConnected;
 
   // Refunded
-  const refundedTickets = (refundedTicketsRes.data as any[]) ?? [];
-  const totalRefunds = refundedTickets.reduce((s: number, t: any) => s + Number(t.price_paid || 0), 0);
+  const refundedTickets = refundedTicketsRes.data ?? [];
+  const totalRefunds = refundedTickets.reduce((s, t) => s + Number(t.price_paid || 0), 0);
 
   // ── Users tab: fetch auth metadata + apply filters ─────────────────────
   // Fetch auth users for metadata (last_sign_in)
@@ -351,7 +351,10 @@ export default async function AdminPage({ searchParams }: Props) {
     usersTabQuery = usersTabQuery.eq("user_type", filterType);
   }
   if (searchQuery) {
-    usersTabQuery = usersTabQuery.or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`);
+    const safeQuery = sanitizePostgRESTInput(searchQuery);
+    if (safeQuery) {
+      usersTabQuery = usersTabQuery.or(`full_name.ilike.%${safeQuery}%,email.ilike.%${safeQuery}%`);
+    }
   }
 
   const perPage = 50;
@@ -359,7 +362,7 @@ export default async function AdminPage({ searchParams }: Props) {
   usersTabQuery = usersTabQuery.range(offset, offset + perPage - 1);
 
   const usersTabRes = await usersTabQuery;
-  const usersTabData = (usersTabRes.data as any[]) ?? [];
+  const usersTabData = usersTabRes.data ?? [];
   const usersTabTotal = usersTabRes.count ?? 0;
   const totalPages = Math.ceil(usersTabTotal / perPage);
 
@@ -402,7 +405,7 @@ export default async function AdminPage({ searchParams }: Props) {
   // ── Render helpers ─────────────────────────────────────────────────────
 
   function tabHref(tab: string) {
-    return `/admin?secret=${encodedSecret}&tab=${tab}`;
+    return `/admin?tab=${tab}`;
   }
 
   function GrowthArrow({ growth }: { growth: { value: number; positive: boolean } }) {
@@ -750,7 +753,6 @@ export default async function AdminPage({ searchParams }: Props) {
             {/* Search + Filter */}
             <div className="flex flex-col md:flex-row gap-4">
               <form className="flex-1" method="GET" action="/admin">
-                <input type="hidden" name="secret" value={secret} />
                 <input type="hidden" name="tab" value="users" />
                 {filterType && <input type="hidden" name="type" value={filterType} />}
                 <div className="flex gap-2">
@@ -771,7 +773,7 @@ export default async function AdminPage({ searchParams }: Props) {
               </form>
               <div className="flex gap-2 flex-wrap">
                 <a
-                  href={`/admin?secret=${encodedSecret}&tab=users${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+                  href={`/admin?tab=users${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
                   className={`rounded-lg border px-3 py-2.5 text-xs font-medium transition-colors ${
                     !filterType ? "border-[#7B2FF7] text-[#7B2FF7] bg-[#7B2FF7]/10" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
                   }`}
@@ -781,7 +783,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 {USER_TYPES.map((ut) => (
                   <a
                     key={ut}
-                    href={`/admin?secret=${encodedSecret}&tab=users&type=${ut}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+                    href={`/admin?tab=users&type=${ut}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
                     className={`rounded-lg border px-3 py-2.5 text-xs font-medium capitalize transition-colors ${
                       filterType === ut ? "border-[#7B2FF7] text-[#7B2FF7] bg-[#7B2FF7]/10" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
                     }`}
@@ -879,7 +881,7 @@ export default async function AdminPage({ searchParams }: Props) {
               <div className="flex items-center justify-center gap-2">
                 {pageNum > 1 && (
                   <a
-                    href={`/admin?secret=${encodedSecret}&tab=users&page=${pageNum - 1}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+                    href={`/admin?tab=users&page=${pageNum - 1}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
                     className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
                   >
                     Prev
@@ -890,7 +892,7 @@ export default async function AdminPage({ searchParams }: Props) {
                   return (
                     <a
                       key={p}
-                      href={`/admin?secret=${encodedSecret}&tab=users&page=${p}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+                      href={`/admin?tab=users&page=${p}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
                       className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
                         p === pageNum ? "border-[#7B2FF7] text-[#7B2FF7] bg-[#7B2FF7]/10" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
                       }`}
@@ -901,7 +903,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 })}
                 {pageNum < totalPages && (
                   <a
-                    href={`/admin?secret=${encodedSecret}&tab=users&page=${pageNum + 1}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+                    href={`/admin?tab=users&page=${pageNum + 1}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
                     className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
                   >
                     Next
@@ -933,14 +935,14 @@ export default async function AdminPage({ searchParams }: Props) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800">
-                  {allEvents.map((event: any) => {
+                  {allEvents.map((event) => {
                     const stats = ticketCountsByEvent[event.id] ?? { sold: 0, revenue: 0 };
-                    const collectiveName = (event.collectives as any)?.name ?? "\u2014";
+                    const collectiveName = (event.collectives as { name: string } | null)?.name ?? "\u2014";
                     return (
                       <tr key={event.id} className="hover:bg-zinc-900/60">
                         <td className="px-4 py-3 font-medium">
                           <a
-                            href={`/events/${event.slug}`}
+                            href={`/dashboard/events/${event.id}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-zinc-100 hover:text-[#7B2FF7] transition-colors"

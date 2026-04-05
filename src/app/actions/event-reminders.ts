@@ -2,15 +2,7 @@
 import { sendEmail } from "@/lib/email/send";
 import { createAdminClient } from "@/lib/supabase/config";
 import { DEFAULT_TIMEZONE } from "@/lib/utils";
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
+import { escapeHtml } from "@/lib/html";
 
 /**
  * Send reminder emails to all ticket holders for events happening in the next 24 hours.

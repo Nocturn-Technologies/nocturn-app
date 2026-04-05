@@ -117,10 +117,13 @@ export default function GuestListPage() {
       return;
     }
 
+    const addedName = name.trim();
     resetForm();
     setShowForm(false);
     await loadGuests();
     setSaving(false);
+    setAddSuccess(`${addedName} added to the guest list`);
+    setTimeout(() => setAddSuccess(null), 3000);
   }
 
   async function handleCheckIn(guestId: string) {
@@ -136,9 +139,19 @@ export default function GuestListPage() {
     await loadGuests();
   }
 
+  const [addSuccess, setAddSuccess] = useState<string | null>(null);
+  const [removingGuestId, setRemovingGuestId] = useState<string | null>(null);
+  const [removeSuccess, setRemoveSuccess] = useState<string | null>(null);
+
   async function handleRemove(guestId: string) {
+    if (!confirm("Remove this guest from the list?")) return;
+    setRemovingGuestId(guestId);
+    setRemoveSuccess(null);
     await removeGuest(guestId);
     await loadGuests();
+    setRemovingGuestId(null);
+    setRemoveSuccess("Guest removed from the list");
+    setTimeout(() => setRemoveSuccess(null), 3000);
   }
 
   const filteredGuests = useMemo(() => {
@@ -225,6 +238,18 @@ export default function GuestListPage() {
         </div>
       )}
 
+      {/* Success messages */}
+      {addSuccess && (
+        <div className="rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-500 animate-in fade-in duration-200">
+          {addSuccess}
+        </div>
+      )}
+      {removeSuccess && (
+        <div className="rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-500 animate-in fade-in duration-200">
+          {removeSuccess}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex gap-2 flex-wrap">
         <Button
@@ -279,6 +304,7 @@ export default function GuestListPage() {
                     onChange={(e) => setName(e.target.value)}
                     required
                     autoFocus
+                    maxLength={200}
                   />
                 </div>
                 <div className="space-y-2">
@@ -289,6 +315,7 @@ export default function GuestListPage() {
                     placeholder="email@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
+                    maxLength={320}
                   />
                 </div>
               </div>
@@ -302,6 +329,7 @@ export default function GuestListPage() {
                     placeholder="+1 (555) 123-4567"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    maxLength={30}
                   />
                 </div>
                 <div className="space-y-2">
@@ -310,7 +338,7 @@ export default function GuestListPage() {
                     id="plusOnes"
                     type="number"
                     min="0"
-                    max="10"
+                    max="20"
                     value={plusOnes}
                     onChange={(e) => setPlusOnes(e.target.value)}
                   />
@@ -324,6 +352,7 @@ export default function GuestListPage() {
                   placeholder="VIP, backstage access, birthday, etc."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
+                  maxLength={1000}
                 />
               </div>
 
@@ -466,9 +495,14 @@ export default function GuestListPage() {
                       variant="ghost"
                       className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 h-7 px-2"
                       onClick={() => handleRemove(guest.id)}
+                      disabled={removingGuestId === guest.id}
                       title="Remove"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      {removingGuestId === guest.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
                     </Button>
                   </div>
                 </CardContent>

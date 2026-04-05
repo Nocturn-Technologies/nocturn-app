@@ -119,9 +119,10 @@ export async function GET(request: Request) {
 
       // Mark as sent
       await sb.from("audit_logs").insert({
-        event_id: event.id,
         action: "day_of_hype_sent",
-        metadata: { count: emails.size },
+        record_id: event.id,
+        table_name: "events",
+        new_data: { count: emails.size },
       });
 
       results.dayOfHype += emails.size;
@@ -194,9 +195,10 @@ export async function GET(request: Request) {
       }
 
       await sb.from("audit_logs").insert({
-        event_id: event.id,
         action: "countdown_48hr_sent",
-        metadata: { ticketsSold, totalCap },
+        record_id: event.id,
+        table_name: "events",
+        new_data: { ticketsSold, totalCap },
       });
 
       results.countdown48hr++;
@@ -267,7 +269,9 @@ export async function GET(request: Request) {
 
         await sb.from("audit_logs").insert({
           action: "inactive_nudge_sent",
-          metadata: { collective_id: col.id },
+          record_id: col.id,
+          table_name: "collectives",
+          new_data: { collective_id: col.id },
         });
 
         results.inactiveNudge++;

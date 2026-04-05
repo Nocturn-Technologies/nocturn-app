@@ -167,12 +167,12 @@ export default function VenueMePage() {
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2">
               <Label>Venue Name *</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CODA Toronto" required />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CODA Toronto" required maxLength={200} />
             </div>
 
             <div className="space-y-2">
               <Label>Address</Label>
-              <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="e.g. 794 Bathurst St" />
+              <Input value={address} onChange={(e) => setAddress(e.target.value)} placeholder="e.g. 794 Bathurst St" maxLength={500} />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -182,7 +182,7 @@ export default function VenueMePage() {
               </div>
               <div className="space-y-2">
                 <Label>Capacity</Label>
-                <Input type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="e.g. 400" />
+                <Input type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="e.g. 400" min="0" />
               </div>
             </div>
 
@@ -193,6 +193,7 @@ export default function VenueMePage() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Tell promoters about your space — vibe, sound system, what makes it special..."
+                maxLength={2000}
               />
             </div>
 
@@ -209,17 +210,17 @@ export default function VenueMePage() {
 
             <div className="space-y-2">
               <Label>Website</Label>
-              <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://yourvenue.com" />
+              <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://yourvenue.com" maxLength={500} />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Room Rental ($)</Label>
-                <Input type="number" value={rentalFee} onChange={(e) => setRentalFee(e.target.value)} placeholder="e.g. 500" />
+                <Input type="number" value={rentalFee} onChange={(e) => setRentalFee(e.target.value)} placeholder="e.g. 500" min="0" />
               </div>
               <div className="space-y-2">
                 <Label>Bar Minimum ($)</Label>
-                <Input type="number" value={barMinimum} onChange={(e) => setBarMinimum(e.target.value)} placeholder="e.g. 3000" />
+                <Input type="number" value={barMinimum} onChange={(e) => setBarMinimum(e.target.value)} placeholder="e.g. 3000" min="0" />
               </div>
             </div>
 

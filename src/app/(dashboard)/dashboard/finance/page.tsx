@@ -92,6 +92,11 @@ export default async function FinancePage() {
   const eventSummaries = eventSummariesResult.data ?? [];
   const forecasts = forecastResult.data ?? [];
 
+  const hasDataError =
+    "error" in financialsResult ||
+    "error" in eventSummariesResult ||
+    "error" in forecastResult;
+
   type Settlement = {
     id: string;
     event_id: string;
@@ -146,6 +151,16 @@ export default async function FinancePage() {
           Company-wide financials, P&L by event, and revenue forecasts
         </p>
       </div>
+
+      {/* Partial-failure warning */}
+      {hasDataError && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+          <p className="text-sm text-amber-500">
+            Some data may be unavailable. Try refreshing.
+          </p>
+        </div>
+      )}
 
       {/* ===== Empty State (no events at all) ===== */}
       {!hasEvents && (

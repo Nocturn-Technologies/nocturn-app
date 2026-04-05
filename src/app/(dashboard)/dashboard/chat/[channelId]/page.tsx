@@ -4,10 +4,12 @@ import { useEffect, useState, useRef, useCallback, memo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft, Send, Sparkles, DollarSign, Loader2, Check } from "lucide-react";
+import { ArrowLeft, Send, Sparkles, DollarSign, Loader2, Check, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EventCardLive } from "@/components/event-card-live";
 import { MicButton, VoicePlayback } from "@/components/voice-note";
+import { ChatMemberList } from "@/components/chat/member-list";
+import { InviteMemberModal } from "@/components/chat/invite-member-modal";
 
 interface Message {
   id: string;
@@ -43,6 +45,11 @@ export default function ChatRoomPage() {
   const [userNames, setUserNames] = useState<Record<string, string>>({});
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [memberPanelOpen, setMemberPanelOpen] = useState(false);
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [memberCount, setMemberCount] = useState(0);
+  const memberListKeyRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -51,10 +58,19 @@ export default function ChatRoomPage() {
   const mountedRef = useRef(true);
   const initialLoadDoneRef = useRef(false);
 
-  // Get current user
+  // Get current user + check admin role
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setUserId(user.id);
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (!user) return;
+      setUserId(user.id);
+      // Check if user is admin/manager in any of their collectives
+      const { data: memberships } = await supabase
+        .from("collective_members")
+        .select("role")
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+      const adminRoles = ["admin", "owner", "manager", "promoter"];
+      setIsAdmin(memberships?.some((m) => adminRoles.includes(m.role)) ?? false);
     });
   }, [supabase]);
 
@@ -415,7 +431,8 @@ export default function ChatRoomPage() {
   const isOwnMessage = (msg: Message) => msg.user_id === userId;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-[calc(100vh-1.5rem)] -m-4 md:-m-6 animate-in fade-in duration-300">
+    <div className="flex h-[calc(100vh-3.5rem)] md:h-[calc(100vh-1.5rem)] -m-4 md:-m-6 animate-in fade-in duration-300">
+    <div className="flex flex-col flex-1 min-w-0">
       {/* Header */}
       <header className="flex items-center gap-3 px-4 h-14 bg-card/95 backdrop-blur-lg border-b border-border shrink-0 z-10">
         <Link
@@ -438,6 +455,18 @@ export default function ChatRoomPage() {
             <p className="text-[11px] text-nocturn font-medium">Event Channel</p>
           )}
         </div>
+        <button
+          onClick={() => setMemberPanelOpen((v) => !v)}
+          className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-accent active:bg-accent/80 transition-colors duration-200 relative"
+          aria-label="Toggle members"
+        >
+          <Users size={18} />
+          {memberCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-nocturn flex items-center justify-center px-1">
+              <span className="text-[10px] font-bold text-white">{memberCount}</span>
+            </span>
+          )}
+        </button>
       </header>
 
       {/* Connection status banner */}
@@ -610,6 +639,30 @@ export default function ChatRoomPage() {
           </button>
         </div>
       </div>
+    </div>
+
+    {/* Member Sidebar (desktop) + Bottom Sheet (mobile) */}
+    <ChatMemberList
+      channelId={channelId}
+      channelType={channel?.type ?? "general"}
+      isOpen={memberPanelOpen}
+      onToggle={() => setMemberPanelOpen((v) => !v)}
+      onInvite={() => setInviteModalOpen(true)}
+      currentUserId={userId}
+      isAdmin={isAdmin}
+      onMemberCountChange={setMemberCount}
+      key={memberListKeyRef.current}
+    />
+
+    {/* Invite Member Modal */}
+    <InviteMemberModal
+      channelId={channelId}
+      isOpen={inviteModalOpen}
+      onClose={() => setInviteModalOpen(false)}
+      onMemberAdded={() => {
+        memberListKeyRef.current += 1;
+      }}
+    />
     </div>
   );
 }

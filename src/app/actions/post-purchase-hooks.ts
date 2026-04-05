@@ -77,7 +77,7 @@ export async function runPostPurchaseHooks(input: {
       const { count } = await sb
         .from("audit_logs")
         .select("*", { count: "exact", head: true })
-        .eq("event_id", input.eventId)
+        .eq("record_id", input.eventId)
         .eq("action", `milestone_${m.threshold}_sent`);
 
       if ((count ?? 0) > 0) continue;
@@ -98,23 +98,26 @@ export async function runPostPurchaseHooks(input: {
 
       const dashLink = `${BASE_URL}/dashboard/events/${input.eventId}`;
 
-      for (const a of admins ?? []) {
-        const user = a.users as unknown as { email: string } | null;
-        if (!user?.email) continue;
-
-        const html = ticketMilestoneEmail(event.title, m.label, sold, totalCapacity, dashLink);
-        await sendEmail({
-          to: user.email,
-          subject: `${event.title.replace(/[\r\n\x00-\x1f]/g, "")} — ${m.label} 🎉`,
-          html,
-        });
-      }
+      const safeTitle = event.title.replace(/[\r\n\x00-\x1f]/g, "");
+      await Promise.all(
+        (admins ?? []).map(async (a) => {
+          const user = a.users as unknown as { email: string } | null;
+          if (!user?.email) return;
+          const html = ticketMilestoneEmail(event.title, m.label, sold, totalCapacity, dashLink);
+          await sendEmail({
+            to: user.email,
+            subject: `${safeTitle} — ${m.label} 🎉`,
+            html,
+          });
+        })
+      );
 
       // Mark milestone as sent
       await sb.from("audit_logs").insert({
-        event_id: input.eventId,
+        table_name: "events",
+        record_id: input.eventId,
         action: `milestone_${m.threshold}_sent`,
-        metadata: { sold, totalCapacity, percent },
+        new_data: { sold, totalCapacity, percent },
       });
 
       break; // Only send one milestone per purchase

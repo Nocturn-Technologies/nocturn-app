@@ -469,7 +469,7 @@ export function ContactList({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={contact.avatar_url}
-                          alt=""
+                          alt={contact.name || "Contact"}
                           className="h-full w-full rounded-full object-cover"
                         />
                       ) : (
@@ -617,7 +617,7 @@ export function ContactList({
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={contact.avatar_url}
-                          alt=""
+                          alt={contact.name || "Contact"}
                           className="h-full w-full rounded-full object-cover"
                         />
                       ) : (

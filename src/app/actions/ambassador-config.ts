@@ -1,7 +1,9 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import type { Json } from "@/lib/supabase/database.types";
 
 // ── Types ──
 
@@ -123,11 +125,12 @@ export async function saveAmbassadorConfig(
       ambassador_config: config,
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error } = await (admin.from("events") as any).update({ metadata: updatedMetadata })
+    const { error } = await admin.from("events").update({ metadata: updatedMetadata as unknown as { [key: string]: Json | undefined } })
       .eq("id", eventId);
 
-    if (error) return { error: "Something went wrong" };
+    if (error) return { error: "Failed to save ambassador config" };
+
+    revalidatePath("/dashboard/events");
     return { error: null };
   } catch (err) {
     console.error("[saveAmbassadorConfig]", err);
