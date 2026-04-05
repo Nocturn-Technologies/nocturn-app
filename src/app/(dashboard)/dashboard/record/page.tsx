@@ -12,11 +12,34 @@ import {
   CheckCircle2,
   Loader2,
   AlertCircle,
+  MicOff,
 } from "lucide-react";
+import { ALLOWED_AUDIO_TYPES } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { haptic } from "@/lib/haptics";
 import { transcribeAudio, transcribeFromStorage } from "@/app/actions/transcribe";
+
+// ─── Skeleton ────────────────────────────────────────────────────────
+
+function RecordingSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 3 }).map((_, i) => (
+        <Card key={i} className="rounded-2xl border-border overflow-hidden">
+          <div className="flex items-center gap-3 p-4 animate-pulse">
+            <div className="w-10 h-10 rounded-xl bg-muted shrink-0" />
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="h-4 bg-muted rounded w-3/4" />
+              <div className="h-3 bg-muted rounded w-1/2" />
+            </div>
+            <div className="w-5 h-5 rounded bg-muted shrink-0" />
+          </div>
+        </Card>
+      ))}
+    </div>
+  );
+}
 
 // ─── Types ───────────────────────────────────────────────────────────
 
@@ -95,10 +118,10 @@ function RecordingCard({
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <Card className="overflow-hidden border-border">
+    <Card className="overflow-hidden border-border rounded-2xl transition-all duration-200 hover:border-nocturn/30">
       {/* Header — always visible */}
       <button
-        className="w-full flex items-center gap-3 p-4 text-left hover:bg-accent/50 transition-colors min-h-[56px]"
+        className="w-full flex items-center gap-3 p-4 text-left hover:bg-accent/50 active:bg-accent/70 transition-colors duration-200 min-h-[56px]"
         onClick={() => setExpanded(!expanded)}
       >
         <div
@@ -144,8 +167,8 @@ function RecordingCard({
               <>
                 <span className="text-xs text-muted-foreground">-</span>
                 <span className="text-xs text-nocturn font-medium">
-                  {recording.action_items!.length} action
-                  {recording.action_items!.length !== 1 ? "s" : ""}
+                  {recording.action_items?.length ?? 0} action
+                  {(recording.action_items?.length ?? 0) !== 1 ? "s" : ""}
                 </span>
               </>
             )}
@@ -179,7 +202,7 @@ function RecordingCard({
                 Action Items
               </p>
               <div className="space-y-1.5">
-                {recording.action_items!.map((item, i) => (
+                {recording.action_items?.map((item, i) => (
                   <div key={i} className="flex items-start gap-2">
                     <div className="w-5 h-5 rounded-md bg-nocturn/20 flex items-center justify-center shrink-0 mt-0.5">
                       <span className="text-[10px] font-bold text-nocturn">
@@ -199,7 +222,7 @@ function RecordingCard({
                 Key Decisions
               </p>
               <div className="space-y-1">
-                {recording.key_decisions!.map((d, i) => (
+                {recording.key_decisions?.map((d, i) => (
                   <p key={i} className="text-sm text-muted-foreground">
                     - {d}
                   </p>
@@ -210,7 +233,7 @@ function RecordingCard({
 
           <Button
             variant="outline"
-            className="w-full border-green-600/30 text-green-400 hover:bg-green-600/10"
+            className="w-full border-green-600/30 text-green-400 hover:bg-green-600/10 active:bg-green-600/20 transition-colors duration-200 min-h-[44px]"
             onClick={() => onShare(recording)}
           >
             <Share2 size={16} className="mr-2" />
@@ -300,7 +323,7 @@ export default function RecordPage() {
       if (userId) {
         const { data: row, error: insertError } = await supabase
           .from("recordings")
-          .insert({ user_id: userId, status: "recording" })
+          .insert({ user_id: userId, collective_id: "", audio_url: "", status: "recording" })
           .select("id")
           .maybeSingle();
         if (insertError) {
@@ -347,7 +370,11 @@ export default function RecordPage() {
     await fetchRecordings();
 
     try {
-      const audioBlob = new Blob(chunksRef.current, { type: mr.mimeType });
+      // Validate audio MIME type before upload
+      const audioMimeType = (ALLOWED_AUDIO_TYPES as readonly string[]).includes(mr.mimeType)
+        ? mr.mimeType
+        : "audio/webm"; // default to safe type if browser reports unexpected MIME
+      const audioBlob = new Blob(chunksRef.current, { type: audioMimeType });
       const fileSizeMB = audioBlob.size / (1024 * 1024);
 
       let result;
@@ -359,7 +386,7 @@ export default function RecordPage() {
         const { error: uploadError } = await supabase.storage
           .from("recordings")
           .upload(storagePath, audioBlob, {
-            contentType: mr.mimeType,
+            contentType: audioMimeType,
             upsert: true,
           });
 
@@ -463,7 +490,7 @@ export default function RecordPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-6 max-w-2xl mx-auto overflow-x-hidden animate-in fade-in duration-300">
       <div>
         <h1 className="text-2xl font-bold font-heading tracking-tight">Record</h1>
         <p className="text-sm text-muted-foreground mt-1">
@@ -501,10 +528,10 @@ export default function RecordPage() {
           <button
             onClick={isRecording ? stopRecording : startRecording}
             disabled={isProcessing}
-            className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+            className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 active:scale-90 ${
               isRecording
-                ? "bg-red-500 shadow-lg shadow-red-500/40"
-                : "bg-nocturn shadow-lg shadow-nocturn/40"
+                ? "bg-red-500 shadow-lg shadow-red-500/40 hover:bg-red-600"
+                : "bg-nocturn shadow-lg shadow-nocturn/40 hover:bg-nocturn-light"
             }`}
           >
             {isRecording && (
@@ -540,20 +567,29 @@ export default function RecordPage() {
 
       {/* Past recordings */}
       <div>
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+        <h2 className="text-lg font-bold mb-3">
           Past Recordings
         </h2>
 
         {loadingRecordings ? (
-          <div className="flex justify-center py-8">
-            <div className="w-5 h-5 border-2 border-nocturn border-t-transparent rounded-full animate-spin" />
-          </div>
+          <RecordingSkeleton />
         ) : recordings.length === 0 ? (
-          <Card className="p-8 text-center border-border">
-            <Mic size={32} className="text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">
-              Your call recordings and AI-generated notes will appear here.
+          <Card className="p-8 text-center border-border rounded-2xl">
+            <div className="w-12 h-12 rounded-2xl bg-nocturn/10 flex items-center justify-center mx-auto mb-3">
+              <MicOff size={24} className="text-nocturn" />
+            </div>
+            <p className="text-sm font-medium mb-1">No recordings yet</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              Record a call to get AI-generated notes, action items, and key decisions.
             </p>
+            <Button
+              variant="outline"
+              className="border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:bg-nocturn/20 transition-colors duration-200 min-h-[44px]"
+              onClick={startRecording}
+            >
+              <Mic size={16} className="mr-2" />
+              Start Recording
+            </Button>
           </Card>
         ) : (
           <div className="space-y-3">
