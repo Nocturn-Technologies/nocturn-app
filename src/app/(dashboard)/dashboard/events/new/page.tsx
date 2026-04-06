@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/ai-parse-event";
 import { getTicketPricingSuggestion, type PricingSuggestion } from "@/app/actions/pricing-suggestion";
 import { calculateBudget, type BudgetResult, type BudgetInput } from "@/app/actions/budget-planner";
+import { applyLaunchPlaybook, getPlaybookOptions, type PlaybookOption } from "@/app/actions/launch-playbook";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,6 +30,11 @@ import {
   Mic,
   TrendingUp,
   Target,
+  Rocket,
+  Zap,
+  Megaphone,
+  ListChecks,
+  SkipForward,
 } from "lucide-react";
 import Link from "next/link";
 import { haptic } from "@/lib/haptics";
@@ -48,7 +54,7 @@ interface DraftState {
   eventData: ParsedEventDetails;
   tiers: TicketTier[];
   step: ChatStep;
-  phase: "chat" | "review" | "creating" | "done";
+  phase: "chat" | "review" | "creating" | "playbook" | "done";
 }
 
 function saveDraft(state: DraftState) {
@@ -586,7 +592,7 @@ function EventConfirmationCard({
         )}
 
         {/* ── Live Finance Forecast with Pricing Scenarios ── */}
-        {tiers.length > 0 && <LiveForecast tiers={tiers} />}
+        {tiers.length > 0 && <LiveForecast tiers={tiers} onTiersUpdate={(updated) => onUpdate("tiers", updated)} />}
       </div>
 
       {error && (
@@ -713,24 +719,40 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
 
 // ─── Live Forecast with Pricing Scenarios ────────────────────────────────────
 
-function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
+function LiveForecast({ tiers, onTiersUpdate }: { tiers: TicketTier[]; onTiersUpdate?: (tiers: TicketTier[]) => void }) {
   const [priceMultiplier, setPriceMultiplier] = useState(1.0);
+  // Store base prices so slider always scales from the original values
+  const baseTiersRef = useRef<TicketTier[]>(tiers);
+
+  // Update base tiers when tiers change externally (not from slider)
+  useEffect(() => {
+    if (priceMultiplier === 1.0) {
+      baseTiersRef.current = tiers;
+    }
+  }, [tiers, priceMultiplier]);
 
   const STRIPE_FEE_RATE = 0.029;
   const STRIPE_FEE_FLAT = 0.30;
 
-  const adjustedTiers = tiers.map((t) => ({
-    ...t,
-    price: Math.round(t.price * priceMultiplier),
-  }));
-
-  const totalCapacity = adjustedTiers.reduce((s, t) => s + t.capacity, 0);
-  const maxRevenue = adjustedTiers.reduce((s, t) => s + t.price * t.capacity, 0);
+  // Use current tiers directly (they get updated by the slider via onTiersUpdate)
+  const totalCapacity = tiers.reduce((s, t) => s + t.capacity, 0);
+  const maxRevenue = tiers.reduce((s, t) => s + t.price * t.capacity, 0);
   const avgPrice = totalCapacity > 0 ? maxRevenue / totalCapacity : 0;
+
+  function handleSliderChange(newMultiplier: number) {
+    setPriceMultiplier(newMultiplier);
+    if (onTiersUpdate) {
+      const adjusted = baseTiersRef.current.map((t) => ({
+        ...t,
+        price: Math.round(t.price * newMultiplier),
+      }));
+      onTiersUpdate(adjusted);
+    }
+  }
 
   function calcNet(rate: number) {
     const ticketsSold = Math.round(totalCapacity * rate);
-    const gross = adjustedTiers.reduce((s, t) => s + t.price * Math.round(t.capacity * rate), 0);
+    const gross = tiers.reduce((s, t) => s + t.price * Math.round(t.capacity * rate), 0);
     // Buyer pays all fees — organizer keeps 100% of ticket price
     // Stripe processing still applies to payout (~2.9% + $0.30)
     const stripeProcessing = ticketsSold * STRIPE_FEE_FLAT + gross * STRIPE_FEE_RATE;
@@ -746,6 +768,7 @@ function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
   const projections = scenarios.map((s) => ({ ...s, ...calcNet(s.rate) }));
   const priceLabels = ["Lower", "Current", "Higher"];
   const priceIndex = priceMultiplier < 1 ? 0 : priceMultiplier > 1 ? 2 : 1;
+  const baseTier0Price = baseTiersRef.current[0]?.price || 0;
 
   return (
     <div className="border-t border-white/5 pt-3 mt-3 space-y-3">
@@ -769,7 +792,7 @@ function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
         <p className="text-xs text-zinc-500 mt-1">max net revenue at sell-out</p>
       </div>
 
-      {/* Price slider — "What if?" */}
+      {/* Price slider — adjusts tier prices in real time */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-zinc-500">What if you charge...</span>
@@ -783,23 +806,23 @@ function LiveForecast({ tiers }: { tiers: TicketTier[] }) {
           max={2.0}
           step={0.1}
           value={priceMultiplier}
-          onChange={(e) => setPriceMultiplier(parseFloat(e.target.value))}
+          onChange={(e) => handleSliderChange(parseFloat(e.target.value))}
           className="w-full h-1.5 rounded-full appearance-none bg-zinc-800 accent-[#7B2FF7] cursor-pointer"
         />
         <div className="flex justify-between text-[10px] text-zinc-600">
-          <span>${Math.round(tiers[0]?.price * 0.5 || 0)}</span>
-          <span>${tiers[0]?.price || 0} (current)</span>
-          <span>${Math.round(tiers[0]?.price * 2 || 0)}</span>
+          <span>${Math.round(baseTier0Price * 0.5)}</span>
+          <span>${baseTier0Price} (base)</span>
+          <span>${Math.round(baseTier0Price * 2)}</span>
         </div>
       </div>
 
-      {/* Adjusted tier prices */}
+      {/* Show current tier prices when slider is moved */}
       {priceMultiplier !== 1.0 && (
         <div className="flex flex-wrap gap-1.5">
-          {adjustedTiers.map((t, i) => (
+          {tiers.map((t, i) => (
             <span key={i} className="text-[11px] bg-zinc-800/80 text-zinc-400 rounded-full px-2 py-0.5">
               {t.name}: <span className="text-white font-medium">${t.price}</span>
-              <span className="text-zinc-600 line-through ml-1">${tiers[i].price}</span>
+              <span className="text-zinc-600 line-through ml-1">${baseTiersRef.current[i]?.price ?? t.price}</span>
             </span>
           ))}
         </div>
@@ -869,10 +892,12 @@ export default function NewEventPage() {
   const [tiers, setTiers] = useState<TicketTier[]>([]);
   const [thinking, setThinking] = useState(false);
   const [step, setStep] = useState<ChatStep>("name");
-  const [phase, setPhase] = useState<"chat" | "review" | "creating" | "done">(
+  const [phase, setPhase] = useState<"chat" | "review" | "creating" | "playbook" | "done">(
     "chat"
   );
   const [error, setError] = useState<string | null>(null);
+  const [createdEventId, setCreatedEventId] = useState<string | null>(null);
+  const [applyingPlaybook, setApplyingPlaybook] = useState(false);
   const [introShown, setIntroShown] = useState(false);
   const [budgetInput, setBudgetInput] = useState<Partial<BudgetInput>>({});
   const [, setBudgetResult] = useState<BudgetResult | null>(null);
@@ -890,7 +915,7 @@ export default function NewEventPage() {
       setEventData(draft.eventData);
       setTiers(draft.tiers);
       setStep(draft.step);
-      setPhase(draft.phase === "creating" ? "review" : draft.phase);
+      setPhase(draft.phase === "creating" || draft.phase === "playbook" ? "review" : draft.phase);
       setIntroShown(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -899,7 +924,7 @@ export default function NewEventPage() {
   // ── Debounced save to localStorage on key state changes ───────────────
   const saveDraftDebounced = useCallback(() => {
     const timer = setTimeout(() => {
-      if (phase === "done") return; // don't persist after creation
+      if (phase === "done" || phase === "playbook") return; // don't persist after creation
       saveDraft({ messages, eventData, tiers, step, phase });
     }, 500);
     return timer;
@@ -1033,6 +1058,33 @@ export default function NewEventPage() {
     setTimeout(() => inputRef.current?.focus(), 100);
   }
 
+  // ── Scale budget tiers to user's entered price ───────────────────────────
+  // If the user told us a ticket price in chat, use it as Early Bird and scale
+  // the rest proportionally instead of using the budget planner's calculated price.
+  function scaleBudgetTiers(
+    suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning?: string }>,
+    userPrice: number | undefined
+  ): TicketTier[] {
+    if (
+      userPrice === undefined ||
+      userPrice <= 0 ||
+      suggestedTiers.length === 0
+    ) {
+      return suggestedTiers.map((t) => ({ name: t.name, price: t.price, capacity: t.capacity }));
+    }
+    // User price becomes the Early Bird; scale others proportionally
+    const baseSuggested = suggestedTiers[0].price;
+    if (baseSuggested <= 0) {
+      return suggestedTiers.map((t) => ({ name: t.name, price: userPrice, capacity: t.capacity }));
+    }
+    const ratio = userPrice / baseSuggested;
+    return suggestedTiers.map((t) => ({
+      name: t.name,
+      price: Math.round(t.price * ratio),
+      capacity: t.capacity,
+    }));
+  }
+
   // ── Handle text input send — AI parses everything ───────────────────────
 
   async function handleSend(e: React.FormEvent) {
@@ -1100,14 +1152,18 @@ export default function NewEventPage() {
           const result = await calculateBudget(finalBudget);
           setBudgetResult(result);
 
-          // Auto-populate suggested tiers
+          // Auto-populate tiers — scaled to user's entered price if provided
           if (result.suggestedTiers.length > 0) {
-            setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+            const scaled = scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice);
+            setTiers(scaled);
           }
 
           setThinking(false);
           // Show budget summary and go to review
-          const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
+          const displayTiers = eventData.ticketPrice && eventData.ticketPrice > 0
+            ? scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice)
+            : result.suggestedTiers;
+          const tierSummary = displayTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
           setMessages(prev => [
             ...prev,
             { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel: ~$${result.travelEstimate.total.toLocaleString()} (${result.travelEstimate.breakdown})` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. You can adjust prices in the review, or tell me different amounts.` },
@@ -1149,14 +1205,18 @@ export default function NewEventPage() {
         const result = await calculateBudget(finalBudget);
         setBudgetResult(result);
 
-        // Auto-populate suggested tiers
+        // Auto-populate tiers — scaled to user's entered price if provided
         if (result.suggestedTiers.length > 0) {
-          setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+          const scaled = scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice);
+          setTiers(scaled);
         }
 
         setThinking(false);
 
-        const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
+        const displayTiers = eventData.ticketPrice && eventData.ticketPrice > 0
+          ? scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice)
+          : result.suggestedTiers;
+        const tierSummary = displayTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
         setMessages(prev => [
           ...prev,
           { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel estimate: ~$${result.travelEstimate.total.toLocaleString()}\n${result.travelEstimate.breakdown}` : ""}${barMinimum > 0 ? `\n\n⚠️ Bar minimum: $${barMinimum.toLocaleString()} — if you don't hit it, you lose your $${deposit.toLocaleString()} deposit.` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. Adjust in the review or tell me different prices.` },
@@ -1264,9 +1324,10 @@ export default function NewEventPage() {
           const result = await calculateBudget(updatedBudget as BudgetInput);
           setBudgetResult(result);
 
-          // Update tiers from recalculated budget (unless user explicitly set tiers)
+          // Update tiers from recalculated budget — scaled to user's price if set
           if (!parsed.tiers && result.suggestedTiers.length > 0) {
-            setTiers(result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity })));
+            const scaled = scaleBudgetTiers(result.suggestedTiers, merged.ticketPrice);
+            setTiers(scaled);
           }
 
           const changes: string[] = [];
@@ -1276,7 +1337,10 @@ export default function NewEventPage() {
           if (parsed.deposit !== undefined) changes.push(`deposit → $${parsed.deposit.toLocaleString()}`);
           if (parsed.otherExpenses !== undefined) changes.push(`other expenses → $${parsed.otherExpenses.toLocaleString()}`);
 
-          const tierSummary = result.suggestedTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
+          const displayTiers = merged.ticketPrice && merged.ticketPrice > 0
+            ? scaleBudgetTiers(result.suggestedTiers, merged.ticketPrice)
+            : result.suggestedTiers;
+          const tierSummary = displayTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
 
           setThinking(false);
           setMessages((prev) => [
@@ -1535,11 +1599,8 @@ export default function NewEventPage() {
       if (typeof window !== "undefined") {
         sessionStorage.setItem("event-created", "true");
       }
-      setPhase("done");
-      setTimeout(() => {
-        router.push(`/dashboard/events/${result.eventId}`);
-        router.refresh();
-      }, 2000);
+      setCreatedEventId(result.eventId ?? null);
+      setPhase("playbook");
     } catch {
       setError("Network error — please try again.");
       setPhase("review");
@@ -1628,6 +1689,35 @@ export default function NewEventPage() {
           />
         )}
 
+        {/* Playbook selection */}
+        {phase === "playbook" && (
+          <PlaybookSelector
+            eventTitle={eventData.title || "Your event"}
+            onSelect={async (playbookId) => {
+              if (!createdEventId) return;
+              setApplyingPlaybook(true);
+              const result = await applyLaunchPlaybook(createdEventId, playbookId);
+              setApplyingPlaybook(false);
+              if (result.error) {
+                setError(result.error);
+              }
+              setPhase("done");
+              setTimeout(() => {
+                router.push(`/dashboard/events/${createdEventId}/tasks`);
+                router.refresh();
+              }, 1500);
+            }}
+            onSkip={() => {
+              setPhase("done");
+              setTimeout(() => {
+                router.push(`/dashboard/events/${createdEventId}`);
+                router.refresh();
+              }, 1500);
+            }}
+            applying={applyingPlaybook}
+          />
+        )}
+
         {/* Done state */}
         {phase === "done" && (
           <div className="flex flex-col items-center gap-4 py-12 animate-scale-in">
@@ -1639,7 +1729,7 @@ export default function NewEventPage() {
                 {eventData.title} — draft created!
               </h2>
               <p className="text-sm text-zinc-400 mt-1">
-                Taking you to the event dashboard to finish setup...
+                {applyingPlaybook ? "Generating your launch plan..." : "Taking you to the event dashboard..."}
               </p>
             </div>
           </div>
@@ -1696,6 +1786,96 @@ export default function NewEventPage() {
             )}
           </Button>
         </form>
+      )}
+    </div>
+  );
+}
+
+// ─── Playbook Selector ────────────────────────────────────────────────────────
+
+const PLAYBOOK_ICONS: Record<string, React.ReactNode> = {
+  rocket: <Rocket className="h-5 w-5" />,
+  zap: <Zap className="h-5 w-5" />,
+  megaphone: <Megaphone className="h-5 w-5" />,
+};
+
+function PlaybookSelector({
+  eventTitle,
+  onSelect,
+  onSkip,
+  applying,
+}: {
+  eventTitle: string;
+  onSelect: (playbookId: string) => void;
+  onSkip: () => void;
+  applying: boolean;
+}) {
+  const options = getPlaybookOptions();
+
+  return (
+    <div className="flex flex-col gap-5 py-6 animate-fade-in-up">
+      {/* Header */}
+      <div className="text-center space-y-2">
+        <div className="flex justify-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10">
+            <ListChecks className="h-6 w-6 text-nocturn" />
+          </div>
+        </div>
+        <h2 className="text-lg font-bold font-heading">Set up your launch plan</h2>
+        <p className="text-sm text-zinc-400 max-w-xs mx-auto">
+          Pick a playbook and we&apos;ll generate a task list with due dates working back from your event.
+        </p>
+      </div>
+
+      {/* Options */}
+      <div className="space-y-2.5">
+        {options.map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => onSelect(opt.id)}
+            disabled={applying}
+            className={`w-full flex items-start gap-3.5 rounded-2xl border p-4 text-left transition-all duration-200 active:scale-[0.98] ${
+              opt.recommended
+                ? "border-nocturn/30 bg-nocturn/5 hover:border-nocturn/50"
+                : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]"
+            } ${applying ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+              opt.recommended ? "bg-nocturn/20 text-nocturn" : "bg-white/[0.05] text-zinc-400"
+            }`}>
+              {PLAYBOOK_ICONS[opt.icon] ?? <ListChecks className="h-5 w-5" />}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-white">{opt.name}</p>
+                {opt.recommended && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-nocturn/20 text-nocturn text-[10px] font-semibold">
+                    Recommended
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-zinc-400 mt-0.5">{opt.description}</p>
+              <p className="text-[10px] text-zinc-500 mt-1">{opt.taskCount} tasks with auto-assigned due dates</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Skip */}
+      <button
+        onClick={onSkip}
+        disabled={applying}
+        className="flex items-center justify-center gap-1.5 py-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+      >
+        <SkipForward className="h-3 w-3" />
+        Skip — I&apos;ll set up tasks later
+      </button>
+
+      {applying && (
+        <div className="flex items-center justify-center gap-2 py-2">
+          <Loader2 className="h-4 w-4 animate-spin text-nocturn" />
+          <span className="text-sm text-zinc-400">Generating your launch plan...</span>
+        </div>
       )}
     </div>
   );
