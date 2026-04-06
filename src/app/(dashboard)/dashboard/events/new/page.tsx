@@ -1265,26 +1265,40 @@ export default function NewEventPage() {
 
       // Handle tickets step — free event ask about bar revenue, or advance
       if (step === "tickets") {
-        // Check if user mentioned bar revenue even if parser didn't extract barMinimum
         const lower = userMsg.toLowerCase();
         const mentionsBarRevenue = /bar\s*(revenue|percent|%|split|sales|minimum)|percentage.*bar|we\s*get\s*\d+%/i.test(userMsg);
+        const hasBarPercent = parsed.barPercent !== undefined || merged.barPercent !== undefined;
+        const hasBarMin = parsed.barMinimum !== undefined || merged.barMinimum !== undefined;
+        const hasProjectedSales = parsed.projectedBarSales !== undefined || merged.projectedBarSales !== undefined;
         const isNo = /^(no|nah|nope|skip|none|not really)/i.test(lower);
         const alreadyAskedBarQ = messages.some(m => m.role === "ai" && typeof m.content === "string" && m.content.includes("Are you earning revenue another way"));
+        const alreadyAskedProjected = messages.some(m => m.role === "ai" && typeof m.content === "string" && m.content.includes("projected bar sales"));
 
         // First time seeing free pricing and haven't asked about bar revenue yet
-        if (parsed.ticketPrice === 0 && !merged.barMinimum && !mentionsBarRevenue && !alreadyAskedBarQ) {
+        if (parsed.ticketPrice === 0 && !hasBarMin && !hasBarPercent && !mentionsBarRevenue && !alreadyAskedBarQ) {
           setThinking(false);
           setMessages((prev) => [
             ...prev,
-            { role: "ai", content: "Got it, free event! 🆓\n\nAre you earning revenue another way? For example:\n• **Bar revenue** — percentage of bar sales\n• **Sponsorship** or **door donations**\n\nOr just say \"no\" and we'll skip the budget planner." },
+            { role: "ai", content: "Got it, free event! 🆓\n\nAre you earning revenue another way? For example:\n• **Bar minimum** — a dollar amount the venue requires (e.g. \"$3000 bar min\")\n• **Bar percentage** — you keep a % of bar sales (e.g. \"we get 15%\")\n• **Sponsorship** or **door donations**\n\nOr just say \"no\" and we'll skip the budget planner." },
+          ]);
+          return;
+        }
+
+        // User mentioned bar percentage — ask for projected bar sales to calculate revenue
+        if ((parsed.barPercent || (mentionsBarRevenue && !hasBarMin)) && !hasProjectedSales && !alreadyAskedProjected) {
+          const pct = parsed.barPercent || merged.barPercent;
+          setThinking(false);
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: `Got it — you get ${pct ? `${pct}%` : "a percentage"} of bar sales. 🍸\n\nWhat are the **projected bar sales** for the night? This helps us forecast your revenue.\n\nE.g. "$5000" or "$8000"` },
           ]);
           return;
         }
 
         // User answered the bar revenue question or provided pricing — advance
-        if (isNo || parsed.ticketPrice !== undefined || parsed.barMinimum !== undefined || parsed.venueCapacity !== undefined || mentionsBarRevenue || alreadyAskedBarQ) {
+        if (isNo || parsed.ticketPrice !== undefined || hasBarMin || hasProjectedSales || parsed.venueCapacity !== undefined || alreadyAskedProjected) {
           setThinking(false);
-          if ((isNo || (!mentionsBarRevenue && !parsed.barMinimum)) && merged.ticketPrice === 0 && alreadyAskedBarQ) {
+          if ((isNo || (!mentionsBarRevenue && !hasBarMin && !hasBarPercent)) && merged.ticketPrice === 0 && alreadyAskedBarQ) {
             // Free event, no other revenue — skip budget planner, go to review
             setMessages((prev) => [
               ...prev,

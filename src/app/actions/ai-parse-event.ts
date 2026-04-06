@@ -33,6 +33,8 @@ export interface ParsedEventDetails {
   estimatedTransport?: number;
   venueCost?: number;
   barMinimum?: number;
+  barPercent?: number;
+  projectedBarSales?: number;
   deposit?: number;
   otherExpenses?: number;
   totalBudget?: number;
@@ -291,6 +293,19 @@ function localParse(message: string, existing: Partial<ParsedEventDetails>): Par
   // "bar minimum $3000"
   const barMinMatch = lower.match(/bar\s*(?:min(?:imum)?)\s*(?:is|to|=|:)?\s*\$?([\d,]+)/);
   if (barMinMatch) result.barMinimum = parseInt(barMinMatch[1].replace(/,/g, ""));
+
+  // "bar percentage 15%", "we get 15%", "15% of bar", "bar split 15"
+  const barPctMatch = lower.match(/(?:bar\s*(?:percent(?:age)?|split|rev(?:enue)?)|we\s*(?:get|keep|earn|receive))\s*(?:is|of|=|:)?\s*(\d+)\s*%?/);
+  if (barPctMatch) result.barPercent = parseInt(barPctMatch[1]);
+  // Also catch "15% of bar sales" pattern
+  const barPctAlt = lower.match(/(\d+)\s*%\s*(?:of\s*)?(?:bar|drink|beverage)\s*(?:sales|revenue|split)?/);
+  if (barPctAlt && !result.barPercent) result.barPercent = parseInt(barPctAlt[1]);
+
+  // "projected bar sales $5000", "bar sales 8000", "expect $6000 in bar"
+  const barSalesMatch = lower.match(/(?:projected?\s*)?(?:bar|drink|beverage)\s*(?:sales|revenue|total)\s*(?:is|of|=|:|\s)\s*\$?([\d,]+)/);
+  if (barSalesMatch) result.projectedBarSales = parseInt(barSalesMatch[1].replace(/,/g, ""));
+  const barSalesAlt = lower.match(/\$?([\d,]+)\s*(?:in\s*)?(?:bar|drink|beverage)\s*(?:sales|revenue)/);
+  if (barSalesAlt && !result.projectedBarSales) result.projectedBarSales = parseInt(barSalesAlt[1].replace(/,/g, ""));
 
   return result;
 }
