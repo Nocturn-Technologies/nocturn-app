@@ -9,11 +9,17 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Instagram,
   User,
+  Users,
   Clock,
   Mail,
   Phone,
+  DollarSign,
+  TrendingUp,
+  Repeat2,
 } from "lucide-react";
 
 
@@ -39,6 +45,7 @@ export interface PeopleContact {
   segment?: string | null;
   profile_id?: string | null;
   created_at: string;
+  last_seen_at?: string | null;
 }
 
 export interface PeopleStats {
@@ -54,6 +61,11 @@ interface ContactListProps {
   contactType: "industry" | "fan";
   onContactClick?: (contactId: string) => void;
 }
+
+// ── Sort types ──────────────────────────────────────────────────────────────
+
+type SortBy = "name" | "events" | "spent" | "recent" | "newest";
+type SortDirection = "asc" | "desc";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -107,6 +119,37 @@ const SOURCE_LABELS: Record<string, string> = {
   referral: "referral",
 };
 
+const MOBILE_SORT_OPTIONS: { label: string; value: SortBy }[] = [
+  { label: "Recent", value: "recent" },
+  { label: "Most Events", value: "events" },
+  { label: "Top Spenders", value: "spent" },
+  { label: "Newest", value: "newest" },
+];
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+
+function formatRelativeDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 14) return "1 week ago";
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  // Fallback to "Mar 15" format
+  return date.toLocaleDateString("en", { month: "short", day: "numeric" });
+}
+
+function formatCurrency(amount: number): string {
+  if (amount >= 10000) {
+    return `$${(amount / 1000).toFixed(1)}k`;
+  }
+  return `$${amount.toFixed(0)}`;
+}
+
 // ── Component ───────────────────────────────────────────────────────────────
 
 export function ContactList({
@@ -124,6 +167,9 @@ export function ContactList({
   const [activeFilter, setActiveFilter] = useState("all");
   const [page, setPage] = useState(1);
 
+  const [sortBy, setSortBy] = useState<SortBy>("recent");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+
   // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300);
@@ -133,7 +179,7 @@ export function ContactList({
   // Reset page on filter/search change
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, activeFilter]);
+  }, [debouncedSearch, activeFilter, sortBy, sortDirection]);
 
   // Fetch contacts
   const fetchContacts = useCallback(async () => {
@@ -165,6 +211,7 @@ export function ContactList({
           segment: (c.metadata as Record<string, unknown>)?.segment as string | undefined,
           profile_id: c.marketplaceProfileId,
           created_at: c.createdAt,
+          last_seen_at: c.lastSeenAt,
         })));
         setStats({ total: result.totalCount ?? 0, ...result.segmentCounts });
       }
@@ -178,6 +225,17 @@ export function ContactList({
   useEffect(() => {
     fetchContacts();
   }, [fetchContacts]);
+
+  // ── Stat cards computation ──
+  const summaryStats = useMemo(() => {
+    const totalFans = stats.total;
+    const totalRevenue = contacts.reduce((sum, c) => sum + (c.total_spend ?? 0), 0);
+    const avgSpend = totalFans > 0 ? totalRevenue / totalFans : 0;
+    const repeatCount = contacts.filter((c) => (c.total_events ?? 0) >= 2).length;
+    const repeatRate = contacts.length > 0 ? (repeatCount / contacts.length) * 100 : 0;
+
+    return { totalFans, totalRevenue, avgSpend, repeatRate };
+  }, [contacts, stats.total]);
 
   // Build dynamic filter chips for industry (only roles that have contacts)
   const industryFilters = useMemo(() => {
@@ -269,8 +327,59 @@ export function ContactList({
     });
   }, [contacts, debouncedSearch, activeFilter, contactType]);
 
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
-  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  // Sort filtered contacts
+  const sorted = useMemo(() => {
+    const arr = [...filtered];
+    const dir = sortDirection === "asc" ? 1 : -1;
+
+    arr.sort((a, b) => {
+      switch (sortBy) {
+        case "name": {
+          const nameA = (a.name ?? a.email).toLowerCase();
+          const nameB = (b.name ?? b.email).toLowerCase();
+          return dir * nameA.localeCompare(nameB);
+        }
+        case "events":
+          return dir * ((a.total_events ?? 0) - (b.total_events ?? 0));
+        case "spent":
+          return dir * ((a.total_spend ?? 0) - (b.total_spend ?? 0));
+        case "recent": {
+          const dateA = a.last_seen_at ?? a.created_at;
+          const dateB = b.last_seen_at ?? b.created_at;
+          return dir * (new Date(dateA).getTime() - new Date(dateB).getTime());
+        }
+        case "newest":
+          return dir * (new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+        default:
+          return 0;
+      }
+    });
+
+    return arr;
+  }, [filtered, sortBy, sortDirection]);
+
+  const totalPages = Math.ceil(sorted.length / PER_PAGE);
+  const paginated = sorted.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+
+  // ── Sort handler ──
+  function handleSort(column: SortBy) {
+    if (sortBy === column) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(column);
+      // Default descending for numeric/date, ascending for name
+      setSortDirection(column === "name" ? "asc" : "desc");
+    }
+  }
+
+  function SortIndicator({ column }: { column: SortBy }) {
+    if (sortBy !== column) return null;
+    return sortDirection === "asc" ? (
+      <ChevronUp className="h-3 w-3 inline-block ml-0.5" />
+    ) : (
+      <ChevronDown className="h-3 w-3 inline-block ml-0.5" />
+    );
+  }
 
   // ── Loading state ──
 
@@ -332,50 +441,57 @@ export function ContactList({
     return date.toLocaleDateString("en", { month: "short", day: "numeric" });
   }
 
+  function getLastSeenDate(contact: PeopleContact): string | null {
+    const dateStr = contact.last_seen_at ?? contact.created_at;
+    if (!dateStr) return null;
+    return formatRelativeDate(dateStr);
+  }
+
   // ── Main render ──
 
   return (
     <div className="space-y-4">
-      {/* Stats row */}
-      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-        {contactType === "fan" ? (
-          <>
-            <span className="font-medium text-foreground">
-              {stats.total} fan{stats.total !== 1 ? "s" : ""}
-            </span>
-            {(stats.repeat ?? 0) > 0 && (
-              <>
-                <span className="text-white/20">·</span>
-                <span>{stats.repeat} repeat</span>
-              </>
-            )}
-            {(stats.ambassadors ?? 0) > 0 && (
-              <>
-                <span className="text-white/20">·</span>
-                <span>{stats.ambassadors} ambassadors</span>
-              </>
-            )}
-          </>
-        ) : (
-          <>
-            <span className="font-medium text-foreground">
-              {stats.total} contact{stats.total !== 1 ? "s" : ""}
-            </span>
-            {(stats.booked ?? 0) > 0 && (
-              <>
-                <span className="text-white/20">·</span>
-                <span>{stats.booked} booked</span>
-              </>
-            )}
-            {(stats.saved ?? 0) > 0 && (
-              <>
-                <span className="text-white/20">·</span>
-                <span>{stats.saved} saved</span>
-              </>
-            )}
-          </>
-        )}
-      </div>
+      {/* Summary stat cards */}
+      {contactType === "fan" && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-8 w-8 rounded-full bg-nocturn/15 flex items-center justify-center">
+                <Users className="h-4 w-4 text-nocturn" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-foreground">{summaryStats.totalFans}</p>
+            <p className="text-xs text-muted-foreground">Total Fans</p>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-8 w-8 rounded-full bg-green-500/15 flex items-center justify-center">
+                <DollarSign className="h-4 w-4 text-green-400" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-foreground">{formatCurrency(summaryStats.totalRevenue)}</p>
+            <p className="text-xs text-muted-foreground">Total Revenue</p>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-8 w-8 rounded-full bg-blue-500/15 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 text-blue-400" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-foreground">{formatCurrency(summaryStats.avgSpend)}</p>
+            <p className="text-xs text-muted-foreground">Avg Spend</p>
+          </div>
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="h-8 w-8 rounded-full bg-amber-500/15 flex items-center justify-center">
+                <Repeat2 className="h-4 w-4 text-amber-400" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-foreground">{summaryStats.repeatRate.toFixed(0)}%</p>
+            <p className="text-xs text-muted-foreground">Repeat Rate</p>
+          </div>
+        </div>
+      )}
 
       {/* Search */}
       <div className="relative">
@@ -411,16 +527,43 @@ export function ContactList({
         </div>
       )}
 
+      {/* Mobile sort pills */}
+      <div className="md:hidden flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+        {MOBILE_SORT_OPTIONS.map(({ label, value }) => {
+          const isActive = sortBy === value;
+          return (
+            <button
+              key={value}
+              onClick={() => handleSort(value)}
+              className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[44px] ${
+                isActive
+                  ? "bg-foreground/10 text-foreground border border-border"
+                  : "bg-muted/40 text-muted-foreground hover:text-foreground hover:bg-muted/60"
+              }`}
+            >
+              {label}
+              {isActive && (
+                sortDirection === "desc" ? (
+                  <ChevronDown className="h-3 w-3 inline-block ml-0.5" />
+                ) : (
+                  <ChevronUp className="h-3 w-3 inline-block ml-0.5" />
+                )
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Result count */}
       <p className="text-xs text-muted-foreground">
-        {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+        {sorted.length} result{sorted.length !== 1 ? "s" : ""}
         {activeFilter !== "all" &&
           ` · ${filters.find((f) => f.value === activeFilter)?.label ?? activeFilter}`}
         {debouncedSearch && ` · "${debouncedSearch}"`}
       </p>
 
       {/* Contact list */}
-      {filtered.length === 0 ? (
+      {sorted.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center">
             <p className="text-sm text-muted-foreground">
@@ -432,24 +575,55 @@ export function ContactList({
         </Card>
       ) : (
         <div className="space-y-2">
-          {/* Desktop header */}
+          {/* Desktop header — sortable for fans */}
           {contactType === "fan" && (
             <div className="hidden md:grid grid-cols-12 gap-2 px-4 text-xs font-medium text-muted-foreground">
-              <span className="col-span-3">Contact</span>
-              <span className="col-span-3">Info</span>
-              <span className="col-span-1 text-center">Events</span>
-              <span className="col-span-2 text-center">Spent</span>
-              <span className="col-span-1 text-center">Segment</span>
-              <span className="col-span-2 text-right">Tags</span>
+              <button
+                onClick={() => handleSort("name")}
+                className="col-span-3 text-left flex items-center gap-0.5 hover:text-foreground transition-colors min-h-[44px]"
+              >
+                Contact
+                <SortIndicator column="name" />
+              </button>
+              <span className="col-span-2">Info</span>
+              <button
+                onClick={() => handleSort("events")}
+                className="col-span-1 text-center flex items-center justify-center gap-0.5 hover:text-foreground transition-colors min-h-[44px]"
+              >
+                Events
+                <SortIndicator column="events" />
+              </button>
+              <button
+                onClick={() => handleSort("spent")}
+                className="col-span-2 text-center flex items-center justify-center gap-0.5 hover:text-foreground transition-colors min-h-[44px]"
+              >
+                Spent
+                <SortIndicator column="spent" />
+              </button>
+              <span className="col-span-1 text-center flex items-center justify-center">Segment</span>
+              <button
+                onClick={() => handleSort("recent")}
+                className="col-span-1 text-center flex items-center justify-center gap-0.5 hover:text-foreground transition-colors min-h-[44px]"
+              >
+                Last Seen
+                <SortIndicator column="recent" />
+              </button>
+              <span className="col-span-2 text-right flex items-center justify-end">Tags</span>
             </div>
           )}
           {contactType === "industry" && (
             <div className="hidden md:grid grid-cols-12 gap-2 px-4 text-xs font-medium text-muted-foreground">
-              <span className="col-span-3">Contact</span>
+              <button
+                onClick={() => handleSort("name")}
+                className="col-span-3 text-left flex items-center gap-0.5 hover:text-foreground transition-colors min-h-[44px]"
+              >
+                Contact
+                <SortIndicator column="name" />
+              </button>
               <span className="col-span-3">Info</span>
-              <span className="col-span-2 text-center">Role</span>
-              <span className="col-span-2 text-center">Notes</span>
-              <span className="col-span-2 text-right">Tags</span>
+              <span className="col-span-2 text-center flex items-center justify-center">Role</span>
+              <span className="col-span-2 text-center flex items-center justify-center">Notes</span>
+              <span className="col-span-2 text-right flex items-center justify-end">Tags</span>
             </div>
           )}
 
@@ -503,49 +677,89 @@ export function ContactList({
                   </div>
 
                   {/* Contact info column — email, phone, IG */}
-                  <div className="col-span-3 min-w-0 space-y-0.5">
-                    {contact.email && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
-                        <Mail className="h-3 w-3 shrink-0" />
-                        <span className="truncate">{contact.email}</span>
-                      </div>
-                    )}
-                    {contact.phone && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                        <Phone className="h-3 w-3 shrink-0" />
-                        <a
-                          href={`tel:${contact.phone}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="hover:text-foreground transition-colors"
-                        >
-                          {contact.phone}
-                        </a>
-                      </div>
-                    )}
-                    {contact.instagram && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
-                        <Instagram className="h-3 w-3 shrink-0" />
-                        <a
-                          href={`https://instagram.com/${contact.instagram.replace(/^@/, "")}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="hover:text-pink-400 transition-colors truncate"
-                        >
-                          @{contact.instagram.replace(/^@/, "")}
-                        </a>
-                      </div>
-                    )}
-                    {!contact.email && !contact.phone && !contact.instagram && (
-                      <span className="text-[11px] text-muted-foreground/40">No contact info</span>
-                    )}
-                  </div>
+                  {contactType === "fan" ? (
+                    <div className="col-span-2 min-w-0 space-y-0.5">
+                      {contact.email && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
+                          <Mail className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{contact.email}</span>
+                        </div>
+                      )}
+                      {contact.phone && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <Phone className="h-3 w-3 shrink-0" />
+                          <a
+                            href={`tel:${contact.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:text-foreground transition-colors"
+                          >
+                            {contact.phone}
+                          </a>
+                        </div>
+                      )}
+                      {contact.instagram && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
+                          <Instagram className="h-3 w-3 shrink-0" />
+                          <a
+                            href={`https://instagram.com/${contact.instagram.replace(/^@/, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:text-pink-400 transition-colors truncate"
+                          >
+                            @{contact.instagram.replace(/^@/, "")}
+                          </a>
+                        </div>
+                      )}
+                      {!contact.email && !contact.phone && !contact.instagram && (
+                        <span className="text-[11px] text-muted-foreground/40">No contact info</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="col-span-3 min-w-0 space-y-0.5">
+                      {contact.email && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
+                          <Mail className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{contact.email}</span>
+                        </div>
+                      )}
+                      {contact.phone && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <Phone className="h-3 w-3 shrink-0" />
+                          <a
+                            href={`tel:${contact.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:text-foreground transition-colors"
+                          >
+                            {contact.phone}
+                          </a>
+                        </div>
+                      )}
+                      {contact.instagram && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
+                          <Instagram className="h-3 w-3 shrink-0" />
+                          <a
+                            href={`https://instagram.com/${contact.instagram.replace(/^@/, "")}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="hover:text-pink-400 transition-colors truncate"
+                          >
+                            @{contact.instagram.replace(/^@/, "")}
+                          </a>
+                        </div>
+                      )}
+                      {!contact.email && !contact.phone && !contact.instagram && (
+                        <span className="text-[11px] text-muted-foreground/40">No contact info</span>
+                      )}
+                    </div>
+                  )}
 
                   {contactType === "fan" ? (
                     <>
-                      <p className="col-span-1 text-center text-sm">
-                        {contact.total_events ?? 0}
-                      </p>
+                      <div className="col-span-1 text-center">
+                        <p className="text-sm">{contact.total_events ?? 0}</p>
+                      </div>
                       <p className="col-span-2 text-center font-medium text-nocturn">
                         ${(contact.total_spend ?? 0).toFixed(2)}
                       </p>
@@ -558,6 +772,11 @@ export function ContactList({
                             {contact.segment}
                           </Badge>
                         )}
+                      </div>
+                      <div className="col-span-1 text-center">
+                        <span className="text-[11px] text-muted-foreground">
+                          {getLastSeenDate(contact)}
+                        </span>
                       </div>
                     </>
                   ) : (
@@ -702,6 +921,12 @@ export function ContactList({
                           <span className="text-[10px] text-muted-foreground">
                             {contact.total_events ?? 0} event
                             {(contact.total_events ?? 0) !== 1 ? "s" : ""}
+                          </span>
+                        )}
+                        {/* Last seen */}
+                        {contactType === "fan" && getLastSeenDate(contact) && (
+                          <span className="text-[10px] text-muted-foreground/60">
+                            · {getLastSeenDate(contact)}
                           </span>
                         )}
                         {/* Follow-up */}
