@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { NocturnLogo } from "@/components/nocturn-logo";
 
 export const metadata: Metadata = {
-  title: "Log in — Nocturn",
+  title: { default: "Nocturn", template: "%s — Nocturn" },
   description: "Sign in to your Nocturn account. AI-powered operations for music collectives and promoters.",
 };
 

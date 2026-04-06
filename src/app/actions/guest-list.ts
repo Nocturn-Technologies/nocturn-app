@@ -2,6 +2,9 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { sendEmail } from "@/lib/email/send";
+import { escapeHtml } from "@/lib/html";
+import { DEFAULT_TIMEZONE } from "@/lib/utils";
 
 /** Verify the caller is an admin/member of the collective that owns this event */
 async function verifyEventAccess(eventId: string): Promise<{ error: string | null; userId: string | null }> {
@@ -81,6 +84,61 @@ export async function addGuest(input: {
     });
 
     if (error) return { error: "Failed to add guest" };
+
+    // Send notification email to guest (fire-and-forget — don't block on failure)
+    const guestEmail = input.email?.trim();
+    if (guestEmail) {
+      try {
+        const { data: event } = await supabase
+          .from("events")
+          .select("title, starts_at, venues(name, city)")
+          .eq("id", input.eventId)
+          .maybeSingle();
+
+        if (event) {
+          const venue = event.venues as unknown as { name: string; city: string } | null;
+          const eventDate = new Date(event.starts_at);
+          const tz = DEFAULT_TIMEZONE;
+
+          const html = `
+            <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
+              <p style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</p>
+
+              <h2 style="margin: 16px 0 8px; font-size: 22px;">You're on the list ✨</h2>
+
+              <p style="color: #A1A1AA; line-height: 1.6; font-size: 15px;">
+                Hey ${escapeHtml(input.name.trim())}, you've been added to the guest list for:
+              </p>
+
+              <div style="background: #18181B; border-radius: 12px; padding: 20px; margin: 16px 0;">
+                <h3 style="margin: 0 0 12px; font-size: 18px; font-weight: 700;">${escapeHtml(event.title)}</h3>
+                <p style="color: #A1A1AA; margin: 4px 0;">📅 ${eventDate.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", timeZone: tz })}</p>
+                <p style="color: #A1A1AA; margin: 4px 0;">⏰ ${eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz })}</p>
+                ${venue ? `<p style="color: #A1A1AA; margin: 4px 0;">📍 ${escapeHtml(venue.name)}, ${escapeHtml(venue.city)}</p>` : ""}
+              </div>
+
+              <p style="color: #A1A1AA; line-height: 1.6; font-size: 15px;">
+                Just give your name at the door. See you there.
+              </p>
+
+              <p style="color: #71717A; font-size: 12px; margin-top: 24px;">
+                Sent via Nocturn.
+              </p>
+            </div>
+          `;
+
+          await sendEmail({
+            to: guestEmail,
+            subject: `You're on the guest list for ${event.title}`,
+            html,
+          });
+        }
+      } catch (emailErr) {
+        // Log but don't fail the guest addition
+        console.error("[addGuest] Failed to send notification email:", emailErr);
+      }
+    }
+
     return { error: null };
   } catch (err) {
     console.error("[addGuest]", err);

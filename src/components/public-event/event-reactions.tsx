@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { createClient } from "@/lib/supabase/client";
+import { addReaction, getReactionsByFingerprint } from "@/app/actions/event-reactions";
 
 const EMOJIS = ["🔥", "💯", "🙌", "🎉", "💜"] as const;
 
@@ -42,18 +42,12 @@ export function EventReactions({ eventId, initialCounts }: EventReactionsProps) 
   // Load which emojis this user already reacted to
   useEffect(() => {
     const fp = getFingerprint();
-    const supabase = createClient();
 
-    supabase
-      .from("event_reactions")
-      .select("emoji")
-      .eq("event_id", eventId)
-      .eq("fingerprint", fp)
-      .then(({ data }) => {
-        if (data) {
-          setReacted(new Set(data.map((r) => r.emoji)));
-        }
-      });
+    getReactionsByFingerprint(eventId, fp).then((emojis) => {
+      if (emojis.length > 0) {
+        setReacted(new Set(emojis));
+      }
+    });
   }, [eventId]);
 
   const handleReaction = useCallback(
@@ -61,7 +55,6 @@ export function EventReactions({ eventId, initialCounts }: EventReactionsProps) 
       if (reacted.has(emoji)) return; // already reacted
 
       const fp = getFingerprint();
-      const supabase = createClient();
 
       // Optimistic update
       setCounts((prev) => ({ ...prev, [emoji]: (prev[emoji] || 0) + 1 }));
@@ -69,12 +62,14 @@ export function EventReactions({ eventId, initialCounts }: EventReactionsProps) 
       setAnimating(emoji);
       setTimeout(() => setAnimating(null), 600);
 
-      const { error } = await supabase
-        .from("event_reactions")
-        .insert({ event_id: eventId, emoji, fingerprint: fp });
+      const { error } = await addReaction({
+        eventId,
+        emoji,
+        fingerprint: fp,
+      });
 
       if (error) {
-        // Revert on conflict (already reacted)
+        // Revert on failure
         setCounts((prev) => ({ ...prev, [emoji]: Math.max(0, (prev[emoji] || 0) - 1) }));
         setReacted((prev) => {
           const next = new Set(prev);

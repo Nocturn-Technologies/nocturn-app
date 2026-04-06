@@ -69,13 +69,16 @@ function DiscoverContent() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<"discover" | "network">("discover");
   const [collectiveId, setCollectiveId] = useState<string | undefined>(undefined);
-  const [category, setCategory] = useState("all");
+  const [category, setCategory] = useState(() => {
+    const tab = searchParams.get("tab");
+    return tab === "venues" ? "venue" : "all";
+  });
   const [query, setQuery] = useState("");
   const [cityFilter, setCityFilter] = useState("");
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
 
-  // Handle ?tab=venues query param
+  // Handle ?tab=venues query param changes after mount
   useEffect(() => {
     const tab = searchParams.get("tab");
     if (tab === "venues") {

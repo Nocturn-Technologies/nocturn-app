@@ -642,22 +642,13 @@ export default function EventDesignPage() {
 
                 <div className="flex gap-2">
                   <Button
-                    onClick={handleGeneratePoster}
-                    disabled={generating}
-                    className="flex-1 bg-nocturn hover:bg-nocturn-light py-5"
+                    disabled={true}
+                    className="flex-1 bg-nocturn/30 hover:bg-nocturn/30 py-5 cursor-not-allowed opacity-50"
                     size="lg"
+                    title="AI poster generation is coming soon"
                   >
-                    {generating ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Designing...
-                      </>
-                    ) : (
-                      <>
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        AI Generate
-                      </>
-                    )}
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    AI Generate — Soon
                   </Button>
                   <Button
                     onClick={() => searchUnsplash()}

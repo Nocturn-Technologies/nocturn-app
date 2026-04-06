@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Navigation, Music } from "lucide-react";
+import { Navigation, Music, MapPin } from "lucide-react";
 import { TicketSection } from "@/components/public-event/ticket-section";
 import { ShareButton } from "@/components/public-event/share-button";
 import { PublicEventShareCard } from "@/components/public-event/public-event-share-card";
@@ -413,22 +413,15 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
         {venue && (
           <div className="py-8 border-t border-white/[0.04]">
             <div className="rounded-[20px] overflow-hidden border border-white/[0.06] bg-white/[0.015]">
-              <div className="relative h-40 w-full">
-                <iframe
-                  src={`https://www.google.com/maps/embed/v1/place?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY}&q=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}&zoom=15&maptype=roadmap`}
-                  className="h-full w-full border-0 opacity-50 grayscale contrast-[1.2] saturate-0"
-                  allowFullScreen={false}
-                  loading="lazy"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  title={`Map of ${venue.name}`}
-                />
+              <div className="relative h-40 w-full bg-gradient-to-br from-[#1a1a2e] via-[#16162a] to-[#0e0e12] flex items-center justify-center">
+                <MapPin className="h-10 w-10 text-white/10" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0e0e12] via-transparent to-[#09090B]/40 pointer-events-none" />
-                <div className="absolute bottom-3 left-4 text-[10px] font-semibold tracking-[0.2em] uppercase text-white/20 px-2.5 py-1 border border-white/[0.08] rounded">MAP</div>
+                <div className="absolute bottom-3 left-4 text-[10px] font-semibold tracking-[0.2em] uppercase text-white/20 px-2.5 py-1 border border-white/[0.08] rounded">VENUE</div>
               </div>
               <div className="px-6 py-5">
                 <p className="font-heading text-[24px] font-bold text-white">{venue.name}</p>
                 <p className="text-[14px] text-white/30 mt-1">
-                  {venue.address}{venue.address && venue.city ? ", " : ""}{venue.city}
+                  {[venue.address, venue.city].filter((part) => typeof part === "string" && part.trim().length > 0).join(", ")}
                 </p>
                 {mapsUrl && (
                   <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
