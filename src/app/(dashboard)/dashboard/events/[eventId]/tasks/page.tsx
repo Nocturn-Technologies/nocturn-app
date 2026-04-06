@@ -178,7 +178,7 @@ export default function EventTasksPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
-          <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
         <div className="flex-1">
           <h1 className="text-2xl font-bold font-heading">Event Playbook</h1>
@@ -222,10 +222,10 @@ export default function EventTasksPage() {
         <div className="space-y-4">
           {/* Actions bar */}
           <div className="flex gap-2 flex-wrap">
-            <Button size="sm" variant="outline" onClick={() => setShowNewTask(!showNewTask)}>
+            <Button size="sm" variant="outline" className="min-h-[44px]" onClick={() => setShowNewTask(!showNewTask)}>
               <Plus className="mr-1 h-3 w-3" /> Add Task
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowPlaybooks(!showPlaybooks)}>
+            <Button size="sm" variant="outline" className="min-h-[44px]" onClick={() => setShowPlaybooks(!showPlaybooks)}>
               <ListChecks className="mr-1 h-3 w-3" /> Apply Playbook
             </Button>
           </div>
@@ -290,7 +290,7 @@ export default function EventTasksPage() {
                   onChange={(e) => setNewDueDate(e.target.value)}
                   className="flex-1"
                 />
-                <Button type="submit" size="sm" className="bg-nocturn hover:bg-nocturn-light" disabled={adding}>
+                <Button type="submit" size="sm" className="min-h-[44px] bg-nocturn hover:bg-nocturn-light" disabled={adding}>
                   {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
                 </Button>
               </div>

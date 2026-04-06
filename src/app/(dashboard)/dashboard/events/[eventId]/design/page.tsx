@@ -473,7 +473,7 @@ export default function EventDesignPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -485,7 +485,7 @@ export default function EventDesignPage() {
         </div>
         {publicUrl && (
           <Link href={publicUrl} target="_blank">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="min-h-[44px]">
               <ExternalLink className="mr-2 h-3 w-3" />
               Preview
             </Button>
@@ -682,7 +682,7 @@ export default function EventDesignPage() {
                         Search
                       </Button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {unsplashResults.map((photo) => (
                         <button
                           key={photo.id}

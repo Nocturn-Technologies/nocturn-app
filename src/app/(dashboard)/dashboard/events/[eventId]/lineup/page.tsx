@@ -168,7 +168,7 @@ export default function LineupPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>

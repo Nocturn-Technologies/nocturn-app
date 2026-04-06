@@ -281,7 +281,7 @@ export default async function ProfileDetailPage({
                   Performance with your collective
                 </h3>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="text-center">
                   <div className="text-xl font-bold">
                     {performance.totalEvents}

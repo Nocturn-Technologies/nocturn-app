@@ -215,7 +215,7 @@ export default function CheckInScannerPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -283,7 +283,7 @@ export default function CheckInScannerPage() {
                 className="flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-nocturn"
                 autoFocus
               />
-              <Button type="submit" disabled={!manualToken.trim() || processing} size="sm">
+              <Button type="submit" disabled={!manualToken.trim() || processing} size="sm" className="min-h-[44px]">
                 Check In
               </Button>
             </form>

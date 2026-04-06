@@ -425,8 +425,76 @@ export function EventPnlSpreadsheet({ financials }: Props) {
         />
       </div>
 
-      {/* Spreadsheet Table */}
-      <div className="rounded-xl border border-border overflow-hidden bg-card">
+      {/* Mobile Card Layout */}
+      <div className="md:hidden space-y-3">
+        {/* Revenue */}
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-4 py-2.5 bg-green-500/5 flex items-center gap-2 border-b border-border">
+            <TrendingUp className="h-4 w-4 text-green-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-green-400">Revenue</span>
+          </div>
+          <div className="divide-y divide-border/50">
+            {financials.ticketTiers.map((tier) => (
+              <div key={tier.id} className="px-4 py-3 flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{tier.name}</p>
+                  <p className="text-xs text-muted-foreground">{tier.sold} / {tier.capacity} sold @ {formatCurrency(tier.price)}</p>
+                </div>
+                <span className="text-sm font-mono tabular-nums text-green-400 shrink-0 ml-3">{formatCurrency(tier.revenue)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Expenses */}
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="px-4 py-2.5 bg-red-500/5 flex items-center gap-2 border-b border-border">
+            <TrendingDown className="h-4 w-4 text-red-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-red-400">Expenses</span>
+          </div>
+          <div className="divide-y divide-border/50">
+            {financials.stripeFees > 0 && (
+              <div className="px-4 py-3 flex items-center justify-between">
+                <div><p className="text-sm">Stripe Fees</p><p className="text-xs text-muted-foreground">Processing</p></div>
+                <span className="text-sm font-mono tabular-nums text-red-400">-{formatCurrency(financials.stripeFees)}</span>
+              </div>
+            )}
+            {financials.platformFees > 0 && (
+              <div className="px-4 py-3 flex items-center justify-between">
+                <div><p className="text-sm">Platform Fee</p><p className="text-xs text-muted-foreground">Nocturn 7% + $0.50</p></div>
+                <span className="text-sm font-mono tabular-nums text-red-400">-{formatCurrency(financials.platformFees)}</span>
+              </div>
+            )}
+            {financials.customExpenses.map((exp) => (
+              <div key={exp.id} className="px-4 py-3 flex items-center justify-between">
+                <div className="min-w-0"><p className="text-sm truncate">{exp.description || "Expense"}</p><p className="text-xs text-muted-foreground">{exp.category}</p></div>
+                <span className="text-sm font-mono tabular-nums text-red-400 shrink-0 ml-3">-{formatCurrency(exp.amount)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Totals */}
+        <div className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="divide-y divide-border/50">
+            <div className="px-4 py-3 flex items-center justify-between">
+              <span className="text-sm font-semibold">Net Revenue</span>
+              <span className={`text-sm font-bold font-mono tabular-nums ${financials.netRevenue >= 0 ? "text-foreground" : "text-red-400"}`}>
+                {formatCurrency(financials.netRevenue)}
+              </span>
+            </div>
+            <div className={`px-4 py-4 flex items-center justify-between ${isProfitable ? "bg-green-500/10" : "bg-red-500/10"}`}>
+              <span className="text-sm font-bold uppercase tracking-wide">{isProfitable ? "Profit" : "Loss"}</span>
+              <span className={`text-lg font-black font-mono tabular-nums ${isProfitable ? "text-green-400" : "text-red-400"}`}>
+                {isProfitable ? "" : "-"}{formatCurrency(Math.abs(financials.profitLoss))}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop Spreadsheet Table */}
+      <div className="hidden md:block rounded-xl border border-border overflow-hidden bg-card">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             {/* Header */}

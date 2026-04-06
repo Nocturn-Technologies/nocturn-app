@@ -30,7 +30,7 @@ export default async function PromotePage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card>
           <CardContent className="pt-4 pb-3 px-4">
             <div className="flex items-center justify-between mb-1">

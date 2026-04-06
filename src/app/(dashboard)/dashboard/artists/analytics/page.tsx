@@ -124,7 +124,7 @@ export default function ArtistAnalyticsPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card>
           <CardContent className="p-4 text-center">
             <Music className="h-5 w-5 text-nocturn mx-auto mb-1" />

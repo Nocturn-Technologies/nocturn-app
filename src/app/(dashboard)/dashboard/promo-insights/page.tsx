@@ -249,7 +249,7 @@ export default async function PromoInsightsPage() {
         <CardContent>
           {audience && audience.totalUniqueAttendees > 0 ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 <div className="rounded-lg bg-muted/50 p-3 text-center">
                   <Users className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
                   <p className="text-xl font-bold">
