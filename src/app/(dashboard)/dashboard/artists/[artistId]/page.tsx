@@ -104,7 +104,7 @@ export default function ArtistDetailPage() {
               <ArrowLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <h1 className="text-2xl font-bold">Artist not found</h1>
+          <h1 className="text-2xl font-bold font-heading">Artist not found</h1>
         </div>
       </div>
     );

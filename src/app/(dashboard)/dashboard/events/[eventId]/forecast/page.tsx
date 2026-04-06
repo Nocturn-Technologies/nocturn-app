@@ -46,7 +46,7 @@ export default function ForecastPage() {
           <Link href={`/dashboard/events/${eventId}`}>
             <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
           </Link>
-          <h1 className="text-2xl font-bold">Financial Forecast</h1>
+          <h1 className="text-2xl font-bold font-heading">Financial Forecast</h1>
         </div>
         <Card>
           <CardContent className="py-12 text-center">
@@ -68,7 +68,7 @@ export default function ForecastPage() {
           <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">Financial Forecast</h1>
+          <h1 className="text-2xl font-bold font-heading">Financial Forecast</h1>
           <p className="text-sm text-muted-foreground">
             {f.daysUntilEvent > 0 ? `${f.daysUntilEvent} days until event` : "Event has passed"}
           </p>
@@ -101,7 +101,7 @@ export default function ForecastPage() {
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-xs text-muted-foreground">Tickets Sold</p>
-            <p className="text-2xl font-bold">{f.ticketsSoldSoFar}</p>
+            <p className="text-2xl font-bold font-heading">{f.ticketsSoldSoFar}</p>
             <p className="text-[10px] text-muted-foreground mt-1">
               of {f.totalCapacity} ({Math.round(f.sellThroughRate * 100)}%)
             </p>
@@ -110,7 +110,7 @@ export default function ForecastPage() {
         <Card>
           <CardContent className="p-4 text-center">
             <p className="text-xs text-muted-foreground">Break Even</p>
-            <p className="text-2xl font-bold">{f.breakEvenTickets}</p>
+            <p className="text-2xl font-bold font-heading">{f.breakEvenTickets}</p>
             <p className="text-[10px] text-muted-foreground mt-1">
               {f.ticketsSoldSoFar >= f.breakEvenTickets ? "✅ Passed!" : `${f.breakEvenTickets - f.ticketsSoldSoFar} more needed`}
             </p>

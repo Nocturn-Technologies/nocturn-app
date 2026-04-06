@@ -181,7 +181,7 @@ export default function EventTasksPage() {
           <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">Event Playbook</h1>
+          <h1 className="text-2xl font-bold font-heading">Event Playbook</h1>
           <p className="text-sm text-muted-foreground">Tasks, delegation & updates</p>
         </div>
       </div>

@@ -270,7 +270,7 @@ export default async function FinancePage() {
 
         return (
           <div className="space-y-3">
-            <h2 className="flex items-center gap-2 text-lg font-semibold">
+            <h2 className="flex items-center gap-2 text-lg font-semibold font-heading">
               <Flame className="h-5 w-5 text-orange-500" />
               Needs Your Attention
             </h2>
@@ -317,7 +317,7 @@ export default async function FinancePage() {
       {/* ===== SECTION 5: Payout Status ===== */}
       {settlements.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Payout Status</h2>
+          <h2 className="text-lg font-semibold font-heading">Payout Status</h2>
           <div className="space-y-2">
             {settlements.map((s) => {
               const event = s.events as unknown as {

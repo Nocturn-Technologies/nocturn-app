@@ -478,7 +478,7 @@ export default function EventDesignPage() {
           </Button>
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold truncate">Design — {eventTitle}</h1>
+          <h1 className="text-2xl font-bold font-heading truncate">Design — {eventTitle}</h1>
           <p className="text-sm text-muted-foreground">
             Customize how your event page looks to attendees
           </p>

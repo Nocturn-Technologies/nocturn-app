@@ -173,7 +173,7 @@ export default function LineupPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold">Lineup</h1>
+          <h1 className="text-2xl font-bold font-heading">Lineup</h1>
           <p className="text-sm text-muted-foreground">{eventTitle}</p>
         </div>
       </div>
@@ -316,7 +316,7 @@ export default function LineupPage() {
                     <Music className="h-5 w-5 text-nocturn" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium">{item.artists.name}</p>
+                    <p className="font-medium truncate">{item.artists.name}</p>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       {item.artists.genre?.length > 0 && (
                         <span>{item.artists.genre.join(", ")}</span>

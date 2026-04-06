@@ -58,7 +58,7 @@ export default async function PromoInsightsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">Promo Insights</h1>
+          <h1 className="text-2xl font-bold font-heading">Promo Insights</h1>
           <p className="text-sm text-muted-foreground">
             Join a collective to see your promo intelligence
           </p>
@@ -105,7 +105,7 @@ export default async function PromoInsightsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Promo Insights</h1>
+        <h1 className="text-2xl font-bold font-heading">Promo Insights</h1>
         <p className="text-sm text-muted-foreground">
           Data-driven timing for your posts and promotions
         </p>

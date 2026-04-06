@@ -220,7 +220,7 @@ export default function CheckInScannerPage() {
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-xl font-bold flex items-center gap-2">
+          <h1 className="text-xl font-bold font-heading flex items-center gap-2">
             <ScanLine className="h-5 w-5 text-nocturn" />
             Door Check-In
           </h1>

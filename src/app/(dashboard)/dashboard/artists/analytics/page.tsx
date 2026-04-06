@@ -116,7 +116,7 @@ export default function ArtistAnalyticsPage() {
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
-          <h1 className="text-2xl font-bold">Artist Performance</h1>
+          <h1 className="text-2xl font-bold font-heading">Artist Performance</h1>
           <p className="text-sm text-muted-foreground">
             Track which DJs drive ticket sales across your events
           </p>

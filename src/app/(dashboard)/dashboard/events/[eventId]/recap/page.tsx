@@ -65,7 +65,7 @@ export default function RecapPage() {
           <Link href={`/dashboard/events/${eventId}`}>
             <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
           </Link>
-          <h1 className="text-2xl font-bold">Post-Event Recap</h1>
+          <h1 className="text-2xl font-bold font-heading">Post-Event Recap</h1>
         </div>
         <Card>
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
@@ -86,7 +86,7 @@ export default function RecapPage() {
           <Button variant="ghost" size="icon"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold">{r.event.title}</h1>
+          <h1 className="text-2xl font-bold font-heading truncate">{r.event.title}</h1>
           <p className="text-sm text-muted-foreground">{r.event.date} · {r.event.venue}</p>
         </div>
         <div className="flex items-center gap-1.5 rounded-full bg-nocturn/10 px-3 py-1">
@@ -111,7 +111,7 @@ export default function RecapPage() {
         <Card>
           <CardContent className="p-4 text-center">
             <Ticket className="h-5 w-5 mx-auto mb-1 text-nocturn" />
-            <p className="text-2xl font-bold">{r.financial.ticketsSold}</p>
+            <p className="text-2xl font-bold font-heading">{r.financial.ticketsSold}</p>
             <p className="text-xs text-muted-foreground">Tickets Sold</p>
             <p className="text-[10px] text-muted-foreground">
               {Math.round(r.financial.sellThrough * 100)}% of {r.financial.capacity}
@@ -121,7 +121,7 @@ export default function RecapPage() {
         <Card>
           <CardContent className="p-4 text-center">
             <DollarSign className="h-5 w-5 mx-auto mb-1 text-green-500" />
-            <p className="text-2xl font-bold">${r.financial.grossRevenue.toFixed(0)}</p>
+            <p className="text-2xl font-bold font-heading">${r.financial.grossRevenue.toFixed(0)}</p>
             <p className="text-xs text-muted-foreground">Gross Revenue</p>
             <p className="text-[10px] text-muted-foreground">
               Avg ${r.financial.avgTicketPrice.toFixed(0)}/ticket
@@ -131,7 +131,7 @@ export default function RecapPage() {
         <Card>
           <CardContent className="p-4 text-center">
             <Users className="h-5 w-5 mx-auto mb-1 text-blue-500" />
-            <p className="text-2xl font-bold">{r.attendance.checkedIn}</p>
+            <p className="text-2xl font-bold font-heading">{r.attendance.checkedIn}</p>
             <p className="text-xs text-muted-foreground">Checked In</p>
             <p className="text-[10px] text-muted-foreground">
               {Math.round(r.attendance.checkInRate * 100)}% show rate · {r.attendance.noShows} no-shows

@@ -152,7 +152,7 @@ export default function VenueMePage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">
+        <h1 className="text-2xl font-bold font-heading">
           {venueId ? "Your Venue" : "List Your Venue"}
         </h1>
         <p className="text-sm text-muted-foreground">

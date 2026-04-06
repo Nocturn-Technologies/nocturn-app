@@ -96,7 +96,7 @@ export default function PlaybookPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Event Playbook</h1>
+        <h1 className="text-2xl font-bold font-heading">Event Playbook</h1>
         <p className="text-sm text-muted-foreground">
           {playbook.totalPosts} posts + {playbook.totalTasks} ops tasks across {playbook.phases.length} phases
         </p>

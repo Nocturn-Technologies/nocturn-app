@@ -133,7 +133,7 @@ export default async function ProfileDetailPage({
 
         {/* Display name + verified */}
         <div className="mt-3 flex items-center gap-2">
-          <h1 className="text-2xl font-bold">{profile.display_name}</h1>
+          <h1 className="text-2xl font-bold font-heading truncate">{profile.display_name}</h1>
           {profile.is_verified && (
             <CheckCircle className="h-5 w-5 text-blue-400 fill-blue-400/20" />
           )}

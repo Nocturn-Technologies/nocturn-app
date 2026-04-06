@@ -23,7 +23,7 @@ export default async function PromotePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Promote</h1>
+        <h1 className="text-2xl font-bold font-heading">Promote</h1>
         <p className="text-sm text-muted-foreground">
           Share your link, sell tickets, track everything
         </p>

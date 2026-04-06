@@ -130,7 +130,7 @@ export default function InquiriesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Inquiries</h1>
+        <h1 className="text-2xl font-bold font-heading">Inquiries</h1>
         <p className="text-sm text-muted-foreground">
           Messages from collectives and promoters who want to work with you
         </p>
