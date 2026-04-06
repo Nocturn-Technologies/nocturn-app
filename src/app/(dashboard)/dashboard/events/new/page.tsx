@@ -1265,7 +1265,14 @@ export default function NewEventPage() {
 
       // Handle tickets step — free event ask about bar revenue, or advance
       if (step === "tickets") {
-        if (parsed.ticketPrice === 0 && !merged.barMinimum) {
+        // Check if user mentioned bar revenue even if parser didn't extract barMinimum
+        const lower = userMsg.toLowerCase();
+        const mentionsBarRevenue = /bar\s*(revenue|percent|%|split|sales|minimum)|percentage.*bar|we\s*get\s*\d+%/i.test(userMsg);
+        const isNo = /^(no|nah|nope|skip|none|not really)/i.test(lower);
+        const alreadyAskedBarQ = messages.some(m => m.role === "ai" && typeof m.content === "string" && m.content.includes("Are you earning revenue another way"));
+
+        // First time seeing free pricing and haven't asked about bar revenue yet
+        if (parsed.ticketPrice === 0 && !merged.barMinimum && !mentionsBarRevenue && !alreadyAskedBarQ) {
           setThinking(false);
           setMessages((prev) => [
             ...prev,
@@ -1275,11 +1282,9 @@ export default function NewEventPage() {
         }
 
         // User answered the bar revenue question or provided pricing — advance
-        const lower = userMsg.toLowerCase();
-        const isNo = /^(no|nah|nope|skip|none|not really)/.test(lower);
-        if (isNo || parsed.ticketPrice !== undefined || parsed.barMinimum !== undefined || parsed.venueCapacity !== undefined) {
+        if (isNo || parsed.ticketPrice !== undefined || parsed.barMinimum !== undefined || parsed.venueCapacity !== undefined || mentionsBarRevenue || alreadyAskedBarQ) {
           setThinking(false);
-          if (isNo && merged.ticketPrice === 0) {
+          if ((isNo || (!mentionsBarRevenue && !parsed.barMinimum)) && merged.ticketPrice === 0 && alreadyAskedBarQ) {
             // Free event, no other revenue — skip budget planner, go to review
             setMessages((prev) => [
               ...prev,
@@ -1289,7 +1294,7 @@ export default function NewEventPage() {
             setPhase("review");
             return;
           }
-          // Has pricing info — advance to budget planning
+          // Has pricing or bar revenue info — advance to budget planning
           setMessages((prev) => [
             ...prev,
             { role: "ai", content: reply || "Got it!" },
