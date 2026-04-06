@@ -438,7 +438,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
               <div key={tier.id} className="px-4 py-3 flex items-center justify-between">
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{tier.name}</p>
-                  <p className="text-xs text-muted-foreground">{tier.sold} / {tier.capacity} sold @ {formatCurrency(tier.price)}</p>
+                  <p className="text-xs text-muted-foreground">{tier.ticketsSold} / {tier.capacity} sold @ {formatCurrency(tier.price)}</p>
                 </div>
                 <span className="text-sm font-mono tabular-nums text-green-400 shrink-0 ml-3">{formatCurrency(tier.revenue)}</span>
               </div>
@@ -465,7 +465,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                 <span className="text-sm font-mono tabular-nums text-red-400">-{formatCurrency(financials.platformFees)}</span>
               </div>
             )}
-            {financials.customExpenses.map((exp) => (
+            {financials.expenses.map((exp) => (
               <div key={exp.id} className="px-4 py-3 flex items-center justify-between">
                 <div className="min-w-0"><p className="text-sm truncate">{exp.description || "Expense"}</p><p className="text-xs text-muted-foreground">{exp.category}</p></div>
                 <span className="text-sm font-mono tabular-nums text-red-400 shrink-0 ml-3">-{formatCurrency(exp.amount)}</span>
