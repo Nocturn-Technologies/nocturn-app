@@ -113,6 +113,8 @@ Today is ${new Date().toISOString().split("T")[0]}. "10pm"="22:00". Assume PM fo
       if (parsed.date && typeof parsed.date !== 'string') delete parsed.date;
       if (parsed.startTime && typeof parsed.startTime !== 'string') delete parsed.startTime;
       if (parsed.ticketPrice !== undefined && typeof parsed.ticketPrice !== 'number') delete parsed.ticketPrice;
+      // Don't let AI assume free ($0) unless user explicitly said "free"/"no charge"/"$0"
+      if (parsed.ticketPrice === 0 && !/\bfree\b|no\s*charge|no\s*cost|\$0\b|zero\s*dollars/.test(message.toLowerCase())) delete parsed.ticketPrice;
       if (parsed.ticketQuantity !== undefined && typeof parsed.ticketQuantity !== 'number') delete parsed.ticketQuantity;
       const reply = parsed.reply || generateReply({ ...existingData, ...parsed }, parsed);
       delete parsed.reply;
