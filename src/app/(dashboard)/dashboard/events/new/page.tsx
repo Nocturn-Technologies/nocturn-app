@@ -9,7 +9,7 @@ import {
 } from "@/app/actions/ai-parse-event";
 import { getTicketPricingSuggestion, type PricingSuggestion } from "@/app/actions/pricing-suggestion";
 import { calculateBudget, type BudgetResult, type BudgetInput } from "@/app/actions/budget-planner";
-import { applyLaunchPlaybook, getPlaybookOptions, type PlaybookOption } from "@/app/actions/launch-playbook";
+import { applyLaunchPlaybook } from "@/app/actions/launch-playbook";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1829,7 +1829,11 @@ function PlaybookSelector({
   onSkip: () => void;
   applying: boolean;
 }) {
-  const options = getPlaybookOptions();
+  const options = [
+    { id: "launch-promote", name: "Launch & Promote", description: "25 tasks covering promo plan, logistics, and post-event wrap", taskCount: 25, icon: "rocket", recommended: true },
+    { id: "lean-launch", name: "Lean Launch", description: "10 essential tasks for small or free events", taskCount: 10, icon: "zap", recommended: false },
+    { id: "full-campaign", name: "Full Campaign", description: "33 tasks including press, paid ads, video, and influencer outreach", taskCount: 33, icon: "megaphone", recommended: false },
+  ];
 
   return (
     <div className="flex flex-col gap-5 py-6 animate-fade-in-up">

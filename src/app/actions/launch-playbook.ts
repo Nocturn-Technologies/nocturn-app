@@ -97,7 +97,7 @@ const PLAYBOOK_MAP: Record<string, PlaybookTask[]> = {
   "full-campaign": FULL_CAMPAIGN,
 };
 
-export function getPlaybookOptions(): PlaybookOption[] {
+export async function getPlaybookOptions(): Promise<PlaybookOption[]> {
   return [
     {
       id: "launch-promote",
