@@ -21,6 +21,7 @@ export interface ParsedEventDetails {
   venueCapacity?: number;
   description?: string;
   ticketPrice?: number;
+  ticketPriceMax?: number; // upper end of a price range (e.g. "$20-$50" → ticketPrice=20, ticketPriceMax=50)
   ticketQuantity?: number;
   ticketTierName?: string;
   tiers?: TicketTier[];
@@ -85,8 +86,8 @@ User says: "${message}"
 Return ONLY valid JSON with any of these fields (omit what's not mentioned):
 - title (string), date (YYYY-MM-DD), startTime (HH:MM 24h), endTime (HH:MM 24h), doorsOpen (HH:MM 24h)
 - venueName (string), venueAddress (string), venueCity (string), venueCapacity (number)
-- description (string), ticketPrice (number — use 0 for free events), ticketQuantity (number), ticketTierName (string)
-- tiers (array of {name, price, capacity}): if user wants to update ticket tier prices or capacities. For free events, set price to 0.
+- description (string), ticketPrice (number — use 0 for free events), ticketPriceMax (number — upper end if user gives a range like "$20-$50"), ticketQuantity (number), ticketTierName (string)
+- tiers (array of {name, price, capacity}): if user wants to update ticket tier prices or capacities. For free events, set price to 0. If user gives a range like "$20 to $50", set ticketPrice=20 and ticketPriceMax=50 instead of creating tiers.
 - talentFee (number): if user mentions talent fee, DJ fee, artist fee, headliner fee
 - venueCost (number): if user mentions venue rental, room cost
 - barMinimum (number): if user mentions bar minimum
@@ -113,6 +114,7 @@ Today is ${new Date().toISOString().split("T")[0]}. "10pm"="22:00". Assume PM fo
       if (parsed.date && typeof parsed.date !== 'string') delete parsed.date;
       if (parsed.startTime && typeof parsed.startTime !== 'string') delete parsed.startTime;
       if (parsed.ticketPrice !== undefined && typeof parsed.ticketPrice !== 'number') delete parsed.ticketPrice;
+      if (parsed.ticketPriceMax !== undefined && typeof parsed.ticketPriceMax !== 'number') delete parsed.ticketPriceMax;
       // Don't let AI assume free ($0) unless user explicitly said "free"/"no charge"/"$0"
       if (parsed.ticketPrice === 0 && !/\bfree\b|no\s*charge|no\s*cost|\$0\b|zero\s*dollars/.test(message.toLowerCase())) delete parsed.ticketPrice;
       if (parsed.ticketQuantity !== undefined && typeof parsed.ticketQuantity !== 'number') delete parsed.ticketQuantity;
@@ -272,6 +274,20 @@ function localParse(message: string, existing: Partial<ParsedEventDetails>): Par
   if (/\bfree\b|no\s*charge|no\s*cost|\$0\b|zero\s*dollars/.test(lower)) {
     result.ticketPrice = 0;
   }
+  // Price range: "$20-$50", "$20 to $50", "20-50 dollars", "range from $20 to $50"
+  const priceRangeMatch = lower.match(/\$(\d+)\s*(?:-|–|to)\s*\$?(\d+)|(\d+)\s*(?:-|–|to)\s*(\d+)\s*(?:dollars|bucks)/);
+  if (priceRangeMatch && result.ticketPrice === undefined) {
+    const low = parseInt(priceRangeMatch[1] || priceRangeMatch[3]);
+    const high = parseInt(priceRangeMatch[2] || priceRangeMatch[4]);
+    if (low < high) {
+      result.ticketPrice = low;
+      result.ticketPriceMax = high;
+    } else {
+      result.ticketPrice = Math.min(low, high);
+      result.ticketPriceMax = Math.max(low, high);
+    }
+  }
+  // Single price: "$25", "25 dollars", "price is 25"
   const priceMatch = lower.match(/\$(\d+(?:\.\d{2})?)|(\d+)\s*(?:dollars|bucks)|price\s+(?:is\s+)?(\d+)/);
   if (priceMatch && result.ticketPrice === undefined) result.ticketPrice = parseFloat(priceMatch[1] || priceMatch[2] || priceMatch[3]);
 
@@ -320,7 +336,11 @@ function generateReply(allData: Partial<ParsedEventDetails>, newData: Partial<Pa
   if (newData.doorsOpen) justParsed.push("doors time");
   if (newData.venueName) justParsed.push(`venue (${newData.venueName})`);
   if (newData.venueCity) justParsed.push(`city (${newData.venueCity})`);
-  if (newData.ticketPrice !== undefined) justParsed.push("pricing");
+  if (newData.ticketPrice !== undefined && newData.ticketPriceMax !== undefined) {
+    justParsed.push(`pricing ($${newData.ticketPrice}-$${newData.ticketPriceMax})`);
+  } else if (newData.ticketPrice !== undefined) {
+    justParsed.push(newData.ticketPrice === 0 ? "pricing (free)" : "pricing");
+  }
   if (newData.venueCapacity) justParsed.push("capacity");
 
   // What's still missing?

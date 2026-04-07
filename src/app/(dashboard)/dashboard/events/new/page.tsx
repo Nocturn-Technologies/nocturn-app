@@ -1068,20 +1068,30 @@ export default function NewEventPage() {
   }
 
   // ── Scale budget tiers to user's entered price ───────────────────────────
-  // If the user told us a ticket price in chat, use it as Early Bird and scale
-  // the rest proportionally instead of using the budget planner's calculated price.
+  // If the user gave a price range ($20-$50), distribute tiers across that range.
+  // If they gave a single price, use it as Early Bird and scale proportionally.
   function scaleBudgetTiers(
     suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning?: string }>,
-    userPrice: number | undefined
+    userPrice: number | undefined,
+    userPriceMax?: number | undefined
   ): TicketTier[] {
-    if (
-      userPrice === undefined ||
-      userPrice <= 0 ||
-      suggestedTiers.length === 0
-    ) {
+    if (suggestedTiers.length === 0) {
+      return [];
+    }
+    // Price range: distribute evenly between low and high
+    if (userPrice !== undefined && userPriceMax !== undefined && userPrice > 0 && userPriceMax > userPrice) {
+      const count = suggestedTiers.length;
+      const step = count > 1 ? (userPriceMax - userPrice) / (count - 1) : 0;
+      return suggestedTiers.map((t, i) => ({
+        name: t.name,
+        price: Math.round(userPrice + step * i),
+        capacity: t.capacity,
+      }));
+    }
+    // Single price: scale proportionally
+    if (userPrice === undefined || userPrice <= 0) {
       return suggestedTiers.map((t) => ({ name: t.name, price: t.price, capacity: t.capacity }));
     }
-    // User price becomes the Early Bird; scale others proportionally
     const baseSuggested = suggestedTiers[0].price;
     if (baseSuggested <= 0) {
       return suggestedTiers.map((t) => ({ name: t.name, price: userPrice, capacity: t.capacity }));
@@ -1163,14 +1173,14 @@ export default function NewEventPage() {
 
           // Auto-populate tiers — scaled to user's entered price if provided
           if (result.suggestedTiers.length > 0) {
-            const scaled = scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice);
+            const scaled = scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice, eventData.ticketPriceMax);
             setTiers(scaled);
           }
 
           setThinking(false);
           // Show budget summary and go to review
           const displayTiers = eventData.ticketPrice && eventData.ticketPrice > 0
-            ? scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice)
+            ? scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice, eventData.ticketPriceMax)
             : result.suggestedTiers;
           const tierSummary = displayTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
           setMessages(prev => [
@@ -1216,14 +1226,14 @@ export default function NewEventPage() {
 
         // Auto-populate tiers — scaled to user's entered price if provided
         if (result.suggestedTiers.length > 0) {
-          const scaled = scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice);
+          const scaled = scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice, eventData.ticketPriceMax);
           setTiers(scaled);
         }
 
         setThinking(false);
 
         const displayTiers = eventData.ticketPrice && eventData.ticketPrice > 0
-          ? scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice)
+          ? scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice, eventData.ticketPriceMax)
           : result.suggestedTiers;
         const tierSummary = displayTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
         setMessages(prev => [
@@ -1263,6 +1273,17 @@ export default function NewEventPage() {
       // Handle ticket tiers from parsed data
       if (parsed.tiers && parsed.tiers.length > 0) {
         setTiers(parsed.tiers);
+      } else if (parsed.ticketPrice !== undefined && parsed.ticketPriceMax !== undefined && tiers.length === 0) {
+        // Price range given (e.g. "$20-$50") — auto-create tiered pricing
+        const totalCap = parsed.ticketQuantity || merged.venueCapacity || 200;
+        const low = parsed.ticketPrice;
+        const high = parsed.ticketPriceMax;
+        const mid = Math.round((low + high) / 2);
+        setTiers([
+          { name: "Early Bird", price: low, capacity: Math.round(totalCap * 0.3) },
+          { name: "General Admission", price: mid, capacity: Math.round(totalCap * 0.5) },
+          { name: "Door", price: high, capacity: Math.round(totalCap * 0.2) },
+        ]);
       } else if (parsed.ticketPrice !== undefined && tiers.length === 0) {
         const cap = parsed.ticketQuantity || merged.venueCapacity || 100;
         setTiers([{
@@ -1354,7 +1375,7 @@ export default function NewEventPage() {
 
           // Update tiers from recalculated budget — scaled to user's price if set
           if (!parsed.tiers && result.suggestedTiers.length > 0) {
-            const scaled = scaleBudgetTiers(result.suggestedTiers, merged.ticketPrice);
+            const scaled = scaleBudgetTiers(result.suggestedTiers, merged.ticketPrice, merged.ticketPriceMax);
             setTiers(scaled);
           }
 
@@ -1366,7 +1387,7 @@ export default function NewEventPage() {
           if (parsed.otherExpenses !== undefined) changes.push(`other expenses → $${parsed.otherExpenses.toLocaleString()}`);
 
           const displayTiers = merged.ticketPrice && merged.ticketPrice > 0
-            ? scaleBudgetTiers(result.suggestedTiers, merged.ticketPrice)
+            ? scaleBudgetTiers(result.suggestedTiers, merged.ticketPrice, merged.ticketPriceMax)
             : result.suggestedTiers;
           const tierSummary = displayTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
 
