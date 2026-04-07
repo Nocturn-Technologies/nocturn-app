@@ -284,7 +284,7 @@ export async function updateTaskStatus(taskId: string, status: string) {
 }
 
 // Update task details (assign, due date)
-export async function updateTaskDetails(taskId: string, updates: { assignedTo?: string | null; dueAt?: string | null }) {
+export async function updateTaskDetails(taskId: string, updates: { assignedTo?: string | null; dueAt?: string | null; description?: string | null }) {
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -298,6 +298,7 @@ export async function updateTaskDetails(taskId: string, updates: { assignedTo?: 
     const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (updates.assignedTo !== undefined) dbUpdates.assigned_to = updates.assignedTo;
     if (updates.dueAt !== undefined) dbUpdates.due_at = updates.dueAt;
+    if (updates.description !== undefined) dbUpdates.description = updates.description;
 
     const { error } = await admin.from("event_tasks").update(dbUpdates).eq("id", taskId);
     if (error) return { error: "Failed to update task" };
@@ -305,6 +306,7 @@ export async function updateTaskDetails(taskId: string, updates: { assignedTo?: 
     const changes: string[] = [];
     if (updates.assignedTo !== undefined) changes.push(updates.assignedTo ? "reassigned" : "unassigned");
     if (updates.dueAt !== undefined) changes.push(`due date ${updates.dueAt ? "set" : "cleared"}`);
+    if (updates.description !== undefined) changes.push("note updated");
 
     await admin.from("event_activity").insert({
       event_id: taskCheck.event_id,
@@ -520,6 +522,20 @@ export async function getMyTasks(limit = 10) {
   } catch (err) {
     console.error("[getMyTasks]", err);
     return [];
+  }
+}
+
+// Get event date for countdown display
+export async function getEventDate(eventId: string): Promise<string | null> {
+  try {
+    if (!eventId?.trim()) return null;
+    const userId = await authAndVerifyEvent(eventId);
+    if (!userId) return null;
+    const admin = createAdminClient();
+    const { data } = await admin.from("events").select("starts_at").eq("id", eventId).maybeSingle();
+    return (data?.starts_at as string) ?? null;
+  } catch {
+    return null;
   }
 }
 

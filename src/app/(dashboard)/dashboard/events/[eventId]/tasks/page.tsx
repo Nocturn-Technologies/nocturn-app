@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,11 @@ import {
   Image,
   UserPlus,
   CalendarClock,
+  Search,
+  Eye,
+  EyeOff,
+  StickyNote,
+  PartyPopper,
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -34,7 +39,9 @@ import {
   postEventMessage,
   getEventActivity,
   getAITaskSuggestions,
+  getEventDate,
 } from "@/app/actions/tasks";
+import { haptic } from "@/lib/haptics";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -90,6 +97,14 @@ function isOverdue(task: Task): boolean {
   return new Date(due) < new Date();
 }
 
+function isDueToday(task: Task): boolean {
+  const due = getDueAt(task);
+  if (!due || task.status === "done") return false;
+  const d = new Date(due);
+  const now = new Date();
+  return d.toDateString() === now.toDateString();
+}
+
 function relativeDue(task: Task): string {
   const due = getDueAt(task);
   if (!due) return "";
@@ -104,6 +119,30 @@ function relativeDue(task: Task): string {
   return d.toLocaleDateString("en", { month: "short", day: "numeric" });
 }
 
+// ─── Completion Animation ────────────────────────────────────────────────────
+
+function CompletionCelebration({ show, is100 }: { show: boolean; is100: boolean }) {
+  if (!show) return null;
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 flex items-center justify-center">
+      <div className="animate-scale-in flex flex-col items-center gap-2">
+        {is100 ? (
+          <>
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500/20 animate-bounce">
+              <PartyPopper className="h-10 w-10 text-green-400" />
+            </div>
+            <p className="text-lg font-bold text-green-400 animate-fade-in-up">All tasks complete!</p>
+          </>
+        ) : (
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-500/20">
+            <Check className="h-7 w-7 text-green-400" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 function EventTasksPageInner() {
@@ -115,11 +154,19 @@ function EventTasksPageInner() {
   const [members, setMembers] = useState<Member[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [eventDate, setEventDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"tasks" | "content" | "feed">(() => {
     const tab = searchParams.get("tab");
     return tab === "content" ? "content" : "tasks";
   });
+
+  // Filters
+  const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [filterOwner, setFilterOwner] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [hideDone, setHideDone] = useState(false);
 
   // New task form
   const [showNewTask, setShowNewTask] = useState(false);
@@ -132,22 +179,30 @@ function EventTasksPageInner() {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
 
+  // Completion animation
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [is100Celebration, setIs100Celebration] = useState(false);
+  const prevDoneCountRef = useRef(0);
+
   useEffect(() => {
     loadAll();
   }, [eventId]);
 
   async function loadAll() {
     setLoading(true);
-    const [t, m, a, s] = await Promise.all([
+    const [t, m, a, s, ed] = await Promise.all([
       getEventTasks(eventId),
       getEventMembers(eventId),
       getEventActivity(eventId),
       getAITaskSuggestions(eventId),
+      getEventDate(eventId),
     ]);
     setTasks(t);
     setMembers(m);
     setActivity(a);
     setSuggestions(s);
+    setEventDate(ed);
+    prevDoneCountRef.current = t.filter((x: Task) => x.status === "done").length;
     setLoading(false);
   }
 
@@ -168,8 +223,32 @@ function EventTasksPageInner() {
   }
 
   async function handleStatusChange(taskId: string, newStatus: string) {
+    // Optimistic: find previous done count
+    const prevDone = prevDoneCountRef.current;
+
     await updateTaskStatus(taskId, newStatus);
-    await loadAll();
+    const [t] = await Promise.all([getEventTasks(eventId)]);
+    setTasks(t);
+
+    const newDone = t.filter((x: Task) => x.status === "done").length;
+
+    // Task was just completed
+    if (newStatus === "done" && newDone > prevDone) {
+      haptic("success");
+
+      // Check if all tasks are now done
+      if (newDone === t.length) {
+        setIs100Celebration(true);
+        setShowCelebration(true);
+        setTimeout(() => setShowCelebration(false), 2500);
+      } else {
+        setIs100Celebration(false);
+        setShowCelebration(true);
+        setTimeout(() => setShowCelebration(false), 800);
+      }
+    }
+
+    prevDoneCountRef.current = newDone;
   }
 
   async function handleAssign(taskId: string, userId: string | null) {
@@ -180,6 +259,14 @@ function EventTasksPageInner() {
   async function handleSetDue(taskId: string, dueDate: string | null) {
     await updateTaskDetails(taskId, { dueAt: dueDate ? new Date(dueDate).toISOString() : null });
     await loadAll();
+  }
+
+  async function handleUpdateNote(taskId: string, note: string) {
+    await updateTaskDetails(taskId, { description: note || null });
+    // Update local state without full reload for snappy UX
+    setTasks((prev) =>
+      prev.map((t) => ((t.id as string) === taskId ? { ...t, description: note || null } : t))
+    );
   }
 
   async function handleAddSuggestion(suggestion: Suggestion) {
@@ -217,42 +304,23 @@ function EventTasksPageInner() {
     );
   }
 
-  // Filters
-  const [filterCategory, setFilterCategory] = useState<string | null>(null);
-  const [filterOwner, setFilterOwner] = useState<string | null>(null);
-  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-
-  // Split tasks
-  const opsTasks = tasks.filter(
-    (t) => ((t.metadata as Record<string, unknown>)?.task_type as string) !== "content"
-  );
-  const contentTasks = tasks.filter(
-    (t) => ((t.metadata as Record<string, unknown>)?.task_type as string) === "content"
-  );
-  const doneTasks = tasks.filter((t) => t.status === "done");
-  const progress = tasks.length > 0 ? Math.round((doneTasks.length / tasks.length) * 100) : 0;
-
-  // Priority sort weight — urgent/high first, then overdue, then by due date
+  // Priority sort weight
   const priorityWeight: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
   function sortTasks(list: Task[]): Task[] {
     return [...list].sort((a, b) => {
-      // 1. Incomplete before done
       const aDone = a.status === "done" ? 1 : 0;
       const bDone = b.status === "done" ? 1 : 0;
       if (aDone !== bDone) return aDone - bDone;
 
-      // 2. Overdue first
       const aOverdue = isOverdue(a) ? 0 : 1;
       const bOverdue = isOverdue(b) ? 0 : 1;
       if (aOverdue !== bOverdue) return aOverdue - bOverdue;
 
-      // 3. Priority (urgent > high > medium > low)
       const aPri = priorityWeight[(a.priority as string) ?? "medium"] ?? 2;
       const bPri = priorityWeight[(b.priority as string) ?? "medium"] ?? 2;
       if (aPri !== bPri) return aPri - bPri;
 
-      // 4. Due date
       const da = getDueAt(a);
       const db = getDueAt(b);
       if (da && db) {
@@ -265,14 +333,43 @@ function EventTasksPageInner() {
     });
   }
 
-  // Apply filters to ops tasks
-  const filteredOps = opsTasks.filter((t) => {
-    if (filterCategory && getCategory(t) !== filterCategory) return false;
-    if (filterOwner && (t.assigned_to as string) !== filterOwner) return false;
-    return true;
-  });
+  // Split tasks
+  const opsTasks = tasks.filter(
+    (t) => ((t.metadata as Record<string, unknown>)?.task_type as string) !== "content"
+  );
+  const contentTasks = tasks.filter(
+    (t) => ((t.metadata as Record<string, unknown>)?.task_type as string) === "content"
+  );
+  const doneTasks = tasks.filter((t) => t.status === "done");
+  const progress = tasks.length > 0 ? Math.round((doneTasks.length / tasks.length) * 100) : 0;
 
-  // Group filtered ops tasks by category
+  // Today's focus
+  const overdueTasks = tasks.filter((t) => isOverdue(t));
+  const todayTasks = tasks.filter((t) => isDueToday(t));
+  const focusTasks = [...overdueTasks, ...todayTasks];
+
+  // Event countdown
+  const daysUntilEvent = eventDate
+    ? Math.ceil((new Date(eventDate).getTime() - Date.now()) / 86400000)
+    : null;
+
+  // Apply filters + search
+  function applyFilters(list: Task[]): Task[] {
+    return list.filter((t) => {
+      if (filterCategory && getCategory(t) !== filterCategory) return false;
+      if (filterOwner && (t.assigned_to as string) !== filterOwner) return false;
+      if (hideDone && t.status === "done") return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        const title = String(t.title ?? "").toLowerCase();
+        const desc = String(t.description ?? "").toLowerCase();
+        if (!title.includes(q) && !desc.includes(q)) return false;
+      }
+      return true;
+    });
+  }
+
+  const filteredOps = applyFilters(opsTasks);
   const opsCategories = Object.keys(categoryConfig);
   const opsByCategory = filterCategory
     ? [{ category: filterCategory, tasks: sortTasks(filteredOps) }].filter((g) => g.tasks.length > 0)
@@ -283,14 +380,10 @@ function EventTasksPageInner() {
         }))
         .filter((g) => g.tasks.length > 0);
 
-  // Apply filters to content tasks
-  const filteredContent = contentTasks.filter((t) => {
-    if (filterOwner && (t.assigned_to as string) !== filterOwner) return false;
-    return true;
-  });
+  const filteredContent = applyFilters(contentTasks);
   const contentSorted = sortTasks(filteredContent);
 
-  // Unique owners who have assigned tasks
+  // Unique owners
   const assignedOwners = Array.from(
     new Set(tasks.map((t) => t.assigned_to as string).filter(Boolean))
   ).map((id) => {
@@ -299,8 +392,13 @@ function EventTasksPageInner() {
     return { id, name: member?.name ?? user?.full_name ?? user?.email ?? "Unknown" };
   });
 
+  const hasActiveFilters = !!filterCategory || !!filterOwner || !!searchQuery;
+
   return (
     <div className="space-y-6">
+      {/* Completion animation */}
+      <CompletionCelebration show={showCelebration} is100={is100Celebration} />
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
@@ -310,18 +408,56 @@ function EventTasksPageInner() {
           <h1 className="text-2xl font-bold font-heading">Event Playbook</h1>
           <p className="text-sm text-muted-foreground">Tasks, content & delegation</p>
         </div>
+        {daysUntilEvent !== null && daysUntilEvent >= 0 && (
+          <div className="text-right">
+            <p className="text-lg font-bold text-nocturn">{daysUntilEvent}d</p>
+            <p className="text-[10px] text-muted-foreground">until event</p>
+          </div>
+        )}
       </div>
+
+      {/* Today's Focus Banner */}
+      {focusTasks.length > 0 && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 animate-fade-in-up">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="h-4 w-4 text-amber-400" />
+            <span className="text-sm font-semibold text-amber-400">Today&apos;s Focus</span>
+            {daysUntilEvent !== null && daysUntilEvent >= 0 && (
+              <span className="ml-auto text-xs text-amber-400/70">
+                {daysUntilEvent === 0 ? "Event is today!" : `${daysUntilEvent} day${daysUntilEvent !== 1 ? "s" : ""} away`}
+              </span>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            {overdueTasks.map((t) => (
+              <div key={t.id as string} className="flex items-center gap-2 text-sm">
+                <span className="text-red-400 text-xs font-medium shrink-0">🔴 Overdue</span>
+                <span className="text-foreground truncate">{String(t.title)}</span>
+              </div>
+            ))}
+            {todayTasks.map((t) => (
+              <div key={t.id as string} className="flex items-center gap-2 text-sm">
+                <span className="text-amber-400 text-xs font-medium shrink-0">⏰ Due today</span>
+                <span className="text-foreground truncate">{String(t.title)}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-amber-400/50 mt-2">
+            {overdueTasks.length > 0 ? `${overdueTasks.length} overdue` : ""}{overdueTasks.length > 0 && todayTasks.length > 0 ? " · " : ""}{todayTasks.length > 0 ? `${todayTasks.length} due today` : ""}
+          </p>
+        </div>
+      )}
 
       {/* Progress bar */}
       {tasks.length > 0 && (
         <div className="animate-fade-in-up">
           <div className="flex items-center justify-between text-sm mb-2">
             <span className="text-muted-foreground">{doneTasks.length} of {tasks.length} tasks done</span>
-            <span className="font-bold text-nocturn">{progress}%</span>
+            <span className={`font-bold ${progress === 100 ? "text-green-400" : "text-nocturn"}`}>{progress}%</span>
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
             <div
-              className="h-full rounded-full bg-nocturn transition-all duration-500"
+              className={`h-full rounded-full transition-all duration-500 ${progress === 100 ? "bg-green-500" : "bg-nocturn"}`}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -353,6 +489,25 @@ function EventTasksPageInner() {
       {/* ═══ TASKS TAB ═══ */}
       {activeTab === "tasks" && (
         <div className="space-y-5">
+          {/* Search bar */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 rounded-xl min-h-[44px]"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
           {/* Filters */}
           <div className="space-y-2">
             {/* Category legend — clickable to filter */}
@@ -386,7 +541,7 @@ function EventTasksPageInner() {
               </span>
             </div>
 
-            {/* Owner filter + sort controls */}
+            {/* Owner filter + sort + hide done */}
             <div className="flex items-center gap-2 flex-wrap">
               {assignedOwners.length > 0 && (
                 <select
@@ -407,9 +562,16 @@ function EventTasksPageInner() {
                 <CalendarClock className="h-3 w-3 text-muted-foreground" />
                 Due {sortDir === "asc" ? "↑ earliest" : "↓ latest"}
               </button>
-              {(filterCategory || filterOwner) && (
+              <button
+                onClick={() => setHideDone(!hideDone)}
+                className={`inline-flex items-center gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[36px] hover:border-white/20 transition-colors ${hideDone ? "border-nocturn/30 text-nocturn" : ""}`}
+              >
+                {hideDone ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
+                {hideDone ? "Done hidden" : "Show all"}
+              </button>
+              {hasActiveFilters && (
                 <button
-                  onClick={() => { setFilterCategory(null); setFilterOwner(null); }}
+                  onClick={() => { setFilterCategory(null); setFilterOwner(null); setSearchQuery(""); }}
                   className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Clear filters
@@ -477,15 +639,17 @@ function EventTasksPageInner() {
           )}
 
           {/* Task list grouped by category */}
-          {opsTasks.length === 0 ? (
+          {filteredOps.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center gap-4 py-12">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
                   <ListChecks className="h-8 w-8 text-nocturn" />
                 </div>
                 <div className="text-center">
-                  <p className="font-medium">No tasks yet</p>
-                  <p className="text-sm text-muted-foreground">Add tasks manually or create an event with a playbook.</p>
+                  <p className="font-medium">{hasActiveFilters ? "No tasks match your filters" : "No tasks yet"}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {hasActiveFilters ? "Try adjusting your filters." : "Add tasks manually or create an event with a playbook."}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -504,6 +668,8 @@ function EventTasksPageInner() {
                     onStatusChange={handleStatusChange}
                     onAssign={handleAssign}
                     onSetDue={handleSetDue}
+                    onUpdateNote={handleUpdateNote}
+                    hideDone={hideDone}
                   />
                 );
               })}
@@ -515,8 +681,19 @@ function EventTasksPageInner() {
       {/* ═══ CONTENT TAB ═══ */}
       {activeTab === "content" && (
         <div className="space-y-4">
-          {/* Legend for content platforms */}
-          <div className="flex flex-wrap gap-2">
+          {/* Search + filters for content */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search content tasks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 rounded-xl min-h-[44px]"
+            />
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Legend for content platforms */}
             <span className="inline-flex items-center gap-1 rounded-full border border-pink-500/20 bg-pink-500/10 text-pink-400 px-2 py-0.5 text-[10px] font-medium">
               📸 Instagram Feed
             </span>
@@ -526,6 +703,15 @@ function EventTasksPageInner() {
             <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-400 px-2 py-0.5 text-[10px] font-medium">
               📧 Email
             </span>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => setHideDone(!hideDone)}
+                className={`inline-flex items-center gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[36px] hover:border-white/20 transition-colors ${hideDone ? "border-nocturn/30 text-nocturn" : ""}`}
+              >
+                {hideDone ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
+                {hideDone ? "Done hidden" : "Show all"}
+              </button>
+            </div>
           </div>
 
           {contentSorted.length === 0 ? (
@@ -535,8 +721,10 @@ function EventTasksPageInner() {
                   <Image className="h-8 w-8 text-nocturn" />
                 </div>
                 <div className="text-center">
-                  <p className="font-medium">No content plan yet</p>
-                  <p className="text-sm text-muted-foreground">Create an event with a playbook to generate your promo schedule.</p>
+                  <p className="font-medium">{hasActiveFilters || hideDone ? "No content matches" : "No content plan yet"}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {hasActiveFilters || hideDone ? "Try adjusting your filters." : "Create an event with a playbook to generate your promo schedule."}
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -550,6 +738,7 @@ function EventTasksPageInner() {
                   onStatusChange={handleStatusChange}
                   onAssign={handleAssign}
                   onSetDue={handleSetDue}
+                  onUpdateNote={handleUpdateNote}
                 />
               ))}
             </div>
@@ -633,6 +822,8 @@ function CategoryGroup({
   onStatusChange,
   onAssign,
   onSetDue,
+  onUpdateNote,
+  hideDone,
 }: {
   config: { color: string; label: string; emoji: string };
   tasks: Task[];
@@ -641,8 +832,13 @@ function CategoryGroup({
   onStatusChange: (taskId: string, status: string) => void;
   onAssign: (taskId: string, userId: string | null) => void;
   onSetDue: (taskId: string, dueDate: string | null) => void;
+  onUpdateNote: (taskId: string, note: string) => void;
+  hideDone: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const visibleTasks = hideDone ? tasks.filter((t) => t.status !== "done") : tasks;
+
+  if (visibleTasks.length === 0 && hideDone) return null;
 
   return (
     <div>
@@ -658,14 +854,14 @@ function CategoryGroup({
         </span>
         <div className="flex-1 h-1 rounded-full bg-muted ml-2 overflow-hidden">
           <div
-            className="h-full rounded-full bg-nocturn transition-all duration-300"
+            className={`h-full rounded-full transition-all duration-300 ${doneCount === tasks.length ? "bg-green-500" : "bg-nocturn"}`}
             style={{ width: tasks.length > 0 ? `${(doneCount / tasks.length) * 100}%` : "0%" }}
           />
         </div>
       </button>
       {!collapsed && (
         <div className="space-y-1.5 ml-1">
-          {tasks.map((task) => (
+          {visibleTasks.map((task) => (
             <TaskCard
               key={task.id as string}
               task={task}
@@ -673,6 +869,7 @@ function CategoryGroup({
               onStatusChange={onStatusChange}
               onAssign={onAssign}
               onSetDue={onSetDue}
+              onUpdateNote={onUpdateNote}
             />
           ))}
         </div>
@@ -681,7 +878,7 @@ function CategoryGroup({
   );
 }
 
-// ─── Task Card (with inline assign + due date) ───────────────────────────────
+// ─── Task Card (with inline assign + due date + notes) ──────────────────────
 
 function TaskCard({
   task,
@@ -689,19 +886,34 @@ function TaskCard({
   onStatusChange,
   onAssign,
   onSetDue,
+  onUpdateNote,
 }: {
   task: Task;
   members: Member[];
   onStatusChange: (taskId: string, status: string) => void;
   onAssign: (taskId: string, userId: string | null) => void;
   onSetDue: (taskId: string, dueDate: string | null) => void;
+  onUpdateNote: (taskId: string, note: string) => void;
 }) {
   const [showActions, setShowActions] = useState(false);
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteValue, setNoteValue] = useState(typeof task.description === "string" ? task.description : "");
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const isDone = task.status === "done";
   const nextStatus = task.status === "todo" ? "in_progress" : task.status === "in_progress" ? "done" : "todo";
   const assignee = task.assigned_user as unknown as { full_name: string; email: string } | null;
   const overdue = isOverdue(task);
   const dueLabel = relativeDue(task);
+  const hasNote = typeof task.description === "string" && task.description.length > 0;
+
+  useEffect(() => {
+    if (editingNote && noteRef.current) noteRef.current.focus();
+  }, [editingNote]);
+
+  function saveNote() {
+    onUpdateNote(task.id as string, noteValue.trim());
+    setEditingNote(false);
+  }
 
   return (
     <div
@@ -729,38 +941,75 @@ function TaskCard({
                 → {assignee.full_name ?? assignee.email}
               </span>
             )}
-            {typeof task.description === "string" && task.description && (
-              <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{task.description}</span>
+            {hasNote && !editingNote && (
+              <span className="text-[10px] text-muted-foreground truncate max-w-[200px] inline-flex items-center gap-0.5">
+                <StickyNote className="h-2.5 w-2.5 inline" /> {String(task.description)}
+              </span>
             )}
           </div>
         </div>
       </div>
 
-      {/* Inline actions — assign + due date */}
-      {showActions && !isDone && (
-        <div className="mt-2 pt-2 border-t border-white/5 flex flex-wrap gap-2 animate-fade-in-up">
-          <div className="flex items-center gap-1.5">
-            <UserPlus className="h-3 w-3 text-muted-foreground" />
-            <select
-              className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
-              value={(task.assigned_to as string) ?? ""}
-              onChange={(e) => onAssign(task.id as string, e.target.value || null)}
+      {/* Inline actions — assign + due date + note */}
+      {showActions && (
+        <div className="mt-2 pt-2 border-t border-white/5 space-y-2 animate-fade-in-up">
+          {!isDone && (
+            <div className="flex flex-wrap gap-2">
+              <div className="flex items-center gap-1.5">
+                <UserPlus className="h-3 w-3 text-muted-foreground" />
+                <select
+                  className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+                  value={(task.assigned_to as string) ?? ""}
+                  onChange={(e) => onAssign(task.id as string, e.target.value || null)}
+                >
+                  <option value="">Unassigned</option>
+                  {members.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <CalendarClock className="h-3 w-3 text-muted-foreground" />
+                <input
+                  type="date"
+                  className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+                  value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
+                  onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Inline note */}
+          {editingNote ? (
+            <div className="space-y-1.5">
+              <textarea
+                ref={noteRef}
+                value={noteValue}
+                onChange={(e) => setNoteValue(e.target.value)}
+                placeholder="Add a note..."
+                maxLength={500}
+                rows={2}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveNote(); }
+                  if (e.key === "Escape") { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }
+                }}
+                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-nocturn/50 resize-none"
+              />
+              <div className="flex gap-2">
+                <button onClick={saveNote} className="text-[10px] text-nocturn hover:text-nocturn-light font-medium">Save</button>
+                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[10px] text-muted-foreground hover:text-foreground">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingNote(true)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
             >
-              <option value="">Unassigned</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <CalendarClock className="h-3 w-3 text-muted-foreground" />
-            <input
-              type="date"
-              className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
-              value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
-              onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
-            />
-          </div>
+              <StickyNote className="h-3 w-3" />
+              {hasNote ? "Edit note" : "Add note"}
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -775,16 +1024,21 @@ function ContentTaskCard({
   onStatusChange,
   onAssign,
   onSetDue,
+  onUpdateNote,
 }: {
   task: Task;
   members: Member[];
   onStatusChange: (taskId: string, status: string) => void;
   onAssign: (taskId: string, userId: string | null) => void;
   onSetDue: (taskId: string, dueDate: string | null) => void;
+  onUpdateNote: (taskId: string, note: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteValue, setNoteValue] = useState(typeof task.description === "string" ? task.description : "");
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   const meta = (task.metadata as Record<string, unknown>) ?? {};
   const platform = (meta.platform as string) ?? "";
@@ -809,6 +1063,15 @@ function ContentTaskCard({
     await navigator.clipboard.writeText(caption);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  useEffect(() => {
+    if (editingNote && noteRef.current) noteRef.current.focus();
+  }, [editingNote]);
+
+  function saveNote() {
+    onUpdateNote(task.id as string, noteValue.trim());
+    setEditingNote(false);
   }
 
   return (
@@ -844,31 +1107,64 @@ function ContentTaskCard({
         </Button>
       </div>
 
-      {/* Assign + due date actions */}
+      {/* Assign + due date + note actions */}
       {showActions && !isDone && (
-        <div className="flex flex-wrap gap-2 animate-fade-in-up">
-          <div className="flex items-center gap-1.5">
-            <UserPlus className="h-3 w-3 text-muted-foreground" />
-            <select
-              className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
-              value={(task.assigned_to as string) ?? ""}
-              onChange={(e) => onAssign(task.id as string, e.target.value || null)}
+        <div className="space-y-2 animate-fade-in-up">
+          <div className="flex flex-wrap gap-2">
+            <div className="flex items-center gap-1.5">
+              <UserPlus className="h-3 w-3 text-muted-foreground" />
+              <select
+                className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+                value={(task.assigned_to as string) ?? ""}
+                onChange={(e) => onAssign(task.id as string, e.target.value || null)}
+              >
+                <option value="">Unassigned</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <CalendarClock className="h-3 w-3 text-muted-foreground" />
+              <input
+                type="date"
+                className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+                value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
+                onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
+              />
+            </div>
+          </div>
+
+          {/* Inline note */}
+          {editingNote ? (
+            <div className="space-y-1.5">
+              <textarea
+                ref={noteRef}
+                value={noteValue}
+                onChange={(e) => setNoteValue(e.target.value)}
+                placeholder="Add a note..."
+                maxLength={500}
+                rows={2}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveNote(); }
+                  if (e.key === "Escape") { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }
+                }}
+                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-nocturn/50 resize-none"
+              />
+              <div className="flex gap-2">
+                <button onClick={saveNote} className="text-[10px] text-nocturn hover:text-nocturn-light font-medium">Save</button>
+                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[10px] text-muted-foreground hover:text-foreground">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingNote(true)}
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
             >
-              <option value="">Unassigned</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <CalendarClock className="h-3 w-3 text-muted-foreground" />
-            <input
-              type="date"
-              className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
-              value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
-              onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
-            />
-          </div>
+              <StickyNote className="h-3 w-3" />
+              {typeof task.description === "string" && task.description ? "Edit note" : "Add note"}
+            </button>
+          )}
         </div>
       )}
 
@@ -882,37 +1178,21 @@ function ContentTaskCard({
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             Caption
           </button>
-          {expanded ? (
+          {expanded && (
             <div className="mt-1 space-y-2">
               <p className="text-sm text-foreground whitespace-pre-wrap">{caption}</p>
               <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-foreground min-h-[36px]" onClick={handleCopyCaption}>
                 <Copy className="h-3 w-3 mr-1" />
                 {copied ? "Copied!" : "Copy caption"}
               </Button>
+              {hashtags.length > 0 && (
+                <p className="text-xs text-nocturn">{hashtags.join(" ")}</p>
+              )}
+              {tip && (
+                <p className="text-[11px] text-muted-foreground italic">💡 {tip}</p>
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{caption}</p>
           )}
-        </div>
-      )}
-
-      {/* Hashtags */}
-      {hashtags.length > 0 && expanded && (
-        <div className="flex flex-wrap gap-1">
-          {hashtags.map((tag, i) => (
-            <span key={i} className="rounded-full bg-nocturn/10 text-nocturn px-2 py-0.5 text-[10px] font-medium">
-              {tag.startsWith("#") ? tag : `#${tag}`}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Pro tip */}
-      {tip && expanded && (
-        <div className="rounded-md bg-muted/50 border border-border px-3 py-2">
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Pro tip:</span> {tip}
-          </p>
         </div>
       )}
     </div>
