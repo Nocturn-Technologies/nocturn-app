@@ -217,6 +217,11 @@ function EventTasksPageInner() {
     );
   }
 
+  // Filters
+  const [filterCategory, setFilterCategory] = useState<string | null>(null);
+  const [filterOwner, setFilterOwner] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
   // Split tasks
   const opsTasks = tasks.filter(
     (t) => ((t.metadata as Record<string, unknown>)?.task_type as string) !== "content"
@@ -227,32 +232,71 @@ function EventTasksPageInner() {
   const doneTasks = tasks.filter((t) => t.status === "done");
   const progress = tasks.length > 0 ? Math.round((doneTasks.length / tasks.length) * 100) : 0;
 
-  // Group ops tasks by category, sorted by due date (earliest first = working backwards from event)
-  const opsCategories = Object.keys(categoryConfig);
-  const opsByCategory = opsCategories
-    .map((cat) => ({
-      category: cat,
-      tasks: opsTasks
-        .filter((t) => getCategory(t) === cat)
-        .sort((a, b) => {
-          const da = getDueAt(a);
-          const db = getDueAt(b);
-          if (!da && !db) return 0;
-          if (!da) return 1;
-          if (!db) return -1;
-          return new Date(da).getTime() - new Date(db).getTime();
-        }),
-    }))
-    .filter((g) => g.tasks.length > 0);
+  // Priority sort weight — urgent/high first, then overdue, then by due date
+  const priorityWeight: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
-  // Content tasks sorted by due date
-  const contentSorted = [...contentTasks].sort((a, b) => {
-    const da = getDueAt(a);
-    const db = getDueAt(b);
-    if (!da && !db) return 0;
-    if (!da) return 1;
-    if (!db) return -1;
-    return new Date(da).getTime() - new Date(db).getTime();
+  function sortTasks(list: Task[]): Task[] {
+    return [...list].sort((a, b) => {
+      // 1. Incomplete before done
+      const aDone = a.status === "done" ? 1 : 0;
+      const bDone = b.status === "done" ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+
+      // 2. Overdue first
+      const aOverdue = isOverdue(a) ? 0 : 1;
+      const bOverdue = isOverdue(b) ? 0 : 1;
+      if (aOverdue !== bOverdue) return aOverdue - bOverdue;
+
+      // 3. Priority (urgent > high > medium > low)
+      const aPri = priorityWeight[(a.priority as string) ?? "medium"] ?? 2;
+      const bPri = priorityWeight[(b.priority as string) ?? "medium"] ?? 2;
+      if (aPri !== bPri) return aPri - bPri;
+
+      // 4. Due date
+      const da = getDueAt(a);
+      const db = getDueAt(b);
+      if (da && db) {
+        const diff = new Date(da).getTime() - new Date(db).getTime();
+        return sortDir === "asc" ? diff : -diff;
+      }
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      return -1;
+    });
+  }
+
+  // Apply filters to ops tasks
+  const filteredOps = opsTasks.filter((t) => {
+    if (filterCategory && getCategory(t) !== filterCategory) return false;
+    if (filterOwner && (t.assigned_to as string) !== filterOwner) return false;
+    return true;
+  });
+
+  // Group filtered ops tasks by category
+  const opsCategories = Object.keys(categoryConfig);
+  const opsByCategory = filterCategory
+    ? [{ category: filterCategory, tasks: sortTasks(filteredOps) }].filter((g) => g.tasks.length > 0)
+    : opsCategories
+        .map((cat) => ({
+          category: cat,
+          tasks: sortTasks(filteredOps.filter((t) => getCategory(t) === cat)),
+        }))
+        .filter((g) => g.tasks.length > 0);
+
+  // Apply filters to content tasks
+  const filteredContent = contentTasks.filter((t) => {
+    if (filterOwner && (t.assigned_to as string) !== filterOwner) return false;
+    return true;
+  });
+  const contentSorted = sortTasks(filteredContent);
+
+  // Unique owners who have assigned tasks
+  const assignedOwners = Array.from(
+    new Set(tasks.map((t) => t.assigned_to as string).filter(Boolean))
+  ).map((id) => {
+    const member = members.find((m) => m.id === id);
+    const user = tasks.find((t) => (t.assigned_to as string) === id)?.assigned_user as unknown as { full_name: string; email: string } | null;
+    return { id, name: member?.name ?? user?.full_name ?? user?.email ?? "Unknown" };
   });
 
   return (
@@ -309,22 +353,69 @@ function EventTasksPageInner() {
       {/* ═══ TASKS TAB ═══ */}
       {activeTab === "tasks" && (
         <div className="space-y-5">
-          {/* Legend */}
-          <div className="flex flex-wrap gap-2">
-            {opsByCategory.map(({ category }) => {
-              const cfg = categoryConfig[category] ?? categoryConfig.general;
-              return (
-                <span key={category} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${cfg.color}`}>
-                  {cfg.emoji} {cfg.label}
-                </span>
-              );
-            })}
-            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-400 px-2 py-0.5 text-[10px] font-medium">
-              ⚡ High priority
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-400 px-2 py-0.5 text-[10px] font-medium">
-              🔴 Overdue
-            </span>
+          {/* Filters */}
+          <div className="space-y-2">
+            {/* Category legend — clickable to filter */}
+            <div className="flex flex-wrap gap-1.5">
+              {Object.entries(categoryConfig).map(([key, cfg]) => {
+                const count = opsTasks.filter((t) => getCategory(t) === key).length;
+                if (count === 0) return null;
+                const isActive = filterCategory === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => setFilterCategory(isActive ? null : key)}
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all active:scale-95 min-h-[32px] ${
+                      isActive
+                        ? cfg.color + " ring-1 ring-white/20 shadow-sm"
+                        : filterCategory && !isActive
+                        ? "opacity-40 " + cfg.color
+                        : cfg.color
+                    }`}
+                  >
+                    {cfg.emoji} {cfg.label}
+                    <span className="text-[9px] opacity-70">{count}</span>
+                  </button>
+                );
+              })}
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-400 px-2 py-0.5 text-[10px] font-medium">
+                ⚡ High priority
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-400 px-2 py-0.5 text-[10px] font-medium">
+                🔴 Overdue
+              </span>
+            </div>
+
+            {/* Owner filter + sort controls */}
+            <div className="flex items-center gap-2 flex-wrap">
+              {assignedOwners.length > 0 && (
+                <select
+                  className="rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[36px]"
+                  value={filterOwner ?? ""}
+                  onChange={(e) => setFilterOwner(e.target.value || null)}
+                >
+                  <option value="">All owners</option>
+                  {assignedOwners.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+                </select>
+              )}
+              <button
+                onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
+                className="inline-flex items-center gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[36px] hover:border-white/20 transition-colors"
+              >
+                <CalendarClock className="h-3 w-3 text-muted-foreground" />
+                Due {sortDir === "asc" ? "↑ earliest" : "↓ latest"}
+              </button>
+              {(filterCategory || filterOwner) && (
+                <button
+                  onClick={() => { setFilterCategory(null); setFilterOwner(null); }}
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Clear filters
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Add Task */}
