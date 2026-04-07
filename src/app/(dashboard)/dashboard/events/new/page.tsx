@@ -449,6 +449,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
 function EventConfirmationCard({
   data,
   tiers,
+  totalExpenses,
   onUpdate,
   onEdit,
   onCreate,
@@ -457,6 +458,7 @@ function EventConfirmationCard({
 }: {
   data: ParsedEventDetails;
   tiers: TicketTier[];
+  totalExpenses?: number;
   onUpdate: (field: keyof ParsedEventDetails | "tiers" | "description", value: string | number | TicketTier[]) => void;
   onEdit: () => void;
   onCreate: () => void;
@@ -601,7 +603,7 @@ function EventConfirmationCard({
         )}
 
         {/* ── Live Finance Forecast with Pricing Scenarios ── */}
-        {tiers.length > 0 && <LiveForecast tiers={tiers} onTiersUpdate={(updated) => onUpdate("tiers", updated)} />}
+        {tiers.length > 0 && <LiveForecast tiers={tiers} totalExpenses={totalExpenses} onTiersUpdate={(updated) => onUpdate("tiers", updated)} />}
       </div>
 
       {error && (
@@ -728,7 +730,7 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
 
 // ─── Live Forecast with Pricing Scenarios ────────────────────────────────────
 
-function LiveForecast({ tiers, onTiersUpdate }: { tiers: TicketTier[]; onTiersUpdate?: (tiers: TicketTier[]) => void }) {
+function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: TicketTier[]; totalExpenses?: number; onTiersUpdate?: (tiers: TicketTier[]) => void }) {
   const [priceMultiplier, setPriceMultiplier] = useState(1.0);
   // Store base prices so slider always scales from the original values
   const baseTiersRef = useRef<TicketTier[]>(tiers);
@@ -765,7 +767,9 @@ function LiveForecast({ tiers, onTiersUpdate }: { tiers: TicketTier[]; onTiersUp
     // Buyer pays all fees — organizer keeps 100% of ticket price
     // Stripe processing still applies to payout (~2.9% + $0.30)
     const stripeProcessing = ticketsSold * STRIPE_FEE_FLAT + gross * STRIPE_FEE_RATE;
-    return { ticketsSold, gross, net: gross - stripeProcessing };
+    const netRevenue = gross - stripeProcessing;
+    const profit = netRevenue - totalExpenses;
+    return { ticketsSold, gross, net: netRevenue, profit };
   }
 
   const scenarios = [
@@ -795,10 +799,19 @@ function LiveForecast({ tiers, onTiersUpdate }: { tiers: TicketTier[]; onTiersUp
 
       {/* Headline */}
       <div className="text-center py-2">
-        <p className="text-3xl font-bold text-white">
-          ${projections[2].net.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+        <p className={`text-3xl font-bold ${totalExpenses > 0 ? (projections[2].profit >= 0 ? "text-green-400" : "text-red-400") : "text-white"}`}>
+          {totalExpenses > 0
+            ? `${projections[2].profit >= 0 ? "" : "-"}$${Math.abs(projections[2].profit).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+            : `$${projections[2].net.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
         </p>
-        <p className="text-xs text-zinc-500 mt-1">max net revenue at sell-out</p>
+        <p className="text-xs text-zinc-500 mt-1">
+          {totalExpenses > 0 ? "estimated profit at sell-out" : "max net revenue at sell-out"}
+        </p>
+        {totalExpenses > 0 && (
+          <p className="text-[10px] text-zinc-600 mt-0.5">
+            ${projections[2].net.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue − ${totalExpenses.toLocaleString()} expenses
+          </p>
+        )}
       </div>
 
       {/* Price slider — adjusts tier prices in real time */}
@@ -839,31 +852,38 @@ function LiveForecast({ tiers, onTiersUpdate }: { tiers: TicketTier[]; onTiersUp
 
       {/* Scenario comparison */}
       <div className="space-y-1.5">
-        {projections.map((p) => (
-          <div
-            key={p.label}
-            className="flex items-center gap-3 rounded-xl bg-zinc-800/30 px-3 py-2 transition-colors duration-200 hover:bg-zinc-800/50"
-          >
-            <span className="text-sm">{p.emoji}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[11px] text-zinc-500">{p.label}</span>
-                <span className="text-xs font-bold text-white">
-                  ${p.net.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                </span>
-              </div>
-              <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${p.rate * 100}%`,
-                    backgroundColor: p.rate >= 1 ? "#7B2FF7" : p.rate >= 0.75 ? "#22c55e" : "#eab308",
-                  }}
-                />
+        {projections.map((p) => {
+          const displayValue = totalExpenses > 0 ? p.profit : p.net;
+          const isLoss = displayValue < 0;
+          return (
+            <div
+              key={p.label}
+              className="flex items-center gap-3 rounded-xl bg-zinc-800/30 px-3 py-2 transition-colors duration-200 hover:bg-zinc-800/50"
+            >
+              <span className="text-sm">{p.emoji}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[11px] text-zinc-500">{p.label}</span>
+                  <span className={`text-xs font-bold ${totalExpenses > 0 ? (isLoss ? "text-red-400" : "text-green-400") : "text-white"}`}>
+                    {isLoss ? "-" : ""}${Math.abs(displayValue).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {totalExpenses > 0 && <span className="text-[9px] text-zinc-600 ml-1">{isLoss ? "loss" : "profit"}</span>}
+                  </span>
+                </div>
+                <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{
+                      width: `${p.rate * 100}%`,
+                      backgroundColor: totalExpenses > 0
+                        ? (isLoss ? "#ef4444" : "#22c55e")
+                        : (p.rate >= 1 ? "#7B2FF7" : p.rate >= 0.75 ? "#22c55e" : "#eab308"),
+                    }}
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Quick metrics */}
@@ -877,15 +897,24 @@ function LiveForecast({ tiers, onTiersUpdate }: { tiers: TicketTier[]; onTiersUp
           <p className="text-[9px] text-zinc-500">capacity</p>
         </div>
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
-          <p className="text-xs font-bold text-green-400">
-            ${projections[1].net.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </p>
-          <p className="text-[9px] text-zinc-500">@ 75%</p>
+          {(() => {
+            const at75 = totalExpenses > 0 ? projections[1].profit : projections[1].net;
+            return (
+              <>
+                <p className={`text-xs font-bold ${totalExpenses > 0 ? (at75 >= 0 ? "text-green-400" : "text-red-400") : "text-green-400"}`}>
+                  {at75 < 0 ? "-" : ""}${Math.abs(at75).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </p>
+                <p className="text-[9px] text-zinc-500">@ 75%</p>
+              </>
+            );
+          })()}
         </div>
       </div>
 
       <p className="text-[9px] text-zinc-600 text-center">
-        Net after Stripe fees (2.9% + $0.30) • You keep 100% of ticket price
+        {totalExpenses > 0
+          ? `Profit = revenue − $${totalExpenses.toLocaleString()} expenses − Stripe fees (2.9% + $0.30)`
+          : "Net after Stripe fees (2.9% + $0.30) • You keep 100% of ticket price"}
       </p>
     </div>
   );
@@ -1758,6 +1787,13 @@ export default function NewEventPage() {
           <EventConfirmationCard
             data={eventData}
             tiers={tiers}
+            totalExpenses={
+              (budgetInput.talentFee || 0) +
+              (budgetInput.venueCost || 0) +
+              (budgetInput.barMinimum || 0) +
+              (budgetInput.deposit || 0) +
+              (budgetInput.otherExpenses || 0)
+            }
             onUpdate={handleUpdateField}
             onEdit={handleBackToChat}
             onCreate={handleCreate}
