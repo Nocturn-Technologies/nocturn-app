@@ -21,16 +21,22 @@ import {
   Loader2,
   Copy,
   Image,
+  UserPlus,
+  CalendarClock,
 } from "lucide-react";
 import Link from "next/link";
 import {
   getEventTasks,
   createEventTask,
   updateTaskStatus,
+  updateTaskDetails,
+  getEventMembers,
   postEventMessage,
   getEventActivity,
   getAITaskSuggestions,
 } from "@/app/actions/tasks";
+
+// ─── Constants ────────────────────────────────────────────────────────────────
 
 const statusIcons: Record<string, React.ReactNode> = {
   todo: <Circle className="h-4 w-4 text-muted-foreground" />,
@@ -42,39 +48,63 @@ const statusIcons: Record<string, React.ReactNode> = {
 const priorityColors: Record<string, string> = {
   low: "text-muted-foreground",
   medium: "text-foreground",
-  high: "text-nocturn-amber",
+  high: "text-amber-400",
   urgent: "text-red-500",
 };
 
-const categoryColors: Record<string, string> = {
-  marketing: "bg-nocturn/10 text-nocturn",
-  logistics: "bg-blue-500/10 text-blue-500",
-  talent: "bg-nocturn-coral/10 text-nocturn-coral",
-  finance: "bg-nocturn-teal/10 text-nocturn-teal",
-  production: "bg-nocturn-amber/10 text-nocturn-amber",
-  general: "bg-muted text-muted-foreground",
+const categoryConfig: Record<string, { color: string; label: string; emoji: string }> = {
+  marketing: { color: "bg-purple-500/10 text-purple-400 border-purple-500/20", label: "Marketing", emoji: "📣" },
+  content: { color: "bg-pink-500/10 text-pink-400 border-pink-500/20", label: "Content", emoji: "📸" },
+  logistics: { color: "bg-blue-500/10 text-blue-400 border-blue-500/20", label: "Logistics", emoji: "🔧" },
+  talent: { color: "bg-orange-500/10 text-orange-400 border-orange-500/20", label: "Talent", emoji: "🎤" },
+  finance: { color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20", label: "Finance", emoji: "💰" },
+  production: { color: "bg-amber-500/10 text-amber-400 border-amber-500/20", label: "Production", emoji: "🎛️" },
+  general: { color: "bg-zinc-500/10 text-zinc-400 border-zinc-500/20", label: "General", emoji: "📋" },
 };
 
 const platformEmoji: Record<string, string> = {
-  instagram: "\ud83d\udcf8",
-  twitter: "\ud83d\udc26",
-  x: "\ud83d\udc26",
-  email: "\ud83d\udce7",
-  ig_story: "\ud83d\udcf1",
-  story: "\ud83d\udcf1",
-};
-
-const phaseColors: Record<string, string> = {
-  hype: "bg-nocturn/10 text-nocturn",
-  announce: "bg-blue-500/10 text-blue-500",
-  push: "bg-nocturn-amber/10 text-nocturn-amber",
-  reminder: "bg-nocturn-coral/10 text-nocturn-coral",
-  recap: "bg-nocturn-teal/10 text-nocturn-teal",
+  instagram: "📸",
+  email: "📧",
+  story: "📱",
+  all: "📢",
 };
 
 type Task = Record<string, unknown>;
 type Activity = Record<string, unknown>;
+type Member = { id: string; name: string; role: string };
 type Suggestion = { title: string; description: string; category: string; priority: string };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function getCategory(task: Task): string {
+  return ((task.metadata as Record<string, unknown>)?.category as string) ?? "general";
+}
+
+function getDueAt(task: Task): string | null {
+  return (task.due_at as string) ?? null;
+}
+
+function isOverdue(task: Task): boolean {
+  const due = getDueAt(task);
+  if (!due || task.status === "done") return false;
+  return new Date(due) < new Date();
+}
+
+function relativeDue(task: Task): string {
+  const due = getDueAt(task);
+  if (!due) return "";
+  const d = new Date(due);
+  const now = new Date();
+  const diff = Math.ceil((d.getTime() - now.getTime()) / 86400000);
+  if (diff < -1) return `${Math.abs(diff)}d overdue`;
+  if (diff === -1) return "Yesterday";
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff <= 7) return `${diff}d`;
+  return d.toLocaleDateString("en", { month: "short", day: "numeric" });
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 function EventTasksPageInner() {
   const params = useParams();
@@ -82,6 +112,7 @@ function EventTasksPageInner() {
   const eventId = params.eventId as string;
 
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,12 +138,14 @@ function EventTasksPageInner() {
 
   async function loadAll() {
     setLoading(true);
-    const [t, a, s] = await Promise.all([
+    const [t, m, a, s] = await Promise.all([
       getEventTasks(eventId),
+      getEventMembers(eventId),
       getEventActivity(eventId),
       getAITaskSuggestions(eventId),
     ]);
     setTasks(t);
+    setMembers(m);
     setActivity(a);
     setSuggestions(s);
     setLoading(false);
@@ -136,6 +169,16 @@ function EventTasksPageInner() {
 
   async function handleStatusChange(taskId: string, newStatus: string) {
     await updateTaskStatus(taskId, newStatus);
+    await loadAll();
+  }
+
+  async function handleAssign(taskId: string, userId: string | null) {
+    await updateTaskDetails(taskId, { assignedTo: userId });
+    await loadAll();
+  }
+
+  async function handleSetDue(taskId: string, dueDate: string | null) {
+    await updateTaskDetails(taskId, { dueAt: dueDate ? new Date(dueDate).toISOString() : null });
     await loadAll();
   }
 
@@ -174,21 +217,43 @@ function EventTasksPageInner() {
     );
   }
 
-  const todoTasks = tasks.filter((t) => t.status === "todo");
-  const inProgressTasks = tasks.filter((t) => t.status === "in_progress");
-  const doneTasks = tasks.filter((t) => t.status === "done");
-  const progress = tasks.length > 0 ? Math.round((doneTasks.length / tasks.length) * 100) : 0;
-
-  // Content tasks
+  // Split tasks
+  const opsTasks = tasks.filter(
+    (t) => ((t.metadata as Record<string, unknown>)?.task_type as string) !== "content"
+  );
   const contentTasks = tasks.filter(
     (t) => ((t.metadata as Record<string, unknown>)?.task_type as string) === "content"
   );
-  const contentByPhase = contentTasks.reduce<Record<string, Task[]>>((acc, t) => {
-    const phase = ((t.metadata as Record<string, unknown>)?.phase as string) ?? "other";
-    if (!acc[phase]) acc[phase] = [];
-    acc[phase].push(t);
-    return acc;
-  }, {});
+  const doneTasks = tasks.filter((t) => t.status === "done");
+  const progress = tasks.length > 0 ? Math.round((doneTasks.length / tasks.length) * 100) : 0;
+
+  // Group ops tasks by category, sorted by due date (earliest first = working backwards from event)
+  const opsCategories = Object.keys(categoryConfig);
+  const opsByCategory = opsCategories
+    .map((cat) => ({
+      category: cat,
+      tasks: opsTasks
+        .filter((t) => getCategory(t) === cat)
+        .sort((a, b) => {
+          const da = getDueAt(a);
+          const db = getDueAt(b);
+          if (!da && !db) return 0;
+          if (!da) return 1;
+          if (!db) return -1;
+          return new Date(da).getTime() - new Date(db).getTime();
+        }),
+    }))
+    .filter((g) => g.tasks.length > 0);
+
+  // Content tasks sorted by due date
+  const contentSorted = [...contentTasks].sort((a, b) => {
+    const da = getDueAt(a);
+    const db = getDueAt(b);
+    if (!da && !db) return 0;
+    if (!da) return 1;
+    if (!db) return -1;
+    return new Date(da).getTime() - new Date(db).getTime();
+  });
 
   return (
     <div className="space-y-6">
@@ -199,7 +264,7 @@ function EventTasksPageInner() {
         </Link>
         <div className="flex-1">
           <h1 className="text-2xl font-bold font-heading">Event Playbook</h1>
-          <p className="text-sm text-muted-foreground">Tasks, delegation & updates</p>
+          <p className="text-sm text-muted-foreground">Tasks, content & delegation</p>
         </div>
       </div>
 
@@ -225,7 +290,7 @@ function EventTasksPageInner() {
           onClick={() => setActiveTab("tasks")}
           className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors min-h-[44px] ${activeTab === "tasks" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
         >
-          <ListChecks className="inline h-4 w-4 mr-1" /> All Tasks
+          <ListChecks className="inline h-4 w-4 mr-1" /> Tasks
         </button>
         <button
           onClick={() => setActiveTab("content")}
@@ -241,16 +306,34 @@ function EventTasksPageInner() {
         </button>
       </div>
 
+      {/* ═══ TASKS TAB ═══ */}
       {activeTab === "tasks" && (
-        <div className="space-y-4">
-          {/* Actions bar */}
+        <div className="space-y-5">
+          {/* Legend */}
+          <div className="flex flex-wrap gap-2">
+            {opsByCategory.map(({ category }) => {
+              const cfg = categoryConfig[category] ?? categoryConfig.general;
+              return (
+                <span key={category} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${cfg.color}`}>
+                  {cfg.emoji} {cfg.label}
+                </span>
+              );
+            })}
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-400 px-2 py-0.5 text-[10px] font-medium">
+              ⚡ High priority
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-400 px-2 py-0.5 text-[10px] font-medium">
+              🔴 Overdue
+            </span>
+          </div>
+
+          {/* Add Task */}
           <div className="flex gap-2 flex-wrap">
             <Button size="sm" variant="outline" className="min-h-[44px]" onClick={() => setShowNewTask(!showNewTask)}>
               <Plus className="mr-1 h-3 w-3" /> Add Task
             </Button>
           </div>
 
-          {/* New task form */}
           {showNewTask && (
             <form onSubmit={handleCreateTask} className="animate-scale-in rounded-lg border p-3 space-y-3">
               <Input
@@ -266,19 +349,11 @@ function EventTasksPageInner() {
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
                 >
-                  <option value="general">General</option>
-                  <option value="marketing">Marketing</option>
-                  <option value="logistics">Logistics</option>
-                  <option value="talent">Talent</option>
-                  <option value="finance">Finance</option>
-                  <option value="production">Production</option>
+                  {Object.entries(categoryConfig).map(([key, cfg]) => (
+                    <option key={key} value={key}>{cfg.emoji} {cfg.label}</option>
+                  ))}
                 </select>
-                <Input
-                  type="date"
-                  value={newDueDate}
-                  onChange={(e) => setNewDueDate(e.target.value)}
-                  className="flex-1"
-                />
+                <Input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} className="flex-1" />
                 <Button type="submit" size="sm" className="min-h-[44px] bg-nocturn hover:bg-nocturn-light" disabled={adding}>
                   {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
                 </Button>
@@ -301,12 +376,7 @@ function EventTasksPageInner() {
                       <p className="text-sm font-medium">{s.title}</p>
                       <p className="text-xs text-muted-foreground">{s.description}</p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="text-nocturn hover:bg-nocturn/10 shrink-0"
-                      onClick={() => handleAddSuggestion(s)}
-                    >
+                    <Button size="sm" variant="ghost" className="text-nocturn hover:bg-nocturn/10 shrink-0" onClick={() => handleAddSuggestion(s)}>
                       <Plus className="h-3 w-3 mr-1" /> Add
                     </Button>
                   </div>
@@ -315,8 +385,8 @@ function EventTasksPageInner() {
             </Card>
           )}
 
-          {/* Task list */}
-          {tasks.length === 0 ? (
+          {/* Task list grouped by category */}
+          {opsTasks.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center gap-4 py-12">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
@@ -324,35 +394,50 @@ function EventTasksPageInner() {
                 </div>
                 <div className="text-center">
                   <p className="font-medium">No tasks yet</p>
-                  <p className="text-sm text-muted-foreground">
-                    Add tasks manually or create an event with a playbook to auto-generate them.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Add tasks manually or create an event with a playbook.</p>
                 </div>
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-4">
-              {/* To Do */}
-              {todoTasks.length > 0 && (
-                <TaskGroup title="To Do" count={todoTasks.length} tasks={todoTasks} onStatusChange={handleStatusChange} />
-              )}
-              {/* In Progress */}
-              {inProgressTasks.length > 0 && (
-                <TaskGroup title="In Progress" count={inProgressTasks.length} tasks={inProgressTasks} onStatusChange={handleStatusChange} />
-              )}
-              {/* Done */}
-              {doneTasks.length > 0 && (
-                <TaskGroup title="Done" count={doneTasks.length} tasks={doneTasks} onStatusChange={handleStatusChange} defaultCollapsed />
-              )}
+            <div className="space-y-5">
+              {opsByCategory.map(({ category, tasks: catTasks }) => {
+                const cfg = categoryConfig[category] ?? categoryConfig.general;
+                const doneCat = catTasks.filter((t) => t.status === "done").length;
+                return (
+                  <CategoryGroup
+                    key={category}
+                    config={cfg}
+                    tasks={catTasks}
+                    doneCount={doneCat}
+                    members={members}
+                    onStatusChange={handleStatusChange}
+                    onAssign={handleAssign}
+                    onSetDue={handleSetDue}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
       )}
 
-      {/* Content Tab */}
+      {/* ═══ CONTENT TAB ═══ */}
       {activeTab === "content" && (
         <div className="space-y-4">
-          {contentTasks.length === 0 ? (
+          {/* Legend for content platforms */}
+          <div className="flex flex-wrap gap-2">
+            <span className="inline-flex items-center gap-1 rounded-full border border-pink-500/20 bg-pink-500/10 text-pink-400 px-2 py-0.5 text-[10px] font-medium">
+              📸 Instagram Feed
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-400 px-2 py-0.5 text-[10px] font-medium">
+              📱 IG Story
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-400 px-2 py-0.5 text-[10px] font-medium">
+              📧 Email
+            </span>
+          </div>
+
+          {contentSorted.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center gap-4 py-12">
                 <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
@@ -360,53 +445,37 @@ function EventTasksPageInner() {
                 </div>
                 <div className="text-center">
                   <p className="font-medium">No content plan yet</p>
-                  <p className="text-sm text-muted-foreground">
-                    Create an event and pick a playbook to generate your promo schedule.
-                  </p>
+                  <p className="text-sm text-muted-foreground">Create an event with a playbook to generate your promo schedule.</p>
                 </div>
               </CardContent>
             </Card>
           ) : (
-            Object.entries(contentByPhase).map(([phase, phaseTasks]) => (
-              <div key={phase} className="space-y-2">
-                <h3 className="text-sm font-semibold text-muted-foreground capitalize">{phase} Phase</h3>
-                <div className="space-y-2">
-                  {phaseTasks.map((task) => (
-                    <ContentTaskCard
-                      key={task.id as string}
-                      task={task}
-                      onStatusChange={handleStatusChange}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))
+            <div className="space-y-2">
+              {contentSorted.map((task) => (
+                <ContentTaskCard
+                  key={task.id as string}
+                  task={task}
+                  members={members}
+                  onStatusChange={handleStatusChange}
+                  onAssign={handleAssign}
+                  onSetDue={handleSetDue}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
 
-      {/* Activity Feed */}
+      {/* ═══ ACTIVITY TAB ═══ */}
       {activeTab === "feed" && (
         <div className="space-y-4">
-          {/* Message input */}
           <form onSubmit={handleSendMessage} className="flex gap-2">
-            <Input
-              placeholder="Post an update..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="flex-1"
-            />
-            <Button
-              type="submit"
-              size="icon"
-              className="bg-nocturn hover:bg-nocturn-light shrink-0"
-              disabled={sending || !message.trim()}
-            >
+            <Input placeholder="Post an update..." value={message} onChange={(e) => setMessage(e.target.value)} className="flex-1" />
+            <Button type="submit" size="icon" className="bg-nocturn hover:bg-nocturn-light shrink-0" disabled={sending || !message.trim()}>
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </form>
 
-          {/* Feed */}
           {activity.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center gap-4 py-12">
@@ -418,24 +487,20 @@ function EventTasksPageInner() {
             <div className="space-y-2">
               {activity.map((item) => {
                 const user = item.users as unknown as { full_name: string; email: string } | null;
-                const isSystem = item.type === "system" || item.type === "task_update";
+                const isSystem = (item.action as string) === "system" || (item.action as string) === "task_update";
                 return (
                   <div key={item.id as string} className={`flex gap-3 animate-fade-in-up ${isSystem ? "opacity-70" : ""}`}>
                     <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isSystem ? "bg-muted text-muted-foreground" : "bg-nocturn text-white"}`}>
-                      {isSystem ? "\u26a1" : (user?.full_name?.[0] ?? "?").toUpperCase()}
+                      {isSystem ? "⚡" : (user?.full_name?.[0] ?? "?").toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium">
-                          {isSystem ? "Nocturn" : user?.full_name ?? user?.email ?? "Unknown"}
-                        </span>
+                        <span className="text-sm font-medium">{isSystem ? "Nocturn" : user?.full_name ?? user?.email ?? "Unknown"}</span>
                         <span className="text-xs text-muted-foreground">
-                          {new Date(item.created_at as string).toLocaleString("en", {
-                            month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
-                          })}
+                          {new Date(item.created_at as string).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
                         </span>
                       </div>
-                      <p className="text-sm text-muted-foreground">{String(item.content)}</p>
+                      <p className="text-sm text-muted-foreground">{String(item.description)}</p>
                     </div>
                   </div>
                 );
@@ -467,15 +532,168 @@ export default function EventTasksPage() {
   );
 }
 
-function ContentTaskCard({
-  task,
+// ─── Category Group ───────────────────────────────────────────────────────────
+
+function CategoryGroup({
+  config,
+  tasks,
+  doneCount,
+  members,
   onStatusChange,
+  onAssign,
+  onSetDue,
+}: {
+  config: { color: string; label: string; emoji: string };
+  tasks: Task[];
+  doneCount: number;
+  members: Member[];
+  onStatusChange: (taskId: string, status: string) => void;
+  onAssign: (taskId: string, userId: string | null) => void;
+  onSetDue: (taskId: string, dueDate: string | null) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div>
+      <button
+        onClick={() => setCollapsed(!collapsed)}
+        className="flex items-center gap-2 text-sm font-semibold mb-2 hover:text-foreground transition-colors w-full"
+      >
+        {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        <span className="text-base">{config.emoji}</span>
+        <span>{config.label}</span>
+        <span className="text-xs font-normal text-muted-foreground">
+          {doneCount}/{tasks.length}
+        </span>
+        <div className="flex-1 h-1 rounded-full bg-muted ml-2 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-nocturn transition-all duration-300"
+            style={{ width: tasks.length > 0 ? `${(doneCount / tasks.length) * 100}%` : "0%" }}
+          />
+        </div>
+      </button>
+      {!collapsed && (
+        <div className="space-y-1.5 ml-1">
+          {tasks.map((task) => (
+            <TaskCard
+              key={task.id as string}
+              task={task}
+              members={members}
+              onStatusChange={onStatusChange}
+              onAssign={onAssign}
+              onSetDue={onSetDue}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Task Card (with inline assign + due date) ───────────────────────────────
+
+function TaskCard({
+  task,
+  members,
+  onStatusChange,
+  onAssign,
+  onSetDue,
 }: {
   task: Task;
+  members: Member[];
   onStatusChange: (taskId: string, status: string) => void;
+  onAssign: (taskId: string, userId: string | null) => void;
+  onSetDue: (taskId: string, dueDate: string | null) => void;
+}) {
+  const [showActions, setShowActions] = useState(false);
+  const isDone = task.status === "done";
+  const nextStatus = task.status === "todo" ? "in_progress" : task.status === "in_progress" ? "done" : "todo";
+  const assignee = task.assigned_user as unknown as { full_name: string; email: string } | null;
+  const overdue = isOverdue(task);
+  const dueLabel = relativeDue(task);
+
+  return (
+    <div
+      className={`rounded-lg border p-3 transition-all duration-200 hover:border-nocturn/20 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : ""}`}
+    >
+      <div className="flex items-start gap-3">
+        <button
+          onClick={() => onStatusChange(task.id as string, nextStatus)}
+          className="shrink-0 mt-0.5 min-w-[20px] min-h-[20px]"
+        >
+          {statusIcons[task.status as string]}
+        </button>
+        <div className="flex-1 min-w-0" onClick={() => setShowActions(!showActions)}>
+          <p className={`text-sm font-medium cursor-pointer ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}>
+            {String(task.title)}
+          </p>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {dueLabel && (
+              <span className={`text-[10px] font-medium ${overdue ? "text-red-400" : "text-muted-foreground"}`}>
+                {overdue ? "🔴 " : ""}{dueLabel}
+              </span>
+            )}
+            {assignee && (
+              <span className="text-[10px] text-muted-foreground">
+                → {assignee.full_name ?? assignee.email}
+              </span>
+            )}
+            {typeof task.description === "string" && task.description && (
+              <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{task.description}</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Inline actions — assign + due date */}
+      {showActions && !isDone && (
+        <div className="mt-2 pt-2 border-t border-white/5 flex flex-wrap gap-2 animate-fade-in-up">
+          <div className="flex items-center gap-1.5">
+            <UserPlus className="h-3 w-3 text-muted-foreground" />
+            <select
+              className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+              value={(task.assigned_to as string) ?? ""}
+              onChange={(e) => onAssign(task.id as string, e.target.value || null)}
+            >
+              <option value="">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <CalendarClock className="h-3 w-3 text-muted-foreground" />
+            <input
+              type="date"
+              className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+              value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
+              onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Content Task Card ────────────────────────────────────────────────────────
+
+function ContentTaskCard({
+  task,
+  members,
+  onStatusChange,
+  onAssign,
+  onSetDue,
+}: {
+  task: Task;
+  members: Member[];
+  onStatusChange: (taskId: string, status: string) => void;
+  onAssign: (taskId: string, userId: string | null) => void;
+  onSetDue: (taskId: string, dueDate: string | null) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showActions, setShowActions] = useState(false);
 
   const meta = (task.metadata as Record<string, unknown>) ?? {};
   const platform = (meta.platform as string) ?? "";
@@ -484,9 +702,17 @@ function ContentTaskCard({
   const hashtags = (meta.hashtags as string[]) ?? [];
   const tip = (meta.tip as string) ?? "";
   const isDone = task.status === "done";
+  const overdue = isOverdue(task);
+  const dueLabel = relativeDue(task);
+  const assignee = task.assigned_user as unknown as { full_name: string; email: string } | null;
 
-  const emoji = platformEmoji[platform.toLowerCase()] ?? "\ud83d\udcf8";
-  const phaseColor = phaseColors[phase.toLowerCase()] ?? "bg-muted text-muted-foreground";
+  const emoji = platformEmoji[platform.toLowerCase()] ?? "📸";
+
+  const platformColor: Record<string, string> = {
+    instagram: "border-pink-500/20",
+    story: "border-violet-500/20",
+    email: "border-blue-500/20",
+  };
 
   async function handleCopyCaption() {
     await navigator.clipboard.writeText(caption);
@@ -494,163 +720,108 @@ function ContentTaskCard({
     setTimeout(() => setCopied(false), 2000);
   }
 
-  function handleToggleStatus() {
-    onStatusChange(task.id as string, isDone ? "todo" : "done");
-  }
-
   return (
-    <Card className={`transition-colors ${isDone ? "opacity-60" : ""}`}>
-      <CardContent className="p-3 space-y-2">
-        {/* Top row: emoji + title + phase badge + status toggle */}
-        <div className="flex items-start gap-3">
-          <span className="text-lg shrink-0 mt-0.5">{emoji}</span>
-          <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium ${isDone ? "line-through" : ""}`}>
-              {String(task.title)}
-            </p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${phaseColor}`}>
-                {phase}
+    <div className={`rounded-lg border p-3 space-y-2 transition-all duration-200 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : platformColor[platform.toLowerCase()] ?? ""}`}>
+      {/* Top row */}
+      <div className="flex items-start gap-3">
+        <span className="text-lg shrink-0 mt-0.5">{emoji}</span>
+        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setShowActions(!showActions)}>
+          <p className={`text-sm font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
+            {String(task.title)}
+          </p>
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            <span className="rounded-full bg-white/5 border border-white/10 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              {phase}
+            </span>
+            {dueLabel && (
+              <span className={`text-[10px] font-medium ${overdue ? "text-red-400" : "text-muted-foreground"}`}>
+                {overdue ? "🔴 " : ""}{dueLabel}
               </span>
-              {typeof task.due_date === "string" && task.due_date && (
-                <span className="text-[10px] text-muted-foreground">
-                  Due {new Date(task.due_date).toLocaleDateString("en", { month: "short", day: "numeric" })}
-                </span>
-              )}
-            </div>
-          </div>
-          <Button
-            size="sm"
-            variant={isDone ? "default" : "outline"}
-            className={`min-h-[44px] min-w-[44px] shrink-0 ${isDone ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
-            onClick={handleToggleStatus}
-          >
-            {isDone ? (
-              <><Check className="h-3 w-3 mr-1" /> Posted</>
-            ) : (
-              <Circle className="h-3 w-3" />
             )}
-          </Button>
+            {assignee && (
+              <span className="text-[10px] text-muted-foreground">→ {assignee.full_name ?? assignee.email}</span>
+            )}
+          </div>
         </div>
+        <Button
+          size="sm"
+          variant={isDone ? "default" : "outline"}
+          className={`min-h-[44px] min-w-[44px] shrink-0 ${isDone ? "bg-green-600 hover:bg-green-700 text-white" : ""}`}
+          onClick={() => onStatusChange(task.id as string, isDone ? "todo" : "done")}
+        >
+          {isDone ? <><Check className="h-3 w-3 mr-1" /> Posted</> : <Circle className="h-3 w-3" />}
+        </Button>
+      </div>
 
-        {/* Caption */}
-        {caption && (
-          <div>
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors min-h-[44px]"
+      {/* Assign + due date actions */}
+      {showActions && !isDone && (
+        <div className="flex flex-wrap gap-2 animate-fade-in-up">
+          <div className="flex items-center gap-1.5">
+            <UserPlus className="h-3 w-3 text-muted-foreground" />
+            <select
+              className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+              value={(task.assigned_to as string) ?? ""}
+              onChange={(e) => onAssign(task.id as string, e.target.value || null)}
             >
-              {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              Caption
-            </button>
-            {expanded ? (
-              <div className="mt-1 space-y-2">
-                <p className="text-sm text-foreground whitespace-pre-wrap">{caption}</p>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="text-xs text-muted-foreground hover:text-foreground min-h-[44px]"
-                  onClick={handleCopyCaption}
-                >
-                  <Copy className="h-3 w-3 mr-1" />
-                  {copied ? "Copied!" : "Copy caption"}
-                </Button>
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{caption}</p>
-            )}
+              <option value="">Unassigned</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
           </div>
-        )}
-
-        {/* Hashtags */}
-        {hashtags.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {hashtags.map((tag, i) => (
-              <span
-                key={i}
-                className="rounded-full bg-nocturn/10 text-nocturn px-2 py-0.5 text-[10px] font-medium"
-              >
-                {tag.startsWith("#") ? tag : `#${tag}`}
-              </span>
-            ))}
+          <div className="flex items-center gap-1.5">
+            <CalendarClock className="h-3 w-3 text-muted-foreground" />
+            <input
+              type="date"
+              className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+              value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
+              onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
+            />
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Pro tip */}
-        {tip && (
-          <div className="rounded-md bg-muted/50 border border-border px-3 py-2">
-            <p className="text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Pro tip:</span> {tip}
-            </p>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
+      {/* Caption */}
+      {caption && (
+        <div>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors min-h-[36px]"
+          >
+            {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            Caption
+          </button>
+          {expanded ? (
+            <div className="mt-1 space-y-2">
+              <p className="text-sm text-foreground whitespace-pre-wrap">{caption}</p>
+              <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-foreground min-h-[36px]" onClick={handleCopyCaption}>
+                <Copy className="h-3 w-3 mr-1" />
+                {copied ? "Copied!" : "Copy caption"}
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground line-clamp-2 mt-1">{caption}</p>
+          )}
+        </div>
+      )}
 
-function TaskGroup({
-  title,
-  count,
-  tasks,
-  onStatusChange,
-  defaultCollapsed = false,
-}: {
-  title: string;
-  count: number;
-  tasks: Task[];
-  onStatusChange: (taskId: string, status: string) => void;
-  defaultCollapsed?: boolean;
-}) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+      {/* Hashtags */}
+      {hashtags.length > 0 && expanded && (
+        <div className="flex flex-wrap gap-1">
+          {hashtags.map((tag, i) => (
+            <span key={i} className="rounded-full bg-nocturn/10 text-nocturn px-2 py-0.5 text-[10px] font-medium">
+              {tag.startsWith("#") ? tag : `#${tag}`}
+            </span>
+          ))}
+        </div>
+      )}
 
-  return (
-    <div>
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center gap-2 text-sm font-semibold text-muted-foreground mb-2 hover:text-foreground transition-colors"
-      >
-        {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-        {title} <span className="text-xs font-normal">({count})</span>
-      </button>
-      {!collapsed && (
-        <div className="space-y-1.5">
-          {tasks.map((task) => {
-            const assignee = task.assigned_user as unknown as { full_name: string; email: string } | null;
-            const nextStatus = task.status === "todo" ? "in_progress" : task.status === "in_progress" ? "done" : "todo";
-            const category = ((task.metadata as Record<string, unknown>)?.category as string) ?? "general";
-
-            return (
-              <div
-                key={task.id as string}
-                className={`flex items-center gap-3 rounded-lg border p-3 transition-colors hover:border-nocturn/20 ${task.status === "done" ? "opacity-60" : ""}`}
-              >
-                <button onClick={() => onStatusChange(task.id as string, nextStatus)} className="shrink-0">
-                  {statusIcons[task.status as string]}
-                </button>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-medium ${task.status === "done" ? "line-through" : ""} ${priorityColors[task.priority as string] ?? ""}`}>
-                    {String(task.title)}
-                  </p>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-medium ${categoryColors[category] ?? categoryColors.general}`}>
-                      {category}
-                    </span>
-                    {typeof task.due_date === "string" && task.due_date && (
-                      <span className="text-[10px] text-muted-foreground">
-                        Due {new Date(task.due_date).toLocaleDateString("en", { month: "short", day: "numeric" })}
-                      </span>
-                    )}
-                    {assignee && (
-                      <span className="text-[10px] text-muted-foreground">
-                        → {assignee.full_name ?? assignee.email}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+      {/* Pro tip */}
+      {tip && expanded && (
+        <div className="rounded-md bg-muted/50 border border-border px-3 py-2">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">Pro tip:</span> {tip}
+          </p>
         </div>
       )}
     </div>

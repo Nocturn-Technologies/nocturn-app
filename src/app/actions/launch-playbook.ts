@@ -287,7 +287,11 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
           startsAt: ev.starts_at,
         });
 
-        const contentTasks = contentPlan.posts.map((post, i) => {
+        // Filter to Instagram (feed + stories) and email only — no Twitter
+        const filteredPosts = contentPlan.posts.filter(
+          (p) => p.platform !== "twitter"
+        );
+        const contentTasks = filteredPosts.map((post, i) => {
           const platformLabels: Record<string, string> = {
             instagram: "Instagram",
             twitter: "Twitter/X",

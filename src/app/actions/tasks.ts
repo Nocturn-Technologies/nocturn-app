@@ -283,6 +283,71 @@ export async function updateTaskStatus(taskId: string, status: string) {
   }
 }
 
+// Update task details (assign, due date)
+export async function updateTaskDetails(taskId: string, updates: { assignedTo?: string | null; dueAt?: string | null }) {
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated" };
+    if (!taskId?.trim()) return { error: "Task ID is required" };
+
+    const admin = createAdminClient();
+    const { data: taskCheck } = await admin.from("event_tasks").select("event_id, title").eq("id", taskId).maybeSingle();
+    if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
+
+    const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (updates.assignedTo !== undefined) dbUpdates.assigned_to = updates.assignedTo;
+    if (updates.dueAt !== undefined) dbUpdates.due_at = updates.dueAt;
+
+    const { error } = await admin.from("event_tasks").update(dbUpdates).eq("id", taskId);
+    if (error) return { error: "Failed to update task" };
+
+    const changes: string[] = [];
+    if (updates.assignedTo !== undefined) changes.push(updates.assignedTo ? "reassigned" : "unassigned");
+    if (updates.dueAt !== undefined) changes.push(`due date ${updates.dueAt ? "set" : "cleared"}`);
+
+    await admin.from("event_activity").insert({
+      event_id: taskCheck.event_id,
+      user_id: user.id,
+      action: "task_update",
+      description: `Updated "${taskCheck.title}": ${changes.join(", ")}`,
+    });
+
+    return { error: null };
+  } catch (err) {
+    console.error("[updateTaskDetails]", err);
+    return { error: "Something went wrong" };
+  }
+}
+
+// Get collective members for an event (for assignee dropdown)
+export async function getEventMembers(eventId: string) {
+  try {
+    if (!eventId?.trim()) return [];
+    const userId = await authAndVerifyEvent(eventId);
+    if (!userId) return [];
+
+    const admin = createAdminClient();
+    const { data: event } = await admin.from("events").select("collective_id").eq("id", eventId).maybeSingle();
+    if (!event) return [];
+
+    const { data, error } = await admin
+      .from("collective_members")
+      .select("user_id, role, users!collective_members_user_id_fkey(full_name, email)")
+      .eq("collective_id", event.collective_id)
+      .is("deleted_at", null);
+
+    if (error) return [];
+    return (data ?? []).map((m) => {
+      const u = m.users as unknown as { full_name: string; email: string } | null;
+      return { id: m.user_id, name: u?.full_name ?? u?.email ?? "Unknown", role: m.role };
+    });
+  } catch (err) {
+    console.error("[getEventMembers]", err);
+    return [];
+  }
+}
+
 // Post a message to event activity feed
 export async function postEventMessage(eventId: string, content: string) {
   try {
