@@ -84,7 +84,7 @@ The signature color is Nocturn Purple (`#7B2FF7`) — a vivid, saturated violet 
 
 ### Principles
 - **Outfit for hierarchy, DM Sans for everything else**: Outfit headings are always bold (700) and create the visual structure. DM Sans handles all interactive and body text.
-- **No font size above 24px in the app**: This is a mobile-first tool, not a marketing page. The largest text is `text-2xl` for page titles.
+- **No font size above 24px in the app**: This is a mobile-first tool, not a marketing page. The largest text is `text-2xl` for page titles. **Exception — Dashboard Greeting**: The home screen greeting may use `text-3xl md:text-4xl` for editorial hierarchy. This is the only permitted exception.
 - **Uppercase tracking on labels**: Small labels use `uppercase tracking-wider` for emphasis at tiny sizes. CSS: `text-xs font-semibold text-zinc-400 uppercase tracking-wider`.
 - **Truncation over wrapping**: Long text gets `truncate` rather than wrapping, preserving layout density. Critical on mobile.
 
@@ -112,6 +112,13 @@ The signature color is Nocturn Purple (`#7B2FF7`) — a vivid, saturated violet 
 - Text: White
 - Used for: Submit, Send, Add, Create actions
 - CSS: `bg-nocturn hover:bg-nocturn-light text-white`
+
+**Nocturn Gradient (Premium Variant)**
+- Background: `bg-gradient-to-r from-nocturn to-nocturn-light`
+- Text: White, border `border-nocturn/20`
+- Used for: Hero CTAs, checkout buttons, primary onboarding actions
+- Shadow on hover: `hover:shadow-lg hover:shadow-nocturn/25 hover:brightness-110`
+- CSS: shadcn `variant="nocturn"` uses this gradient automatically
 
 **Icon Button**
 - Size: 44x44px minimum (touch target)
@@ -218,6 +225,12 @@ Nocturn uses almost no traditional box shadows. Depth comes from:
 3. `#18181B` (zinc-900) — Inputs, nested surfaces within cards
 4. `#27272A` (zinc-800) — Tertiary surfaces, editable field backgrounds
 5. `rgba(39, 39, 42, 0.5)` (zinc-800/50) — Stat cards, metric boxes
+
+### Interactive Card Hover Glow
+- Cards may use `hover:shadow-lg hover:shadow-nocturn/10` for brand-colored hover feedback
+- This is a glow effect, not a traditional shadow, and is permitted
+- Keep opacity at ≤20% to maintain the subtle, atmospheric feel
+- Combine with `hover:ring-1 hover:ring-nocturn/20` for a coordinated hover state
 
 ### Grain Texture
 - `body::before` pseudo-element with `position: fixed; inset: 0; z-index: 9999; pointer-events: none; opacity: 0.03`

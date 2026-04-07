@@ -154,7 +154,7 @@ export default async function FinancePage() {
 
       {/* Partial-failure warning */}
       {hasDataError && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+        <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
           <p className="text-sm text-amber-500">
             Some data may be unavailable. Try refreshing.

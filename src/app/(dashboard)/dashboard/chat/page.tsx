@@ -154,7 +154,7 @@ function ChannelRow({
   return (
     <Link
       href={`/dashboard/chat/${ch.id}`}
-      className="flex items-center gap-3 px-4 py-3 min-h-[48px] hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 border-b border-white/[0.04] last:border-b-0"
+      className="flex items-center gap-3 px-4 py-3 min-h-[48px] hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 border-b border-white/5 last:border-b-0"
     >
       {/* Avatar */}
       {icon ?? <Avatar name={ch.name} />}
