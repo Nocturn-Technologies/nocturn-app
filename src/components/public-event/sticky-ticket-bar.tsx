@@ -45,7 +45,7 @@ export function StickyTicketBar({ lowestPrice, accentColor, ticketSectionId }: S
           </div>
           <button
             onClick={scrollToTickets}
-            className="flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-bold text-white transition-all hover:brightness-110 active:scale-[0.97]"
+            className="flex items-center gap-2 rounded-xl px-5 py-3 min-h-[44px] text-sm font-bold text-white transition-all duration-200 hover:brightness-110 active:scale-[0.95]"
             style={{ backgroundColor: accentColor }}
           >
             <Ticket className="h-4 w-4" />
