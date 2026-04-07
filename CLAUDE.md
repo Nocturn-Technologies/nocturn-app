@@ -91,6 +91,7 @@ When asked to create pitch decks, slides, or marketing materials:
 - **Project management**: Linear
 
 ## Brand
+- **Design System**: See `DESIGN.md` for the full design system reference — colors, typography, component patterns, layout rules, and agent prompt guide. All AI agents should read DESIGN.md before generating UI code.
 - **Primary**: #7B2FF7 (Nocturn Purple)
 - **Light**: #9D5CFF
 - **Glow**: #E9DEFF
