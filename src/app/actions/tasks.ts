@@ -429,3 +429,61 @@ export async function getAITaskSuggestions(eventId: string) {
     return [];
   }
 }
+
+// Get current user's active tasks across all events
+export async function getMyTasks(limit = 10) {
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("event_tasks")
+      .select("id, title, status, priority, due_at, metadata, event_id, events!event_tasks_event_id_fkey(title, starts_at)")
+      .eq("assigned_to", user.id)
+      .in("status", ["todo", "in_progress"])
+      .is("deleted_at", null)
+      .order("due_at", { ascending: true, nullsFirst: false })
+      .limit(limit);
+
+    if (error) {
+      console.error("[getMyTasks]", error);
+      return [];
+    }
+    return data ?? [];
+  } catch (err) {
+    console.error("[getMyTasks]", err);
+    return [];
+  }
+}
+
+// Get task completion progress for an event
+export async function getEventTaskProgress(eventId: string) {
+  try {
+    if (!eventId?.trim()) return null;
+
+    const userId = await authAndVerifyEvent(eventId);
+    if (!userId) return null;
+
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("event_tasks")
+      .select("status")
+      .eq("event_id", eventId)
+      .is("deleted_at", null);
+
+    if (error) {
+      console.error("[getEventTaskProgress]", error);
+      return null;
+    }
+    if (!data || data.length === 0) return null;
+
+    const total = data.length;
+    const done = data.filter(t => t.status === "done").length;
+    return { total, done, percent: Math.round((done / total) * 100) };
+  } catch (err) {
+    console.error("[getEventTaskProgress]", err);
+    return null;
+  }
+}

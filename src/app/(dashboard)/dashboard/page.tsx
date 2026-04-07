@@ -3,6 +3,7 @@ import { DashboardHome } from "@/components/dashboard-home";
 import { createAdminClient } from "@/lib/supabase/config";
 import { getFinancialPulse } from "@/app/actions/finance-pulse";
 import { getActionItems } from "@/app/actions/action-items";
+import { getMyTasks } from "@/app/actions/tasks";
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
@@ -57,6 +58,7 @@ export default async function DashboardPage() {
   let totalAttendees = 0;
   let financialPulse: Awaited<ReturnType<typeof getFinancialPulse>> | null = null;
   let actionItems: Awaited<ReturnType<typeof getActionItems>> = [];
+  let myTasksData: Record<string, unknown>[] = [];
 
   if (collectiveIds.length > 0) {
     // Fire ALL queries at once — not sequentially
@@ -68,6 +70,7 @@ export default async function DashboardPage() {
       revenueResult,
       pulseResult,
       actionItemsResult,
+      myTasksResult,
     ] = await Promise.all([
       // Upcoming count
       admin
@@ -117,6 +120,9 @@ export default async function DashboardPage() {
 
       // Action items / alerts (catch individually to prevent entire page crash)
       getActionItems().catch((err) => { console.error("[dashboard] getActionItems failed:", err); return [] as Awaited<ReturnType<typeof getActionItems>>; }),
+
+      // My tasks (catch individually to prevent entire page crash)
+      getMyTasks(5).catch((err) => { console.error("[dashboard] getMyTasks failed:", err); return [] as Record<string, unknown>[]; }),
     ]);
 
     upcomingCount = upcomingResult.count ?? 0;
@@ -137,6 +143,7 @@ export default async function DashboardPage() {
 
     financialPulse = pulseResult;
     actionItems = actionItemsResult;
+    myTasksData = (myTasksResult ?? []) as Record<string, unknown>[];
 
     // Attendee count (already fetched in parallel above)
     totalAttendees = allEventsResult.count ?? 0;
@@ -165,6 +172,16 @@ export default async function DashboardPage() {
       briefing={[]}
       collectiveId={collectiveId}
       actionItems={actionItems}
+      myTasks={myTasksData.map((t: Record<string, unknown>) => ({
+        id: t.id as string,
+        title: t.title as string,
+        eventTitle: ((t.events as Record<string, unknown>)?.title as string) ?? "Event",
+        eventId: t.event_id as string,
+        dueAt: (t.due_at as string) ?? null,
+        priority: (t.priority as string) ?? null,
+        status: (t.status as string) ?? "todo",
+        isContent: ((t.metadata as Record<string, unknown>)?.task_type as string) === "content",
+      }))}
     />
   );
 }

@@ -153,6 +153,17 @@ export default async function EventDetailPage({ params }: Props) {
     sold: tierSoldCounts[t.id] ?? 0,
   })) ?? [];
 
+  // Fetch task progress for playbook
+  const { data: taskStats } = await admin
+    .from("event_tasks")
+    .select("status")
+    .eq("event_id", eventId)
+    .is("deleted_at", null);
+
+  const taskTotal = taskStats?.length ?? 0;
+  const taskDone = taskStats?.filter((t: { status: string | null }) => t.status === "done").length ?? 0;
+  const taskPercent = taskTotal > 0 ? Math.round((taskDone / taskTotal) * 100) : 0;
+
   const venue = event.venues as unknown as {
     name: string;
     address: string;
@@ -332,6 +343,24 @@ export default async function EventDetailPage({ params }: Props) {
           />
         )}
       </div>
+
+      {/* Playbook Progress */}
+      {taskTotal > 0 && (
+        <Link href={`/dashboard/events/${event.id}/tasks`}>
+          <div className="rounded-2xl border border-border p-4 hover:border-nocturn/20 transition-all active:scale-[0.98]">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium flex items-center gap-2">
+                <ListChecks className="h-4 w-4 text-nocturn" /> Playbook Progress
+              </span>
+              <span className="text-sm font-bold text-nocturn">{taskPercent}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div className="h-full rounded-full bg-nocturn transition-all duration-500" style={{ width: `${taskPercent}%` }} />
+            </div>
+            <p className="text-xs text-muted-foreground mt-1.5">{taskDone} of {taskTotal} tasks complete</p>
+          </div>
+        </Link>
+      )}
 
       <Separator />
 

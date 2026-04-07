@@ -18,6 +18,7 @@ import {
   MapPin,
   MessageSquare,
   AlertTriangle,
+  ListChecks,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -59,6 +60,28 @@ interface DashboardHomeProps {
   briefing?: BriefingItem[];
   collectiveId?: string;
   actionItems?: ActionItemData[];
+  myTasks?: Array<{
+    id: string;
+    title: string;
+    eventTitle: string;
+    eventId: string;
+    dueAt: string | null;
+    priority: string | null;
+    status: string;
+    isContent: boolean;
+  }>;
+}
+
+function formatRelativeDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = date.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+  if (diffDays === 0) return "today";
+  if (diffDays === 1) return "tomorrow";
+  if (diffDays < 0) return `${Math.abs(diffDays)}d overdue`;
+  if (diffDays <= 7) return `in ${diffDays}d`;
+  return date.toLocaleDateString("en", { month: "short", day: "numeric" });
 }
 
 function getGreeting(): string {
@@ -307,6 +330,38 @@ export function DashboardHome(props: DashboardHomeProps) {
               </div>
             </CardContent>
           </Card>
+        </div>
+      )}
+
+      {/* ── My Tasks ── */}
+      {props.myTasks && props.myTasks.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <ListChecks className="h-4 w-4" /> Your Tasks
+            </h2>
+            <Link href="/dashboard/events" className="text-xs text-nocturn hover:underline">View all</Link>
+          </div>
+          <div className="space-y-2">
+            {props.myTasks.map((task) => (
+              <Link key={task.id} href={`/dashboard/events/${task.eventId}/tasks`}>
+                <Card className="rounded-xl hover:border-nocturn/20 transition-all active:scale-[0.98]">
+                  <CardContent className="p-3 flex items-center gap-3">
+                    <div className={`h-2 w-2 rounded-full shrink-0 ${
+                      task.priority === "urgent" ? "bg-red-500" :
+                      task.priority === "high" ? "bg-amber-500" :
+                      "bg-nocturn"
+                    }`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{task.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{task.eventTitle}{task.dueAt ? ` · Due ${formatRelativeDate(task.dueAt)}` : ""}</p>
+                    </div>
+                    {task.isContent && <span className="text-xs bg-nocturn/10 text-nocturn px-2 py-0.5 rounded-full shrink-0">Content</span>}
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
 

@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { buildContentPlan } from "./content-playbook";
 
 // ─── Playbook Templates ────────────────────────────────────────────────────
 
@@ -218,15 +219,129 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
       return { error: "Failed to create tasks" };
     }
 
+    // ── Generate content tasks ──────────────────────────────────────────────
+    let contentTaskCount = 0;
+    try {
+      // Fetch event data needed for content generation (parallel)
+      const [eventData, lineupData, tierData, allTierData] = await Promise.all([
+        admin
+          .from("events")
+          .select("title, slug, starts_at, vibe_tags, venues(name, city), collectives(name, slug)")
+          .eq("id", eventId)
+          .maybeSingle(),
+        admin
+          .from("event_artists")
+          .select("artists(name)")
+          .eq("event_id", eventId),
+        admin
+          .from("ticket_tiers")
+          .select("name, price")
+          .eq("event_id", eventId)
+          .order("price", { ascending: true })
+          .limit(1),
+        admin
+          .from("ticket_tiers")
+          .select("capacity")
+          .eq("event_id", eventId),
+      ]);
+
+      if (eventData.data) {
+        const ev = eventData.data;
+        const venue = ev.venues as unknown as { name: string; city: string } | null;
+        const collective = ev.collectives as unknown as { name: string; slug: string } | null;
+        const vibes = (ev.vibe_tags as string[]) ?? [];
+        const vibeStr = vibes.length > 0 ? vibes.slice(0, 3).join(", ") : "underground";
+
+        const artistNames = (lineupData.data ?? [])
+          .map((l) => (l.artists as unknown as { name: string })?.name)
+          .filter(Boolean);
+        const lineupStr = artistNames.length > 0 ? artistNames.join(", ") : "a curated lineup";
+
+        const lowestPrice = tierData.data?.[0]?.price
+          ? `$${Number(tierData.data[0].price).toFixed(0)}`
+          : "limited";
+
+        const collectiveSlug = collective?.slug ?? event.collective_id;
+        const eventSlug = ev.slug ?? eventId;
+        const ticketLink = `app.trynocturn.com/e/${collectiveSlug}/${eventSlug}`;
+
+        const totalCapacity = (allTierData.data ?? []).reduce(
+          (sum, t) => sum + (t.capacity ?? 0),
+          0,
+        );
+        const eventSize: "small" | "medium" | "large" =
+          totalCapacity > 300 ? "large" : totalCapacity > 100 ? "medium" : "small";
+
+        const contentPlan = buildContentPlan({
+          eventDate,
+          daysUntil: daysUntilEvent,
+          title: ev.title,
+          venueName: venue?.name ?? "the venue",
+          city: venue?.city ?? "the city",
+          collectiveName: collective?.name ?? "the collective",
+          vibeStr,
+          lineupStr,
+          lowestPrice,
+          ticketLink,
+          eventSize,
+          startsAt: ev.starts_at,
+        });
+
+        const contentTasks = contentPlan.posts.map((post, i) => {
+          const platformLabels: Record<string, string> = {
+            instagram: "Instagram",
+            twitter: "Twitter/X",
+            email: "Email",
+            story: "IG Story",
+            all: "All Platforms",
+          };
+          const dueDate = new Date(eventDate.getTime() - post.daysBefore * 86400000);
+          // Don't schedule in the past
+          if (dueDate < new Date()) dueDate.setTime(Date.now() + (i + 1) * 3600000);
+
+          return {
+            event_id: eventId,
+            title: `${platformLabels[post.platform] ?? post.platform} post — ${post.phase}`,
+            description: post.caption.slice(0, 500),
+            status: "todo",
+            priority: "medium",
+            assigned_to: null,
+            due_at: dueDate.toISOString(),
+            metadata: {
+              created_by: user.id,
+              source: `playbook:${playbookId}:content`,
+              category: "content",
+              task_type: "content",
+              platform: post.platform,
+              caption: post.caption,
+              hashtags: post.hashtags,
+              tip: post.tip,
+              phase: post.phase,
+              position: 1000 + i,
+            },
+          };
+        });
+
+        if (contentTasks.length > 0) {
+          await admin.from("event_tasks").insert(contentTasks);
+          contentTaskCount = contentTasks.length;
+        }
+      }
+    } catch (contentErr) {
+      // Content generation is best-effort — don't fail the whole playbook
+      console.error("[applyLaunchPlaybook] content generation error", contentErr);
+    }
+
     // Log activity
+    const totalCount = tasks.length + contentTaskCount;
     await admin.from("event_activity").insert({
       event_id: eventId,
       user_id: user.id,
       action: "system",
-      description: `Applied "${playbookId}" playbook — ${tasks.length} tasks created`,
+      description: `Applied "${playbookId}" playbook — ${tasks.length} ops tasks + ${contentTaskCount} content tasks created (${totalCount} total)`,
     });
 
-    return { error: null, taskCount: tasks.length };
+    return { error: null, taskCount: totalCount };
   } catch (err) {
     console.error("[applyLaunchPlaybook]", err);
     return { error: "Something went wrong" };
