@@ -1198,7 +1198,7 @@ export default function NewEventPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg flex flex-col min-h-[calc(100dvh-8rem)] animate-fade-in">
+    <div className="mx-auto max-w-lg flex flex-col h-[calc(100dvh-8rem)] animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-3 pb-2 shrink-0 px-1">
         <Link href="/dashboard/events">
@@ -1231,7 +1231,7 @@ export default function NewEventPage() {
       <StepProgress current={step} steps={STEPS} />
 
       {/* Step content */}
-      <div className="flex-1 overflow-y-auto px-1 pb-28">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-1 pb-32 min-h-0">
         {/* ── STEP 1: Event Details ── */}
         {step === "details" && (
           <div className="space-y-5 animate-fade-in">
