@@ -2,7 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
-import { buildContentPlan } from "./content-playbook";
+import { buildContentPlan } from "@/lib/content-plan-builder";
 
 // ─── Playbook Templates ────────────────────────────────────────────────────
 
