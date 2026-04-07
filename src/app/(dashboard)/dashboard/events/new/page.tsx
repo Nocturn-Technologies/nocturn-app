@@ -1407,17 +1407,45 @@ export default function NewEventPage() {
 
       setThinking(false);
 
-      // Check what's still missing
+      // Check what's still missing (basic info)
       const missing: string[] = [];
       if (!merged.title) missing.push("event name");
       if (!merged.date) missing.push("date");
       if (!merged.startTime) missing.push("time");
       if (!merged.venueName) missing.push("venue");
 
+      // Also track what's missing for budget flow
+      const needsTicketInfo = merged.ticketPrice === undefined && !merged.tiers?.length;
+      const needsCapacity = !merged.venueCapacity;
+
       const currentStep = step as string;
-      if (missing.length === 0 && !["headliner-type", "headliner-origin", "talent-fee", "venue-costs", "budget-calc", "tickets"].includes(currentStep)) {
+      const inBudgetSteps = ["headliner-type", "headliner-origin", "talent-fee", "venue-costs", "budget-calc"].includes(currentStep);
+
+      // If we're on the tickets step and the user said something we didn't parse,
+      // re-prompt for ticket info instead of showing a broken "just need the" message
+      if (step === "tickets" && missing.length === 0) {
+        const promptParts: string[] = [];
+        if (needsCapacity) promptParts.push("**capacity**");
+        if (needsTicketInfo) promptParts.push("**ticket price**");
+        if (promptParts.length > 0) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: `${reply || "Didn't quite catch that — could you rephrase what you're trying to update?"}\n\nI still need the ${promptParts.join(" and ")}. E.g. "200 cap, $25" or "free"` },
+          ]);
+        } else {
+          // We have everything from tickets step — advance to budget planning
+          setMessages((prev) => [
+            ...prev,
+            { role: "ai", content: reply || "Got it!" },
+          ]);
+          advanceToStep("headliner-type");
+        }
+        return;
+      }
+
+      if (missing.length === 0 && !inBudgetSteps && step !== "tickets") {
         // All basic info collected — ask about capacity and pricing before budget
-        if (!merged.venueCapacity && !merged.ticketPrice && merged.ticketPrice !== 0 && step !== "tickets") {
+        if (needsCapacity && needsTicketInfo) {
           setMessages((prev) => [
             ...prev,
             { role: "ai", content: `${reply || "Got it!"}\n\nDoes this look right so far?\n\n🎤 **${merged.title}**\n📅 ${merged.date}${merged.startTime ? ` at ${merged.startTime}` : ""}\n📍 ${merged.venueName}${merged.venueCity ? `, ${merged.venueCity}` : ""}\n\nWhat's the **capacity** and **ticket price**? E.g. "200 cap, $25" or "free"` },
@@ -1427,7 +1455,7 @@ export default function NewEventPage() {
         }
 
         // If we have capacity but no price, ask about price specifically
-        if (merged.venueCapacity && merged.ticketPrice === undefined && step !== "tickets") {
+        if (needsTicketInfo) {
           setMessages((prev) => [
             ...prev,
             { role: "ai", content: `${reply || "Got it!"}\n\nWhat's the **ticket price**? E.g. "$25" or "free"\n\nIf it's free, are you earning revenue another way? (e.g. bar revenue percentage)` },
@@ -1463,7 +1491,7 @@ export default function NewEventPage() {
         ]);
         setStep("review");
         setPhase("review");
-      } else if (missing.length <= 2) {
+      } else if (missing.length > 0 && missing.length <= 2) {
         // Almost there — ask for what's missing naturally
         const needStr = missing.join(" and ");
         setMessages((prev) => [
@@ -1473,7 +1501,7 @@ export default function NewEventPage() {
             content: `${reply || "Got it!"}\n\nJust need the ${needStr} and we're good to go.`,
           },
         ]);
-      } else {
+      } else if (missing.length > 2) {
         // Got some info, need more
         setMessages((prev) => [
           ...prev,
