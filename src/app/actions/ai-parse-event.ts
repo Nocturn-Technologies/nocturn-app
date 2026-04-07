@@ -320,7 +320,7 @@ function generateReply(allData: Partial<ParsedEventDetails>, newData: Partial<Pa
   if (newData.doorsOpen) justParsed.push("doors time");
   if (newData.venueName) justParsed.push(`venue (${newData.venueName})`);
   if (newData.venueCity) justParsed.push(`city (${newData.venueCity})`);
-  if (newData.ticketPrice) justParsed.push("pricing");
+  if (newData.ticketPrice !== undefined) justParsed.push("pricing");
   if (newData.venueCapacity) justParsed.push("capacity");
 
   // What's still missing?

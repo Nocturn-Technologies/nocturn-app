@@ -48,8 +48,11 @@ function slugify(text: string): string {
 
 
 const DRAFT_STORAGE_KEY = "nocturn-event-draft";
+/** Bump this when chat flow logic changes to invalidate stale drafts */
+const DRAFT_VERSION = 2;
 
 interface DraftState {
+  version?: number;
   messages: Message[];
   eventData: ParsedEventDetails;
   tiers: TicketTier[];
@@ -60,7 +63,7 @@ interface DraftState {
 function saveDraft(state: DraftState) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ ...state, version: DRAFT_VERSION }));
   } catch {
     // storage full or unavailable — silently ignore
   }
@@ -71,7 +74,13 @@ function loadDraft(): DraftState | null {
   try {
     const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
     if (!raw) return null;
-    return JSON.parse(raw) as DraftState;
+    const draft = JSON.parse(raw) as DraftState;
+    // Discard drafts from older code versions to avoid stuck states
+    if (draft.version !== DRAFT_VERSION) {
+      window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      return null;
+    }
+    return draft;
   } catch {
     return null;
   }
