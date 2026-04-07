@@ -3,10 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createEvent } from "@/app/actions/events";
-import {
-  type ParsedEventDetails,
-  type TicketTier,
-} from "@/app/actions/ai-parse-event";
+import { type TicketTier } from "@/app/actions/ai-parse-event";
 import { getTicketPricingSuggestion, type PricingSuggestion } from "@/app/actions/pricing-suggestion";
 import { calculateBudget, type BudgetResult, type BudgetInput } from "@/app/actions/budget-planner";
 import { applyLaunchPlaybook } from "@/app/actions/launch-playbook";
@@ -14,11 +11,9 @@ import { applyLaunchPlaybook } from "@/app/actions/launch-playbook";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import VenuePicker, { type SelectedVenue } from "@/components/venue-picker";
-import { useSpeech } from "@/hooks/use-speech";
 import {
   Sparkles,
   ArrowLeft,
-  Send,
   Check,
   Calendar,
   MapPin,
@@ -27,7 +22,6 @@ import {
   Users,
   Loader2,
   Pencil,
-  Mic,
   TrendingUp,
   Target,
   Rocket,
@@ -35,6 +29,14 @@ import {
   Megaphone,
   ListChecks,
   SkipForward,
+  Plus,
+  Trash2,
+  DollarSign,
+  Music,
+  Plane,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from "lucide-react";
 import Link from "next/link";
 import { haptic } from "@/lib/haptics";
@@ -46,38 +48,56 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+// ─── Draft Persistence ─────────────────────────────────────────────────────
 
 const DRAFT_STORAGE_KEY = "nocturn-event-draft";
-/** Bump this when chat flow logic changes to invalidate stale drafts */
-const DRAFT_VERSION = 2;
+const DRAFT_VERSION = 3;
+
+type WizardStep = "details" | "venue" | "tickets" | "budget" | "review";
+
+interface EventFormData {
+  title: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  doorsOpen: string;
+  description: string;
+  venueName: string;
+  venueAddress: string;
+  venueCity: string;
+  venueCapacity: number | "";
+  isFree: boolean;
+  projectedBarSales: number | "";
+  barPercent: number | "";
+}
 
 interface DraftState {
-  version?: number;
-  messages: Message[];
-  eventData: ParsedEventDetails;
+  version: number;
+  step: WizardStep;
+  formData: EventFormData;
   tiers: TicketTier[];
-  step: ChatStep;
-  phase: "chat" | "review" | "creating" | "playbook" | "done";
+  budgetInput: Partial<BudgetInput>;
+  budgetResult: BudgetResult | null;
+  phase: "wizard" | "creating" | "playbook" | "done";
 }
 
 function saveDraft(state: DraftState) {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ ...state, version: DRAFT_VERSION }));
+    sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ ...state, version: DRAFT_VERSION }));
   } catch {
-    // storage full or unavailable — silently ignore
+    // storage full or unavailable
   }
 }
 
 function loadDraft(): DraftState | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(DRAFT_STORAGE_KEY);
+    const raw = sessionStorage.getItem(DRAFT_STORAGE_KEY);
     if (!raw) return null;
     const draft = JSON.parse(raw) as DraftState;
-    // Discard drafts from older code versions to avoid stuck states
     if (draft.version !== DRAFT_VERSION) {
-      window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      sessionStorage.removeItem(DRAFT_STORAGE_KEY);
       return null;
     }
     return draft;
@@ -89,78 +109,79 @@ function loadDraft(): DraftState | null {
 function clearDraft() {
   if (typeof window === "undefined") return;
   try {
-    window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+    sessionStorage.removeItem(DRAFT_STORAGE_KEY);
   } catch {
     // ignore
   }
 }
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+const STEPS: WizardStep[] = ["details", "venue", "tickets", "budget", "review"];
+const STEP_LABELS: Record<WizardStep, string> = {
+  details: "Details",
+  venue: "Venue",
+  tickets: "Tickets",
+  budget: "Budget",
+  review: "Review",
+};
 
-interface Message {
-  role: "ai" | "user";
-  content: string;
-  /** If set, render venue picker inline below this message */
-  widget?: "venue-picker";
-}
+const DEFAULT_FORM: EventFormData = {
+  title: "",
+  date: "",
+  startTime: "22:00",
+  endTime: "",
+  doorsOpen: "",
+  description: "",
+  venueName: "",
+  venueAddress: "",
+  venueCity: "",
+  venueCapacity: "",
+  isFree: false,
+  projectedBarSales: "",
+  barPercent: "",
+};
 
-type ChatStep =
-  | "name"
-  | "venue"
-  | "venue-custom"
-  | "datetime"
-  | "headliner-type"
-  | "headliner-origin"
-  | "talent-fee"
-  | "venue-costs"
-  | "budget-calc"
-  | "tickets"
-  | "vip"
-  | "review";
+// ─── Progress Indicator ────────────────────────────────────────────────────
 
-// ─── Chat Bubbles ────────────────────────────────────────────────────────────
-
-function AiBubble({ children }: { children: React.ReactNode }) {
+function StepProgress({ current, steps }: { current: WizardStep; steps: WizardStep[] }) {
+  const currentIdx = steps.indexOf(current);
   return (
-    <div className="flex items-start gap-3 animate-fade-in-up">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-nocturn/20">
-        <Sparkles className="h-4 w-4 text-nocturn" />
-      </div>
-      <div className="rounded-2xl rounded-tl-sm bg-card border border-white/5 px-4 py-3 max-w-[85%] overflow-hidden">
-        {children}
-      </div>
+    <div className="flex items-center justify-center gap-0 w-full max-w-xs mx-auto py-4">
+      {steps.map((s, i) => {
+        const isActive = i === currentIdx;
+        const isDone = i < currentIdx;
+        return (
+          <div key={s} className="flex items-center flex-1 last:flex-initial">
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
+                  isActive
+                    ? "bg-[#7B2FF7] text-white scale-110 shadow-lg shadow-[#7B2FF7]/30"
+                    : isDone
+                    ? "bg-[#7B2FF7]/20 text-[#7B2FF7]"
+                    : "bg-zinc-800 text-zinc-500"
+                }`}
+              >
+                {isDone ? <Check className="h-3.5 w-3.5" /> : i + 1}
+              </div>
+              <span className={`text-[10px] font-medium transition-colors ${
+                isActive ? "text-white" : isDone ? "text-[#7B2FF7]" : "text-zinc-600"
+              }`}>
+                {STEP_LABELS[s]}
+              </span>
+            </div>
+            {i < steps.length - 1 && (
+              <div className={`h-0.5 flex-1 mx-1 rounded-full transition-colors ${
+                i < currentIdx ? "bg-[#7B2FF7]/40" : "bg-zinc-800"
+              }`} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function UserBubble({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex justify-end animate-fade-in-up">
-      <div className="rounded-2xl rounded-tr-sm bg-nocturn px-4 py-3 max-w-[85%] overflow-hidden">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function ThinkingDots() {
-  return (
-    <div className="flex items-start gap-3 animate-fade-in-up">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-nocturn/20 animate-pulse">
-        <Sparkles className="h-4 w-4 text-nocturn" />
-      </div>
-      <div className="rounded-2xl rounded-tl-sm bg-card border border-white/5 px-5 py-4">
-        <div className="flex gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]" />
-          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]" />
-          <div className="w-2 h-2 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Editable Field Row ──────────────────────────────────────────────────────
+// ─── Editable Components (for review step) ─────────────────────────────────
 
 function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
@@ -199,10 +220,7 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
   return (
     <div className="group/title">
       <button
-        onClick={() => {
-          setEditValue(value);
-          setEditing(true);
-        }}
+        onClick={() => { setEditValue(value); setEditing(true); }}
         className="text-lg font-bold text-foreground flex items-center gap-1.5 text-left hover:text-nocturn-light active:scale-[0.98] transition-all duration-200"
       >
         {value}
@@ -217,13 +235,11 @@ function EditableRow({
   value,
   icon: Icon,
   onSave,
-  type = "text",
 }: {
   label: string;
   value: string;
   icon: React.ComponentType<{ className?: string }>;
   onSave: (value: string) => void;
-  type?: string;
 }) {
   const [editing, setEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
@@ -240,7 +256,6 @@ function EditableRow({
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <input
             ref={inputRef}
-            type={type}
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={(e) => {
@@ -262,10 +277,7 @@ function EditableRow({
         </div>
       ) : (
         <button
-          onClick={() => {
-            setEditValue(value);
-            setEditing(true);
-          }}
+          onClick={() => { setEditValue(value); setEditing(true); }}
           className="flex items-center gap-1.5 text-sm text-left min-w-0 group/row hover:text-nocturn-light active:scale-[0.98] transition-all duration-200"
         >
           <span className="text-zinc-400 shrink-0">{label}:</span>
@@ -276,8 +288,6 @@ function EditableRow({
     </div>
   );
 }
-
-// ─── Editable Description ───────────────────────────────────────────────────
 
 function EditableDescription({ value, onSave }: { value: string; onSave: (v: string) => void }) {
   const [editing, setEditing] = useState(false);
@@ -321,10 +331,7 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
   return (
     <div className="group/desc">
       <button
-        onClick={() => {
-          setEditValue(value);
-          setEditing(true);
-        }}
+        onClick={() => { setEditValue(value); setEditing(true); }}
         className="text-sm text-zinc-400 line-clamp-3 text-left flex items-start gap-1.5 hover:text-zinc-300 active:scale-[0.98] transition-all duration-200"
       >
         <span className="flex-1">{value}</span>
@@ -333,8 +340,6 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
     </div>
   );
 }
-
-// ─── Editable Tier Row ──────────────────────────────────────────────────────
 
 function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: TicketTier) => void }) {
   const [editingField, setEditingField] = useState<"name" | "price" | "capacity" | null>(null);
@@ -381,10 +386,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
             ref={inputRef}
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitEdit();
-              if (e.key === "Escape") cancelEdit();
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
             onBlur={commitEdit}
             className="w-24 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-sm text-white outline-none focus:border-[#7B2FF7]/50"
           />
@@ -402,10 +404,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
             ref={editingField === "capacity" ? inputRef : undefined}
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commitEdit();
-              if (e.key === "Escape") cancelEdit();
-            }}
+            onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
             onBlur={commitEdit}
             className="w-20 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-xs text-white outline-none focus:border-[#7B2FF7]/50"
           />
@@ -424,10 +423,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
           ref={editingField === "price" ? inputRef : undefined}
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commitEdit();
-            if (e.key === "Escape") cancelEdit();
-          }}
+          onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
           onBlur={commitEdit}
           className="w-16 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-sm text-right text-white outline-none focus:border-[#7B2FF7]/50"
         />
@@ -440,202 +436,6 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
           <Pencil className="h-2.5 w-2.5 text-zinc-500 opacity-0 group-hover/price:opacity-100 transition-opacity" />
         </button>
       )}
-    </div>
-  );
-}
-
-// ─── Confirmation Card ───────────────────────────────────────────────────────
-
-function EventConfirmationCard({
-  data,
-  tiers,
-  totalExpenses,
-  onUpdate,
-  onEdit,
-  onCreate,
-  creating,
-  error,
-}: {
-  data: ParsedEventDetails;
-  tiers: TicketTier[];
-  totalExpenses?: number;
-  onUpdate: (field: keyof ParsedEventDetails | "tiers" | "description", value: string | number | TicketTier[]) => void;
-  onEdit: () => void;
-  onCreate: () => void;
-  creating: boolean;
-  error: string | null;
-}) {
-  const dateDisplay = data.date
-    ? (() => {
-        try {
-          const d = new Date(data.date + "T12:00:00");
-          return d.toLocaleDateString("en", {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-          });
-        } catch {
-          return data.date;
-        }
-      })()
-    : "";
-
-  const timeDisplay = data.startTime
-    ? (() => {
-        const [h, m] = (data.startTime ?? "19:00").split(":").map(Number);
-        const period = h >= 12 ? "PM" : "AM";
-        const hour12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
-        return m === 0
-          ? `${hour12} ${period}`
-          : `${hour12}:${String(m).padStart(2, "0")} ${period}`;
-      })()
-    : "";
-
-  return (
-    <div className="ml-11 rounded-2xl border border-[#7B2FF7]/20 bg-zinc-900 overflow-hidden animate-scale-in flex flex-col">
-      <div className="p-4 space-y-3">
-        {/* Status badge */}
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
-            <Check className="h-3 w-3 text-green-400" />
-          </div>
-          <span className="text-xs text-green-400 font-medium uppercase tracking-wider">
-            Ready to create
-          </span>
-        </div>
-
-        {/* Title — inline editable */}
-        <EditableTitle
-          value={data.title || "Untitled Event"}
-          onSave={(v) => onUpdate("title", v)}
-        />
-
-        {data.description && (
-          <EditableDescription
-            value={data.description}
-            onSave={(v) => onUpdate("description", v)}
-          />
-        )}
-
-        {/* Details grid */}
-        <div className="grid gap-2">
-          {data.date && (
-            <EditableRow
-              label="When"
-              value={`${dateDisplay}${timeDisplay ? ` at ${timeDisplay}` : ""}`}
-              icon={Calendar}
-              onSave={(val) => {
-                onUpdate("date", val);
-              }}
-            />
-          )}
-
-          {data.doorsOpen && (
-            <EditableRow
-              label="Doors"
-              value={data.doorsOpen}
-              icon={Clock}
-              onSave={(val) => onUpdate("doorsOpen", val)}
-            />
-          )}
-
-          {(data.venueName || data.venueCity) && (
-            <EditableRow
-              label="Where"
-              value={[data.venueName, data.venueCity]
-                .filter(Boolean)
-                .join(", ")}
-              icon={MapPin}
-              onSave={(val) => {
-                const lastCommaIdx = val.lastIndexOf(",");
-                if (lastCommaIdx === -1) {
-                  // No comma — treat entire string as venue name
-                  onUpdate("venueName", val.trim());
-                } else {
-                  const name = val.slice(0, lastCommaIdx).trim();
-                  const city = val.slice(lastCommaIdx + 1).trim();
-                  if (name) onUpdate("venueName", name);
-                  if (city) onUpdate("venueCity", city);
-                }
-              }}
-            />
-          )}
-        </div>
-
-        {/* Ticket Tiers */}
-        {tiers.length > 0 && (
-          <div className="border-t border-white/5 pt-3 mt-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Ticket className="h-3.5 w-3.5 text-[#7B2FF7]" />
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Tickets</span>
-            </div>
-            <div className="space-y-2">
-              {tiers.map((tier, i) => (
-                <EditableTierRow
-                  key={i}
-                  tier={tier}
-                  onSave={(updatedTier) => {
-                    const updatedTiers = [...tiers];
-                    updatedTiers[i] = updatedTier;
-                    onUpdate("tiers", updatedTiers);
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {data.venueCapacity !== undefined && data.venueCapacity > 0 && (
-          <EditableRow
-            label="Capacity"
-            value={`${data.venueCapacity}`}
-            icon={Users}
-            onSave={(val) => {
-              const num = parseInt(val.replace(/[^0-9]/g, ""));
-              if (!isNaN(num)) onUpdate("venueCapacity", num);
-            }}
-          />
-        )}
-
-        {/* ── Pricing Insight ── */}
-        {tiers.length > 0 && tiers.some(t => t.price > 0) && data.venueCity && data.date && (
-          <PricingInsight city={data.venueCity} date={data.date} venueCapacity={data.venueCapacity} tiers={tiers} />
-        )}
-
-        {/* ── Live Finance Forecast with Pricing Scenarios ── */}
-        {tiers.length > 0 && <LiveForecast tiers={tiers} totalExpenses={totalExpenses} onTiersUpdate={(updated) => onUpdate("tiers", updated)} />}
-      </div>
-
-      {error && (
-        <div role="alert" className="mx-4 mb-3 rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400 text-center">
-          {error}
-        </div>
-      )}
-
-      {/* Action buttons — always visible at bottom */}
-      <div className="flex border-t border-white/5 shrink-0 bg-zinc-900">
-        <button
-          onClick={onEdit}
-          className="flex-1 flex items-center justify-center gap-1.5 h-12 text-sm text-zinc-400 font-medium hover:text-white hover:bg-white/5 active:scale-[0.98] transition-all duration-200 border-r border-white/5"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Change something
-        </button>
-        <button
-          onClick={onCreate}
-          disabled={creating}
-          className="flex-1 flex items-center justify-center gap-1.5 h-12 text-sm text-[#7B2FF7] font-semibold hover:text-white hover:bg-[#7B2FF7]/10 active:scale-[0.98] transition-all duration-200"
-        >
-          {creating ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <>
-              <Sparkles className="h-3.5 w-3.5" />
-              Create Event
-            </>
-          )}
-        </button>
-      </div>
     </div>
   );
 }
@@ -667,8 +467,8 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
 
   if (loading) {
     return (
-      <div className="border-t border-white/5 pt-3 mt-3">
-        <div className="flex items-center gap-1.5 mb-2">
+      <div className="rounded-2xl border border-white/5 bg-zinc-900/50 p-4">
+        <div className="flex items-center gap-1.5">
           <Target className="h-3.5 w-3.5 text-[#7B2FF7] animate-pulse" />
           <span className="text-xs text-zinc-500">Checking market prices...</span>
         </div>
@@ -678,15 +478,14 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
 
   if (!pricing) return null;
 
-  // Compare user's GA price to market
   const userGA = tiers.find(t => t.price > 0 && !t.name.toLowerCase().includes("vip"))?.price ?? 0;
   const diff = userGA - pricing.avgGA;
   const diffLabel = diff > 5 ? "above" : diff < -5 ? "below" : "in line with";
   const diffColor = diff > 5 ? "text-yellow-400" : diff < -5 ? "text-green-400" : "text-green-400";
 
   return (
-    <div className="border-t border-white/5 pt-3 mt-3">
-      <div className="flex items-center gap-1.5 mb-2">
+    <div className="rounded-2xl border border-white/5 bg-zinc-900/50 p-4 space-y-3">
+      <div className="flex items-center gap-1.5">
         <Target className="h-3.5 w-3.5 text-[#7B2FF7]" />
         <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Market Pricing</span>
         <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${
@@ -698,7 +497,7 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5 mb-2">
+      <div className="grid grid-cols-2 gap-1.5">
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${pricing.avgGA}</p>
           <p className="text-[9px] text-zinc-500">avg GA in {city}</p>
@@ -710,7 +509,7 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
       </div>
 
       {userGA > 0 && (
-        <p className="text-[11px] text-zinc-400 mb-1.5">
+        <p className="text-[11px] text-zinc-400">
           Your GA (<span className="text-white font-medium">${userGA}</span>) is{" "}
           <span className={`font-medium ${diffColor}`}>{diffLabel}</span>{" "}
           the market average.
@@ -723,19 +522,17 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
         </p>
       )}
 
-      <p className="text-[10px] text-zinc-600 mt-1 italic">{pricing.suggestion}</p>
+      <p className="text-[10px] text-zinc-600 italic">{pricing.suggestion}</p>
     </div>
   );
 }
 
-// ─── Live Forecast with Pricing Scenarios ────────────────────────────────────
+// ─── Live Forecast ────────────────────────────────────────────────────────────
 
 function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: TicketTier[]; totalExpenses?: number; onTiersUpdate?: (tiers: TicketTier[]) => void }) {
   const [priceMultiplier, setPriceMultiplier] = useState(1.0);
-  // Store base prices so slider always scales from the original values
   const baseTiersRef = useRef<TicketTier[]>(tiers);
 
-  // Update base tiers when tiers change externally (not from slider)
   useEffect(() => {
     if (priceMultiplier === 1.0) {
       baseTiersRef.current = tiers;
@@ -745,7 +542,6 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
   const STRIPE_FEE_RATE = 0.029;
   const STRIPE_FEE_FLAT = 0.30;
 
-  // Use current tiers directly (they get updated by the slider via onTiersUpdate)
   const totalCapacity = tiers.reduce((s, t) => s + t.capacity, 0);
   const maxRevenue = tiers.reduce((s, t) => s + t.price * t.capacity, 0);
   const avgPrice = totalCapacity > 0 ? maxRevenue / totalCapacity : 0;
@@ -764,8 +560,6 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
   function calcNet(rate: number) {
     const ticketsSold = Math.round(totalCapacity * rate);
     const gross = tiers.reduce((s, t) => s + t.price * Math.round(t.capacity * rate), 0);
-    // Buyer pays all fees — organizer keeps 100% of ticket price
-    // Stripe processing still applies to payout (~2.9% + $0.30)
     const stripeProcessing = ticketsSold * STRIPE_FEE_FLAT + gross * STRIPE_FEE_RATE;
     const netRevenue = gross - stripeProcessing;
     const profit = netRevenue - totalExpenses;
@@ -773,9 +567,9 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
   }
 
   const scenarios = [
-    { label: "50% sold", emoji: "😐", rate: 0.5 },
-    { label: "75% sold", emoji: "🔥", rate: 0.75 },
-    { label: "Sell-out", emoji: "🚀", rate: 1.0 },
+    { label: "50% sold", emoji: "\u{1F610}", rate: 0.5 },
+    { label: "75% sold", emoji: "\u{1F525}", rate: 0.75 },
+    { label: "Sell-out", emoji: "\u{1F680}", rate: 1.0 },
   ];
 
   const projections = scenarios.map((s) => ({ ...s, ...calcNet(s.rate) }));
@@ -784,7 +578,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
   const baseTier0Price = baseTiersRef.current[0]?.price || 0;
 
   return (
-    <div className="border-t border-white/5 pt-3 mt-3 space-y-3">
+    <div className="rounded-2xl border border-white/5 bg-zinc-900/50 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <TrendingUp className="h-3.5 w-3.5 text-[#7B2FF7]" />
@@ -814,7 +608,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
         )}
       </div>
 
-      {/* Price slider — adjusts tier prices in real time */}
+      {/* Price slider */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-zinc-500">What if you charge...</span>
@@ -838,7 +632,6 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
         </div>
       </div>
 
-      {/* Show current tier prices when slider is moved */}
       {priceMultiplier !== 1.0 && (
         <div className="flex flex-wrap gap-1.5">
           {tiers.map((t, i) => (
@@ -913,998 +706,14 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
 
       <p className="text-[9px] text-zinc-600 text-center">
         {totalExpenses > 0
-          ? `Profit = revenue − $${totalExpenses.toLocaleString()} expenses − Stripe fees (2.9% + $0.30)`
-          : "Net after Stripe fees (2.9% + $0.30) • You keep 100% of ticket price"}
+          ? `Profit = revenue \u2212 $${totalExpenses.toLocaleString()} expenses \u2212 Stripe fees (2.9% + $0.30)`
+          : "Net after Stripe fees (2.9% + $0.30) \u2022 You keep 100% of ticket price"}
       </p>
     </div>
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
-
-export default function NewEventPage() {
-  const router = useRouter();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [eventData, setEventData] = useState<ParsedEventDetails>({});
-  const [tiers, setTiers] = useState<TicketTier[]>([]);
-  const [thinking, setThinking] = useState(false);
-  const [step, setStep] = useState<ChatStep>("name");
-  const [phase, setPhase] = useState<"chat" | "review" | "creating" | "playbook" | "done">(
-    "chat"
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [createdEventId, setCreatedEventId] = useState<string | null>(null);
-  const [applyingPlaybook, setApplyingPlaybook] = useState(false);
-  const [introShown, setIntroShown] = useState(false);
-  const [budgetInput, setBudgetInput] = useState<Partial<BudgetInput>>({});
-  const [, setBudgetResult] = useState<BudgetResult | null>(null);
-  const [showVenuePicker, setShowVenuePicker] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const { listening, transcript, startListening, stopListening, clearTranscript } = useSpeech();
-  const [speechSupported, setSpeechSupported] = useState(false);
-
-  // ── Restore draft from localStorage on mount ──────────────────────────
-  useEffect(() => {
-    const draft = loadDraft();
-    if (draft && draft.messages.length > 1) {
-      setMessages(draft.messages);
-      setEventData(draft.eventData);
-      setTiers(draft.tiers);
-      setStep(draft.step);
-      setPhase(draft.phase === "creating" || draft.phase === "playbook" ? "review" : draft.phase);
-      setIntroShown(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ── Debounced save to localStorage on key state changes ───────────────
-  const saveDraftDebounced = useCallback(() => {
-    const timer = setTimeout(() => {
-      if (phase === "done" || phase === "playbook") return; // don't persist after creation
-      saveDraft({ messages, eventData, tiers, step, phase });
-    }, 500);
-    return timer;
-  }, [messages, eventData, tiers, step, phase]);
-
-  useEffect(() => {
-    const timer = saveDraftDebounced();
-    return () => clearTimeout(timer);
-  }, [saveDraftDebounced]);
-
-  // Detect speech recognition support
-  useEffect(() => {
-    if (typeof window !== "undefined" && ("SpeechRecognition" in window || "webkitSpeechRecognition" in window)) {
-      setSpeechSupported(true);
-    }
-  }, []);
-
-  // Auto-submit speech transcript
-  useEffect(() => {
-    if (transcript && !thinking) {
-      setInput(transcript);
-      clearTranscript();
-      // Submit on next tick so the input state is set
-      setTimeout(() => {
-        const form = document.getElementById("chat-form") as HTMLFormElement;
-        if (form) {
-          form.requestSubmit();
-        } else {
-          setInput(transcript);
-        }
-      }, 50);
-    }
-  }, [transcript, thinking, clearTranscript]);
-
-  // Scroll to bottom on new messages
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, thinking, phase, showVenuePicker]);
-
-  // Show intro message
-  useEffect(() => {
-    if (!introShown) {
-      setIntroShown(true);
-      setMessages([
-        {
-          role: "ai",
-          content: "Tell me about your event — name, date, venue, whatever you know. I'll figure out the rest. 🌙",
-        },
-      ]);
-      setTimeout(() => inputRef.current?.focus(), 500);
-    }
-  }, [introShown]);
-
-  // Warn before leaving with unsaved data
-  useEffect(() => {
-    function handleBeforeUnload(e: BeforeUnloadEvent) {
-      if ((phase === "chat" || phase === "review") && messages.length > 1) {
-        e.preventDefault();
-      }
-    }
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [phase, messages.length]);
-
-  // ── Start over handler ─────────────────────────────────────────────────
-  function handleStartOver() {
-    if (!window.confirm("Start over? You'll lose your progress.")) return;
-    clearDraft();
-    setMessages([
-      {
-        role: "ai",
-        content: "Tell me about your event — name, date, venue, whatever you know. I'll figure out the rest. \u{1F319}",
-      },
-    ]);
-    setEventData({});
-    setTiers([]);
-    setStep("name");
-    setPhase("chat");
-    setBudgetInput({});
-    setBudgetResult(null);
-    setError(null);
-    setShowVenuePicker(false);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }
-
-  // ── Step advancement helper ──────────────────────────────────────────────
-
-  function advanceToStep(nextStep: ChatStep) {
-    setStep(nextStep);
-
-    if (nextStep === "review") {
-      setPhase("review");
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", content: "Here\u2019s what I\u2019ve set up:" },
-      ]);
-    } else if (nextStep === "venue") {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "ai",
-          content: "Where\u2019s it happening?",
-          widget: "venue-picker",
-        },
-      ]);
-      setShowVenuePicker(true);
-    } else {
-      const prompts: Record<string, string> = {
-        "venue-custom":
-          'Type the venue name, address, and city.\n\nE.g. "CODA, 794 Bathurst St, Toronto"',
-        datetime:
-          'When? Date and time?\n\nTry something like "April 25 10pm" or "2026-04-25 at 22:00"',
-        "headliner-type":
-          "What kind of event is this?\n\n🌍 **International headliner** — flying someone in\n🏠 **Local headliner** — hometown talent\n🎵 **No headliner** — collective showcase or open format\n\nJust say international, local, or no headliner.",
-        "headliner-origin":
-          "Where is your headliner coming from?\n\nE.g. \"London, UK\" or \"New York\" — I'll estimate flights, hotel, and transport.",
-        "talent-fee":
-          "What's the talent fee? And how many nights are they staying?\n\nE.g. \"$2000, staying 2 nights\" or just the fee if it's a day trip.",
-        "venue-costs":
-          "Any venue costs?\n\n💰 **Room rental** — flat fee to book the space\n🍸 **Bar minimum** — spend threshold or lose deposit\n💵 **Deposit** — upfront payment\n🔧 **Other** — sound, lights, security, promo\n\nE.g. \"$500 rental, $3000 bar min, $1000 deposit, $800 other\" or \"no venue costs\"",
-        tickets:
-          'Ticket price and capacity?\n\nE.g. "$25, 200 tickets" or "free"',
-        vip: 'Want to add a VIP tier?\n\nE.g. "$50 VIP, 50 tickets" or type "skip"',
-      };
-      setMessages((prev) => [
-        ...prev,
-        { role: "ai", content: prompts[nextStep] || "" },
-      ]);
-    }
-
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }
-
-  // ── Scale budget tiers to user's entered price ───────────────────────────
-  // If the user gave a price range ($20-$50), distribute tiers across that range.
-  // If they gave a single price, use it as Early Bird and scale proportionally.
-  function scaleBudgetTiers(
-    suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning?: string }>,
-    userPrice: number | undefined,
-    userPriceMax?: number | undefined
-  ): TicketTier[] {
-    if (suggestedTiers.length === 0) {
-      return [];
-    }
-    // Price range: distribute evenly between low and high
-    if (userPrice !== undefined && userPriceMax !== undefined && userPrice > 0 && userPriceMax > userPrice) {
-      const count = suggestedTiers.length;
-      const step = count > 1 ? (userPriceMax - userPrice) / (count - 1) : 0;
-      return suggestedTiers.map((t, i) => ({
-        name: t.name,
-        price: Math.round(userPrice + step * i),
-        capacity: t.capacity,
-      }));
-    }
-    // Single price: scale proportionally
-    if (userPrice === undefined || userPrice <= 0) {
-      return suggestedTiers.map((t) => ({ name: t.name, price: t.price, capacity: t.capacity }));
-    }
-    const baseSuggested = suggestedTiers[0].price;
-    if (baseSuggested <= 0) {
-      return suggestedTiers.map((t) => ({ name: t.name, price: userPrice, capacity: t.capacity }));
-    }
-    const ratio = userPrice / baseSuggested;
-    return suggestedTiers.map((t) => ({
-      name: t.name,
-      price: Math.round(t.price * ratio),
-      capacity: t.capacity,
-    }));
-  }
-
-  // ── Handle text input send — AI parses everything ───────────────────────
-
-  async function handleSend(e: React.FormEvent) {
-    e.preventDefault();
-    if (!input.trim() || thinking) return;
-
-    const userMsg = input.trim();
-    setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
-
-    setThinking(true);
-
-    // ── Budget planning step handlers ──────────────────────────────────
-    if (step === "headliner-type") {
-      const lower = userMsg.toLowerCase();
-      let headlinerType: "local" | "international" | "none" = "none";
-      if (lower.includes("international") || lower.includes("flying") || lower.includes("abroad")) {
-        headlinerType = "international";
-      } else if (lower.includes("local") || lower.includes("hometown") || lower.includes("home")) {
-        headlinerType = "local";
-      } else if (lower.includes("no") || lower.includes("none") || lower.includes("skip") || lower.includes("showcase") || lower.includes("open")) {
-        headlinerType = "none";
-      }
-
-      setBudgetInput(prev => ({ ...prev, headlinerType, venueCity: eventData.venueCity, venueCapacity: eventData.venueCapacity, date: eventData.date }));
-      setEventData(prev => ({ ...prev, headlinerType }));
-      setThinking(false);
-
-      if (headlinerType === "international") {
-        advanceToStep("headliner-origin");
-      } else if (headlinerType === "local") {
-        advanceToStep("talent-fee");
-      } else {
-        advanceToStep("venue-costs");
-      }
-      return;
-    }
-
-    if (step === "headliner-origin") {
-      setBudgetInput(prev => ({ ...prev, headlinerOrigin: userMsg }));
-      setThinking(false);
-      advanceToStep("talent-fee");
-      return;
-    }
-
-    if (step === "talent-fee") {
-      const feeMatch = userMsg.match(/\$?([\d,]+)/);
-      const fee = feeMatch ? parseInt(feeMatch[1].replace(/,/g, "")) : 0;
-      const nightsMatch = userMsg.match(/(\d+)\s*night/i);
-      const nights = nightsMatch ? parseInt(nightsMatch[1]) : undefined;
-
-      setBudgetInput(prev => ({ ...prev, talentFee: fee, stayNights: nights }));
-      setThinking(false);
-      advanceToStep("venue-costs");
-      return;
-    }
-
-    if (step === "venue-costs") {
-      const lower = userMsg.toLowerCase();
-      if (lower.includes("no") || lower.includes("none") || lower.includes("skip") || lower === "0") {
-        // No venue costs — go calculate budget
-        setThinking(true);
-        try {
-          const finalBudget = { ...budgetInput, venueCost: 0, barMinimum: 0, deposit: 0, otherExpenses: 0 } as BudgetInput;
-          const result = await calculateBudget(finalBudget);
-          setBudgetResult(result);
-
-          // Auto-populate tiers — scaled to user's entered price if provided
-          if (result.suggestedTiers.length > 0) {
-            const scaled = scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice, eventData.ticketPriceMax);
-            setTiers(scaled);
-          }
-
-          setThinking(false);
-          // Show budget summary and go to review
-          const displayTiers = eventData.ticketPrice && eventData.ticketPrice > 0
-            ? scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice, eventData.ticketPriceMax)
-            : result.suggestedTiers;
-          const tierSummary = displayTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
-          setMessages(prev => [
-            ...prev,
-            { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel: ~$${result.travelEstimate.total.toLocaleString()} (${result.travelEstimate.breakdown})` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. You can adjust prices in the review, or tell me different amounts.` },
-          ]);
-          setStep("review");
-          setPhase("review");
-        } catch {
-          setThinking(false);
-          setMessages(prev => [
-            ...prev,
-            { role: "ai", content: "I couldn't calculate the budget. Let's continue — you can adjust later." },
-          ]);
-          setStep("review");
-          setPhase("review");
-        }
-        return;
-      }
-
-      // Parse venue costs
-      const rentalMatch = userMsg.match(/\$?([\d,]+)\s*(?:rental|rent|room)/i);
-      const barMinMatch = userMsg.match(/\$?([\d,]+)\s*(?:bar\s*min|minimum)/i);
-      const depositMatch = userMsg.match(/\$?([\d,]+)\s*(?:deposit|down)/i);
-      const otherMatch = userMsg.match(/\$?([\d,]+)\s*(?:other|sound|light|security|promo|misc)/i);
-
-      // If no specific labels, try to parse just numbers
-      const allNumbers = [...userMsg.matchAll(/\$?([\d,]+)/g)].map(m => parseInt(m[1].replace(/,/g, "")));
-
-      const venueCost = rentalMatch ? parseInt(rentalMatch[1].replace(/,/g, "")) : (allNumbers[0] ?? 0);
-      const barMinimum = barMinMatch ? parseInt(barMinMatch[1].replace(/,/g, "")) : 0;
-      const deposit = depositMatch ? parseInt(depositMatch[1].replace(/,/g, "")) : 0;
-      const otherExpenses = otherMatch ? parseInt(otherMatch[1].replace(/,/g, "")) : (allNumbers.length > 1 ? allNumbers[allNumbers.length - 1] : 0);
-
-      setBudgetInput(prev => ({ ...prev, venueCost, barMinimum, deposit, otherExpenses }));
-
-      // Calculate budget
-      setThinking(true);
-      try {
-        const finalBudget = { ...budgetInput, venueCost, barMinimum, deposit, otherExpenses } as BudgetInput;
-        const result = await calculateBudget(finalBudget);
-        setBudgetResult(result);
-
-        // Auto-populate tiers — scaled to user's entered price if provided
-        if (result.suggestedTiers.length > 0) {
-          const scaled = scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice, eventData.ticketPriceMax);
-          setTiers(scaled);
-        }
-
-        setThinking(false);
-
-        const displayTiers = eventData.ticketPrice && eventData.ticketPrice > 0
-          ? scaleBudgetTiers(result.suggestedTiers, eventData.ticketPrice, eventData.ticketPriceMax)
-          : result.suggestedTiers;
-        const tierSummary = displayTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
-        setMessages(prev => [
-          ...prev,
-          { role: "ai", content: `📊 **Budget Breakdown**\n\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**${result.travelEstimate ? `\nTravel estimate: ~$${result.travelEstimate.total.toLocaleString()}\n${result.travelEstimate.breakdown}` : ""}${barMinimum > 0 ? `\n\n⚠️ Bar minimum: $${barMinimum.toLocaleString()} — if you don't hit it, you lose your $${deposit.toLocaleString()} deposit.` : ""}\n\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Suggested ticket tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} revenue → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()} ${s.profit >= 0 ? "profit" : "loss"}`).join("\n")}\n\nThese tiers are pre-loaded. Adjust in the review or tell me different prices.` },
-        ]);
-        setStep("review");
-        setPhase("review");
-      } catch {
-        setThinking(false);
-        setMessages(prev => [
-          ...prev,
-          { role: "ai", content: "I couldn't calculate the budget. Let's continue — you can adjust later." },
-        ]);
-        setStep("review");
-        setPhase("review");
-      }
-      return;
-    }
-
-    try {
-      // Let Claude parse whatever the user said — no rigid steps
-      const { parseEventDetails } = await import("@/app/actions/ai-parse-event");
-      const { parsed, reply } = await parseEventDetails(userMsg, eventData);
-
-      // Check for auth expiry
-      if (reply && reply.includes("Not authenticated")) {
-        setThinking(false);
-        router.push("/login");
-        return;
-      }
-
-      // Merge new data with existing
-      const merged = { ...eventData, ...parsed };
-      setEventData(merged);
-
-      // Handle ticket tiers from parsed data
-      if (parsed.tiers && parsed.tiers.length > 0) {
-        setTiers(parsed.tiers);
-      } else if (parsed.ticketPrice !== undefined && parsed.ticketPriceMax !== undefined && tiers.length === 0) {
-        // Price range given (e.g. "$20-$50") — auto-create tiered pricing
-        const totalCap = parsed.ticketQuantity || merged.venueCapacity || 200;
-        const low = parsed.ticketPrice;
-        const high = parsed.ticketPriceMax;
-        const mid = Math.round((low + high) / 2);
-        setTiers([
-          { name: "Early Bird", price: low, capacity: Math.round(totalCap * 0.3) },
-          { name: "General Admission", price: mid, capacity: Math.round(totalCap * 0.5) },
-          { name: "Door", price: high, capacity: Math.round(totalCap * 0.2) },
-        ]);
-      } else if (parsed.ticketPrice !== undefined && tiers.length === 0) {
-        const cap = parsed.ticketQuantity || merged.venueCapacity || 100;
-        setTiers([{
-          name: parsed.ticketTierName || "General Admission",
-          price: parsed.ticketPrice,
-          capacity: cap,
-        }]);
-      }
-
-      // Handle tickets step — free event ask about bar revenue, or advance
-      if (step === "tickets") {
-        const lower = userMsg.toLowerCase();
-        const mentionsBarRevenue = /bar\s*(revenue|percent|%|split|sales|minimum)|percentage.*bar|we\s*get\s*\d+%/i.test(userMsg);
-        const hasBarPercent = parsed.barPercent !== undefined || merged.barPercent !== undefined;
-        const hasBarMin = parsed.barMinimum !== undefined || merged.barMinimum !== undefined;
-        const hasProjectedSales = parsed.projectedBarSales !== undefined || merged.projectedBarSales !== undefined;
-        const isNo = /^(no|nah|nope|skip|none|not really)/i.test(lower);
-        const alreadyAskedBarQ = messages.some(m => m.role === "ai" && typeof m.content === "string" && m.content.includes("Are you earning revenue another way"));
-        const alreadyAskedProjected = messages.some(m => m.role === "ai" && typeof m.content === "string" && m.content.includes("projected bar sales"));
-
-        // First time seeing free pricing and haven't asked about bar revenue yet
-        if (parsed.ticketPrice === 0 && !hasBarMin && !hasBarPercent && !mentionsBarRevenue && !alreadyAskedBarQ) {
-          setThinking(false);
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: "Got it, free event! 🆓\n\nAre you earning revenue another way? For example:\n• **Bar minimum** — a dollar amount the venue requires (e.g. \"$3000 bar min\")\n• **Bar percentage** — you keep a % of bar sales (e.g. \"we get 15%\")\n• **Sponsorship** or **door donations**\n\nOr just say \"no\" and we'll skip the budget planner." },
-          ]);
-          return;
-        }
-
-        // User mentioned bar percentage — ask for projected bar sales to calculate revenue
-        if ((parsed.barPercent || (mentionsBarRevenue && !hasBarMin)) && !hasProjectedSales && !alreadyAskedProjected) {
-          const pct = parsed.barPercent || merged.barPercent;
-          setThinking(false);
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: `Got it — you get ${pct ? `${pct}%` : "a percentage"} of bar sales. 🍸\n\nWhat are the **projected bar sales** for the night? This helps us forecast your revenue.\n\nE.g. "$5000" or "$8000"` },
-          ]);
-          return;
-        }
-
-        // User answered the bar revenue question or provided pricing — advance
-        if (isNo || parsed.ticketPrice !== undefined || hasBarMin || hasProjectedSales || parsed.venueCapacity !== undefined || alreadyAskedProjected) {
-          setThinking(false);
-          if ((isNo || (!mentionsBarRevenue && !hasBarMin && !hasBarPercent)) && merged.ticketPrice === 0 && alreadyAskedBarQ) {
-            // Free event, no other revenue — skip budget planner, go to review
-            setMessages((prev) => [
-              ...prev,
-              { role: "ai", content: "All good! Let's get this event created. Here's what I've set up:" },
-            ]);
-            setStep("review");
-            setPhase("review");
-            return;
-          }
-          // Has pricing or bar revenue info — advance to budget planning
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: reply || "Got it!" },
-          ]);
-          advanceToStep("headliner-type");
-          return;
-        }
-      }
-
-      // ── Budget field update from chat (e.g. "increase talent fee to $800") ──
-      const budgetFieldUpdated =
-        parsed.talentFee !== undefined ||
-        parsed.venueCost !== undefined ||
-        parsed.barMinimum !== undefined ||
-        parsed.deposit !== undefined ||
-        parsed.otherExpenses !== undefined;
-
-      if (budgetFieldUpdated && step === "review") {
-        // Update budget inputs with the new values
-        const updatedBudget = {
-          ...budgetInput,
-          ...(parsed.talentFee !== undefined && { talentFee: parsed.talentFee }),
-          ...(parsed.venueCost !== undefined && { venueCost: parsed.venueCost }),
-          ...(parsed.barMinimum !== undefined && { barMinimum: parsed.barMinimum }),
-          ...(parsed.deposit !== undefined && { deposit: parsed.deposit }),
-          ...(parsed.otherExpenses !== undefined && { otherExpenses: parsed.otherExpenses }),
-        };
-        setBudgetInput(updatedBudget);
-
-        // Recalculate budget with updated inputs
-        try {
-          const result = await calculateBudget(updatedBudget as BudgetInput);
-          setBudgetResult(result);
-
-          // Update tiers from recalculated budget — scaled to user's price if set
-          if (!parsed.tiers && result.suggestedTiers.length > 0) {
-            const scaled = scaleBudgetTiers(result.suggestedTiers, merged.ticketPrice, merged.ticketPriceMax);
-            setTiers(scaled);
-          }
-
-          const changes: string[] = [];
-          if (parsed.talentFee !== undefined) changes.push(`talent fee → $${parsed.talentFee.toLocaleString()}`);
-          if (parsed.venueCost !== undefined) changes.push(`venue cost → $${parsed.venueCost.toLocaleString()}`);
-          if (parsed.barMinimum !== undefined) changes.push(`bar minimum → $${parsed.barMinimum.toLocaleString()}`);
-          if (parsed.deposit !== undefined) changes.push(`deposit → $${parsed.deposit.toLocaleString()}`);
-          if (parsed.otherExpenses !== undefined) changes.push(`other expenses → $${parsed.otherExpenses.toLocaleString()}`);
-
-          const displayTiers = merged.ticketPrice && merged.ticketPrice > 0
-            ? scaleBudgetTiers(result.suggestedTiers, merged.ticketPrice, merged.ticketPriceMax)
-            : result.suggestedTiers;
-          const tierSummary = displayTiers.map(t => `• ${t.name}: $${t.price} × ${t.capacity}`).join("\n");
-
-          setThinking(false);
-          setMessages((prev) => [
-            ...prev,
-            {
-              role: "ai",
-              content: `Updated ${changes.join(", ")}.\n\n📊 **Revised Budget**\nTotal expenses: **$${result.totalExpenses.toLocaleString()}**\nBreak-even: ${result.breakEven.ticketsNeeded} tickets at $${result.breakEven.atPrice}\n\n🎫 **Updated tiers:**\n${tierSummary}\n\n${result.scenarios.map(s => `${s.label}: $${s.revenue.toLocaleString()} → ${s.profit >= 0 ? "✅" : "❌"} $${s.profit.toLocaleString()}`).join("\n")}`,
-            },
-          ]);
-          setPhase("review");
-        } catch {
-          setThinking(false);
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: reply || "Updated! Here's the revised plan:" },
-          ]);
-          setPhase("review");
-        }
-        return;
-      }
-
-      // If coming back from review with tier updates only, go straight back to review
-      if (step === "review" && (parsed.tiers || parsed.ticketPrice !== undefined)) {
-        // Update existing tiers if user changed the price (e.g. "make it free")
-        if (parsed.ticketPrice !== undefined && !parsed.tiers && tiers.length > 0) {
-          setTiers(tiers.map(t => ({ ...t, price: parsed.ticketPrice! })));
-        }
-        setThinking(false);
-        setMessages((prev) => [
-          ...prev,
-          { role: "ai", content: reply || "Updated the tiers. Here's the revised plan:" },
-        ]);
-        setPhase("review");
-        return;
-      }
-
-      setThinking(false);
-
-      // Check what's still missing (basic info)
-      const missing: string[] = [];
-      if (!merged.title) missing.push("event name");
-      if (!merged.date) missing.push("date");
-      if (!merged.startTime) missing.push("time");
-      if (!merged.venueName) missing.push("venue");
-
-      // Also track what's missing for budget flow
-      const needsTicketInfo = merged.ticketPrice === undefined && !merged.tiers?.length;
-      const needsCapacity = !merged.venueCapacity;
-
-      const currentStep = step as string;
-      const inBudgetSteps = ["headliner-type", "headliner-origin", "talent-fee", "venue-costs", "budget-calc"].includes(currentStep);
-
-      // If we're on the tickets step and the user said something we didn't parse,
-      // re-prompt for ticket info instead of showing a broken "just need the" message
-      if (step === "tickets" && missing.length === 0) {
-        const promptParts: string[] = [];
-        if (needsCapacity) promptParts.push("**capacity**");
-        if (needsTicketInfo) promptParts.push("**ticket price**");
-        if (promptParts.length > 0) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: `${reply || "Didn't quite catch that — could you rephrase what you're trying to update?"}\n\nI still need the ${promptParts.join(" and ")}. E.g. "200 cap, $25" or "free"` },
-          ]);
-        } else {
-          // We have everything from tickets step — advance to budget planning
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: reply || "Got it!" },
-          ]);
-          advanceToStep("headliner-type");
-        }
-        return;
-      }
-
-      if (missing.length === 0 && !inBudgetSteps && step !== "tickets") {
-        // All basic info collected — ask about capacity and pricing before budget
-        if (needsCapacity && needsTicketInfo) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: `${reply || "Got it!"}\n\nDoes this look right so far?\n\n🎤 **${merged.title}**\n📅 ${merged.date}${merged.startTime ? ` at ${merged.startTime}` : ""}\n📍 ${merged.venueName}${merged.venueCity ? `, ${merged.venueCity}` : ""}\n\nWhat's the **capacity** and **ticket price**? E.g. "200 cap, $25" or "free"` },
-          ]);
-          setStep("tickets");
-          return;
-        }
-
-        // If we have capacity but no price, ask about price specifically
-        if (needsTicketInfo) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: `${reply || "Got it!"}\n\nWhat's the **ticket price**? E.g. "$25" or "free"\n\nIf it's free, are you earning revenue another way? (e.g. bar revenue percentage)` },
-          ]);
-          setStep("tickets");
-          return;
-        }
-
-        // Now ask about budget planning
-        if (!eventData.headlinerType && !budgetInput.headlinerType) {
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: reply || "Got it!" },
-          ]);
-          advanceToStep("headliner-type");
-          return;
-        }
-
-        // If coming back from review with any field update, go back to review
-        if (step === "review") {
-          setMessages((prev) => [
-            ...prev,
-            { role: "ai", content: reply || "Updated! Here's the revised plan:" },
-          ]);
-          setPhase("review");
-          return;
-        }
-
-        // Everything we need — go to review
-        setMessages((prev) => [
-          ...prev,
-          { role: "ai", content: reply || "Got it all — here's what I've set up:" },
-        ]);
-        setStep("review");
-        setPhase("review");
-      } else if (missing.length > 0 && missing.length <= 2) {
-        // Almost there — ask for what's missing naturally
-        const needStr = missing.join(" and ");
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "ai",
-            content: `${reply || "Got it!"}\n\nJust need the ${needStr} and we're good to go.`,
-          },
-        ]);
-      } else if (missing.length > 2) {
-        // Got some info, need more
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "ai",
-            content: reply || `Nice! I still need: ${missing.join(", ")}. Tell me more.`,
-          },
-        ]);
-      }
-    } catch (err) {
-      console.error("Parse error:", err);
-      setThinking(false);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "ai",
-          content: "I didn't catch that — try telling me the event name, date, time, and venue.",
-        },
-      ]);
-    }
-
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }
-
-  // ── Venue picker handlers ────────────────────────────────────────────────
-
-  function handleVenueSelect(venue: SelectedVenue) {
-    setShowVenuePicker(false);
-
-    setEventData((prev) => ({
-      ...prev,
-      venueName: venue.name,
-      venueAddress: venue.address,
-      venueCity: venue.city,
-      venueCapacity: venue.capacity,
-    }));
-
-    // Add user message showing the selection
-    const addressShort = venue.address.split(",")[0] ?? venue.address;
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "user",
-        content: `\u{1F4CD} ${venue.name} \u2014 ${addressShort}, ${venue.city}`,
-      },
-    ]);
-
-    // Brief thinking delay then advance
-    setThinking(true);
-    setTimeout(() => {
-      setThinking(false);
-      advanceToStep("datetime");
-    }, 500);
-  }
-
-  function handleVenueCustom() {
-    setShowVenuePicker(false);
-    setStep("venue-custom");
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "ai",
-        content:
-          'Type the venue name, address, and city.\n\nE.g. "CODA, 794 Bathurst St, Toronto"',
-      },
-    ]);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }
-
-  // ── Review / create handlers ─────────────────────────────────────────────
-
-  function handleUpdateField(
-    field: keyof ParsedEventDetails | "tiers" | "description",
-    value: string | number | TicketTier[]
-  ) {
-    if (field === "tiers" && Array.isArray(value)) {
-      setTiers(value as TicketTier[]);
-    } else {
-      setEventData((prev) => ({ ...prev, [field]: value }));
-    }
-  }
-
-  function handleBackToChat() {
-    setPhase("chat");
-    // Keep existing data — just let them make changes via chat
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "ai",
-        content: "What would you like to change? You can say things like:\n• \"Increase talent fee to $800\"\n• \"Change Early Bird to $20\"\n• \"Add a VIP tier at $50 for 30 people\"\n• \"Move the date to May 10\"",
-      },
-    ]);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }
-
-  async function handleCreate() {
-    setError(null);
-
-    const d = eventData;
-
-    // Validate date is set — don't silently fall back to today
-    if (!d.date) {
-      setError("Please specify a date for your event.");
-      return;
-    }
-
-    setPhase("creating");
-
-    // Build tiers from the collected ticket tiers, or fallback to single-tier legacy
-    let validTiers: { name: string; price: number; quantity: number }[] = [];
-    if (tiers.length > 0) {
-      validTiers = tiers.map((t) => ({
-        name: t.name,
-        price: t.price,
-        quantity: t.capacity,
-      }));
-    } else if (d.ticketPrice !== undefined) {
-      validTiers = [
-        {
-          name: d.ticketTierName || "General Admission",
-          price: d.ticketPrice,
-          quantity: d.ticketQuantity || d.venueCapacity || 100,
-        },
-      ];
-    }
-
-    try {
-      const result = await createEvent({
-        title: d.title || "Untitled Event",
-        slug: slugify(d.title || "untitled-event"),
-        description: d.description || null,
-        date: d.date,
-        doorsOpen: d.doorsOpen || null,
-        startTime: d.startTime || "22:00",
-        endTime: d.endTime || null,
-        venueName: d.venueName || "TBA",
-        venueAddress: d.venueAddress || "",
-        venueCity: d.venueCity || "",
-        venueCapacity: d.venueCapacity || 0,
-        tiers: validTiers,
-      });
-
-      if (result.error) {
-        setError(result.error);
-        setPhase("review");
-        return;
-      }
-
-      haptic('success');
-      clearDraft();
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("event-created", "true");
-      }
-      setCreatedEventId(result.eventId ?? null);
-      setPhase("playbook");
-    } catch {
-      setError("Network error — please try again.");
-      setPhase("review");
-    }
-  }
-
-  // ── Should show text input? ──────────────────────────────────────────────
-  const showInput = phase === "chat" && step !== "venue";
-
-  // ── Placeholder — contextual based on what's missing ───────────────────
-  function getPlaceholder(): string {
-    const d = eventData;
-    if (!d.title) return '"Midnight Sessions at Coda, April 25 10pm, $25"';
-    if (!d.venueName) return 'Where? e.g. "Coda, Toronto"';
-    if (!d.date) return 'When? e.g. "next Saturday 10pm"';
-    if (!d.startTime) return 'What time? e.g. "10pm"';
-    return 'Add more details or say "looks good"...';
-  }
-
-  return (
-    <div className="mx-auto max-w-lg flex flex-col h-[calc(100dvh-8rem)] animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center gap-3 pb-4 shrink-0">
-        <Link href="/dashboard/events">
-          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        {messages.length > 1 && (
-          <button
-            onClick={handleStartOver}
-            className="text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-          >
-            Start over
-          </button>
-        )}
-        <h1 className="text-xl font-bold font-heading truncate">
-          New Event
-        </h1>
-        <div className="ml-auto flex items-center gap-1.5 rounded-full bg-[#7B2FF7]/10 px-3 py-1">
-          <Sparkles className="h-3 w-3 text-[#7B2FF7]" />
-          <span className="text-xs font-medium text-[#7B2FF7]">AI</span>
-        </div>
-      </div>
-
-      {/* Chat area */}
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4 min-h-0" aria-live="polite">
-        {messages.map((msg, i) => {
-          if (msg.role === "ai") {
-            return (
-              <div key={i} className="space-y-3">
-                <AiBubble>
-                  <p className="text-sm leading-relaxed whitespace-pre-line">
-                    {msg.content}
-                  </p>
-                </AiBubble>
-                {/* Show venue picker inline right after the venue AI message */}
-                {msg.widget === "venue-picker" && showVenuePicker && (
-                  <VenuePicker
-                    onSelect={handleVenueSelect}
-                    onCustom={handleVenueCustom}
-                  />
-                )}
-              </div>
-            );
-          }
-          return (
-            <UserBubble key={i}>
-              <p className="text-sm text-white">{msg.content}</p>
-            </UserBubble>
-          );
-        })}
-
-        {thinking && <ThinkingDots />}
-
-        {/* Review card with editable fields */}
-        {(phase === "review" || phase === "creating") && (
-          <EventConfirmationCard
-            data={eventData}
-            tiers={tiers}
-            totalExpenses={
-              (budgetInput.talentFee || 0) +
-              (budgetInput.venueCost || 0) +
-              (budgetInput.barMinimum || 0) +
-              (budgetInput.deposit || 0) +
-              (budgetInput.otherExpenses || 0)
-            }
-            onUpdate={handleUpdateField}
-            onEdit={handleBackToChat}
-            onCreate={handleCreate}
-            creating={phase === "creating"}
-            error={error}
-          />
-        )}
-
-        {/* Playbook selection */}
-        {phase === "playbook" && (
-          <PlaybookSelector
-            eventTitle={eventData.title || "Your event"}
-            onSelect={async (playbookId) => {
-              if (!createdEventId) return;
-              setApplyingPlaybook(true);
-              const result = await applyLaunchPlaybook(createdEventId, playbookId);
-              setApplyingPlaybook(false);
-              if (result.error) {
-                setError(result.error);
-              }
-              setPhase("done");
-              setTimeout(() => {
-                router.push(`/dashboard/events/${createdEventId}/tasks`);
-                router.refresh();
-              }, 1500);
-            }}
-            onSkip={() => {
-              setPhase("done");
-              setTimeout(() => {
-                router.push(`/dashboard/events/${createdEventId}`);
-                router.refresh();
-              }, 1500);
-            }}
-            applying={applyingPlaybook}
-          />
-        )}
-
-        {/* Done state */}
-        {phase === "done" && (
-          <div className="flex flex-col items-center gap-4 py-12 animate-scale-in">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 animate-pulse">
-              <Check className="h-8 w-8 text-green-500" />
-            </div>
-            <div className="text-center">
-              <h2 className="text-lg font-bold font-heading truncate max-w-full px-4">
-                {eventData.title} — draft created!
-              </h2>
-              <p className="text-sm text-zinc-400 mt-1">
-                {applyingPlaybook ? "Generating your launch plan..." : "Taking you to the event dashboard..."}
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div ref={chatEndRef} />
-      </div>
-
-      {/* Input bar — shown during chat steps that need text input */}
-      {showInput && (
-        <form
-          id="chat-form"
-          onSubmit={handleSend}
-          className="shrink-0 flex gap-2 border-t border-white/5 pt-3 pb-2"
-          style={{
-            paddingBottom: "max(env(safe-area-inset-bottom, 0px), 8px)",
-          }}
-        >
-          <Input
-            ref={inputRef}
-            placeholder={getPlaceholder()}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            maxLength={2000}
-            aria-label="Describe your event"
-            className="flex-1 text-sm bg-zinc-900 border-white/10 rounded-full px-4 focus:border-[#7B2FF7]/50 min-h-[44px]"
-            disabled={thinking || listening}
-          />
-          {speechSupported && (
-            <Button
-              type="button"
-              size="icon"
-              onClick={listening ? stopListening : startListening}
-              className={`shrink-0 rounded-full min-h-[44px] min-w-[44px] transition-all duration-200 active:scale-95 ${
-                listening
-                  ? "bg-red-600 hover:bg-red-700 animate-pulse"
-                  : "bg-zinc-800 hover:bg-zinc-700 border border-white/10"
-              }`}
-              disabled={thinking}
-            >
-              <Mic className={`h-4 w-4 ${listening ? "text-white" : "text-zinc-400"}`} />
-            </Button>
-          )}
-          <Button
-            type="submit"
-            size="icon"
-            className="bg-[#7B2FF7] hover:bg-[#6B1FE7] shrink-0 rounded-full min-h-[44px] min-w-[44px] transition-all duration-200 active:scale-95"
-            disabled={!input.trim() || thinking}
-          >
-            {thinking ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
-        </form>
-      )}
-    </div>
-  );
-}
-
-// ─── Playbook Selector ────────────────────────────────────────────────────────
+// ─── Playbook Selector ─────────────────────────────────────────────────────
 
 const PLAYBOOK_ICONS: Record<string, React.ReactNode> = {
   rocket: <Rocket className="h-5 w-5" />,
@@ -1931,7 +740,6 @@ function PlaybookSelector({
 
   return (
     <div className="flex flex-col gap-5 py-6 animate-fade-in-up">
-      {/* Header */}
       <div className="text-center space-y-2">
         <div className="flex justify-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10">
@@ -1944,7 +752,6 @@ function PlaybookSelector({
         </p>
       </div>
 
-      {/* Options */}
       <div className="space-y-2.5">
         {options.map((opt) => (
           <button
@@ -1978,7 +785,6 @@ function PlaybookSelector({
         ))}
       </div>
 
-      {/* Skip */}
       <button
         onClick={onSkip}
         disabled={applying}
@@ -1992,6 +798,1127 @@ function PlaybookSelector({
         <div className="flex items-center justify-center gap-2 py-2">
           <Loader2 className="h-4 w-4 animate-spin text-nocturn" />
           <span className="text-sm text-zinc-400">Generating your launch plan...</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Scale Budget Tiers ────────────────────────────────────────────────────
+
+function scaleBudgetTiers(
+  suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning?: string }>,
+  userPrice: number | undefined,
+  userPriceMax?: number | undefined
+): TicketTier[] {
+  if (suggestedTiers.length === 0) return [];
+
+  if (userPrice !== undefined && userPriceMax !== undefined && userPrice > 0 && userPriceMax > userPrice) {
+    const count = suggestedTiers.length;
+    const step = count > 1 ? (userPriceMax - userPrice) / (count - 1) : 0;
+    return suggestedTiers.map((t, i) => ({
+      name: t.name,
+      price: Math.round(userPrice + step * i),
+      capacity: t.capacity,
+    }));
+  }
+
+  if (userPrice === undefined || userPrice <= 0) {
+    return suggestedTiers.map((t) => ({ name: t.name, price: t.price, capacity: t.capacity }));
+  }
+
+  const baseSuggested = suggestedTiers[0].price;
+  if (baseSuggested <= 0) {
+    return suggestedTiers.map((t) => ({ name: t.name, price: userPrice, capacity: t.capacity }));
+  }
+  const ratio = userPrice / baseSuggested;
+  return suggestedTiers.map((t) => ({
+    name: t.name,
+    price: Math.round(t.price * ratio),
+    capacity: t.capacity,
+  }));
+}
+
+// ─── Collapsible Section Helper ────────────────────────────────────────────
+
+function CollapsibleSection({ label, children, defaultOpen = false }: { label: string; children: React.ReactNode; defaultOpen?: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 transition-colors py-1"
+      >
+        {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        {label}
+      </button>
+      {open && <div className="mt-2 animate-fade-in">{children}</div>}
+    </div>
+  );
+}
+
+// ─── Form Field ────────────────────────────────────────────────────────────
+
+function FormField({ label, icon: Icon, required, children }: {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
+        <Icon className="h-3.5 w-3.5 text-[#7B2FF7]" />
+        {label}
+        {required && <span className="text-[#7B2FF7] text-xs">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+// ─── Main Page ──────────────────────────────────────────────────────────────
+
+export default function NewEventPage() {
+  const router = useRouter();
+  const [step, setStep] = useState<WizardStep>("details");
+  const [formData, setFormData] = useState<EventFormData>(DEFAULT_FORM);
+  const [tiers, setTiers] = useState<TicketTier[]>([]);
+  const [budgetInput, setBudgetInput] = useState<Partial<BudgetInput>>({});
+  const [budgetResult, setBudgetResult] = useState<BudgetResult | null>(null);
+  const [phase, setPhase] = useState<"wizard" | "creating" | "playbook" | "done">("wizard");
+  const [error, setError] = useState<string | null>(null);
+  const [createdEventId, setCreatedEventId] = useState<string | null>(null);
+  const [applyingPlaybook, setApplyingPlaybook] = useState(false);
+  const [venueMode, setVenueMode] = useState<"picker" | "manual">("picker");
+  const [calculatingBudget, setCalculatingBudget] = useState(false);
+  const [showOptionalDetails, setShowOptionalDetails] = useState(false);
+
+  // Restore draft on mount
+  useEffect(() => {
+    const draft = loadDraft();
+    if (draft) {
+      setStep(draft.step);
+      setFormData(draft.formData);
+      setTiers(draft.tiers);
+      setBudgetInput(draft.budgetInput);
+      setBudgetResult(draft.budgetResult);
+      setPhase(draft.phase === "creating" || draft.phase === "playbook" ? "wizard" : draft.phase);
+    }
+  }, []);
+
+  // Save draft on changes
+  const saveDraftDebounced = useCallback(() => {
+    const timer = setTimeout(() => {
+      if (phase === "done" || phase === "playbook") return;
+      saveDraft({ version: DRAFT_VERSION, step, formData, tiers, budgetInput, budgetResult, phase });
+    }, 500);
+    return timer;
+  }, [step, formData, tiers, budgetInput, budgetResult, phase]);
+
+  useEffect(() => {
+    const timer = saveDraftDebounced();
+    return () => clearTimeout(timer);
+  }, [saveDraftDebounced]);
+
+  // Warn before leaving with unsaved data
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (phase === "wizard" && (formData.title || formData.venueName)) {
+        e.preventDefault();
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [phase, formData.title, formData.venueName]);
+
+  // Helpers
+  function updateForm(updates: Partial<EventFormData>) {
+    setFormData((prev) => ({ ...prev, ...updates }));
+  }
+
+  function goTo(nextStep: WizardStep) {
+    setStep(nextStep);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  const currentIdx = STEPS.indexOf(step);
+
+  function goNext() {
+    if (currentIdx < STEPS.length - 1) goTo(STEPS[currentIdx + 1]);
+  }
+
+  function goBack() {
+    if (currentIdx > 0) goTo(STEPS[currentIdx - 1]);
+  }
+
+  // Total expenses from budget input
+  const totalExpenses =
+    (budgetInput.talentFee || 0) +
+    (budgetInput.venueCost || 0) +
+    (budgetInput.barMinimum || 0) +
+    (budgetInput.deposit || 0) +
+    (budgetInput.otherExpenses || 0);
+
+  // Validation per step
+  function canAdvance(): boolean {
+    switch (step) {
+      case "details":
+        return !!formData.title.trim() && !!formData.date;
+      case "venue":
+        return !!formData.venueName.trim() && !!formData.venueCity.trim() && (typeof formData.venueCapacity === "number" && formData.venueCapacity > 0);
+      case "tickets":
+        return formData.isFree || (tiers.length > 0 && tiers.some((t) => t.price >= 0 && t.capacity > 0));
+      case "budget":
+        return true; // always skippable
+      case "review":
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // Handle venue selection from picker
+  function handleVenueSelect(venue: SelectedVenue) {
+    updateForm({
+      venueName: venue.name,
+      venueAddress: venue.address,
+      venueCity: venue.city,
+      venueCapacity: venue.capacity,
+    });
+    setVenueMode("manual"); // show the filled fields
+  }
+
+  // Auto-generate tiers from a price or price range
+  function generateTiersFromPrice(priceStr: string) {
+    const capacity = typeof formData.venueCapacity === "number" ? formData.venueCapacity : 100;
+
+    // Check for range pattern: $20-$50, $20 - $50, $20 to $50
+    const rangeMatch = priceStr.match(/\$?(\d+)\s*(?:-|–|to)\s*\$?(\d+)/);
+    if (rangeMatch) {
+      const low = parseInt(rangeMatch[1]);
+      const high = parseInt(rangeMatch[2]);
+      if (low > 0 && high > low) {
+        const mid = Math.round((low + high) / 2);
+        setTiers([
+          { name: "Early Bird", price: low, capacity: Math.round(capacity * 0.3) },
+          { name: "General Admission", price: mid, capacity: Math.round(capacity * 0.5) },
+          { name: "Door", price: high, capacity: Math.round(capacity * 0.2) },
+        ]);
+        return;
+      }
+    }
+
+    // Single price
+    const singleMatch = priceStr.match(/\$?(\d+)/);
+    if (singleMatch) {
+      const price = parseInt(singleMatch[1]);
+      if (price > 0) {
+        setTiers([
+          { name: "Early Bird", price: Math.round(price * 0.8), capacity: Math.round(capacity * 0.3) },
+          { name: "General Admission", price, capacity: Math.round(capacity * 0.5) },
+          { name: "Door", price: Math.round(price * 1.3), capacity: Math.round(capacity * 0.2) },
+        ]);
+        return;
+      }
+    }
+  }
+
+  // Calculate budget
+  async function handleCalculateBudget() {
+    setCalculatingBudget(true);
+    setError(null);
+    try {
+      const input: BudgetInput = {
+        headlinerType: budgetInput.headlinerType || "none",
+        headlinerOrigin: budgetInput.headlinerOrigin,
+        talentFee: budgetInput.talentFee,
+        venueCost: budgetInput.venueCost,
+        barMinimum: budgetInput.barMinimum,
+        deposit: budgetInput.deposit,
+        otherExpenses: budgetInput.otherExpenses,
+        venueCity: formData.venueCity,
+        venueCapacity: typeof formData.venueCapacity === "number" ? formData.venueCapacity : undefined,
+        date: formData.date,
+        stayNights: budgetInput.stayNights,
+      };
+      const result = await calculateBudget(input);
+      setBudgetResult(result);
+
+      // Auto-update tiers if budget suggests them and user has no tiers yet
+      if (result.suggestedTiers.length > 0 && tiers.length === 0) {
+        const firstTierPrice = tiers.length > 0 ? tiers[0].price : undefined;
+        const scaled = scaleBudgetTiers(result.suggestedTiers, firstTierPrice);
+        setTiers(scaled);
+      }
+    } catch {
+      setError("Could not calculate budget. You can still proceed.");
+    } finally {
+      setCalculatingBudget(false);
+    }
+  }
+
+  // Create event
+  async function handleCreate() {
+    setError(null);
+
+    if (!formData.date) {
+      setError("Please specify a date for your event.");
+      return;
+    }
+
+    setPhase("creating");
+
+    let validTiers: { name: string; price: number; quantity: number }[] = [];
+    if (!formData.isFree && tiers.length > 0) {
+      validTiers = tiers.map((t) => ({
+        name: t.name,
+        price: t.price,
+        quantity: t.capacity,
+      }));
+    } else if (formData.isFree) {
+      validTiers = [{ name: "Free", price: 0, quantity: typeof formData.venueCapacity === "number" ? formData.venueCapacity : 100 }];
+    }
+
+    try {
+      const result = await createEvent({
+        title: formData.title || "Untitled Event",
+        slug: slugify(formData.title || "untitled-event"),
+        description: formData.description || null,
+        date: formData.date,
+        doorsOpen: formData.doorsOpen || null,
+        startTime: formData.startTime || "22:00",
+        endTime: formData.endTime || null,
+        venueName: formData.venueName || "TBA",
+        venueAddress: formData.venueAddress || "",
+        venueCity: formData.venueCity || "",
+        venueCapacity: typeof formData.venueCapacity === "number" ? formData.venueCapacity : 0,
+        tiers: validTiers,
+      });
+
+      if (result.error) {
+        setError(result.error);
+        setPhase("wizard");
+        return;
+      }
+
+      haptic("success");
+      clearDraft();
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("event-created", "true");
+      }
+      setCreatedEventId(result.eventId ?? null);
+      setPhase("playbook");
+    } catch {
+      setError("Network error — please try again.");
+      setPhase("wizard");
+    }
+  }
+
+  // Format time for display
+  function formatTime(t: string): string {
+    if (!t) return "";
+    const [h, m] = t.split(":").map(Number);
+    const period = h >= 12 ? "PM" : "AM";
+    const hour12 = h > 12 ? h - 12 : h === 0 ? 12 : h;
+    return m === 0 ? `${hour12} ${period}` : `${hour12}:${String(m).padStart(2, "0")} ${period}`;
+  }
+
+  function formatDate(d: string): string {
+    if (!d) return "";
+    try {
+      const date = new Date(d + "T12:00:00");
+      return date.toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+    } catch {
+      return d;
+    }
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  // Playbook phase
+  if (phase === "playbook") {
+    return (
+      <div className="mx-auto max-w-lg px-4 py-6 animate-fade-in">
+        <PlaybookSelector
+          eventTitle={formData.title || "Your event"}
+          onSelect={async (playbookId) => {
+            if (!createdEventId) return;
+            setApplyingPlaybook(true);
+            const result = await applyLaunchPlaybook(createdEventId, playbookId);
+            setApplyingPlaybook(false);
+            if (result.error) {
+              setError(result.error);
+            }
+            setPhase("done");
+            setTimeout(() => {
+              router.push(`/dashboard/events/${createdEventId}/tasks`);
+              router.refresh();
+            }, 1500);
+          }}
+          onSkip={() => {
+            setPhase("done");
+            setTimeout(() => {
+              router.push(`/dashboard/events/${createdEventId}`);
+              router.refresh();
+            }, 1500);
+          }}
+          applying={applyingPlaybook}
+        />
+      </div>
+    );
+  }
+
+  // Done phase
+  if (phase === "done") {
+    return (
+      <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-scale-in">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 animate-pulse">
+          <Check className="h-8 w-8 text-green-500" />
+        </div>
+        <div className="text-center">
+          <h2 className="text-lg font-bold font-heading truncate max-w-full px-4">
+            {formData.title} — draft created!
+          </h2>
+          <p className="text-sm text-zinc-400 mt-1">Taking you to the event dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Creating phase
+  if (phase === "creating") {
+    return (
+      <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-fade-in">
+        <Loader2 className="h-10 w-10 animate-spin text-[#7B2FF7]" />
+        <p className="text-sm text-zinc-400">Creating your event...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto max-w-lg flex flex-col min-h-[calc(100dvh-8rem)] animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center gap-3 pb-2 shrink-0 px-1">
+        <Link href="/dashboard/events">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+        </Link>
+        <h1 className="text-xl font-bold font-heading truncate">New Event</h1>
+        {(formData.title || formData.venueName) && (
+          <button
+            onClick={() => {
+              if (!window.confirm("Start over? You'll lose your progress.")) return;
+              clearDraft();
+              setFormData(DEFAULT_FORM);
+              setTiers([]);
+              setBudgetInput({});
+              setBudgetResult(null);
+              setStep("details");
+              setError(null);
+              setVenueMode("picker");
+            }}
+            className="ml-auto text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            Start over
+          </button>
+        )}
+      </div>
+
+      {/* Progress */}
+      <StepProgress current={step} steps={STEPS} />
+
+      {/* Step content */}
+      <div className="flex-1 overflow-y-auto px-1 pb-28">
+        {/* ── STEP 1: Event Details ── */}
+        {step === "details" && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="text-center space-y-1 pb-2">
+              <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
+                Event Details
+              </h2>
+              <p className="text-sm text-zinc-500">What&apos;s the event?</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-4">
+              <FormField label="Event Name" icon={Sparkles} required>
+                <Input
+                  placeholder="Midnight Sessions Vol. 4"
+                  value={formData.title}
+                  onChange={(e) => updateForm({ title: e.target.value })}
+                  maxLength={200}
+                  className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                  autoFocus
+                />
+              </FormField>
+
+              <FormField label="Date" icon={Calendar} required>
+                <Input
+                  type="date"
+                  value={formData.date}
+                  onChange={(e) => updateForm({ date: e.target.value })}
+                  className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                />
+              </FormField>
+
+              <FormField label="Start Time" icon={Clock} required>
+                <Input
+                  type="time"
+                  value={formData.startTime}
+                  onChange={(e) => updateForm({ startTime: e.target.value })}
+                  className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                />
+              </FormField>
+
+              {/* Optional fields */}
+              <CollapsibleSection label="Add doors time, end time, or description" defaultOpen={showOptionalDetails || !!formData.endTime || !!formData.doorsOpen || !!formData.description}>
+                <div className="space-y-4">
+                  <FormField label="Doors Open" icon={Clock}>
+                    <Input
+                      type="time"
+                      value={formData.doorsOpen}
+                      onChange={(e) => { updateForm({ doorsOpen: e.target.value }); setShowOptionalDetails(true); }}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    />
+                  </FormField>
+
+                  <FormField label="End Time" icon={Clock}>
+                    <Input
+                      type="time"
+                      value={formData.endTime}
+                      onChange={(e) => { updateForm({ endTime: e.target.value }); setShowOptionalDetails(true); }}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    />
+                  </FormField>
+
+                  <FormField label="Description" icon={Info}>
+                    <textarea
+                      placeholder="Tell people what to expect..."
+                      value={formData.description}
+                      onChange={(e) => { updateForm({ description: e.target.value }); setShowOptionalDetails(true); }}
+                      maxLength={5000}
+                      rows={3}
+                      className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#7B2FF7]/50 resize-none min-h-[44px]"
+                    />
+                  </FormField>
+                </div>
+              </CollapsibleSection>
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 2: Venue ── */}
+        {step === "venue" && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="text-center space-y-1 pb-2">
+              <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
+                Venue
+              </h2>
+              <p className="text-sm text-zinc-500">Where&apos;s it happening?</p>
+            </div>
+
+            {venueMode === "picker" && !formData.venueName ? (
+              <VenuePicker
+                onSelect={handleVenueSelect}
+                onCustom={() => setVenueMode("manual")}
+              />
+            ) : (
+              <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-4">
+                {/* Switch back to picker */}
+                {formData.venueName && (
+                  <button
+                    onClick={() => {
+                      updateForm({ venueName: "", venueAddress: "", venueCity: "", venueCapacity: "" });
+                      setVenueMode("picker");
+                    }}
+                    className="text-xs text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors"
+                  >
+                    Choose a different venue
+                  </button>
+                )}
+
+                <FormField label="Venue Name" icon={MapPin} required>
+                  <Input
+                    placeholder="CODA"
+                    value={formData.venueName}
+                    onChange={(e) => updateForm({ venueName: e.target.value })}
+                    maxLength={200}
+                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    autoFocus={!formData.venueName}
+                  />
+                </FormField>
+
+                <FormField label="Address" icon={MapPin}>
+                  <Input
+                    placeholder="794 Bathurst St"
+                    value={formData.venueAddress}
+                    onChange={(e) => updateForm({ venueAddress: e.target.value })}
+                    maxLength={500}
+                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                  />
+                </FormField>
+
+                <FormField label="City" icon={MapPin} required>
+                  <Input
+                    placeholder="Toronto"
+                    value={formData.venueCity}
+                    onChange={(e) => updateForm({ venueCity: e.target.value })}
+                    maxLength={100}
+                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                  />
+                </FormField>
+
+                <FormField label="Capacity" icon={Users} required>
+                  <Input
+                    type="number"
+                    placeholder="200"
+                    value={formData.venueCapacity === "" ? "" : formData.venueCapacity}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      updateForm({ venueCapacity: val === "" ? "" : parseInt(val) || "" });
+                    }}
+                    min={1}
+                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                  />
+                </FormField>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── STEP 3: Tickets & Pricing ── */}
+        {step === "tickets" && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="text-center space-y-1 pb-2">
+              <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
+                Tickets & Pricing
+              </h2>
+              <p className="text-sm text-zinc-500">How much are tickets?</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-5">
+              {/* Free event toggle */}
+              <label className="flex items-center justify-between cursor-pointer">
+                <span className="text-sm font-medium text-zinc-300">Free event</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={formData.isFree}
+                  onClick={() => {
+                    const newVal = !formData.isFree;
+                    updateForm({ isFree: newVal });
+                    if (newVal) setTiers([]);
+                  }}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    formData.isFree ? "bg-[#7B2FF7]" : "bg-zinc-700"
+                  }`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    formData.isFree ? "translate-x-6" : "translate-x-1"
+                  }`} />
+                </button>
+              </label>
+
+              {formData.isFree ? (
+                <div className="space-y-4">
+                  <p className="text-xs text-zinc-500">No ticket fees for free events. Track bar revenue below (optional).</p>
+                  <FormField label="Projected Bar Sales" icon={DollarSign}>
+                    <Input
+                      type="number"
+                      placeholder="5000"
+                      value={formData.projectedBarSales === "" ? "" : formData.projectedBarSales}
+                      onChange={(e) => updateForm({ projectedBarSales: e.target.value === "" ? "" : parseInt(e.target.value) || "" })}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    />
+                  </FormField>
+                  <FormField label="Your Bar Split %" icon={DollarSign}>
+                    <Input
+                      type="number"
+                      placeholder="15"
+                      min={0}
+                      max={100}
+                      value={formData.barPercent === "" ? "" : formData.barPercent}
+                      onChange={(e) => updateForm({ barPercent: e.target.value === "" ? "" : parseInt(e.target.value) || "" })}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    />
+                  </FormField>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {/* Quick price input */}
+                  <FormField label="Quick Price" icon={Ticket}>
+                    <div className="space-y-1">
+                      <Input
+                        placeholder="$25 or $20-$50 for a range"
+                        onBlur={(e) => {
+                          if (e.target.value.trim() && tiers.length === 0) {
+                            generateTiersFromPrice(e.target.value.trim());
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            const val = (e.target as HTMLInputElement).value.trim();
+                            if (val) generateTiersFromPrice(val);
+                          }
+                        }}
+                        className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                      />
+                      <p className="text-[10px] text-zinc-600">Enter a price to auto-generate tiers, or add them manually below</p>
+                    </div>
+                  </FormField>
+
+                  {/* Tier editor */}
+                  {tiers.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-1.5">
+                        <Ticket className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Ticket Tiers</span>
+                      </div>
+                      {tiers.map((tier, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <div className="flex-1 grid grid-cols-3 gap-2">
+                            <Input
+                              placeholder="Tier name"
+                              value={tier.name}
+                              onChange={(e) => {
+                                const updated = [...tiers];
+                                updated[i] = { ...tier, name: e.target.value };
+                                setTiers(updated);
+                              }}
+                              className="bg-zinc-900 border-white/10 rounded-lg text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
+                            />
+                            <Input
+                              type="number"
+                              placeholder="Price"
+                              value={tier.price}
+                              onChange={(e) => {
+                                const updated = [...tiers];
+                                updated[i] = { ...tier, price: parseFloat(e.target.value) || 0 };
+                                setTiers(updated);
+                              }}
+                              min={0}
+                              className="bg-zinc-900 border-white/10 rounded-lg text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
+                            />
+                            <Input
+                              type="number"
+                              placeholder="Qty"
+                              value={tier.capacity}
+                              onChange={(e) => {
+                                const updated = [...tiers];
+                                updated[i] = { ...tier, capacity: parseInt(e.target.value) || 0 };
+                                setTiers(updated);
+                              }}
+                              min={1}
+                              className="bg-zinc-900 border-white/10 rounded-lg text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
+                            />
+                          </div>
+                          <button
+                            onClick={() => setTiers(tiers.filter((_, idx) => idx !== i))}
+                            className="p-2 text-zinc-500 hover:text-red-400 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      const capacity = typeof formData.venueCapacity === "number" ? formData.venueCapacity : 100;
+                      const remaining = capacity - tiers.reduce((s, t) => s + t.capacity, 0);
+                      setTiers([
+                        ...tiers,
+                        { name: `Tier ${tiers.length + 1}`, price: 0, capacity: Math.max(remaining, 10) },
+                      ]);
+                    }}
+                    className="flex items-center gap-1.5 text-sm text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors py-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add tier
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Pricing insight */}
+            {!formData.isFree && tiers.length > 0 && tiers.some(t => t.price > 0) && formData.venueCity && formData.date && (
+              <PricingInsight
+                city={formData.venueCity}
+                date={formData.date}
+                venueCapacity={typeof formData.venueCapacity === "number" ? formData.venueCapacity : undefined}
+                tiers={tiers}
+              />
+            )}
+          </div>
+        )}
+
+        {/* ── STEP 4: Budget (Optional) ── */}
+        {step === "budget" && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="text-center space-y-1 pb-2">
+              <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
+                Budget Planning
+              </h2>
+              <p className="text-sm text-zinc-500">Optional — helps forecast profit</p>
+            </div>
+
+            {/* Skip button */}
+            <button
+              onClick={goNext}
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-white/[0.06] bg-card p-4 text-sm text-zinc-400 hover:text-zinc-200 hover:border-white/[0.12] transition-all active:scale-[0.98]"
+            >
+              <SkipForward className="h-4 w-4" />
+              Skip — I&apos;ll figure out costs later
+            </button>
+
+            <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-5">
+              {/* Headliner type */}
+              <div className="space-y-2">
+                <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
+                  <Music className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                  Headliner
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    { value: "international" as const, label: "International", icon: Plane },
+                    { value: "local" as const, label: "Local", icon: Music },
+                    { value: "none" as const, label: "No headliner", icon: Users },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setBudgetInput(prev => ({ ...prev, headlinerType: opt.value }))}
+                      className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all active:scale-[0.98] ${
+                        budgetInput.headlinerType === opt.value
+                          ? "border-[#7B2FF7]/40 bg-[#7B2FF7]/5 text-white"
+                          : "border-white/[0.06] bg-zinc-900 text-zinc-400 hover:border-white/[0.12]"
+                      }`}
+                    >
+                      <opt.icon className="h-4 w-4" />
+                      <span className="text-xs font-medium">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Conditional headliner fields */}
+              {budgetInput.headlinerType === "international" && (
+                <div className="space-y-3 animate-fade-in">
+                  <FormField label="Flying from" icon={Plane}>
+                    <Input
+                      placeholder="London, UK"
+                      value={budgetInput.headlinerOrigin || ""}
+                      onChange={(e) => setBudgetInput(prev => ({ ...prev, headlinerOrigin: e.target.value }))}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    />
+                  </FormField>
+                  <FormField label="Talent Fee" icon={DollarSign}>
+                    <Input
+                      type="number"
+                      placeholder="2000"
+                      value={budgetInput.talentFee || ""}
+                      onChange={(e) => setBudgetInput(prev => ({ ...prev, talentFee: parseInt(e.target.value) || 0 }))}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    />
+                  </FormField>
+                  <FormField label="Stay (nights)" icon={Clock}>
+                    <Input
+                      type="number"
+                      placeholder="2"
+                      value={budgetInput.stayNights || ""}
+                      onChange={(e) => setBudgetInput(prev => ({ ...prev, stayNights: parseInt(e.target.value) || 0 }))}
+                      min={0}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    />
+                  </FormField>
+                </div>
+              )}
+
+              {budgetInput.headlinerType === "local" && (
+                <div className="animate-fade-in">
+                  <FormField label="Talent Fee" icon={DollarSign}>
+                    <Input
+                      type="number"
+                      placeholder="500"
+                      value={budgetInput.talentFee || ""}
+                      onChange={(e) => setBudgetInput(prev => ({ ...prev, talentFee: parseInt(e.target.value) || 0 }))}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    />
+                  </FormField>
+                </div>
+              )}
+
+              {/* Venue costs */}
+              <div className="space-y-3 border-t border-white/5 pt-4">
+                <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
+                  <DollarSign className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                  Venue Costs
+                </span>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-500">Room Rental</label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={budgetInput.venueCost || ""}
+                      onChange={(e) => setBudgetInput(prev => ({ ...prev, venueCost: parseInt(e.target.value) || 0 }))}
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-[#7B2FF7]/50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-500">Bar Minimum</label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={budgetInput.barMinimum || ""}
+                      onChange={(e) => setBudgetInput(prev => ({ ...prev, barMinimum: parseInt(e.target.value) || 0 }))}
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-[#7B2FF7]/50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-500">Deposit</label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={budgetInput.deposit || ""}
+                      onChange={(e) => setBudgetInput(prev => ({ ...prev, deposit: parseInt(e.target.value) || 0 }))}
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-[#7B2FF7]/50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs text-zinc-500">Other (sound, lights, etc.)</label>
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      value={budgetInput.otherExpenses || ""}
+                      onChange={(e) => setBudgetInput(prev => ({ ...prev, otherExpenses: parseInt(e.target.value) || 0 }))}
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-[#7B2FF7]/50"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Calculate button */}
+              <Button
+                onClick={handleCalculateBudget}
+                disabled={calculatingBudget}
+                className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px] transition-all active:scale-[0.98]"
+              >
+                {calculatingBudget ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                )}
+                Calculate Budget
+              </Button>
+
+              {/* Budget result */}
+              {budgetResult && (
+                <div className="rounded-xl bg-zinc-800/50 p-4 space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Budget Summary</span>
+                    <span className="text-sm font-bold text-white">${budgetResult.totalExpenses.toLocaleString()}</span>
+                  </div>
+
+                  {budgetResult.travelEstimate && (
+                    <p className="text-xs text-zinc-400">
+                      Travel: ~${budgetResult.travelEstimate.total.toLocaleString()} ({budgetResult.travelEstimate.breakdown})
+                    </p>
+                  )}
+
+                  <p className="text-xs text-zinc-400">
+                    Break-even: <span className="text-white font-medium">{budgetResult.breakEven.ticketsNeeded} tickets</span> at ${budgetResult.breakEven.atPrice}
+                  </p>
+
+                  <div className="space-y-1">
+                    {budgetResult.scenarios.map((s, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <span className="text-zinc-500">{s.label}</span>
+                        <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                          {s.profit >= 0 ? "+" : ""}${s.profit.toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── STEP 5: Review & Forecast ── */}
+        {step === "review" && (
+          <div className="space-y-5 animate-fade-in">
+            <div className="text-center space-y-1 pb-2">
+              <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
+                Review & Create
+              </h2>
+              <p className="text-sm text-zinc-500">Everything look good?</p>
+            </div>
+
+            {/* Review card */}
+            <div className="rounded-2xl border border-[#7B2FF7]/20 bg-zinc-900 p-5 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <Check className="h-3 w-3 text-green-400" />
+                </div>
+                <span className="text-xs text-green-400 font-medium uppercase tracking-wider">
+                  Ready to create
+                </span>
+              </div>
+
+              <EditableTitle
+                value={formData.title || "Untitled Event"}
+                onSave={(v) => updateForm({ title: v })}
+              />
+
+              {formData.description && (
+                <EditableDescription
+                  value={formData.description}
+                  onSave={(v) => updateForm({ description: v })}
+                />
+              )}
+
+              <div className="grid gap-2">
+                <EditableRow
+                  label="When"
+                  value={`${formatDate(formData.date)}${formData.startTime ? ` at ${formatTime(formData.startTime)}` : ""}`}
+                  icon={Calendar}
+                  onSave={() => goTo("details")}
+                />
+
+                {formData.doorsOpen && (
+                  <EditableRow
+                    label="Doors"
+                    value={formatTime(formData.doorsOpen)}
+                    icon={Clock}
+                    onSave={() => goTo("details")}
+                  />
+                )}
+
+                <EditableRow
+                  label="Where"
+                  value={[formData.venueName, formData.venueCity].filter(Boolean).join(", ")}
+                  icon={MapPin}
+                  onSave={() => goTo("venue")}
+                />
+
+                {typeof formData.venueCapacity === "number" && formData.venueCapacity > 0 && (
+                  <EditableRow
+                    label="Capacity"
+                    value={`${formData.venueCapacity}`}
+                    icon={Users}
+                    onSave={() => goTo("venue")}
+                  />
+                )}
+              </div>
+
+              {/* Tiers */}
+              {tiers.length > 0 && (
+                <div className="border-t border-white/5 pt-3 mt-3">
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <Ticket className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                    <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                      {formData.isFree ? "Tickets" : "Ticket Tiers"}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {tiers.map((tier, i) => (
+                      <EditableTierRow
+                        key={i}
+                        tier={tier}
+                        onSave={(updatedTier) => {
+                          const updatedTiers = [...tiers];
+                          updatedTiers[i] = updatedTier;
+                          setTiers(updatedTiers);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Budget summary if calculated */}
+              {totalExpenses > 0 && (
+                <div className="border-t border-white/5 pt-3 mt-3">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <DollarSign className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                    <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Expenses</span>
+                  </div>
+                  <p className="text-sm font-bold text-white">${totalExpenses.toLocaleString()}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Pricing insight */}
+            {!formData.isFree && tiers.length > 0 && tiers.some(t => t.price > 0) && formData.venueCity && formData.date && (
+              <PricingInsight
+                city={formData.venueCity}
+                date={formData.date}
+                venueCapacity={typeof formData.venueCapacity === "number" ? formData.venueCapacity : undefined}
+                tiers={tiers}
+              />
+            )}
+
+            {/* Live forecast */}
+            {tiers.length > 0 && tiers.some(t => t.price > 0) && (
+              <LiveForecast
+                tiers={tiers}
+                totalExpenses={totalExpenses}
+                onTiersUpdate={setTiers}
+              />
+            )}
+
+            {/* Error */}
+            {error && (
+              <div role="alert" className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400 text-center">
+                {error}
+              </div>
+            )}
+
+            {/* Create button */}
+            <Button
+              onClick={handleCreate}
+              className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[48px] text-base font-semibold transition-all active:scale-[0.98] shadow-lg shadow-[#7B2FF7]/20"
+            >
+              <Sparkles className="h-5 w-5 mr-2" />
+              Create Event
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom nav bar — Back / Next */}
+      {step !== "review" && (
+        <div
+          className="fixed bottom-0 left-0 right-0 border-t border-white/5 bg-background/95 backdrop-blur-sm z-10"
+          style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 8px)" }}
+        >
+          <div className="mx-auto max-w-lg flex gap-3 px-4 py-3">
+            {currentIdx > 0 ? (
+              <Button
+                variant="ghost"
+                onClick={goBack}
+                className="flex-1 min-h-[44px] text-zinc-400 hover:text-white rounded-xl"
+              >
+                <ArrowLeft className="h-4 w-4 mr-1.5" />
+                Back
+              </Button>
+            ) : (
+              <div className="flex-1" />
+            )}
+            <Button
+              onClick={goNext}
+              disabled={!canAdvance()}
+              className="flex-1 bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white min-h-[44px] rounded-xl transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {step === "budget" ? "Review" : "Next"}
+            </Button>
+          </div>
         </div>
       )}
     </div>
