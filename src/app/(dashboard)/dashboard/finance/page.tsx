@@ -143,20 +143,20 @@ export default async function FinancePage() {
   ];
 
   return (
-    <div className="space-y-6 pb-24 overflow-x-hidden">
+    <div className="space-y-6 pb-24 overflow-x-hidden animate-in fade-in duration-300">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold font-heading">Money</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-2xl font-bold font-heading truncate">Money</h1>
+        <p className="text-sm text-muted-foreground truncate">
           Company-wide financials, P&L by event, and revenue forecasts
         </p>
       </div>
 
       {/* Partial-failure warning */}
       {hasDataError && (
-        <div className="flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+        <div className="flex items-center gap-2 rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 transition-colors duration-200">
           <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
-          <p className="text-sm text-amber-500">
+          <p className="text-sm text-amber-500 truncate">
             Some data may be unavailable. Try refreshing.
           </p>
         </div>
@@ -164,14 +164,14 @@ export default async function FinancePage() {
 
       {/* ===== Empty State (no events at all) ===== */}
       {!hasEvents && (
-        <Card className="border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
+        <Card className="rounded-2xl border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
           <CardContent className="p-5 md:p-6">
             <div className="flex flex-col items-center gap-4 py-6 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
                 <DollarSign className="h-8 w-8 text-nocturn" />
               </div>
               <div>
-                <p className="text-lg font-semibold">
+                <p className="text-lg font-bold">
                   Create your first event to start tracking your money.
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -180,7 +180,7 @@ export default async function FinancePage() {
                 </p>
               </div>
               <Link href="/dashboard/events">
-                <Button className="bg-nocturn hover:bg-nocturn-light min-h-[44px]">
+                <Button className="bg-nocturn hover:bg-nocturn-light active:scale-95 min-h-[44px] transition-all duration-200">
                   Create an Event
                 </Button>
               </Link>
@@ -191,14 +191,14 @@ export default async function FinancePage() {
 
       {/* ===== Getting Started (events exist but no revenue yet) ===== */}
       {hasEvents && !hasRevenue && (
-        <Card className="border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
+        <Card className="rounded-2xl border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
           <CardContent className="p-5">
             <div className="flex items-start gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-nocturn/10">
                 <Target className="h-6 w-6 text-nocturn" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold">
+                <p className="font-bold truncate">
                   Your events are set up — now let&apos;s get tickets moving
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -209,7 +209,7 @@ export default async function FinancePage() {
                   <Link href="/dashboard/events">
                     <Button
                       size="sm"
-                      className="bg-nocturn hover:bg-nocturn-light text-xs min-h-[44px]"
+                      className="bg-nocturn hover:bg-nocturn-light active:scale-95 text-xs min-h-[44px] transition-all duration-200"
                     >
                       View Events
                     </Button>
@@ -270,7 +270,7 @@ export default async function FinancePage() {
 
         return (
           <div className="space-y-3">
-            <h2 className="flex items-center gap-2 text-lg font-semibold font-heading">
+            <h2 className="flex items-center gap-2 text-lg font-bold font-heading">
               <Flame className="h-5 w-5 text-orange-500" />
               Needs Your Attention
             </h2>
@@ -278,12 +278,12 @@ export default async function FinancePage() {
               {alerts.map((alert, i) => {
                 const Icon = alert.icon;
                 return (
-                  <Card key={i} className="border-yellow-500/20">
+                  <Card key={i} className="rounded-2xl border-yellow-500/20 transition-colors duration-200 hover:border-yellow-500/40">
                     <CardContent className="flex items-center gap-3 p-4">
                       <Icon
                         className={`h-5 w-5 shrink-0 ${alert.color}`}
                       />
-                      <p className="min-w-0 flex-1 text-sm font-medium">
+                      <p className="min-w-0 flex-1 text-sm font-medium truncate">
                         {alert.message}
                       </p>
                       {alert.cta && (
@@ -291,7 +291,7 @@ export default async function FinancePage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="text-xs min-h-[44px]"
+                            className="text-xs min-h-[44px] hover:border-nocturn/30 active:scale-95 transition-all duration-200"
                           >
                             {alert.cta.label}
                           </Button>
@@ -317,7 +317,7 @@ export default async function FinancePage() {
       {/* ===== SECTION 5: Payout Status ===== */}
       {settlements.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold font-heading">Payout Status</h2>
+          <h2 className="text-lg font-bold font-heading">Payout Status</h2>
           <div className="space-y-2">
             {settlements.map((s) => {
               const event = s.events as unknown as {
@@ -334,7 +334,7 @@ export default async function FinancePage() {
                   key={s.id}
                   href={`/dashboard/finance/${s.event_id}`}
                 >
-                  <Card className="transition-colors hover:border-nocturn/30">
+                  <Card className="rounded-2xl transition-all duration-200 hover:border-nocturn/30 active:scale-[0.98]">
                     <CardContent className="p-4">
                       <div className="mb-3 flex items-center justify-between">
                         <div className="min-w-0 flex-1">
@@ -444,9 +444,9 @@ export default async function FinancePage() {
 
       {/* Empty state for unsettled events with no settlements */}
       {unsettledEvents.length > 0 && settlements.length === 0 && (
-        <Card className="border-yellow-500/30">
+        <Card className="rounded-2xl border-yellow-500/30">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
+            <CardTitle className="flex items-center gap-2 text-base font-bold">
               <AlertTriangle className="h-4 w-4 text-yellow-500" />
               Events Ready for Settlement
             </CardTitle>
@@ -455,10 +455,10 @@ export default async function FinancePage() {
             {unsettledEvents.map((event) => (
               <div
                 key={event.id}
-                className="flex items-center justify-between rounded-lg border p-3"
+                className="flex items-center justify-between rounded-xl border p-3 transition-colors duration-200 hover:border-nocturn/30"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium line-clamp-1">{event.title}</p>
+                  <p className="font-medium truncate">{event.title}</p>
                   <p className="text-xs text-muted-foreground">
                     {new Date(event.starts_at).toLocaleDateString("en", {
                       month: "short",
@@ -473,7 +473,7 @@ export default async function FinancePage() {
                 >
                   <Button
                     size="default"
-                    className="bg-nocturn hover:bg-nocturn-light text-sm min-h-[44px]"
+                    className="bg-nocturn hover:bg-nocturn-light active:scale-95 text-sm min-h-[44px] transition-all duration-200"
                   >
                     Settle
                   </Button>

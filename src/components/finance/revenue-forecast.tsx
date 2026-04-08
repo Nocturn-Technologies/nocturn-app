@@ -41,7 +41,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-semibold">
+        <h2 className="flex items-center gap-2 text-lg font-bold font-heading">
           <TrendingUp className="h-5 w-5 text-nocturn-light" />
           Revenue Forecast
         </h2>
@@ -51,7 +51,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
       </div>
 
       {/* Forecast summary */}
-      <Card className="border-nocturn/20 bg-gradient-to-r from-nocturn/5 to-transparent">
+      <Card className="rounded-2xl border-nocturn/20 bg-gradient-to-r from-nocturn/5 to-transparent">
         <CardContent className="p-4">
           <div className="grid grid-cols-3 gap-4">
             <div>
@@ -101,7 +101,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
               key={forecast.id}
               href={`/dashboard/events/${forecast.id}`}
             >
-              <Card className="border-white/[0.06] transition-colors hover:border-nocturn/20">
+              <Card className="rounded-2xl border-white/[0.06] transition-all duration-200 hover:border-nocturn/20 active:scale-[0.98]">
                 <CardContent className="p-4 space-y-3">
                   {/* Header */}
                   <div className="flex items-start justify-between gap-2">

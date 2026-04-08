@@ -159,7 +159,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Event P&L</h2>
+        <h2 className="text-lg font-bold font-heading">Event P&L</h2>
         <p className="text-xs text-muted-foreground">
           {events.length} event{events.length !== 1 ? "s" : ""}
         </p>
@@ -167,7 +167,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
 
       {/* Desktop table */}
       <div className="hidden md:block">
-        <Card className="border-white/[0.06] overflow-hidden">
+        <Card className="rounded-2xl border-white/[0.06] overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -292,10 +292,10 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
           <button
             key={field}
             onClick={() => toggleSort(field)}
-            className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200 active:scale-95 min-h-[36px] ${
               sortField === field
                 ? "bg-nocturn/15 text-nocturn-light"
-                : "bg-white/[0.04] text-muted-foreground"
+                : "bg-white/[0.04] text-muted-foreground hover:bg-white/[0.08]"
             }`}
           >
             {label} <SortIcon field={field} />
@@ -313,14 +313,14 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
           return (
             <Card
               key={event.id}
-              className="border-white/[0.06] transition-colors"
+              className="rounded-2xl border-white/[0.06] transition-all duration-200 hover:border-nocturn/20"
             >
               <CardContent className="p-0">
                 <button
                   onClick={() =>
                     setExpandedId(isExpanded ? null : event.id)
                   }
-                  className="flex w-full items-center gap-3 p-4 text-left"
+                  className="flex w-full items-center gap-3 p-4 text-left min-h-[44px] active:bg-white/[0.02] transition-colors duration-200"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -398,7 +398,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="w-full mt-1 text-xs"
+                        className="w-full mt-1 text-xs min-h-[44px] hover:border-nocturn/30 active:scale-95 transition-all duration-200"
                       >
                         View Full P&L
                       </Button>
@@ -417,7 +417,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
                       >
                         <Button
                           size="sm"
-                          className="mt-2 w-full bg-nocturn hover:bg-nocturn-light text-xs"
+                          className="mt-2 w-full bg-nocturn hover:bg-nocturn-light active:scale-95 text-xs min-h-[44px] transition-all duration-200"
                         >
                           Settle Now
                         </Button>

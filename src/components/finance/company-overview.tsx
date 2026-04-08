@@ -68,7 +68,7 @@ export function CompanyOverview({ financials }: CompanyOverviewProps) {
   return (
     <div className="space-y-4">
       {/* Headline */}
-      <Card className="border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
+      <Card className="rounded-2xl border-nocturn/30 bg-gradient-to-br from-nocturn/5 to-transparent">
         <CardContent className="p-5">
           <div className="flex items-center justify-between">
             <div>
@@ -138,7 +138,7 @@ export function CompanyOverview({ financials }: CompanyOverviewProps) {
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
-            <Card key={stat.label} className="border-white/[0.06]">
+            <Card key={stat.label} className="rounded-2xl border-white/[0.06] transition-colors duration-200 hover:border-nocturn/20">
               <CardContent className="p-3 md:p-4">
                 <div className="flex items-center gap-2">
                   <div
