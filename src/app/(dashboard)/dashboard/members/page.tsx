@@ -31,6 +31,7 @@ import {
   Mail,
   X,
   Clock,
+  Loader2,
   Handshake,
   Search,
   MessageSquare,
@@ -119,6 +120,10 @@ export default function MembersPage() {
   const [connectingId, setConnectingId] = useState<string | null>(null);
 
   // Referral state
+  const [cancellingInviteId, setCancellingInviteId] = useState<string | null>(null);
+  const [changingRoleId, setChangingRoleId] = useState<string | null>(null);
+
+  // Referral state
   const [referralCode, setReferralCode] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -205,17 +210,20 @@ export default function MembersPage() {
 
   // Cancel a pending invite
   async function handleCancelInvite(inviteId: string) {
+    setCancellingInviteId(inviteId);
     const result = await cancelInvitation(inviteId);
     if (result.error) {
       setError(result.error);
-      return;
+    } else {
+      setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
+      setSuccess("Invitation cancelled");
     }
-    setPendingInvites((prev) => prev.filter((i) => i.id !== inviteId));
-    setSuccess("Invitation cancelled");
+    setCancellingInviteId(null);
   }
 
   // Role change
   async function handleRoleChange(memberId: string, newRole: Role) {
+    setChangingRoleId(memberId);
     const { error } = await supabase
       .from("collective_members")
       .update({ role: newRole })
@@ -223,12 +231,13 @@ export default function MembersPage() {
 
     if (error) {
       setError(error.message);
-      return;
+    } else {
+      setMembers((prev) =>
+        prev.map((m) => (m.id === memberId ? { ...m, role: newRole } : m))
+      );
+      setSuccess(`Role updated to ${roleLabels[newRole]}`);
     }
-
-    setMembers((prev) =>
-      prev.map((m) => (m.id === memberId ? { ...m, role: newRole } : m))
-    );
+    setChangingRoleId(null);
   }
 
   // Remove member
@@ -305,28 +314,52 @@ export default function MembersPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="space-y-2">
+          <div className="h-7 w-28 rounded-lg bg-muted animate-pulse" />
+          <div className="h-4 w-44 rounded-lg bg-muted animate-pulse" />
+        </div>
+        <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+        <Card className="rounded-2xl">
+          <CardContent className="p-4 space-y-3">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl">
+                <div className="h-9 w-9 rounded-full bg-muted animate-pulse shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+                  <div className="h-3 w-44 rounded bg-muted animate-pulse" />
+                </div>
+                <div className="h-6 w-16 rounded-full bg-muted animate-pulse" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   if (loadError) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
-        <p className="text-sm text-destructive">{loadError}</p>
-        <button
+      <div className="flex flex-col items-center justify-center py-12 text-center animate-in fade-in duration-300">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10 mb-3">
+          <Users className="h-7 w-7 text-destructive" />
+        </div>
+        <p className="text-sm font-medium">Something went wrong</p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">{loadError}</p>
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => window.location.reload()}
-          className="mt-3 text-sm text-nocturn hover:underline"
+          className="mt-4 min-h-[44px] transition-all duration-200 active:scale-[0.97]"
         >
           Try again
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
+    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
@@ -337,7 +370,7 @@ export default function MembersPage() {
         </div>
         {activeTab === "team" && (
           <Button
-            className="bg-nocturn hover:bg-nocturn-light min-h-[44px] shrink-0"
+            className="bg-nocturn hover:bg-nocturn-light min-h-[44px] shrink-0 transition-all duration-200 active:scale-[0.97]"
             onClick={() => setShowInvite(!showInvite)}
           >
             <UserPlus className="mr-2 h-4 w-4" />
@@ -356,10 +389,10 @@ export default function MembersPage() {
           <button
             key={key}
             onClick={() => setActiveTab(key)}
-            className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 min-h-[44px] text-sm font-medium transition-colors ${
+            className={`flex-1 flex items-center justify-center gap-2 rounded-md px-3 py-2 min-h-[44px] text-sm font-medium transition-all duration-200 active:scale-[0.97] ${
               activeTab === key
                 ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
+                : "text-muted-foreground hover:text-foreground hover:bg-background/50"
             }`}
           >
             <Icon className="h-4 w-4" />
@@ -370,15 +403,15 @@ export default function MembersPage() {
 
       {/* Alerts */}
       {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive flex items-center justify-between">
+        <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive flex items-center justify-between animate-in fade-in duration-200">
           {error}
-          <button onClick={() => setError(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"><X className="h-4 w-4" /></button>
+          <button onClick={() => setError(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-destructive/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
         </div>
       )}
       {success && (
-        <div className="rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-500 flex items-center justify-between">
+        <div className="rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-500 flex items-center justify-between animate-in fade-in duration-200">
           {success}
-          <button onClick={() => setSuccess(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0"><X className="h-4 w-4" /></button>
+          <button onClick={() => setSuccess(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-emerald-500/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
         </div>
       )}
 
@@ -387,9 +420,9 @@ export default function MembersPage() {
         <>
           {/* Invite form */}
           {showInvite && (
-            <Card className="border-nocturn/20">
+            <Card className="border-nocturn/20 rounded-2xl animate-in fade-in slide-in-from-top-2 duration-300">
               <CardHeader>
-                <CardTitle className="text-base">Invite a team member</CardTitle>
+                <CardTitle className="text-base font-bold">Invite a team member</CardTitle>
                 <CardDescription>
                   Enter their email — if they&apos;re already on Nocturn they&apos;ll be added instantly. Otherwise they&apos;ll get an invite link.
                 </CardDescription>
@@ -424,10 +457,10 @@ export default function MembersPage() {
                   </div>
                   <Button
                     type="submit"
-                    className="bg-nocturn hover:bg-nocturn-light min-h-[44px]"
+                    className="bg-nocturn hover:bg-nocturn-light min-h-[44px] transition-all duration-200 active:scale-[0.97]"
                     disabled={inviting}
                   >
-                    {inviting ? "Sending..." : "Send Invite"}
+                    {inviting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sending...</> : "Send Invite"}
                   </Button>
                 </form>
               </CardContent>
@@ -436,9 +469,9 @@ export default function MembersPage() {
 
           {/* Pending invitations */}
           {pendingInvites.length > 0 && (
-            <Card className="border-amber-500/20">
+            <Card className="border-amber-500/20 rounded-2xl">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm flex items-center gap-2">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
                   <Clock className="h-4 w-4 text-amber-500" />
                   Pending Invitations ({pendingInvites.length})
                 </CardTitle>
@@ -450,7 +483,7 @@ export default function MembersPage() {
                   return (
                     <div
                       key={invite.id}
-                      className="flex items-center gap-3 rounded-lg p-3 bg-amber-500/5"
+                      className="flex items-center gap-3 rounded-xl p-3 bg-amber-500/5 transition-colors duration-200 hover:bg-amber-500/10"
                     >
                       <div className="flex h-9 w-9 items-center justify-center rounded-full bg-amber-500/10">
                         <Mail className="h-4 w-4 text-amber-500" />
@@ -464,10 +497,11 @@ export default function MembersPage() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-muted-foreground hover:text-destructive min-h-[44px] min-w-[44px]"
+                        className="text-muted-foreground hover:text-destructive min-h-[44px] min-w-[44px] transition-colors duration-200 active:scale-[0.95]"
                         onClick={() => handleCancelInvite(invite.id)}
+                        disabled={cancellingInviteId === invite.id}
                       >
-                        <X className="h-4 w-4" />
+                        {cancellingInviteId === invite.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <X className="h-4 w-4" />}
                       </Button>
                     </div>
                   );
@@ -477,13 +511,31 @@ export default function MembersPage() {
           )}
 
           {/* Members list */}
-          <Card>
+          <Card className="rounded-2xl">
             <CardHeader>
-              <CardTitle className="text-base">
+              <CardTitle className="text-base font-bold">
                 Team ({members.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
+              {members.length === 0 && (
+                <div className="flex flex-col items-center py-8 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-nocturn/10 mb-3">
+                    <Users className="h-7 w-7 text-nocturn" />
+                  </div>
+                  <p className="text-sm font-medium">No team members yet</p>
+                  <p className="text-xs text-muted-foreground max-w-[260px] mt-1">
+                    Invite your crew to manage events, handle the door, and run the night together.
+                  </p>
+                  <Button
+                    className="mt-4 bg-nocturn hover:bg-nocturn-light min-h-[44px] transition-all duration-200 active:scale-[0.97]"
+                    onClick={() => setShowInvite(true)}
+                  >
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Invite your first member
+                  </Button>
+                </div>
+              )}
               {members.map((member) => {
                 const initials = (member.user?.full_name ?? member.user?.email ?? "?")
                   .split(" ")
@@ -497,7 +549,7 @@ export default function MembersPage() {
                 return (
                   <div
                     key={member.id}
-                    className="flex items-center gap-3 rounded-lg p-3 transition-colors hover:bg-accent/50"
+                    className="flex items-center gap-3 rounded-xl p-3 transition-all duration-200 hover:bg-accent/50"
                   >
                     <Avatar className="h-9 w-9">
                       <AvatarFallback className="bg-nocturn/10 text-xs text-nocturn">
@@ -523,8 +575,8 @@ export default function MembersPage() {
                     </div>
                     {!isCurrentUser && (
                       <DropdownMenu>
-                        <DropdownMenuTrigger className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-md hover:bg-accent">
-                          <MoreVertical className="h-4 w-4" />
+                        <DropdownMenuTrigger className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-md hover:bg-accent transition-colors duration-200 active:scale-[0.95]" disabled={changingRoleId === member.id || removingId === member.id}>
+                          {changingRoleId === member.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           {(["admin", "promoter", "talent_buyer", "door_staff", "member"] as Role[])
@@ -533,6 +585,7 @@ export default function MembersPage() {
                               <DropdownMenuItem
                                 key={role}
                                 onClick={() => handleRoleChange(member.id, role)}
+                                disabled={!!changingRoleId}
                               >
                                 Make {roleLabels[role]}
                               </DropdownMenuItem>
@@ -558,9 +611,9 @@ export default function MembersPage() {
       {/* ==================== COLLABS TAB ==================== */}
       {activeTab === "collabs" && (
         <>
-          <Card className="border-nocturn/20">
+          <Card className="border-nocturn/20 rounded-2xl">
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
                 <Handshake className="h-5 w-5 text-nocturn" />
                 Connect with Collectives
               </CardTitle>
@@ -580,8 +633,17 @@ export default function MembersPage() {
               </div>
 
               {searchingCollabs && (
-                <div className="flex justify-center py-4">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+                <div className="space-y-2 py-2">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-xl p-3 border border-border">
+                      <div className="h-10 w-10 rounded-full bg-muted animate-pulse shrink-0" />
+                      <div className="flex-1 space-y-1.5">
+                        <div className="h-4 w-28 rounded bg-muted animate-pulse" />
+                        <div className="h-3 w-20 rounded bg-muted animate-pulse" />
+                      </div>
+                      <div className="h-9 w-16 rounded-md bg-muted animate-pulse" />
+                    </div>
+                  ))}
                 </div>
               )}
 
@@ -596,7 +658,7 @@ export default function MembersPage() {
                   {collabResults.map((c) => (
                     <div
                       key={c.id}
-                      className="flex items-center gap-3 rounded-lg p-3 border border-border hover:border-nocturn/30 transition-colors"
+                      className="flex items-center gap-3 rounded-xl p-3 border border-border hover:border-nocturn/30 transition-all duration-200 active:scale-[0.99]"
                     >
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-nocturn/10 shrink-0">
                         {c.logo_url ? (
@@ -622,7 +684,7 @@ export default function MembersPage() {
                       </div>
                       <Button
                         size="sm"
-                        className="bg-nocturn hover:bg-nocturn-light shrink-0 min-h-[44px]"
+                        className="bg-nocturn hover:bg-nocturn-light shrink-0 min-h-[44px] transition-all duration-200 active:scale-[0.97]"
                         onClick={() => handleConnect(c.id)}
                         disabled={connectingId === c.id}
                       >
@@ -653,9 +715,9 @@ export default function MembersPage() {
       {/* ==================== REFERRAL TAB ==================== */}
       {activeTab === "referral" && (
         <>
-          <Card className="border-nocturn/20">
+          <Card className="border-nocturn/20 rounded-2xl">
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
                 <Gift className="h-5 w-5 text-nocturn" />
                 Referral Program
               </CardTitle>
@@ -678,7 +740,7 @@ export default function MembersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="border-nocturn/20 min-h-[44px]"
+                        className="border-nocturn/20 min-h-[44px] transition-all duration-200 active:scale-[0.97] hover:border-nocturn/40"
                         onClick={handleCopyCode}
                       >
                         {copied ? (
@@ -696,7 +758,7 @@ export default function MembersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="border-nocturn/20 min-h-[44px]"
+                        className="border-nocturn/20 min-h-[44px] transition-all duration-200 active:scale-[0.97] hover:border-nocturn/40"
                         onClick={() => {
                           if (!referralCode) return;
                           const url = `https://app.trynocturn.com/signup?ref=${referralCode}`;
@@ -719,15 +781,16 @@ export default function MembersPage() {
                     </p>
                   </>
                 ) : (
-                  <div className="flex justify-center py-2">
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+                  <div className="flex flex-col items-center gap-2 py-2">
+                    <div className="h-8 w-32 rounded-lg bg-nocturn/10 animate-pulse" />
+                    <div className="h-4 w-48 rounded bg-muted animate-pulse" />
                   </div>
                 )}
               </div>
 
               {/* How it works */}
               <div className="space-y-3">
-                <p className="text-sm font-medium">How it works</p>
+                <h2 className="text-lg font-bold">How it works</h2>
                 <div className="grid gap-3 sm:grid-cols-3">
                   {[
                     {
@@ -746,7 +809,7 @@ export default function MembersPage() {
                       desc: "Build your network, co-host events, and collaborate across the platform",
                     },
                   ].map(({ step, title, desc }) => (
-                    <div key={step} className="rounded-lg border border-border p-4 space-y-2">
+                    <div key={step} className="rounded-xl border border-border p-4 space-y-2 hover:border-nocturn/20 transition-colors duration-200">
                       <div className="flex h-8 w-8 items-center justify-center rounded-full bg-nocturn/10 text-sm font-bold text-nocturn">
                         {step}
                       </div>
