@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Check, HelpCircle, X, Users, Loader2, Mail, Phone } from "lucide-react";
 import { submitRsvp, type RsvpStatus } from "@/app/actions/rsvps";
+import { useConfetti } from "@/components/celebrations";
 
 interface RsvpWidgetProps {
   eventId: string;
@@ -47,6 +48,7 @@ export function RsvpWidget({
   const [guestName, setGuestName] = useState("");
   const [memberPhone, setMemberPhone] = useState(initialPhone ?? "");
   const [submitted, setSubmitted] = useState(false);
+  const fireConfetti = useConfetti();
 
   const total = counts.yes + counts.maybe;
 
@@ -81,6 +83,14 @@ export function RsvpWidget({
       setShowGuestForm(false);
       setShowMemberForm(false);
       setPendingChoice(null);
+
+      // 🎉 Celebrate on "going" — full-screen confetti burst
+      if (status === "yes") {
+        fireConfetti({ duration: 2000 }).catch(() => {
+          // Ignore confetti errors — don't let a CSS/animation hiccup
+          // break the RSVP success state.
+        });
+      }
     });
   }
 

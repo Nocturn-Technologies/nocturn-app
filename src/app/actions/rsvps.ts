@@ -194,11 +194,23 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
       }
     }
 
-    // Send RSVP confirmation email (fire-and-forget, never blocks success)
-    // Only send on "yes" / "maybe" — no need to confirm a decline.
+    // Send RSVP confirmation email. Only send on "yes" / "maybe" — no need
+    // to confirm a decline.
+    //
+    // CRITICAL: we AWAIT the sendEmail call instead of fire-and-forget.
+    // On Vercel, once a server action returns, the serverless function
+    // context is frozen and any in-flight promise is killed. Fire-and-forget
+    // = the email never actually goes out. The cost of awaiting is ~300ms
+    // (Resend is fast), which is well worth the reliability.
     const recipient = email || (user?.email ? user.email.toLowerCase().trim() : null);
     if (recipient && input.status !== "no") {
       try {
+        console.info("[submitRsvp] queueing confirmation email", {
+          to: recipient,
+          eventId: event.id,
+          status: input.status,
+        });
+
         // Resolve collective name + venue for a nicer email
         const [{ data: collective }, { data: venue }] = await Promise.all([
           event.collective_id
@@ -216,7 +228,7 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
         const { sendEmail } = await import("@/lib/email/send");
         const { rsvpConfirmationEmail } = await import("@/lib/email/templates");
 
-        void sendEmail({
+        const sendResult = await sendEmail({
           to: recipient,
           subject: input.status === "yes"
             ? `You're going to ${event.title} 🎉`
@@ -231,11 +243,27 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
             eventUrl: publicUrl,
             firstName: (fullName ?? recipient.split("@")[0] ?? "").split(" ")[0] ?? null,
           }),
-        }).catch((err) => console.error("[submitRsvp] confirmation email failed:", err));
+        });
+
+        if (sendResult.error) {
+          console.error("[submitRsvp] confirmation email failed:", sendResult.error);
+        } else {
+          console.info("[submitRsvp] confirmation email sent", {
+            messageId: sendResult.messageId,
+            to: recipient,
+          });
+        }
       } catch (emailErr) {
-        // Never let email failure bubble up to the user
-        console.error("[submitRsvp] email prep failed:", emailErr);
+        // Never let email failure bubble up to the user — RSVP is already
+        // saved successfully at this point.
+        console.error("[submitRsvp] email prep/send failed:", emailErr);
       }
+    } else {
+      console.info("[submitRsvp] skipping confirmation email", {
+        hasRecipient: !!recipient,
+        status: input.status,
+        reason: !recipient ? "no recipient" : "status is no",
+      });
     }
 
     revalidatePath("/e/[slug]/[eventSlug]", "page");

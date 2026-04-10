@@ -5,9 +5,15 @@ import { createAdminClient } from "@/lib/supabase/config";
 let _resend: Resend | null = null;
 
 function getResend(): Resend | null {
-  if (!process.env.RESEND_API_KEY) return null;
+  const key = process.env.RESEND_API_KEY;
+  // Treat missing OR the literal ".env.example" placeholder as "not configured".
+  // Without this guard, local dev silently hits Resend with a bogus key and
+  // every 4xx response gets dropped without retry — no logs, no emails.
+  if (!key || key === "your_resend_api_key" || !key.startsWith("re_")) {
+    return null;
+  }
   if (!_resend) {
-    _resend = new Resend(process.env.RESEND_API_KEY);
+    _resend = new Resend(key);
   }
   return _resend;
 }
@@ -86,6 +92,12 @@ export async function sendEmail({
         return { error: lastError, messageId: null };
       }
 
+      console.info(`[email] sent successfully`, {
+        messageId: data?.id,
+        to,
+        subject,
+        from: FROM_EMAIL,
+      });
       return { error: null, messageId: data?.id };
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
