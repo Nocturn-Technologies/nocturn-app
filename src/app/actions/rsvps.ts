@@ -17,6 +17,13 @@ interface SubmitRsvpInput {
   fullName?: string | null;
   plusOnes?: number | null;
   message?: string | null;
+  /**
+   * Optional access token from the confirmation email deep link.
+   * When present + valid, the caller is authenticated as the owner
+   * of an existing RSVP row and can update its status without
+   * re-supplying email/phone/name.
+   */
+  rsvpToken?: string | null;
 }
 
 // Phone: allow leading +, digits, spaces, dashes, parens, dots. Require 7-15 digits.
@@ -87,6 +94,32 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
       if (!phone) return { error: "Please enter a valid phone number" };
     }
 
+    // ── Token short-circuit ──
+    // If the caller sent a valid access_token from the confirmation email,
+    // treat it as proof of ownership and load the existing row's identity
+    // so the guest doesn't need to re-enter name/email/phone just to flip
+    // their status between Going/Maybe/Can't go.
+    const adminClient = createAdminClient();
+    let tokenRsvpId: string | null = null;
+    if (input.rsvpToken) {
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (uuidRe.test(input.rsvpToken)) {
+        const { data: tokenRow } = await adminClient
+          .from("rsvps")
+          .select("id, event_id, email, phone, full_name")
+          .eq("access_token", input.rsvpToken)
+          .maybeSingle();
+        if (tokenRow && tokenRow.event_id === input.eventId) {
+          tokenRsvpId = tokenRow.id;
+          // Backfill any missing fields from the existing row — this is
+          // what lets the widget submit without re-collecting data.
+          if (!email && tokenRow.email) email = tokenRow.email;
+          if (!phone && tokenRow.phone) phone = tokenRow.phone;
+          if (!fullName && tokenRow.full_name) fullName = tokenRow.full_name;
+        }
+      }
+    }
+
     if (!user && !email) {
       return { error: "Email is required to RSVP" };
     }
@@ -100,7 +133,6 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
 
     // For logged-in users, resolve name + email from their profile and
     // persist the phone back to the users table if it's new or different.
-    const adminClient = createAdminClient();
     if (user) {
       const { data: profile } = await adminClient
         .from("users")
@@ -153,16 +185,50 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
       message,
     };
 
-    // Try upsert on user_id first if logged in, else on email
-    const onConflict = user ? "event_id,user_id" : "event_id,email";
-    const { error } = await admin
-      .from("rsvps")
-      .upsert(row, { onConflict, ignoreDuplicates: false });
+    // If the caller authenticated via a valid access_token we update that
+    // specific row directly — no conflict key needed, and we preserve the
+    // token so the SAME deep link keeps working across multiple changes.
+    //
+    // Otherwise: upsert on (event_id, user_id) for logged-in users or
+    // (event_id, email) for guests, so repeat RSVPs replace instead of
+    // duplicate.
+    let upserted: { id: string; access_token: string } | null = null;
+    let error: { message: string } | null = null;
+
+    if (tokenRsvpId) {
+      const { data: updated, error: updateError } = await admin
+        .from("rsvps")
+        .update({
+          status: input.status,
+          plus_ones: plusOnes,
+          // Only overwrite phone / full_name if we actually received new
+          // values — otherwise keep what's already on the row.
+          ...(phone ? { phone } : {}),
+          ...(fullName ? { full_name: fullName } : {}),
+          ...(message != null ? { message } : {}),
+        })
+        .eq("id", tokenRsvpId)
+        .select("id, access_token")
+        .maybeSingle();
+      upserted = (updated as { id: string; access_token: string } | null) ?? null;
+      error = updateError ? { message: updateError.message } : null;
+    } else {
+      const onConflict = user ? "event_id,user_id" : "event_id,email";
+      const { data: upsertData, error: upsertError } = await admin
+        .from("rsvps")
+        .upsert(row, { onConflict, ignoreDuplicates: false })
+        .select("id, access_token")
+        .maybeSingle();
+      upserted = (upsertData as { id: string; access_token: string } | null) ?? null;
+      error = upsertError ? { message: upsertError.message } : null;
+    }
 
     if (error) {
-      console.error("[submitRsvp] upsert error:", error.message);
+      console.error("[submitRsvp] write error:", error.message);
       return { error: "Failed to submit RSVP" };
     }
+
+    const accessToken = upserted?.access_token ?? null;
 
     // RSVP fans = collective fans. Feed them through the same CRM backend
     // that ticket buyers use (attendee_profiles + contacts) so they show up in
@@ -221,9 +287,16 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
             : Promise.resolve({ data: null }),
         ]);
 
-        const publicUrl = collective?.slug && event.slug
+        // Include the access_token on the email link so when the guest
+        // clicks through they land back on the event page with their
+        // existing RSVP loaded — giving them a one-tap way to change
+        // their mind without requiring an account.
+        const baseUrl = collective?.slug && event.slug
           ? `https://app.trynocturn.com/e/${collective.slug}/${event.slug}`
           : `https://app.trynocturn.com`;
+        const publicUrl = accessToken
+          ? `${baseUrl}?rsvp=${accessToken}#rsvp`
+          : `${baseUrl}#rsvp`;
 
         const { sendEmail } = await import("@/lib/email/send");
         const { rsvpConfirmationEmail } = await import("@/lib/email/templates");
@@ -307,6 +380,67 @@ export async function getRsvpCounts(eventId: string): Promise<{
   } catch (err) {
     console.error("[getRsvpCounts]", err);
     return { error: "Something went wrong", counts: { yes: 0, maybe: 0, no: 0 } };
+  }
+}
+
+// ── Get an RSVP by its access_token (guest deep-link from email) ──
+//
+// Guests don't have sessions, so after they RSVP we embed an opaque token
+// on the confirmation email link. When they land back on the event page
+// with `?rsvp=TOKEN` we use this to resolve their existing RSVP and show
+// the confirmed view — with a one-tap "Change my RSVP" button.
+
+export async function getRsvpByToken(
+  eventId: string,
+  token: string
+): Promise<{
+  error: string | null;
+  rsvp: {
+    id: string;
+    status: RsvpStatus;
+    plus_ones: number;
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+  } | null;
+}> {
+  try {
+    if (!eventId?.trim() || !token?.trim()) return { error: null, rsvp: null };
+    // UUID shape — defensive so a bogus ?rsvp= param can't blow up the page
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRe.test(eventId) || !uuidRe.test(token)) {
+      return { error: null, rsvp: null };
+    }
+
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("rsvps")
+      .select("id, status, plus_ones, full_name, email, phone, event_id")
+      .eq("access_token", token)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[getRsvpByToken]", error);
+      return { error: null, rsvp: null };
+    }
+    // Only return it if the token is for THIS event — guards against a
+    // user pasting a token from one event onto a totally unrelated one.
+    if (!data || data.event_id !== eventId) return { error: null, rsvp: null };
+
+    return {
+      error: null,
+      rsvp: {
+        id: data.id,
+        status: data.status as RsvpStatus,
+        plus_ones: data.plus_ones ?? 0,
+        full_name: data.full_name,
+        email: data.email,
+        phone: data.phone,
+      },
+    };
+  } catch (err) {
+    console.error("[getRsvpByToken]", err);
+    return { error: null, rsvp: null };
   }
 }
 

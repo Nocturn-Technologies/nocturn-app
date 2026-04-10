@@ -13,7 +13,7 @@ import { AlsoThisWeek } from "@/components/public-event/also-this-week";
 import { RsvpWidget } from "@/components/public-event/rsvp-widget";
 import { EventUpdatesFeed } from "@/components/public-event/event-updates-feed";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
-import { getRsvpCounts, getMyRsvp } from "@/app/actions/rsvps";
+import { getRsvpCounts, getMyRsvp, getRsvpByToken } from "@/app/actions/rsvps";
 import { listEventUpdatesPublic } from "@/app/actions/event-updates";
 import type { Metadata } from "next";
 import Image from "next/image";
@@ -28,7 +28,8 @@ export const revalidate = 10;
 
 interface Props {
   params: Promise<{ slug: string; eventSlug: string }>;
-  searchParams: Promise<{ ref?: string }>;
+  /** `ref` = referral param, `rsvp` = access token from email confirmation link */
+  searchParams: Promise<{ ref?: string; rsvp?: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -124,7 +125,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   if (!slugFormat.test(slug) || !slugFormat.test(eventSlug)) {
     notFound();
   }
-  const { ref: referrerToken } = await searchParams;
+  const { ref: referrerToken, rsvp: rsvpToken } = await searchParams;
   const supabase = createAdminClient();
 
   // Fetch collective (include description for profile section)
@@ -237,7 +238,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     })(),
   ]);
   const rsvpCounts = rsvpCountsResult.counts;
-  const myRsvpStatus = myRsvpResult.rsvp?.status ?? null;
+  let myRsvpStatus = myRsvpResult.rsvp?.status ?? null;
   const eventUpdates = updatesResult.updates;
   const isLoggedIn = !!currentUserResult;
 
@@ -251,6 +252,17 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       .eq("auth_id", currentUserResult.id)
       .maybeSingle();
     viewerPhone = viewerProfile?.phone ?? null;
+  }
+
+  // If the user landed here via the confirmation-email deep link
+  // (`?rsvp=TOKEN`), resolve their RSVP by token so guests without
+  // a session still see their current status and can change it.
+  if (showRsvp && rsvpToken && !myRsvpStatus) {
+    const byToken = await getRsvpByToken(event.id, rsvpToken);
+    if (byToken.rsvp) {
+      myRsvpStatus = byToken.rsvp.status;
+      if (!viewerPhone && byToken.rsvp.phone) viewerPhone = byToken.rsvp.phone;
+    }
   }
 
   const venue = event.venues;
@@ -615,6 +627,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                 initialMyStatus={myRsvpStatus}
                 isLoggedIn={isLoggedIn}
                 initialPhone={viewerPhone}
+                rsvpToken={rsvpToken ?? null}
               />
             </div>
           )}

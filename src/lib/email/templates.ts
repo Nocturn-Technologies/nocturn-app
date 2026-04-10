@@ -290,6 +290,12 @@ export function rsvpConfirmationEmail({
     ? `${escapeHtml(venueName)}${venueCity ? `, ${escapeHtml(venueCity)}` : ""}`
     : "Venue details coming soon";
 
+  // The eventUrl already has `?rsvp=TOKEN#rsvp` appended by the server
+  // action so tapping the button lands the guest back on the event page
+  // with the RSVP widget in "confirmed" view — one tap to change.
+  const ctaLabel =
+    status === "yes" ? "View event & manage RSVP →" : "Update my RSVP →";
+
   return baseTemplate(`
     <h2>${headline}</h2>
     <p>${greeting} ${subhead}</p>
@@ -299,7 +305,7 @@ export function rsvpConfirmationEmail({
       <p style="color: #A1A1AA; margin: 0 0 4px 0; font-size: 14px;">📍 ${venueLine}</p>
       <p style="color: #A1A1AA; margin: 0; font-size: 14px;">🎟️ Hosted by ${escapeHtml(collectiveName)}</p>
     </div>
-    <a href="${sanitizeUrl(eventUrl)}" class="btn">View Event →</a>
-    <p>Plans changed? Open the event page and update your RSVP — zero pressure.</p>
+    <a href="${sanitizeUrl(eventUrl)}" class="btn">${ctaLabel}</a>
+    <p style="color: #A1A1AA; font-size: 13px;">Plans changed? Tap the button — your existing RSVP will load and you can switch between <strong style="color:#FAFAFA;">Going</strong>, <strong style="color:#FAFAFA;">Maybe</strong>, or <strong style="color:#FAFAFA;">Can&apos;t go</strong> in one tap. No login required.</p>
   `);
 }

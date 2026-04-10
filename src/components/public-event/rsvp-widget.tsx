@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   Check,
   HelpCircle,
@@ -15,6 +15,18 @@ import {
 import { submitRsvp, type RsvpStatus } from "@/app/actions/rsvps";
 import { useConfetti } from "@/components/celebrations";
 
+// Short, mobile-friendly haptic tick on tap. iOS only fires this
+// inside a PWA or via the Web Vibration API on supported browsers,
+// so we treat it as best-effort.
+function tapHaptic() {
+  if (typeof window === "undefined") return;
+  try {
+    if ("vibrate" in navigator) navigator.vibrate(8);
+  } catch {
+    // noop — some browsers throw if the user hasn't interacted yet
+  }
+}
+
 interface RsvpWidgetProps {
   eventId: string;
   eventTitle: string;
@@ -24,17 +36,27 @@ interface RsvpWidgetProps {
   isLoggedIn: boolean;
   /** User's phone number on file, if any — pre-fills the confirm form */
   initialPhone?: string | null;
+  /**
+   * Access token from the email confirmation deep link. When present,
+   * the user (even a guest) is authenticated as the owner of an existing
+   * RSVP and can switch status with a single tap — no form required.
+   */
+  rsvpToken?: string | null;
 }
 
 const OPTIONS: Array<{
   key: RsvpStatus;
   label: string;
+  /** Longer label used in confirm/submit button text */
+  longLabel: string;
   icon: typeof Check;
   emoji: string;
 }> = [
-  { key: "yes", label: "Going", icon: Check, emoji: "🎉" },
-  { key: "maybe", label: "Maybe", icon: HelpCircle, emoji: "🤔" },
-  { key: "no", label: "Can't make it", icon: X, emoji: "💔" },
+  { key: "yes", label: "Going", longLabel: "Going", icon: Check, emoji: "🎉" },
+  { key: "maybe", label: "Maybe", longLabel: "Maybe", icon: HelpCircle, emoji: "🤔" },
+  // Shortened from "Can't make it" — 13 chars was wrapping to two lines on
+  // iPhone SE / narrow viewports inside the 3-column picker.
+  { key: "no", label: "Can't go", longLabel: "Can't go", icon: X, emoji: "💔" },
 ];
 
 function getConfirmedCopy(status: RsvpStatus): {
@@ -72,7 +94,12 @@ export function RsvpWidget({
   initialMyStatus,
   isLoggedIn,
   initialPhone,
+  rsvpToken,
 }: RsvpWidgetProps) {
+  // Token-auth is effectively "logged in" from the widget's POV — we
+  // already know who they are so we skip the guest form entirely and
+  // submit the new status with one tap.
+  const isTokenAuth = !!rsvpToken;
   const [counts, setCounts] = useState(initialCounts);
   const [myStatus, setMyStatus] = useState<RsvpStatus | null>(initialMyStatus);
   const [pending, startTransition] = useTransition();
@@ -88,6 +115,22 @@ export function RsvpWidget({
   // We start in the confirmed view if they already had one on load.
   const [isChanging, setIsChanging] = useState(false);
   const fireConfetti = useConfetti();
+
+  // Scroll the form into view when it opens. On mobile the form
+  // usually appears BELOW the picker and the user doesn't realize
+  // new inputs just rendered off-screen.
+  const formRef = useRef<HTMLFormElement | null>(null);
+  useEffect(() => {
+    if (showGuestForm || showMemberForm) {
+      // Wait a frame so the DOM has actually painted the new form.
+      requestAnimationFrame(() => {
+        formRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      });
+    }
+  }, [showGuestForm, showMemberForm]);
 
   const total = counts.yes + counts.maybe;
   // Show the confirmed panel whenever we have a status AND the user isn't
@@ -109,6 +152,7 @@ export function RsvpWidget({
         email,
         phone,
         fullName,
+        rsvpToken: rsvpToken ?? null,
       });
       if (result.error) {
         setError(result.error);
@@ -140,7 +184,18 @@ export function RsvpWidget({
   }
 
   function handleChoose(status: RsvpStatus) {
+    tapHaptic();
     setError(null);
+
+    // Token-authenticated users (came via the email deep link) have
+    // their identity + phone already stored on the RSVP row — submit
+    // the new status directly with zero friction.
+    if (isTokenAuth) {
+      setPendingChoice(status);
+      doSubmit(status, null, null, null);
+      return;
+    }
+
     setPendingChoice(status);
     if (isLoggedIn) {
       setShowMemberForm(true);
@@ -219,7 +274,7 @@ export function RsvpWidget({
 
         {/* Confirmed card — prominent, colorful, unmistakable */}
         <div
-          className="relative overflow-hidden rounded-2xl border p-6 animate-fade-in"
+          className="relative overflow-hidden rounded-2xl border p-5 sm:p-6 animate-fade-in"
           style={{
             borderColor: `${accentColor}40`,
             background: `linear-gradient(135deg, ${accentColor}15 0%, ${accentColor}05 100%)`,
@@ -227,13 +282,13 @@ export function RsvpWidget({
         >
           {/* Subtle glow */}
           <div
-            className="absolute -top-20 -right-20 h-40 w-40 rounded-full blur-3xl opacity-30"
+            className="absolute -top-20 -right-20 h-40 w-40 rounded-full blur-3xl opacity-30 pointer-events-none"
             style={{ backgroundColor: accentColor }}
           />
 
-          <div className="relative flex items-start gap-4">
+          <div className="relative flex items-start gap-3 sm:gap-4">
             <div
-              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl"
+              className="flex h-14 w-14 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl text-3xl sm:text-2xl"
               style={{ backgroundColor: `${accentColor}20` }}
             >
               {copy.emoji}
@@ -246,27 +301,30 @@ export function RsvpWidget({
                     style={{ color: accentColor }}
                   />
                 )}
-                <p
-                  className="font-heading text-lg font-bold leading-tight text-white"
-                >
+                <p className="font-heading text-xl sm:text-lg font-bold leading-tight text-white">
                   {copy.headline}
                 </p>
               </div>
-              <p className="mt-1 text-sm text-white/60">{copy.subhead}</p>
-              <p className="mt-3 text-xs text-white/40">
-                Plans changed?{" "}
-                <button
-                  type="button"
-                  onClick={handleChangeRsvp}
-                  className="inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline transition-all"
-                  style={{ color: accentColor }}
-                >
-                  <Edit3 className="h-3 w-3" />
-                  Change your RSVP
-                </button>
+              <p className="mt-1 text-[15px] sm:text-sm text-white/60 leading-snug">
+                {copy.subhead}
               </p>
             </div>
           </div>
+
+          {/* Dedicated full-width "Change RSVP" button — big enough to
+              hit reliably on mobile and visible, not hidden inside copy. */}
+          <button
+            type="button"
+            onClick={handleChangeRsvp}
+            className="relative mt-4 sm:mt-5 w-full rounded-xl border px-4 py-3 text-sm font-semibold text-white transition-all active:scale-[0.98] min-h-[48px] flex items-center justify-center gap-2"
+            style={{
+              borderColor: `${accentColor}50`,
+              backgroundColor: `${accentColor}15`,
+            }}
+          >
+            <Edit3 className="h-4 w-4" style={{ color: accentColor }} />
+            Change my RSVP
+          </button>
         </div>
       </div>
     );
@@ -315,7 +373,7 @@ export function RsvpWidget({
               type="button"
               onClick={() => handleChoose(opt.key)}
               disabled={pending}
-              className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border p-4 transition-all active:scale-[0.97] min-h-[88px] ${
+              className={`flex flex-col items-center justify-center gap-1.5 rounded-2xl border px-2 py-4 transition-all active:scale-[0.97] min-h-[96px] touch-manipulation ${
                 isActive
                   ? "bg-white/[0.04]"
                   : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
@@ -330,14 +388,14 @@ export function RsvpWidget({
               }
             >
               <div className="flex items-center gap-1.5">
-                <span className="text-lg">{opt.emoji}</span>
+                <span className="text-2xl sm:text-xl">{opt.emoji}</span>
                 {isActive && (
                   <Icon className="h-3.5 w-3.5" style={{ color: accentColor }} />
                 )}
               </div>
               <span
-                className={`text-[11px] font-semibold text-center leading-tight ${
-                  isActive ? "text-white" : "text-white/60"
+                className={`text-[13px] font-semibold text-center leading-tight whitespace-nowrap ${
+                  isActive ? "text-white" : "text-white/70"
                 }`}
               >
                 {opt.label}
@@ -376,7 +434,11 @@ export function RsvpWidget({
 
       {/* Guest full form (name + email + phone) */}
       {showGuestForm && !isLoggedIn && (
-        <form onSubmit={handleGuestSubmit} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in">
+        <form
+          ref={formRef}
+          onSubmit={handleGuestSubmit}
+          className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in"
+        >
           <p className="text-xs text-white/60">
             Your name, email, and phone so the organizer knows who&apos;s coming and can reach you with updates.
           </p>
@@ -387,53 +449,73 @@ export function RsvpWidget({
             onChange={(e) => setGuestName(e.target.value)}
             required
             autoFocus
+            autoComplete="name"
+            autoCapitalize="words"
+            autoCorrect="off"
+            enterKeyHint="next"
             maxLength={200}
-            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
+            /* text-base (16px) prevents iOS Safari auto-zoom on focus. */
+            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[48px]"
           />
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
             <input
               type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="next"
               placeholder="you@example.com"
               value={guestEmail}
               onChange={(e) => setGuestEmail(e.target.value)}
               required
               maxLength={320}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[48px]"
             />
           </div>
           <div className="relative">
-            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
             <input
               type="tel"
               inputMode="tel"
               autoComplete="tel"
+              enterKeyHint="done"
               placeholder="(555) 123-4567"
               value={guestPhone}
               onChange={(e) => setGuestPhone(e.target.value)}
               required
               maxLength={32}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[48px]"
             />
           </div>
-          <div className="flex gap-2">
+          {error && (
+            <p
+              className="text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
+          <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={handleCancelForm}
-              className="flex-1 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-white/60 hover:text-white hover:border-white/20 transition-all min-h-[44px]"
+              className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white/70 hover:text-white hover:border-white/20 transition-all min-h-[48px]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={pending}
-              className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-2"
+              className="flex-[2] rounded-xl px-4 py-3 text-base font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50 min-h-[48px] flex items-center justify-center gap-2"
               style={{ backgroundColor: accentColor }}
             >
               {pending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                `Submit as ${OPTIONS.find((o) => o.key === pendingChoice)?.label ?? "RSVP"}`
+                `Submit as ${OPTIONS.find((o) => o.key === pendingChoice)?.longLabel ?? "RSVP"}`
               )}
             </button>
           </div>
@@ -442,54 +524,72 @@ export function RsvpWidget({
 
       {/* Member phone-only form (logged in — we already have name + email) */}
       {showMemberForm && isLoggedIn && (
-        <form onSubmit={handleMemberSubmit} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in">
+        <form
+          ref={formRef}
+          onSubmit={handleMemberSubmit}
+          className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in"
+        >
           <p className="text-xs text-white/60">
             {memberPhone
               ? "Confirm your phone so the organizer can reach you with updates."
               : "Add your phone so the organizer can reach you with updates."}
           </p>
           <div className="relative">
-            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
             <input
               type="tel"
               inputMode="tel"
               autoComplete="tel"
+              enterKeyHint="done"
               placeholder="(555) 123-4567"
               value={memberPhone}
               onChange={(e) => setMemberPhone(e.target.value)}
               required
               autoFocus={!memberPhone}
               maxLength={32}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
+              /* text-base (16px) prevents iOS Safari zoom on focus */
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[48px]"
             />
           </div>
-          <div className="flex gap-2">
+          {error && (
+            <p
+              className="text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
+          <div className="flex gap-2 pt-1">
             <button
               type="button"
               onClick={handleCancelForm}
-              className="flex-1 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-white/60 hover:text-white hover:border-white/20 transition-all min-h-[44px]"
+              className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white/70 hover:text-white hover:border-white/20 transition-all min-h-[48px]"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={pending}
-              className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-2"
+              className="flex-[2] rounded-xl px-4 py-3 text-base font-bold text-white transition-all active:scale-[0.98] disabled:opacity-50 min-h-[48px] flex items-center justify-center gap-2"
               style={{ backgroundColor: accentColor }}
             >
               {pending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                `Confirm as ${OPTIONS.find((o) => o.key === pendingChoice)?.label ?? "RSVP"}`
+                `Confirm as ${OPTIONS.find((o) => o.key === pendingChoice)?.longLabel ?? "RSVP"}`
               )}
             </button>
           </div>
         </form>
       )}
 
-      {/* Error */}
-      {error && (
-        <p className="text-xs text-red-400" role="alert">
+      {/* Inline error (shown only if no form is open — otherwise error
+          lives inside the form so users see it next to the inputs) */}
+      {error && !showGuestForm && !showMemberForm && (
+        <p
+          className="text-sm font-medium text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2"
+          role="alert"
+        >
           {error}
         </p>
       )}
