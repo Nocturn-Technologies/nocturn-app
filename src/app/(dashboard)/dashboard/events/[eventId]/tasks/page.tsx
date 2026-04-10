@@ -403,11 +403,17 @@ function EventTasksPageInner() {
       {/* Completion animation */}
       <CompletionCelebration show={showCelebration} is100={is100Celebration} />
 
+      {/* Explicit back link — discoverable, text + icon */}
+      <Link
+        href={`/dashboard/events/${eventId}`}
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors min-h-[44px]"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to event
+      </Link>
+
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href={`/dashboard/events/${eventId}`}>
-          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]"><ArrowLeft className="h-4 w-4" /></Button>
-        </Link>
         <div className="flex-1">
           <h1 className="text-2xl font-bold font-heading">Event Playbook</h1>
           <p className="text-sm text-muted-foreground">Tasks, content & delegation</p>

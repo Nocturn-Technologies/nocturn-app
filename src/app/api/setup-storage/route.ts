@@ -50,6 +50,15 @@ export async function POST(request: Request) {
         allowedMimeTypes: ["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg"],
         fileSizeLimit: 100 * 1024 * 1024, // 100MB
       },
+      {
+        name: "qr-codes",
+        // Public — QR images are embedded as <img src="..."> in transactional
+        // emails and ticket pages. The URL contains the (unguessable) ticket_token
+        // so treat this as public-with-obscurity.
+        public: true,
+        allowedMimeTypes: ["image/png", "image/jpeg"],
+        fileSizeLimit: 256 * 1024, // 256KB — QR PNGs are ~5KB
+      },
     ];
 
     for (const cfg of buckets) {

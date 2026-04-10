@@ -40,6 +40,11 @@ import {
   ChevronUp,
   Info,
   AlertCircle,
+  Warehouse,
+  Sun,
+  Mic,
+  Home,
+  Tent,
 } from "lucide-react";
 import Link from "next/link";
 import { haptic } from "@/lib/haptics";
@@ -452,6 +457,101 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
   );
 }
 
+// ─── Quick Date Picker ───────────────────────────────────────────────────────
+// Nightlife-first date entry: "Tonight / Tomorrow / This Fri / This Sat / Next Fri / Next Sat"
+// chips on top, native <input type="date"> below as the escape hatch.
+
+function formatLocalYmd(d: Date): string {
+  // Local YYYY-MM-DD (avoiding toISOString timezone shift)
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function getQuickDates(): Array<{ key: string; label: string; sub: string; ymd: string }> {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+
+  // Upcoming Friday (0=Sun..6=Sat; Fri = 5)
+  const daysUntilFri = (5 - today.getDay() + 7) % 7 || 7;
+  const thisFri = new Date(today);
+  thisFri.setDate(today.getDate() + daysUntilFri);
+
+  // Upcoming Saturday
+  const daysUntilSat = (6 - today.getDay() + 7) % 7 || 7;
+  const thisSat = new Date(today);
+  thisSat.setDate(today.getDate() + daysUntilSat);
+
+  const nextFri = new Date(thisFri);
+  nextFri.setDate(thisFri.getDate() + 7);
+
+  const nextSat = new Date(thisSat);
+  nextSat.setDate(thisSat.getDate() + 7);
+
+  const fmt = (d: Date) =>
+    d.toLocaleDateString("en", { month: "short", day: "numeric" });
+
+  return [
+    { key: "tonight", label: "Tonight", sub: fmt(today), ymd: formatLocalYmd(today) },
+    { key: "tomorrow", label: "Tomorrow", sub: fmt(tomorrow), ymd: formatLocalYmd(tomorrow) },
+    { key: "this-fri", label: "This Fri", sub: fmt(thisFri), ymd: formatLocalYmd(thisFri) },
+    { key: "this-sat", label: "This Sat", sub: fmt(thisSat), ymd: formatLocalYmd(thisSat) },
+    { key: "next-fri", label: "Next Fri", sub: fmt(nextFri), ymd: formatLocalYmd(nextFri) },
+    { key: "next-sat", label: "Next Sat", sub: fmt(nextSat), ymd: formatLocalYmd(nextSat) },
+  ];
+}
+
+function QuickDatePicker({ value, onChange }: { value: string; onChange: (ymd: string) => void }) {
+  const quickDates = getQuickDates();
+  const selectedChip = quickDates.find((q) => q.ymd === value)?.key;
+
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-3 gap-2">
+        {quickDates.map((q) => {
+          const active = selectedChip === q.key;
+          return (
+            <button
+              key={q.key}
+              type="button"
+              onClick={() => {
+                onChange(q.ymd);
+                haptic("light");
+              }}
+              className={`rounded-xl border px-2 py-2.5 text-center transition-all min-h-[56px] flex flex-col items-center justify-center ${
+                active
+                  ? "border-[#7B2FF7] bg-[#7B2FF7]/15 shadow-sm shadow-[#7B2FF7]/20"
+                  : "border-white/10 bg-zinc-900 hover:border-[#7B2FF7]/40 hover:bg-[#7B2FF7]/5"
+              }`}
+            >
+              <span className={`text-xs font-semibold ${active ? "text-white" : "text-zinc-200"}`}>
+                {q.label}
+              </span>
+              <span className={`text-[10px] mt-0.5 ${active ? "text-[#9D5CFF]" : "text-zinc-500"}`}>
+                {q.sub}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] text-zinc-500 uppercase tracking-wider shrink-0">Or pick a date</span>
+        <div className="h-px flex-1 bg-white/5" />
+      </div>
+      <Input
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+      />
+    </div>
+  );
+}
+
 // ─── Pricing Insight ─────────────────────────────────────────────────────────
 
 // Cache pricing results across PricingInsight remounts to prevent redundant fetches (#17)
@@ -743,6 +843,11 @@ const PLAYBOOK_ICONS: Record<string, React.ReactNode> = {
   rocket: <Rocket className="h-5 w-5" />,
   zap: <Zap className="h-5 w-5" />,
   megaphone: <Megaphone className="h-5 w-5" />,
+  warehouse: <Warehouse className="h-5 w-5" />,
+  sun: <Sun className="h-5 w-5" />,
+  mic: <Mic className="h-5 w-5" />,
+  home: <Home className="h-5 w-5" />,
+  tent: <Tent className="h-5 w-5" />,
 };
 
 function PlaybookSelector({
@@ -757,9 +862,14 @@ function PlaybookSelector({
   applying: boolean;
 }) {
   const options = [
-    { id: "launch-promote", name: "Launch & Promote", description: "25 tasks covering promo plan, logistics, and post-event wrap", taskCount: 25, icon: "rocket", recommended: true },
-    { id: "lean-launch", name: "Lean Launch", description: "10 essential tasks for small or free events", taskCount: 10, icon: "zap", recommended: false },
-    { id: "full-campaign", name: "Full Campaign", description: "33 tasks including press, paid ads, video, and influencer outreach", taskCount: 33, icon: "megaphone", recommended: false },
+    { id: "launch-promote", name: "Launch & Promote", description: "Balanced plan for a standard club night with promo, logistics, and wrap", taskCount: 25, icon: "rocket", recommended: true },
+    { id: "lean-launch", name: "Lean Launch", description: "Essential tasks for small, free, or fast-turnaround events", taskCount: 10, icon: "zap", recommended: false },
+    { id: "full-campaign", name: "Full Campaign", description: "Everything in Launch & Promote plus press, paid ads, video & influencer outreach", taskCount: 33, icon: "megaphone", recommended: false },
+    { id: "warehouse-rave", name: "Warehouse Rave", description: "Location-reveal strategy, underground aesthetic, BYO bar logistics", taskCount: 12, icon: "warehouse", recommended: false },
+    { id: "rooftop-day-party", name: "Rooftop Day Party", description: "Weather contingency, sound permits, and golden-hour marketing", taskCount: 10, icon: "sun", recommended: false },
+    { id: "ticketed-concert", name: "Ticketed Concert", description: "Headliner-first show with rider, tech pack, and run-of-show", taskCount: 13, icon: "mic", recommended: false },
+    { id: "intimate-house-party", name: "Intimate House Party", description: "Invite-only list, personal DMs, and thoughtful hosting", taskCount: 7, icon: "home", recommended: false },
+    { id: "multi-day-festival", name: "Multi-Day Festival", description: "Multi-stage production, camping, permits, and phased lineup drops", taskCount: 17, icon: "tent", recommended: false },
   ];
 
   return (
@@ -1474,11 +1584,9 @@ export default function NewEventPage() {
               </FormField>
 
               <FormField label="Date" icon={Calendar} required>
-                <Input
-                  type="date"
+                <QuickDatePicker
                   value={formData.date}
-                  onChange={(e) => updateForm({ date: e.target.value })}
-                  className={`bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50 ${dateInPast ? "border-red-500/50" : ""}`}
+                  onChange={(d) => updateForm({ date: d })}
                 />
                 {dateInPast && (
                   <p className="text-[11px] text-red-400 flex items-center gap-1 mt-0.5">

@@ -14,14 +14,23 @@ function getResend(): Resend | null {
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Nocturn <noreply@trynocturn.com>";
 
+export interface EmailAttachment {
+  /** Filename the recipient sees */
+  filename: string;
+  /** Base64-encoded content (without the data: prefix) OR a Buffer */
+  content: string | Buffer;
+}
+
 export async function sendEmail({
   to,
   subject,
   html,
+  attachments,
 }: {
   to: string;
   subject: string;
   html: string;
+  attachments?: EmailAttachment[];
 }) {
   // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -52,6 +61,7 @@ export async function sendEmail({
         to,
         subject,
         html,
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
       });
 
       if (error) {
@@ -99,6 +109,8 @@ export async function sendEmail({
  * Upload a QR code data URI to Supabase Storage and return a public HTTPS URL.
  * Gmail/Outlook block data: URIs and CID attachments are unreliable,
  * so we host QR images and use regular <img src="https://..."> in emails.
+ *
+ * Defensive: lazily creates the `qr-codes` bucket if it doesn't exist.
  */
 async function uploadQRToStorage(
   dataUri: string,
@@ -107,7 +119,10 @@ async function uploadQRToStorage(
 ): Promise<string | null> {
   try {
     const base64Match = dataUri.match(/^data:image\/(\w+);base64,(.+)$/);
-    if (!base64Match) return null;
+    if (!base64Match) {
+      console.warn("[email] QR upload skipped — not a data URI");
+      return null;
+    }
 
     const mimeType = base64Match[1];
     const base64Data = base64Match[2];
@@ -116,21 +131,47 @@ async function uploadQRToStorage(
     const admin = createAdminClient();
     const fileName = `${ticketToken}${index > 0 ? `-${index}` : ""}.${mimeType}`;
 
-    const { error } = await admin.storage
-      .from("qr-codes")
-      .upload(fileName, buffer, {
-        contentType: `image/${mimeType}`,
-        upsert: true,
-      });
+    let uploadError: { message: string } | null = null;
+    {
+      const { error } = await admin.storage
+        .from("qr-codes")
+        .upload(fileName, buffer, {
+          contentType: `image/${mimeType}`,
+          upsert: true,
+        });
+      uploadError = error ? { message: error.message } : null;
+    }
 
-    if (error) {
-      console.error("[email] QR upload failed:", error);
+    // Bucket missing — create it and retry once
+    if (uploadError && /bucket.*not.*found|not.*found.*bucket/i.test(uploadError.message)) {
+      console.warn("[email] qr-codes bucket missing, creating it and retrying");
+      await admin.storage.createBucket("qr-codes", {
+        public: true,
+        allowedMimeTypes: ["image/png", "image/jpeg"],
+        fileSizeLimit: 256 * 1024,
+      });
+      const { error: retryError } = await admin.storage
+        .from("qr-codes")
+        .upload(fileName, buffer, {
+          contentType: `image/${mimeType}`,
+          upsert: true,
+        });
+      uploadError = retryError ? { message: retryError.message } : null;
+    }
+
+    if (uploadError) {
+      console.error("[email] QR upload failed:", uploadError.message, "fileName:", fileName);
       return null;
     }
 
     const { data: publicUrl } = admin.storage
       .from("qr-codes")
       .getPublicUrl(fileName);
+
+    if (!publicUrl?.publicUrl) {
+      console.error("[email] QR upload returned no public URL for", fileName);
+      return null;
+    }
 
     return publicUrl.publicUrl;
   } catch (err) {
@@ -141,28 +182,76 @@ async function uploadQRToStorage(
 
 /**
  * Convert data:image QR codes to hosted HTTPS URLs via Supabase Storage.
- * Returns the HTML with data: URIs replaced by public URLs, plus the URL list.
+ * Returns the HTML with data: URIs replaced by public URLs, plus the URL list
+ * AND a list of Resend-ready attachments as a fallback for clients that strip
+ * external images (Outlook protected view, corporate spam filters, etc.).
+ *
+ * The attachments arrive as real downloadable files named `ticket-1.png`, etc.,
+ * so the user always has a way to get the QR even if the inline image fails.
  */
 export async function prepareQRUrls(
   html: string,
   qrCodes: string[],
   ticketTokens: string[]
-): Promise<{ html: string; hostedUrls: string[] }> {
+): Promise<{
+  html: string;
+  hostedUrls: string[];
+  attachments: EmailAttachment[];
+}> {
   const hostedUrls: string[] = [];
+  const attachments: EmailAttachment[] = [];
   let processedHtml = html;
 
   for (let i = 0; i < qrCodes.length; i++) {
     const dataUri = qrCodes[i];
     if (!dataUri?.startsWith("data:image/")) continue;
 
+    // 1. Always attach as a real file — guarantees delivery of the QR
+    const base64Match = dataUri.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (base64Match) {
+      const ext = base64Match[1];
+      const base64 = base64Match[2];
+      attachments.push({
+        filename: `ticket-${i + 1}.${ext}`,
+        content: base64,
+      });
+    }
+
+    // 2. Also try to host for inline rendering (much nicer UX when it works)
     const token = ticketTokens[i] || `ticket-${i}`;
     const publicUrl = await uploadQRToStorage(dataUri, token, 0);
 
     if (publicUrl) {
       hostedUrls.push(publicUrl);
-      processedHtml = processedHtml.replace(dataUri, publicUrl);
+      // Use a global-equivalent replace so every occurrence of this data URI
+      // is swapped — split/join is safer than `replace(str, str)` which only
+      // replaces the first match.
+      processedHtml = processedHtml.split(dataUri).join(publicUrl);
+    } else {
+      // Upload failed — remove the entire wrapping <div>...<img src="dataUri"...>
+      // block so we don't ship a broken image icon. The attachment fallback
+      // still delivers the QR as a downloadable file, and the "View Your Ticket"
+      // button still leads to the working QR on the ticket page.
+      const imgRegex = new RegExp(
+        `<div[^>]*>\\s*<img[^>]*src=["']${escapeRegExp(dataUri)}["'][^>]*\\/?>[\\s\\S]*?<\\/div>`,
+        "i"
+      );
+      if (imgRegex.test(processedHtml)) {
+        processedHtml = processedHtml.replace(
+          imgRegex,
+          `<p style="color: #A1A1AA; font-size: 13px; text-align: center; padding: 12px;">Your QR code is attached to this email — tap the attachment or the button below to view it.</p>`
+        );
+      } else {
+        // Defensive: if the wrapping div can't be matched, just strip the data URI
+        processedHtml = processedHtml.split(dataUri).join("#");
+      }
     }
   }
 
-  return { html: processedHtml, hostedUrls };
+  return { html: processedHtml, hostedUrls, attachments };
+}
+
+// Escape a string for literal use inside a RegExp
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -92,10 +92,95 @@ const FULL_CAMPAIGN: PlaybookTask[] = [
   { title: "Create multiple video content pieces", description: "Venue walkthrough, BTS prep, artist interview clips", category: "marketing", dayOffset: -20, priority: "medium", ownerType: "team" },
 ];
 
+// ─── Warehouse / Underground ────────────────────────────────────────────────
+// Location-reveal strategy — RSVP first, address DM'd day-of
+const WAREHOUSE_RAVE: PlaybookTask[] = [
+  { title: "Scout + confirm warehouse space", description: "Lock in the venue with written agreement and deposit", category: "logistics", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Confirm generator, sound system, lights", description: "Production is everything in a warehouse — confirm PA, subs, lights, fog", category: "production", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Hire security + door staff", description: "Warehouse events need pros — confirm team, liability waivers, and plan", category: "logistics", dayOffset: -2, priority: "urgent", ownerType: "current" },
+  { title: "Set up RSVP / access list (no public address)", description: "Publish event page with location hidden — 'address DM'd day-of'", category: "marketing", dayOffset: -1, priority: "urgent", ownerType: "current" },
+  { title: "Post teaser — date + vibe, no location", description: "Dark aesthetic, cryptic caption, no address. Build intrigue.", category: "marketing", dayOffset: -3, priority: "high", ownerType: "team" },
+  { title: "Lineup reveal with location-reveal countdown", description: "Drop the flyer with 'Location reveal 24h before'", category: "marketing", dayOffset: -7, priority: "high", ownerType: "team" },
+  { title: "Confirm bar / drink service + ice run plan", description: "Warehouse = BYO bar. Confirm supplier, ice logistics, cups, bartenders", category: "logistics", dayOffset: -7, priority: "high", ownerType: "current" },
+  { title: "Coordinate load-in access + parking plan", description: "Where do trucks unload? Where do guests park? Neighbors?", category: "logistics", dayOffset: -5, priority: "high", ownerType: "current" },
+  { title: "Send location + entry instructions to RSVPs", description: "Mass email/DM the address, entry code, and rules 24h before", category: "marketing", dayOffset: -1, priority: "urgent", ownerType: "current" },
+  { title: "Day-of runner — supplies, ice, cash floats", description: "Assign someone to handle last-minute runs and door cash", category: "logistics", dayOffset: -33, priority: "urgent", ownerType: "current" },
+  { title: "Clean-up crew + trash plan", description: "Warehouses need to be left spotless — confirm cleaning team for 6am", category: "logistics", dayOffset: -33, priority: "high", ownerType: "current" },
+  { title: "Post-event: thank you + next location tease", description: "Keep the audience warm with a cryptic 'until next time'", category: "marketing", dayOffset: 1, priority: "medium", ownerType: "team" },
+];
+
+// ─── Rooftop / Day Party ────────────────────────────────────────────────────
+const ROOFTOP_DAY_PARTY: PlaybookTask[] = [
+  { title: "Confirm rooftop venue + weather contingency", description: "Lock the space with a rain plan — indoor backup or date", category: "logistics", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Confirm sound permit + noise bylaw times", description: "Daytime events need permits — confirm allowed hours and volume limits", category: "logistics", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Publish event page", description: "Go live with date, rain plan, and ticket link", category: "marketing", dayOffset: -1, priority: "urgent", ownerType: "current" },
+  { title: "Post daytime aesthetic teaser", description: "Golden hour, cocktails, rooftop vibes — leans into the day party angle", category: "marketing", dayOffset: -3, priority: "high", ownerType: "team" },
+  { title: "Lineup reveal with flyer", description: "Drop full lineup with sunny/tropical aesthetic", category: "marketing", dayOffset: -7, priority: "high", ownerType: "team" },
+  { title: "Confirm bar + signature cocktails menu", description: "Day parties live and die by the drinks — confirm menu and pricing", category: "logistics", dayOffset: -7, priority: "high", ownerType: "current" },
+  { title: "Confirm sunshade / umbrellas / hydration", description: "Guest comfort = free water, shade, sunscreen station if possible", category: "logistics", dayOffset: -5, priority: "medium", ownerType: "current" },
+  { title: "Monitor weather forecast + send update if needed", description: "3 days out — send an update to ticket holders with weather plan", category: "marketing", dayOffset: -3, priority: "high", ownerType: "current" },
+  { title: "Day-of: soundcheck, bar setup, door staff brief", description: "Arrive 3h early for full setup — sound, bar, door, security", category: "logistics", dayOffset: -33, priority: "urgent", ownerType: "current" },
+  { title: "Post recap within 24h — golden hour shots", description: "Day parties have the best photos — post recap fast while buzz is hot", category: "marketing", dayOffset: 1, priority: "high", ownerType: "team" },
+];
+
+// ─── Intimate House Party / Invite-Only ─────────────────────────────────────
+const INTIMATE_HOUSE_PARTY: PlaybookTask[] = [
+  { title: "Set guest cap + invite list", description: "Decide headcount (20-80) and draft the invite list", category: "general", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Send personal invites via DM / text", description: "Invite-only events are personal — send 1:1 messages, not mass posts", category: "marketing", dayOffset: -1, priority: "urgent", ownerType: "current" },
+  { title: "Set up RSVP collection on Nocturn", description: "Use the event page to track yeses, maybes, and plus-ones", category: "marketing", dayOffset: -1, priority: "high", ownerType: "current" },
+  { title: "Confirm food, drinks, and playlist", description: "Intimate events need thoughtful hosting — plan the menu and music", category: "logistics", dayOffset: -2, priority: "high", ownerType: "current" },
+  { title: "Send reminder + address to confirmed RSVPs", description: "24-48h before — send address, time, and any house rules", category: "marketing", dayOffset: -2, priority: "high", ownerType: "current" },
+  { title: "Prep the space + soundcheck", description: "Day-of: clean, set up bar, test speakers, lighting", category: "logistics", dayOffset: -33, priority: "high", ownerType: "current" },
+  { title: "Thank-you message to guests", description: "Next morning — personal thank you in the group chat", category: "marketing", dayOffset: 1, priority: "medium", ownerType: "current" },
+];
+
+// ─── Multi-Day Festival ─────────────────────────────────────────────────────
+const MULTI_DAY_FESTIVAL: PlaybookTask[] = [
+  { title: "Lock festival site + multi-day agreement", description: "Confirm venue for all days with a detailed contract", category: "logistics", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Confirm all headliners across days", description: "Lock talent for every day with written agreements", category: "talent", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Apply for permits (sound, alcohol, capacity)", description: "Festivals require city permits — start early, allow 4-8 weeks", category: "logistics", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Set up multi-day ticket tiers (single day + festival pass)", description: "Offer single-day tickets + a festival pass with a discount", category: "marketing", dayOffset: -1, priority: "urgent", ownerType: "current" },
+  { title: "Publish festival page + tease lineup", description: "Go live with dates, lineup teaser, and passes on sale", category: "marketing", dayOffset: -1, priority: "urgent", ownerType: "current" },
+  { title: "Confirm camping / accommodation partnerships", description: "Partner with local hotels or set up camping logistics", category: "logistics", dayOffset: -1, priority: "high", ownerType: "current" },
+  { title: "Phase 1 lineup drop (headliners)", description: "Reveal the top-of-bill for all days", category: "marketing", dayOffset: -3, priority: "high", ownerType: "team" },
+  { title: "Confirm stage production (sound, lights, scaffolding)", description: "Lock stage vendors for multi-day setup and teardown", category: "production", dayOffset: -5, priority: "urgent", ownerType: "current" },
+  { title: "Phase 2 lineup drop (full daily schedules)", description: "Reveal the complete lineup with stage splits + set times", category: "marketing", dayOffset: -10, priority: "high", ownerType: "team" },
+  { title: "Influencer + press outreach", description: "Comp tickets for influencers and confirm press access", category: "marketing", dayOffset: -14, priority: "medium", ownerType: "current" },
+  { title: "Coordinate artist travel + hospitality", description: "Multi-day festivals mean multi-day hospitality — rooms, riders, transport", category: "talent", dayOffset: -7, priority: "urgent", ownerType: "current" },
+  { title: "Set up food vendors + bar partners", description: "Confirm vendors for all festival days — contracts, power, placement", category: "logistics", dayOffset: -10, priority: "high", ownerType: "current" },
+  { title: "Hire production team + day-of crew", description: "Stage managers, runners, security, med tent, cleanup", category: "logistics", dayOffset: -14, priority: "urgent", ownerType: "current" },
+  { title: "Send festival info packet to ticket holders", description: "Schedule, map, rules, FAQ — send 1 week before", category: "marketing", dayOffset: -7, priority: "high", ownerType: "team" },
+  { title: "Daily social recaps during festival", description: "Post daily recaps every night to drive next-day ticket sales", category: "marketing", dayOffset: -33, priority: "medium", ownerType: "team" },
+  { title: "Post-festival recap video + thank you", description: "Aftermovie, thank you post, and announce next year's dates", category: "marketing", dayOffset: 3, priority: "high", ownerType: "team" },
+  { title: "Settle with all artists, vendors, and venue", description: "Multi-day settlements are complex — stay organized and prompt", category: "finance", dayOffset: 5, priority: "urgent", ownerType: "current" },
+];
+
+// ─── Ticketed Concert / Headliner Show ──────────────────────────────────────
+const TICKETED_CONCERT: PlaybookTask[] = [
+  { title: "Sign headliner contract + deposit", description: "Lock the headliner with a signed agreement and paid deposit", category: "talent", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Confirm venue contract + tech specs", description: "Lock venue and match tech specs to artist rider", category: "logistics", dayOffset: 0, priority: "urgent", ownerType: "current" },
+  { title: "Publish event page + tickets on sale", description: "Go live with tiered ticket pricing", category: "marketing", dayOffset: -1, priority: "urgent", ownerType: "current" },
+  { title: "Announce headliner + open presale", description: "Presale to mailing list first, then public sale 24-48h later", category: "marketing", dayOffset: -3, priority: "high", ownerType: "team" },
+  { title: "Coordinate artist travel + hospitality rider", description: "Flights, hotel, ground transport, rider fulfillment", category: "talent", dayOffset: -5, priority: "urgent", ownerType: "current" },
+  { title: "Announce support acts", description: "Drop support acts to give attendees more reasons to arrive early", category: "marketing", dayOffset: -10, priority: "medium", ownerType: "team" },
+  { title: "Media + press outreach", description: "Send press release with hi-res images, artist bios, interview requests", category: "marketing", dayOffset: -14, priority: "medium", ownerType: "current" },
+  { title: "Confirm tech crew (FOH, monitors, lighting)", description: "Match artist rider — FOH engineer, monitor tech, lighting tech", category: "production", dayOffset: -7, priority: "urgent", ownerType: "current" },
+  { title: "Set times + soundcheck schedule", description: "Build the run-of-show document — doors, soundcheck, set times, curfew", category: "logistics", dayOffset: -3, priority: "high", ownerType: "current" },
+  { title: "Send tech pack + run-of-show to all crew", description: "Every staff member needs the doc 48h before", category: "logistics", dayOffset: -2, priority: "urgent", ownerType: "current" },
+  { title: "Day-of: soundcheck, doors, show call", description: "Arrive early, run soundcheck, brief door staff, doors at call time", category: "logistics", dayOffset: -33, priority: "urgent", ownerType: "current" },
+  { title: "Post-show settlement + artist payment", description: "Settle with artists and venue same night or next day", category: "finance", dayOffset: 1, priority: "urgent", ownerType: "current" },
+  { title: "Thank you post + recap content", description: "Thank the artist, the crew, and the crowd", category: "marketing", dayOffset: 1, priority: "high", ownerType: "team" },
+];
+
 const PLAYBOOK_MAP: Record<string, PlaybookTask[]> = {
   "launch-promote": LAUNCH_PROMOTE,
   "lean-launch": LEAN_LAUNCH,
   "full-campaign": FULL_CAMPAIGN,
+  "warehouse-rave": WAREHOUSE_RAVE,
+  "rooftop-day-party": ROOFTOP_DAY_PARTY,
+  "intimate-house-party": INTIMATE_HOUSE_PARTY,
+  "multi-day-festival": MULTI_DAY_FESTIVAL,
+  "ticketed-concert": TICKETED_CONCERT,
 };
 
 export async function getPlaybookOptions(): Promise<PlaybookOption[]> {
@@ -104,7 +189,7 @@ export async function getPlaybookOptions(): Promise<PlaybookOption[]> {
     {
       id: "launch-promote",
       name: "Launch & Promote",
-      description: "25 tasks covering promo plan, logistics, and post-event wrap",
+      description: "Balanced plan for a standard club night with promo, logistics, and wrap",
       taskCount: LAUNCH_PROMOTE.length,
       icon: "rocket",
       recommended: true,
@@ -112,16 +197,51 @@ export async function getPlaybookOptions(): Promise<PlaybookOption[]> {
     {
       id: "lean-launch",
       name: "Lean Launch",
-      description: "10 essential tasks for small or free events",
+      description: "Essential tasks for small, free, or fast-turnaround events",
       taskCount: LEAN_LAUNCH.length,
       icon: "zap",
     },
     {
       id: "full-campaign",
       name: "Full Campaign",
-      description: "33 tasks including press, paid ads, video, and influencer outreach",
+      description: "Everything in Launch & Promote plus press, paid ads, video & influencer outreach",
       taskCount: FULL_CAMPAIGN.length,
       icon: "megaphone",
+    },
+    {
+      id: "warehouse-rave",
+      name: "Warehouse Rave",
+      description: "Location-reveal strategy, underground aesthetic, BYO bar logistics",
+      taskCount: WAREHOUSE_RAVE.length,
+      icon: "warehouse",
+    },
+    {
+      id: "rooftop-day-party",
+      name: "Rooftop Day Party",
+      description: "Weather contingency, sound permits, and golden-hour marketing",
+      taskCount: ROOFTOP_DAY_PARTY.length,
+      icon: "sun",
+    },
+    {
+      id: "ticketed-concert",
+      name: "Ticketed Concert",
+      description: "Headliner-first show with rider, tech pack, and run-of-show",
+      taskCount: TICKETED_CONCERT.length,
+      icon: "mic",
+    },
+    {
+      id: "intimate-house-party",
+      name: "Intimate House Party",
+      description: "Invite-only list, personal DMs, and thoughtful hosting",
+      taskCount: INTIMATE_HOUSE_PARTY.length,
+      icon: "home",
+    },
+    {
+      id: "multi-day-festival",
+      name: "Multi-Day Festival",
+      description: "Multi-stage production, camping, permits, and phased lineup drops",
+      taskCount: MULTI_DAY_FESTIVAL.length,
+      icon: "tent",
     },
   ];
   } catch (err) {
