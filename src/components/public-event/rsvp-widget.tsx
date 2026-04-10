@@ -83,11 +83,15 @@ export function RsvpWidget({
   function handleGuestSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!pendingChoice) return;
+    if (!guestName.trim() || guestName.trim().length < 2) {
+      setError("Please enter your name");
+      return;
+    }
     if (!guestEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail)) {
       setError("Please enter a valid email");
       return;
     }
-    doSubmit(pendingChoice, guestEmail.trim(), guestName.trim() || null);
+    doSubmit(pendingChoice, guestEmail.trim(), guestName.trim());
   }
 
   return (
@@ -161,12 +165,16 @@ export function RsvpWidget({
       {/* Guest email form */}
       {showGuestForm && !isLoggedIn && (
         <form onSubmit={handleGuestSubmit} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in">
-          <p className="text-xs text-white/60">Drop your email so the organizer can reach you with updates.</p>
+          <p className="text-xs text-white/60">
+            Your name and email so the organizer knows who&apos;s coming and can reach you with updates.
+          </p>
           <input
             type="text"
-            placeholder="Your name (optional)"
+            placeholder="Your full name"
             value={guestName}
             onChange={(e) => setGuestName(e.target.value)}
+            required
+            autoFocus
             maxLength={200}
             className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
           />
@@ -178,7 +186,6 @@ export function RsvpWidget({
               value={guestEmail}
               onChange={(e) => setGuestEmail(e.target.value)}
               required
-              autoFocus
               maxLength={320}
               className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
             />

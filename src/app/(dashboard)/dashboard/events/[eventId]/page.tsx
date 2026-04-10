@@ -41,6 +41,8 @@ import { TicketTierEditor } from "@/components/ticket-tier-editor";
 import { LiveTicketStats } from "@/components/events/live-ticket-stats";
 import { EventUpdatesComposer } from "@/components/events/event-updates-composer";
 import { listEventUpdatesPublic } from "@/app/actions/event-updates";
+import { RsvpLiveList } from "@/components/events/rsvp-live-list";
+import { listEventRsvps } from "@/app/actions/rsvps";
 
 interface Props {
   params: Promise<{ eventId: string }>;
@@ -191,6 +193,9 @@ export default async function EventDetailPage({ params }: Props) {
 
   // Fetch existing updates for the composer
   const { updates: existingUpdates } = await listEventUpdatesPublic(eventId);
+
+  // Fetch RSVPs (with contact info — only visible to collective members)
+  const { rsvps: initialRsvps } = await listEventRsvps(eventId);
 
   const venue = event.venues as unknown as {
     name: string;
@@ -515,6 +520,23 @@ export default async function EventDetailPage({ params }: Props) {
 
       {/* External Ticket Data */}
       <ExternalTicketsFormWrapper eventId={event.id} />
+
+      {/* RSVPs — live updates from the public page */}
+      <Card className="rounded-2xl border-border hover:border-nocturn/20 transition-all duration-200">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-lg font-bold">
+            <Users className="h-4 w-4 text-nocturn" />
+            RSVPs
+            <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              Live
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <RsvpLiveList eventId={event.id} initialRsvps={initialRsvps} />
+        </CardContent>
+      </Card>
 
       {/* Updates Composer — Post announcements to attendees */}
       <EventUpdatesComposer eventId={event.id} initialUpdates={existingUpdates} />

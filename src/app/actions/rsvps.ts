@@ -69,6 +69,11 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
     if (!user && !email) {
       return { error: "Email is required to RSVP" };
     }
+    // Guest (non-logged-in) RSVPs must also include a name so the organizer
+    // knows who's actually coming — email alone is not enough contact info.
+    if (!user && (!fullName || fullName.length < 2)) {
+      return { error: "Please enter your name" };
+    }
 
     // Rate limit: 10 RSVPs / minute / identity (ip would be better, but user/email is what we have)
     const rlKey = user ? `rsvp:${user.id}` : `rsvp:email:${email}`;
