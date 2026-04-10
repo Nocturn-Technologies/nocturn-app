@@ -20,6 +20,7 @@ import {
 import Link from "next/link";
 import { updateEventDesign, getEventDesign } from "@/app/actions/events";
 import { generatePosterPrompt } from "@/app/actions/ai-poster";
+import { uploadFlyerAndExtractTheme, type EventTheme } from "@/app/actions/ai-theme";
 
 const VIBE_OPTIONS = [
   "House",
@@ -103,6 +104,11 @@ export default function EventDesignPage() {
   const [posterAddress, setPosterAddress] = useState("");
   const [posterAge, setPosterAge] = useState("");
 
+  // Flyer upload + AI theme extraction
+  const [uploadingFlyer, setUploadingFlyer] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [extractedTheme, setExtractedTheme] = useState<EventTheme | null>(null);
+
   useEffect(() => {
     async function load() {
       const result = await getEventDesign(eventId);
@@ -119,11 +125,14 @@ export default function EventDesignPage() {
       setEventTitle(e.title);
       setEventSlug(e.slug);
       setCollectiveSlug(e.collectiveSlug ?? "");
-      const meta = (e.metadata ?? {}) as Record<string, string>;
-      setDressCode(meta.dressCode ?? "");
-      setThemeColor(meta.themeColor ?? "#7B2FF7");
-      setHostMessage(meta.hostMessage ?? "");
+      const meta = (e.metadata ?? {}) as Record<string, unknown>;
+      setDressCode((meta.dressCode as string) ?? "");
+      setThemeColor((meta.themeColor as string) ?? "#7B2FF7");
+      setHostMessage((meta.hostMessage as string) ?? "");
       if (meta.styleRefUrl) setStyleRefUrl(meta.styleRefUrl as string);
+      if (meta.theme && typeof meta.theme === "object") {
+        setExtractedTheme(meta.theme as EventTheme);
+      }
 
       // Auto-fill poster fields from event data
       if (e.artistNames?.length > 0) setPosterDJs(e.artistNames.join(", "));
@@ -444,6 +453,44 @@ export default function EventDesignPage() {
     }
   }
 
+  // Upload a flyer and have Claude vision extract a brand palette.
+  // Fires the new /app/actions/ai-theme server action. On success we update:
+  //   - flyerUrl (public URL of uploaded image)
+  //   - themeColor (primary hex from extracted palette)
+  //   - extractedTheme (full 4-color palette for the swatch display)
+  async function handleFlyerUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingFlyer(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("eventId", eventId);
+      formData.append("file", file);
+
+      const result = await uploadFlyerAndExtractTheme(formData);
+
+      if (result.error || !result.flyerUrl) {
+        setUploadError(result.error ?? "Failed to upload flyer");
+      } else {
+        setFlyerUrl(result.flyerUrl);
+        if (result.theme) {
+          setExtractedTheme(result.theme);
+          setThemeColor(result.theme.primary);
+        }
+      }
+    } catch (err) {
+      console.error("[design] flyer upload failed:", err);
+      setUploadError("Something went wrong. Please try again.");
+    } finally {
+      setUploadingFlyer(false);
+      // Reset the input so the same file can be re-selected
+      e.target.value = "";
+    }
+  }
+
   // Style reference upload handler
   function handleStyleRefUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -498,9 +545,12 @@ export default function EventDesignPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_380px]">
         {/* ─── Controls ─── */}
         <div className="space-y-6">
-          {/* Flyer — AI Generate or URL */}
+          {/* Flyer — Upload + AI Theme Extraction */}
           <div className="space-y-3">
             <label className="text-sm font-medium">Event Flyer</label>
+            <p className="text-xs text-muted-foreground">
+              Upload your flyer and Nocturn will pull a color theme straight from the image.
+            </p>
 
             {/* Current flyer preview */}
             {flyerUrl && (
@@ -509,12 +559,106 @@ export default function EventDesignPage() {
                   className="mx-auto h-64 w-full max-w-sm rounded-xl bg-cover bg-center border border-border"
                   style={{ backgroundImage: safeBgUrl(flyerUrl) }}
                 />
-                <button
-                  onClick={() => setFlyerUrl("")}
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  Remove flyer
-                </button>
+
+                {/* Extracted palette swatches */}
+                {extractedTheme && (
+                  <div className="mx-auto max-w-sm rounded-xl border border-border bg-card p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-muted-foreground">
+                        AI-extracted theme
+                      </span>
+                      {extractedTheme.mood && (
+                        <span className="text-[10px] text-muted-foreground/60 italic">
+                          {extractedTheme.mood}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      {(["primary", "secondary", "accent", "text"] as const).map((key) => (
+                        <button
+                          key={key}
+                          onClick={() => setThemeColor(extractedTheme[key])}
+                          className="group flex-1 space-y-1"
+                          title={`${key}: ${extractedTheme[key]}`}
+                        >
+                          <div
+                            className={`h-10 rounded-lg border transition-transform group-hover:scale-105 ${
+                              themeColor === extractedTheme[key]
+                                ? "border-white ring-2 ring-white/40"
+                                : "border-border"
+                            }`}
+                            style={{ backgroundColor: extractedTheme[key] }}
+                          />
+                          <span className="block text-[9px] uppercase text-muted-foreground/60">
+                            {key}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-center gap-3">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-4 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+                    {uploadingFlyer ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    {uploadingFlyer ? "Extracting theme..." : "Change flyer"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="hidden"
+                      disabled={uploadingFlyer}
+                      onChange={handleFlyerUpload}
+                    />
+                  </label>
+                  <button
+                    onClick={() => {
+                      setFlyerUrl("");
+                      setExtractedTheme(null);
+                    }}
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Primary upload dropzone — shown when no flyer is set */}
+            {!flyerUrl && (
+              <div className="rounded-2xl border-2 border-dashed border-nocturn/30 bg-nocturn/5 p-6 text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10">
+                  {uploadingFlyer ? (
+                    <Loader2 className="h-5 w-5 text-nocturn animate-spin" />
+                  ) : (
+                    <Upload className="h-5 w-5 text-nocturn" />
+                  )}
+                </div>
+                <p className="text-sm font-semibold text-foreground">
+                  {uploadingFlyer ? "Reading your flyer…" : "Upload your flyer"}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {uploadingFlyer
+                    ? "Nocturn is extracting a color theme with AI."
+                    : "JPG, PNG, WEBP or GIF up to 10MB. We'll pull a theme automatically."}
+                </p>
+                <label className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-nocturn px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-nocturn-light disabled:cursor-not-allowed disabled:opacity-50">
+                  <Sparkles className="h-4 w-4" />
+                  {uploadingFlyer ? "Uploading…" : "Pick a file"}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    disabled={uploadingFlyer}
+                    onChange={handleFlyerUpload}
+                  />
+                </label>
+                {uploadError && (
+                  <p className="mt-3 text-xs text-red-400">{uploadError}</p>
+                )}
               </div>
             )}
 

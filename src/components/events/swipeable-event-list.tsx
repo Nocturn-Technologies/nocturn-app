@@ -14,6 +14,7 @@ interface EventItem {
   title: string;
   starts_at: string;
   status: string;
+  flyer_url?: string | null;
   venues: { name: string; city: string } | null;
 }
 
@@ -107,14 +108,25 @@ function SwipeableEventCard({ event }: { event: EventItem }) {
   return (
     <Card className="group rounded-2xl transition-all duration-200 hover:border-nocturn/30 active:scale-[0.98] cursor-pointer">
       <CardContent className="flex items-center gap-4 p-4 min-h-[72px]">
-        <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-nocturn/10 text-nocturn transition-colors duration-200 group-hover:bg-nocturn/15">
-          <span className="text-xs font-medium uppercase leading-tight">
-            {date.toLocaleDateString("en", { month: "short" })}
-          </span>
-          <span className="text-lg font-bold leading-none">
-            {date.getDate()}
-          </span>
-        </div>
+        {event.flyer_url ? (
+          <div
+            className="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-border bg-cover bg-center ring-1 ring-nocturn/10 transition-colors duration-200 group-hover:ring-nocturn/30"
+            style={{ backgroundImage: `url(${event.flyer_url})` }}
+          >
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/60 py-0.5 text-[9px] font-semibold uppercase text-white/80 backdrop-blur-sm">
+              {date.toLocaleDateString("en", { month: "short" })} {date.getDate()}
+            </div>
+          </div>
+        ) : (
+          <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-nocturn/10 text-nocturn transition-colors duration-200 group-hover:bg-nocturn/15">
+            <span className="text-xs font-medium uppercase leading-tight">
+              {date.toLocaleDateString("en", { month: "short" })}
+            </span>
+            <span className="text-lg font-bold leading-none">
+              {date.getDate()}
+            </span>
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <p className="font-bold truncate">{event.title}</p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">

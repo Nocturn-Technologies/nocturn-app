@@ -147,3 +147,106 @@ export async function generateWithClaude(
     return null;
   }
 }
+
+/**
+ * Vision-enabled Claude call. Pass a prompt + one or more image URLs
+ * (publicly accessible, e.g. a Supabase Storage public URL) and Claude
+ * will read the images and respond in text.
+ *
+ * Used by the design page to extract a color palette from an uploaded flyer.
+ */
+export async function generateWithClaudeVision(
+  prompt: string,
+  imageUrls: string[],
+  systemPrompt?: string
+): Promise<string | null> {
+  const client = getClient();
+  if (!client) return null;
+
+  if (!imageUrls || imageUrls.length === 0) {
+    return generateWithClaude(prompt, systemPrompt);
+  }
+
+  // Cap prompt length
+  if (prompt.length > 10000) {
+    prompt = prompt.slice(0, 10000);
+  }
+
+  const defaultSystem =
+    "You are Nocturn AI's visual stylist. You analyze event flyers and return structured visual design data. Be concise and follow JSON output instructions exactly.";
+  const system = systemPrompt || defaultSystem;
+
+  const systemBlocks: Anthropic.Messages.TextBlockParam[] = [
+    { type: "text", text: system, cache_control: { type: "ephemeral" } },
+  ];
+
+  // Build a single user message with image blocks + text
+  const content: Anthropic.Messages.ContentBlockParam[] = [];
+  for (const url of imageUrls.slice(0, 4)) {
+    content.push({
+      type: "image",
+      source: { type: "url", url },
+    });
+  }
+  content.push({ type: "text", text: prompt });
+
+  const messages: Anthropic.Messages.MessageParam[] = [
+    { role: "user", content },
+  ];
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const response = await client.messages.create(
+      {
+        model: "claude-sonnet-4-6",
+        max_tokens: 1024,
+        system: systemBlocks,
+        messages,
+      },
+      { signal: controller.signal as AbortSignal }
+    );
+    clearTimeout(timeout);
+
+    if (!response.content || response.content.length === 0) return null;
+    return response.content[0].type === "text" ? response.content[0].text : null;
+  } catch (error: unknown) {
+    clearTimeout(timeout);
+    const msg = error instanceof Error ? error.message : String(error);
+
+    if (error instanceof Error && error.name === "AbortError") {
+      console.error("[claude] Vision call timed out after 30s");
+      return null;
+    }
+    console.error("[claude] Vision API error:", msg);
+
+    // Fallback to haiku
+    if (
+      msg.includes("model_not_found") ||
+      msg.includes("not_found_error") ||
+      msg.includes("Could not resolve the model")
+    ) {
+      const fallbackController = new AbortController();
+      const fallbackTimeout = setTimeout(() => fallbackController.abort(), 30000);
+      try {
+        const response = await client.messages.create(
+          {
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 1024,
+            system: systemBlocks,
+            messages,
+          },
+          { signal: fallbackController.signal as AbortSignal }
+        );
+        clearTimeout(fallbackTimeout);
+        if (!response.content || response.content.length === 0) return null;
+        return response.content[0].type === "text" ? response.content[0].text : null;
+      } catch (fallbackError) {
+        clearTimeout(fallbackTimeout);
+        console.error("[claude] Vision fallback also failed:", fallbackError);
+      }
+    }
+    return null;
+  }
+}
