@@ -193,10 +193,19 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
   }
 
-  // Mode detection: free RSVP events show the RSVP widget instead of (or in addition to) tickets
-  const eventMode = (event.event_mode ?? "ticketed") as "ticketed" | "rsvp" | "hybrid";
+  // Mode detection: free RSVP events show the RSVP widget instead of (or in addition to) tickets.
+  //
+  // Effectively-free fallback: if the organizer left event_mode on "ticketed" but every
+  // tier is $0 (or there are no tiers, or is_free is explicitly set), we treat the event
+  // as RSVP-only for display. This guarantees the public page never shows "$0+ Get Tickets"
+  // on a free event, and always shows the RSVP widget which collects guest name + email.
+  const rawMode = (event.event_mode ?? "ticketed") as "ticketed" | "rsvp" | "hybrid";
+  const allTiersFree = !!tiers && tiers.length > 0 && tiers.every((t) => Number(t.price) === 0);
+  const noTiers = !tiers || tiers.length === 0;
+  const isEffectivelyFree = event.is_free === true || allTiersFree || noTiers;
+  const eventMode: "ticketed" | "rsvp" | "hybrid" = isEffectivelyFree ? "rsvp" : rawMode;
   const showRsvp = eventMode === "rsvp" || eventMode === "hybrid";
-  const showTickets = eventMode === "ticketed" || eventMode === "hybrid";
+  const showTickets = (eventMode === "ticketed" || eventMode === "hybrid") && !isEffectivelyFree;
 
   // RSVP counts + current user's RSVP + event updates — fetched in parallel for RSVP/hybrid events
   const [rsvpCountsResult, myRsvpResult, updatesResult, currentUserResult] = await Promise.all([
@@ -247,9 +256,13 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // Share card data
   const shareCardDate = `${dayName} ${monthName} ${dayNum} \u2022 ${startTime}`;
   const shareCardVenue = venue ? `${venue.name} \u2022 ${venue.city}` : "";
-  const lowestTierPrice = tiers && tiers.length > 0
-    ? `$${Math.min(...tiers.map((t) => Number(t.price)))}+`
-    : "Free";
+  // If the event is effectively free (no tiers, all $0 tiers, or is_free flag), always
+  // show "Free" — never "$0+".
+  const lowestTierPrice = isEffectivelyFree
+    ? "Free"
+    : tiers && tiers.length > 0
+      ? `$${Math.min(...tiers.map((t) => Number(t.price)))}+`
+      : "Free";
 
   // JSON-LD structured data for search engines
   const jsonLd = {
@@ -404,14 +417,14 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             </div>
           )}
 
-          {/* CTA — full-width on mobile */}
-          {isUpcoming && tiers && tiers.length > 0 && (
+          {/* CTA — full-width on mobile. Anchors to #rsvp for free events, #tickets for paid. */}
+          {isUpcoming && (isEffectivelyFree || (tiers && tiers.length > 0)) && (
             <a
-              href="#tickets"
+              href={isEffectivelyFree ? "#rsvp" : "#tickets"}
               className="inline-flex items-center justify-center gap-2.5 w-full sm:w-auto px-10 py-[18px] rounded-[14px] text-[16px] font-bold text-white transition-all duration-300 hover:brightness-[1.15] hover:translate-y-[-2px] active:scale-[0.98] max-w-[400px]"
               style={{ backgroundColor: accentColor }}
             >
-              {lowestTierPrice === "Free" ? "RSVP — Free" : `Get Tickets — ${lowestTierPrice}`}
+              {isEffectivelyFree ? "RSVP — Free" : `Get Tickets — ${lowestTierPrice}`}
               <span className="transition-transform duration-300 group-hover:translate-x-1">&rarr;</span>
             </a>
           )}
