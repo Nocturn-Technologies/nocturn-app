@@ -44,28 +44,42 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    // Get events this month
-    const { data: events, error: eventsError } = await admin
+    // Current events = this month + upcoming (for revenue/expense calc)
+    const { data: currentEvents, error: currentEventsError } = await admin
       .from("events")
       .select("id, title, starts_at")
       .in("collective_id", collectiveIds)
       .gte("starts_at", monthStart)
-      .order("starts_at", { ascending: false })
-      .limit(10);
+      .order("starts_at", { ascending: true })
+      .limit(20);
 
-    if (eventsError) {
-      console.error("[getFinancialPulse] events query error:", eventsError.message);
+    if (currentEventsError) {
+      console.error("[getFinancialPulse] current events query error:", currentEventsError.message);
     }
 
-    const eventIds = events?.map((e) => e.id) ?? [];
+    const currentEventIds = currentEvents?.map((e) => e.id) ?? [];
 
-    // Get this month's ticket revenue
+    // Recent past events (for the trend chart)
+    const { data: pastEvents, error: pastEventsError } = await admin
+      .from("events")
+      .select("id, title, starts_at")
+      .in("collective_id", collectiveIds)
+      .lt("starts_at", monthStart)
+      .eq("status", "completed")
+      .order("starts_at", { ascending: false })
+      .limit(5);
+
+    if (pastEventsError) {
+      console.error("[getFinancialPulse] past events query error:", pastEventsError.message);
+    }
+
+    // Revenue for current events (this month + upcoming)
     let revenue = 0;
-    if (eventIds.length > 0) {
+    if (currentEventIds.length > 0) {
       const { data: tickets, error: ticketsError } = await admin
         .from("tickets")
         .select("price_paid")
-        .in("event_id", eventIds)
+        .in("event_id", currentEventIds)
         .in("status", ["paid", "checked_in"]);
 
       if (ticketsError) {
@@ -78,26 +92,23 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
       );
     }
 
-    // Get this month's expenses from settlements
+    // Expenses for current events (scoped by event, not settlement.created_at).
+    // NOTE: `total_costs` is a generated column that already sums
+    // artist_fees_total + venue_fee + platform_fee + stripe_fees + other_costs.
+    // Do NOT add artist/stripe/platform on top of it — that would double-count.
     let expenses = 0;
-    const { data: settlements, error: settlementsError } = await admin
-      .from("settlements")
-      .select("total_costs, total_artist_fees, stripe_fees, platform_fee, gross_revenue, profit, events(title)")
-      .in("collective_id", collectiveIds)
-      .gte("created_at", monthStart);
+    if (currentEventIds.length > 0) {
+      const { data: currentSettlements, error: settlementsError } = await admin
+        .from("settlements")
+        .select("total_costs")
+        .in("event_id", currentEventIds);
 
-    if (settlementsError) {
-      console.error("[getFinancialPulse] settlements query error:", settlementsError.message);
-    }
+      if (settlementsError) {
+        console.error("[getFinancialPulse] current settlements query error:", settlementsError.message);
+      }
 
-    if (settlements && settlements.length > 0) {
-      expenses = settlements.reduce(
-        (sum, s) =>
-          sum +
-          (Number(s.total_costs) || 0) +
-          (Number(s.total_artist_fees) || 0) +
-          (Number(s.stripe_fees) || 0) +
-          (Number(s.platform_fee) || 0),
+      expenses = (currentSettlements ?? []).reduce(
+        (sum, s) => sum + (Number(s.total_costs) || 0),
         0
       );
     }
@@ -118,35 +129,49 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
 
     const outstandingSettlements = outstandingCount ?? 0;
 
-    // Build recent events with profit
+    // Build recent events trend chart from the last 5 completed events
     const recentEvents: Array<{ title: string; profit: number }> = [];
+    const pastEventIds = (pastEvents ?? []).map((e) => e.id);
 
-    if (settlements && settlements.length > 0) {
-      for (const s of settlements.slice(0, 5)) {
-        const event = s.events as unknown as { title: string } | null;
+    if (pastEventIds.length > 0) {
+      const { data: pastSettlements, error: pastSettlementsError } = await admin
+        .from("settlements")
+        .select("event_id, net_profit, profit")
+        .in("event_id", pastEventIds);
+
+      if (pastSettlementsError) {
+        console.error("[getFinancialPulse] past settlements query error:", pastSettlementsError.message);
+      }
+
+      const profitByEvent = new Map<string, number>();
+      for (const s of pastSettlements ?? []) {
+        // Prefer net_profit (generated from source fields); fall back to manual `profit` column
+        const p = Number(s.net_profit ?? s.profit) || 0;
+        profitByEvent.set(s.event_id, p);
+      }
+
+      for (const e of pastEvents ?? []) {
         recentEvents.push({
-          title: event?.title ?? "Unknown Event",
-          profit: Number(s.profit) || 0,
+          title: e.title,
+          profit: profitByEvent.get(e.id) ?? 0,
         });
-      }
-    }
-
-    // If not enough from settlements, pad with events (zero profit)
-    if (recentEvents.length < 5 && events) {
-      for (const e of events) {
         if (recentEvents.length >= 5) break;
-        if (!recentEvents.some((r) => r.title === e.title)) {
-          recentEvents.push({ title: e.title, profit: 0 });
-        }
       }
     }
 
-      return {
-        revenue,
-        expenses,
-        netPL,
-        outstandingSettlements,
-        recentEvents,
+    // Fallback: if no past events, show current events so the card isn't empty
+    if (recentEvents.length === 0 && currentEvents) {
+      for (const e of currentEvents.slice(0, 5)) {
+        recentEvents.push({ title: e.title, profit: 0 });
+      }
+    }
+
+    return {
+      revenue,
+      expenses,
+      netPL,
+      outstandingSettlements,
+      recentEvents,
     };
   } catch (err) {
     console.error("[getFinancialPulse]", err);

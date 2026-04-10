@@ -68,11 +68,11 @@ export async function seedDemoData(collectiveId: string) {
     return { error: "Failed to create venues" };
   }
 
-  // Create 3 demo artists
+  // Create 3 demo artists (small-collective scale — local DJs, modest fees)
   const artists = [
-    { name: "DJ Koda", slug: "dj-koda", genre: ["House", "Techno"], default_fee: 400 },
-    { name: "Nadia Night", slug: "nadia-night", genre: ["Deep House", "Afro House"], default_fee: 600 },
-    { name: "Pulse Collective", slug: "pulse-collective", genre: ["Drum & Bass", "Jungle"], default_fee: 350 },
+    { name: "DJ Koda", slug: "dj-koda", genre: ["House", "Techno"], default_fee: 200 },
+    { name: "Nadia Night", slug: "nadia-night", genre: ["Deep House", "Afro House"], default_fee: 250 },
+    { name: "Pulse Collective", slug: "pulse-collective", genre: ["Drum & Bass", "Jungle"], default_fee: 175 },
   ];
 
   const { data: insertedArtists, error: artistError } = await sb
@@ -141,21 +141,24 @@ export async function seedDemoData(collectiveId: string) {
   }
 
   // Create ticket tiers + tickets + settlements for each event
+  // Small-collective scale: 40–90 person rooms, $15–28 tickets, no VIP tier
   const ticketConfigs = [
-    { earlyPrice: 15, gaPrice: 25, vipPrice: 45, earlySold: 60, gaSold: 120, vipSold: 20 },
-    { earlyPrice: 20, gaPrice: 30, vipPrice: 50, earlySold: 80, gaSold: 150, vipSold: 30 },
-    { earlyPrice: 10, gaPrice: 20, vipPrice: 35, earlySold: 40, gaSold: 80, vipSold: 15 },
+    // Show 1 (oldest): Soft launch — 45 paid, $800 gross
+    { earlyPrice: 15, gaPrice: 20, earlySold: 20, gaSold: 25 },
+    // Show 2: Growing — 55 paid, ~$1,200 gross
+    { earlyPrice: 18, gaPrice: 25, earlySold: 25, gaSold: 30 },
+    // Show 3 (most recent): Peak — 75 paid, ~$1,900 gross
+    { earlyPrice: 22, gaPrice: 28, earlySold: 35, gaSold: 40 },
   ];
 
   for (let i = 0; i < insertedEvents.length; i++) {
     const event = insertedEvents[i];
     const config = ticketConfigs[i];
 
-    // Create tiers
+    // Create tiers (just Early Bird + GA — small crews rarely do 3 tiers)
     const tiers = [
       { event_id: event.id, name: "Early Bird", price: config.earlyPrice, capacity: config.earlySold },
-      { event_id: event.id, name: "General Admission", price: config.gaPrice, capacity: config.gaSold + 50 },
-      { event_id: event.id, name: "VIP", price: config.vipPrice, capacity: config.vipSold + 10 },
+      { event_id: event.id, name: "GA", price: config.gaPrice, capacity: config.gaSold + 20 },
     ];
 
     const { data: insertedTiers, error: tierError } = await sb
@@ -169,7 +172,7 @@ export async function seedDemoData(collectiveId: string) {
     if (!insertedTiers) continue;
 
     // Create tickets (all checked_in for past events)
-    const soldCounts = [config.earlySold, config.gaSold, config.vipSold];
+    const soldCounts = [config.earlySold, config.gaSold];
     const allTickets: Array<{
       event_id: string;
       ticket_tier_id: string;
@@ -216,27 +219,27 @@ export async function seedDemoData(collectiveId: string) {
     }
 
     // Calculate and create settlement
+    // Buyer-pays pricing model → stripe/platform fees aren't organizer's costs
     const grossRevenue = config.earlySold * config.earlyPrice
-      + config.gaSold * config.gaPrice
-      + config.vipSold * config.vipPrice;
-    const totalTickets = config.earlySold + config.gaSold + config.vipSold;
-    const stripeFees = Math.round((grossRevenue * 0.029 + totalTickets * 0.30) * 100) / 100;
+      + config.gaSold * config.gaPrice;
     const totalArtistFees = (insertedArtists[artistIndex].default_fee ?? 0) + (insertedArtists[secondArtist].default_fee ?? 0);
-    const platformFee = 0; // Buyer pays — organizer keeps 100%
-
-    const netRevenue = grossRevenue - stripeFees - platformFee;
-    const profit = netRevenue - totalArtistFees;
+    const venueFee = Math.round(grossRevenue * 0.15); // ~15% venue cut
+    const otherCosts = Math.round(grossRevenue * 0.08); // ~8% for promo/supplies
+    // total_costs is a generated column — let the DB compute it
+    const profit = grossRevenue - totalArtistFees - venueFee - otherCosts;
 
     const { error: settlementErr } = await sb.from("settlements").insert({
       event_id: event.id,
       collective_id: collectiveId,
       status: "approved",
       gross_revenue: grossRevenue,
-      stripe_fees: stripeFees,
-      platform_fee: platformFee,
-      net_revenue: netRevenue,
-      total_costs: 0,
+      refunds_total: 0,
+      artist_fees_total: totalArtistFees,
       total_artist_fees: totalArtistFees,
+      venue_fee: venueFee,
+      other_costs: otherCosts,
+      stripe_fees: 0,
+      platform_fee: 0,
       profit: profit,
     });
     if (settlementErr) {
@@ -245,10 +248,10 @@ export async function seedDemoData(collectiveId: string) {
   }
 
   // Summary
-  const totalTickets = ticketConfigs.reduce((sum, c) => sum + c.earlySold + c.gaSold + c.vipSold, 0);
+  const totalTickets = ticketConfigs.reduce((sum, c) => sum + c.earlySold + c.gaSold, 0);
   const totalRevenue = ticketConfigs.reduce((sum, _c, i) => {
     const cfg = ticketConfigs[i];
-    return sum + cfg.earlySold * cfg.earlyPrice + cfg.gaSold * cfg.gaPrice + cfg.vipSold * cfg.vipPrice;
+    return sum + cfg.earlySold * cfg.earlyPrice + cfg.gaSold * cfg.gaPrice;
   }, 0);
 
   return {

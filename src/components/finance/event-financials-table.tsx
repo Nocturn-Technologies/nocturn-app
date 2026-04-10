@@ -244,7 +244,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
                       <td className="px-4 py-3 text-right text-sm tabular-nums font-medium">
                         {hasFinancials ? formatMoney(event.grossRevenue) : "--"}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums text-red-400/80">
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-muted-foreground">
                         {hasFinancials
                           ? formatMoney(event.totalExpenses)
                           : "--"}
@@ -259,7 +259,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
                         }`}
                       >
                         {hasFinancials
-                          ? `${isProfitable ? "+" : "-"}${formatMoney(Math.abs(event.profit))}`
+                          ? `${isProfitable ? "+" : ""}${formatMoney(event.profit)}`
                           : "--"}
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -349,7 +349,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
                               : "text-red-400"
                           }`}
                         >
-                          {isProfitable ? "+" : "-"}
+                          {isProfitable ? "+" : ""}
                           {formatMoney(event.profit)}
                         </p>
                       </div>
@@ -375,7 +375,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
                         <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                           Expenses
                         </p>
-                        <p className="text-sm font-semibold tabular-nums text-red-400/80">
+                        <p className="text-sm font-semibold tabular-nums text-muted-foreground">
                           {formatMoney(event.totalExpenses)}
                         </p>
                       </div>

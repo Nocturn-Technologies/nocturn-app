@@ -81,7 +81,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
                     : "text-red-400"
                 }`}
               >
-                {totalProjectedProfit >= 0 ? "+" : "-"}
+                {totalProjectedProfit >= 0 ? "+" : ""}
                 {formatMoney(totalProjectedProfit)}
               </p>
             </div>
@@ -125,7 +125,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
                           : "border-red-400/20 bg-red-400/10 text-red-400"
                       }`}
                     >
-                      {isProfitable ? "+" : "-"}
+                      {isProfitable ? "+" : ""}
                       {formatMoney(forecast.projectedProfit)} proj.
                     </Badge>
                   </div>

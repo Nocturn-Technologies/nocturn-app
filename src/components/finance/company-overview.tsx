@@ -44,7 +44,7 @@ export function CompanyOverview({ financials }: CompanyOverviewProps) {
     },
     {
       label: "Net Profit",
-      value: `${isProfitable ? "+" : "-"}${formatMoney(netProfit)}`,
+      value: `${isProfitable ? "+" : ""}${formatMoney(netProfit)}`,
       icon: isProfitable ? TrendingUp : TrendingDown,
       color: isProfitable ? "text-nocturn-teal" : "text-red-400",
       bgColor: isProfitable ? "bg-nocturn-teal/10" : "bg-red-400/10",
@@ -77,7 +77,7 @@ export function CompanyOverview({ financials }: CompanyOverviewProps) {
               </p>
               <p className="mt-1 text-2xl font-bold md:text-3xl">
                 <span className={isProfitable ? "text-nocturn-teal" : "text-red-400"}>
-                  {isProfitable ? "+" : "-"}{formatMoney(netProfit)}
+                  {isProfitable ? "+" : ""}{formatMoney(netProfit)}
                 </span>
                 <span className="ml-2 text-base font-normal text-muted-foreground">
                   net profit
