@@ -263,7 +263,12 @@ async function sendUpdateEmails(input: SendUpdateEmailsInput): Promise<void> {
   const emails = new Set<string>();
   const userIdsNeedingLookup: string[] = [];
 
-  for (const row of rsvpRes.data ?? []) {
+  // Explicit row types — Supabase's Promise.all + .in() inference can break and return
+  // SelectQueryError sentinel types, so we narrow manually here.
+  const rsvpRows = (rsvpRes.data ?? []) as Array<{ email: string | null; user_id: string | null }>;
+  const ticketRows = (ticketEmailsRes.data ?? []) as Array<{ buyer_email: string | null }>;
+
+  for (const row of rsvpRows) {
     const addr = (row.email ?? "").trim().toLowerCase();
     if (addr && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
       emails.add(addr);
@@ -284,7 +289,7 @@ async function sendUpdateEmails(input: SendUpdateEmailsInput): Promise<void> {
     }
   }
 
-  for (const row of ticketEmailsRes.data ?? []) {
+  for (const row of ticketRows) {
     const addr = (row.buyer_email ?? "").trim().toLowerCase();
     if (addr && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) emails.add(addr);
   }
