@@ -154,6 +154,19 @@ export function RsvpWidget({
     setIsChanging(true);
   }
 
+  // Used by Cancel buttons in either form. If the user had an RSVP
+  // on record, returning to the confirmed view is the least surprising
+  // behaviour — otherwise just close the form and stay on the picker.
+  function handleCancelForm() {
+    setShowGuestForm(false);
+    setShowMemberForm(false);
+    setPendingChoice(null);
+    setError(null);
+    if (myStatus !== null) {
+      setIsChanging(false);
+    }
+  }
+
   function handleGuestSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!pendingChoice) return;
@@ -323,15 +336,24 @@ export function RsvpWidget({
                 )}
               </div>
               <span
-                className={`text-[11px] font-semibold ${
+                className={`text-[11px] font-semibold text-center leading-tight ${
                   isActive ? "text-white" : "text-white/60"
                 }`}
               >
                 {opt.label}
               </span>
-              <span className="text-[10px] text-white/30">
-                {counts[opt.key]}
-              </span>
+              {isActive && isChanging ? (
+                <span
+                  className="text-[9px] font-bold uppercase tracking-wider"
+                  style={{ color: accentColor }}
+                >
+                  Current
+                </span>
+              ) : counts[opt.key] > 0 ? (
+                <span className="text-[10px] text-white/30">
+                  {counts[opt.key]}
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -397,11 +419,7 @@ export function RsvpWidget({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => {
-                setShowGuestForm(false);
-                setPendingChoice(null);
-                setError(null);
-              }}
+              onClick={handleCancelForm}
               className="flex-1 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-white/60 hover:text-white hover:border-white/20 transition-all min-h-[44px]"
             >
               Cancel
@@ -412,7 +430,11 @@ export function RsvpWidget({
               className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-2"
               style={{ backgroundColor: accentColor }}
             >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit RSVP"}
+              {pending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                `Submit as ${OPTIONS.find((o) => o.key === pendingChoice)?.label ?? "RSVP"}`
+              )}
             </button>
           </div>
         </form>
@@ -444,11 +466,7 @@ export function RsvpWidget({
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => {
-                setShowMemberForm(false);
-                setPendingChoice(null);
-                setError(null);
-              }}
+              onClick={handleCancelForm}
               className="flex-1 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-white/60 hover:text-white hover:border-white/20 transition-all min-h-[44px]"
             >
               Cancel
@@ -459,7 +477,11 @@ export function RsvpWidget({
               className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-2"
               style={{ backgroundColor: accentColor }}
             >
-              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm RSVP"}
+              {pending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                `Confirm as ${OPTIONS.find((o) => o.key === pendingChoice)?.label ?? "RSVP"}`
+              )}
             </button>
           </div>
         </form>
