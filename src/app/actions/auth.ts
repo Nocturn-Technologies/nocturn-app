@@ -52,9 +52,11 @@ export async function signUpUser(formData: {
     return { error: "Invalid user type" };
   }
 
-  // Collectives, hosts, and promoters require manual approval
+  // Collectives and promoters require manual approval. Hosts are instant —
+  // the whole value prop is "throw a night in minutes", so an approval gate
+  // is a direct contradiction (was previously kicking hosts to pending-approval).
   const requiresApproval =
-    userType === "collective" || userType === "host" || userType === "promoter";
+    userType === "collective" || userType === "promoter";
   const isApproved = !requiresApproval;
 
   // Create user with auto-confirm via admin API (no email confirmation needed)
@@ -67,6 +69,25 @@ export async function signUpUser(formData: {
 
   if (createError) {
     console.error("[signup] createUser failed:", createError.message);
+    // Surface specific errors to the user instead of a generic failure.
+    const msg = (createError.message ?? "").toLowerCase();
+    if (
+      msg.includes("already been registered") ||
+      msg.includes("email_exists") ||
+      msg.includes("already exists") ||
+      msg.includes("user already registered")
+    ) {
+      return { error: "That email is already registered. Try signing in instead." };
+    }
+    if (msg.includes("password")) {
+      return { error: "Password must be at least 8 characters." };
+    }
+    if (msg.includes("email") && msg.includes("invalid")) {
+      return { error: "Please enter a valid email address." };
+    }
+    if (msg.includes("rate limit") || msg.includes("too many")) {
+      return { error: "Too many signup attempts. Please wait a few minutes and try again." };
+    }
     return { error: "Failed to create account. Please try again." };
   }
 

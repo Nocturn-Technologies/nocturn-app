@@ -147,8 +147,9 @@ export default function SignupPage() {
       return;
     }
 
-    // Route based on user type — collectives, hosts, and promoters need approval
-    if (userType === "collective" || userType === "host" || userType === "promoter") {
+    // Route based on user type — only collectives and promoters need manual approval.
+    // Hosts are instant-access (the whole value prop is "throw a night in minutes").
+    if (userType === "collective" || userType === "promoter") {
       router.push("/pending-approval");
     } else {
       router.push("/dashboard");
