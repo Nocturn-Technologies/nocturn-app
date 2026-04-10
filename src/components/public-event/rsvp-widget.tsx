@@ -1,7 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, HelpCircle, X, Users, Loader2, Mail, Phone } from "lucide-react";
+import {
+  Check,
+  HelpCircle,
+  X,
+  Users,
+  Loader2,
+  Mail,
+  Phone,
+  PartyPopper,
+  Edit3,
+} from "lucide-react";
 import { submitRsvp, type RsvpStatus } from "@/app/actions/rsvps";
 import { useConfetti } from "@/components/celebrations";
 
@@ -27,6 +37,33 @@ const OPTIONS: Array<{
   { key: "no", label: "Can't make it", icon: X, emoji: "💔" },
 ];
 
+function getConfirmedCopy(status: RsvpStatus): {
+  headline: string;
+  subhead: string;
+  emoji: string;
+} {
+  switch (status) {
+    case "yes":
+      return {
+        headline: "You're on the list",
+        subhead: "We can't wait to see you there.",
+        emoji: "🎉",
+      };
+    case "maybe":
+      return {
+        headline: "We've got you as a maybe",
+        subhead: "The organizer will save you a spot.",
+        emoji: "🤔",
+      };
+    case "no":
+      return {
+        headline: "Got it — we'll miss you",
+        subhead: "Catch the next one?",
+        emoji: "💔",
+      };
+  }
+}
+
 export function RsvpWidget({
   eventId,
   eventTitle,
@@ -47,10 +84,16 @@ export function RsvpWidget({
   const [guestPhone, setGuestPhone] = useState("");
   const [guestName, setGuestName] = useState("");
   const [memberPhone, setMemberPhone] = useState(initialPhone ?? "");
-  const [submitted, setSubmitted] = useState(false);
+  // "isChanging" = user has a status on record but wants to edit it.
+  // We start in the confirmed view if they already had one on load.
+  const [isChanging, setIsChanging] = useState(false);
   const fireConfetti = useConfetti();
 
   const total = counts.yes + counts.maybe;
+  // Show the confirmed panel whenever we have a status AND the user isn't
+  // actively changing their mind AND no form is open.
+  const showConfirmedPanel =
+    myStatus !== null && !isChanging && !showGuestForm && !showMemberForm;
 
   function doSubmit(
     status: RsvpStatus,
@@ -78,14 +121,16 @@ export function RsvpWidget({
         next[status] = next[status] + 1;
         return next;
       });
+      const previousStatus = myStatus;
       setMyStatus(status);
-      setSubmitted(true);
       setShowGuestForm(false);
       setShowMemberForm(false);
       setPendingChoice(null);
+      setIsChanging(false);
 
-      // 🎉 Celebrate on "going" — full-screen confetti burst
-      if (status === "yes") {
+      // 🎉 Celebrate only on transitions INTO "going" — not if they were
+      // already going and just reconfirmed (that would feel spammy).
+      if (status === "yes" && previousStatus !== "yes") {
         fireConfetti({ duration: 2000 }).catch(() => {
           // Ignore confetti errors — don't let a CSS/animation hiccup
           // break the RSVP success state.
@@ -102,6 +147,11 @@ export function RsvpWidget({
     } else {
       setShowGuestForm(true);
     }
+  }
+
+  function handleChangeRsvp() {
+    setError(null);
+    setIsChanging(true);
   }
 
   function handleGuestSubmit(e: React.FormEvent) {
@@ -134,6 +184,82 @@ export function RsvpWidget({
     doSubmit(pendingChoice, null, null, memberPhone.trim());
   }
 
+  // ── Confirmed view ──
+  if (showConfirmedPanel && myStatus) {
+    const copy = getConfirmedCopy(myStatus);
+    return (
+      <div className="space-y-4" id="rsvp">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/40">
+            RSVP
+          </h3>
+          {total > 0 && (
+            <div className="flex items-center gap-1.5">
+              <Users className="h-3.5 w-3.5" style={{ color: accentColor }} />
+              <span className="text-xs font-medium text-white/60">
+                {counts.yes} going{counts.maybe > 0 ? ` · ${counts.maybe} maybe` : ""}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Confirmed card — prominent, colorful, unmistakable */}
+        <div
+          className="relative overflow-hidden rounded-2xl border p-6 animate-fade-in"
+          style={{
+            borderColor: `${accentColor}40`,
+            background: `linear-gradient(135deg, ${accentColor}15 0%, ${accentColor}05 100%)`,
+          }}
+        >
+          {/* Subtle glow */}
+          <div
+            className="absolute -top-20 -right-20 h-40 w-40 rounded-full blur-3xl opacity-30"
+            style={{ backgroundColor: accentColor }}
+          />
+
+          <div className="relative flex items-start gap-4">
+            <div
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-2xl"
+              style={{ backgroundColor: `${accentColor}20` }}
+            >
+              {copy.emoji}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                {myStatus === "yes" && (
+                  <PartyPopper
+                    className="h-4 w-4 shrink-0"
+                    style={{ color: accentColor }}
+                  />
+                )}
+                <p
+                  className="font-heading text-lg font-bold leading-tight text-white"
+                >
+                  {copy.headline}
+                </p>
+              </div>
+              <p className="mt-1 text-sm text-white/60">{copy.subhead}</p>
+              <p className="mt-3 text-xs text-white/40">
+                Plans changed?{" "}
+                <button
+                  type="button"
+                  onClick={handleChangeRsvp}
+                  className="inline-flex items-center gap-1 font-semibold underline-offset-2 hover:underline transition-all"
+                  style={{ color: accentColor }}
+                >
+                  <Edit3 className="h-3 w-3" />
+                  Change your RSVP
+                </button>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Picker view (initial or while changing) ──
   return (
     <div className="space-y-4" id="rsvp">
       {/* Header */}
@@ -143,7 +269,16 @@ export function RsvpWidget({
             RSVP
           </h3>
           <p className="mt-1 text-sm text-white/60">
-            Are you coming to <span className="text-white">{eventTitle}</span>?
+            {isChanging ? (
+              <>
+                Update your RSVP for{" "}
+                <span className="text-white">{eventTitle}</span>
+              </>
+            ) : (
+              <>
+                Are you coming to <span className="text-white">{eventTitle}</span>?
+              </>
+            )}
           </p>
         </div>
         {total > 0 && (
@@ -201,6 +336,21 @@ export function RsvpWidget({
           );
         })}
       </div>
+
+      {/* If currently changing but haven't picked a new option, let them
+          bail out and go back to the confirmed view. */}
+      {isChanging && !showGuestForm && !showMemberForm && myStatus && (
+        <button
+          type="button"
+          onClick={() => {
+            setIsChanging(false);
+            setError(null);
+          }}
+          className="w-full text-xs text-white/40 hover:text-white/60 transition-colors"
+        >
+          Nevermind, keep my RSVP as {OPTIONS.find((o) => o.key === myStatus)?.label}
+        </button>
+      )}
 
       {/* Guest full form (name + email + phone) */}
       {showGuestForm && !isLoggedIn && (
@@ -272,7 +422,7 @@ export function RsvpWidget({
       {showMemberForm && isLoggedIn && (
         <form onSubmit={handleMemberSubmit} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in">
           <p className="text-xs text-white/60">
-            {initialPhone
+            {memberPhone
               ? "Confirm your phone so the organizer can reach you with updates."
               : "Add your phone so the organizer can reach you with updates."}
           </p>
@@ -286,7 +436,7 @@ export function RsvpWidget({
               value={memberPhone}
               onChange={(e) => setMemberPhone(e.target.value)}
               required
-              autoFocus={!initialPhone}
+              autoFocus={!memberPhone}
               maxLength={32}
               className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
             />
@@ -319,15 +469,6 @@ export function RsvpWidget({
       {error && (
         <p className="text-xs text-red-400" role="alert">
           {error}
-        </p>
-      )}
-
-      {/* Confirmation */}
-      {submitted && !showGuestForm && !showMemberForm && myStatus && (
-        <p className="text-xs text-white/40 flex items-center gap-1.5">
-          <Check className="h-3 w-3" style={{ color: accentColor }} />
-          You&apos;re marked as <span className="text-white/60">{OPTIONS.find((o) => o.key === myStatus)?.label}</span>.
-          {myStatus !== "no" && " See you there."}
         </p>
       )}
     </div>
