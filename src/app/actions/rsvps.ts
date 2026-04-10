@@ -85,7 +85,7 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
     // Verify event exists and is published (or preview-able)
     const { data: event, error: eventErr } = await admin
       .from("events")
-      .select("id, status, collective_id, event_mode")
+      .select("id, title, status, collective_id, event_mode")
       .eq("id", input.eventId)
       .is("deleted_at", null)
       .maybeSingle();
@@ -117,6 +117,35 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
     if (error) {
       console.error("[submitRsvp] upsert error:", error.message);
       return { error: "Failed to submit RSVP" };
+    }
+
+    // RSVP fans = collective fans. Feed them through the same CRM backend
+    // that ticket buyers use (attendee_profiles + contacts) so they show up in
+    // /dashboard/attendees and are targetable for email campaigns without any
+    // separate "RSVP list" plumbing. Fire-and-forget — never blocks the RSVP.
+    //
+    // We only sync when:
+    //   - the event has a collective_id, AND
+    //   - we have an email (either from the guest or resolved from the user)
+    if (event.collective_id) {
+      let fanEmail: string | null = email;
+      if (!fanEmail && user?.email) fanEmail = user.email.toLowerCase().trim();
+      if (fanEmail) {
+        try {
+          const { syncRsvpFan } = await import("@/lib/analytics");
+          syncRsvpFan({
+            collectiveId: event.collective_id,
+            email: fanEmail,
+            fullName,
+            userId: user?.id ?? null,
+            eventId: event.id,
+            eventTitle: event.title ?? null,
+          });
+        } catch (syncErr) {
+          // Non-blocking: RSVP is still recorded even if CRM sync fails.
+          console.error("[submitRsvp] syncRsvpFan failed:", syncErr);
+        }
+      }
     }
 
     revalidatePath("/e/[slug]/[eventSlug]", "page");

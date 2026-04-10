@@ -174,7 +174,7 @@ export default function AttendeesPage() {
         <div className="min-w-0">
           <h1 className="text-2xl font-bold font-heading">Attendees</h1>
           <p className="text-sm text-muted-foreground truncate">
-            Your audience CRM from ticket purchases
+            Your audience CRM — ticket buyers and RSVP fans
           </p>
         </div>
         {attendees.length > 0 && (
@@ -269,9 +269,21 @@ export default function AttendeesPage() {
                 {/* Desktop row */}
                 <div className="hidden sm:grid grid-cols-12 items-center gap-2">
                   <div className="col-span-4 min-w-0">
-                    <p className="truncate font-medium text-sm">
-                      {attendee.name || attendee.email}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate font-medium text-sm">
+                        {attendee.name || attendee.email}
+                      </p>
+                      {attendee.source === "rsvp" && (
+                        <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
+                          RSVP
+                        </span>
+                      )}
+                      {attendee.source === "both" && (
+                        <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
+                          VIP
+                        </span>
+                      )}
+                    </div>
                     {attendee.name ? (
                       <p className="text-xs text-muted-foreground truncate">
                         {attendee.email}
@@ -307,9 +319,21 @@ export default function AttendeesPage() {
                 <div className="sm:hidden space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex-1 min-w-0 mr-2">
-                      <p className="truncate font-medium text-sm">
-                        {attendee.name || attendee.email}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <p className="truncate font-medium text-sm">
+                          {attendee.name || attendee.email}
+                        </p>
+                        {attendee.source === "rsvp" && (
+                          <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
+                            RSVP
+                          </span>
+                        )}
+                        {attendee.source === "both" && (
+                          <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
+                            VIP
+                          </span>
+                        )}
+                      </div>
                       {attendee.name && (
                         <p className="truncate text-xs text-muted-foreground">
                           {attendee.email}
@@ -411,8 +435,8 @@ export default function AttendeesPage() {
             <div className="text-center space-y-1">
               <p className="font-bold text-lg">No attendees yet</p>
               <p className="text-sm text-muted-foreground max-w-[260px]">
-                When people buy tickets to your events, they&apos;ll appear
-                here automatically.
+                When people buy tickets or RSVP to your events, they&apos;ll
+                appear here automatically.
               </p>
             </div>
             <Link href="/dashboard/events">

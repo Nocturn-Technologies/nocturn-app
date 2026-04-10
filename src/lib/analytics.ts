@@ -183,3 +183,176 @@ function deriveSegment(totalSpent: number, totalEvents: number): string {
   if (totalEvents >= 2) return "repeat";
   return "new";
 }
+
+// ─── RSVP → Fan sync ──────────────────────────────────────────────────────────
+
+/**
+ * Sync an RSVP into the collective's unified CRM (attendee_profiles + contacts).
+ *
+ * RSVPs are NOT purchases, so this does not increment total_tickets or total_spent.
+ * It ensures a fan row exists for (collective_id, email) and refreshes last_seen_at
+ * plus any contact info (name/phone) the fan just provided.
+ *
+ * This is how RSVPs become first-class "fans" alongside ticket buyers — they
+ * appear in /dashboard/attendees, can be targeted by email campaigns, and feed
+ * into segments without needing a separate code path.
+ *
+ * Fire-and-forget: non-blocking, never throws.
+ */
+export function syncRsvpFan(params: {
+  collectiveId: string;
+  email: string;
+  fullName?: string | null;
+  phone?: string | null;
+  userId?: string | null;
+  eventId: string;
+  eventTitle?: string | null;
+}): void {
+  const {
+    collectiveId,
+    email: rawEmail,
+    fullName,
+    phone,
+    userId,
+    eventId,
+    eventTitle,
+  } = params;
+
+  void (async () => {
+    try {
+      if (!collectiveId || !rawEmail) return;
+      const email = rawEmail.toLowerCase().trim();
+      if (!email) return;
+
+      const admin = createAdminClient();
+      const now = new Date().toISOString();
+
+      // ── attendee_profiles ──
+      // Insert-if-missing: never clobber existing counters or segment.
+      const { error: insertProfileErr } = await admin
+        .from("attendee_profiles")
+        .upsert(
+          {
+            collective_id: collectiveId,
+            email,
+            full_name: fullName ?? null,
+            phone: phone ?? null,
+            user_id: userId ?? null,
+            total_spent: 0,
+            total_tickets: 0,
+            total_events: 0,
+            first_event_at: now,
+            last_event_at: now,
+            segment: "new",
+            tags: ["rsvp"],
+            created_at: now,
+            updated_at: now,
+          },
+          { onConflict: "collective_id,email", ignoreDuplicates: true }
+        );
+      if (insertProfileErr) {
+        console.warn("[analytics] syncRsvpFan profile insert:", insertProfileErr.message);
+      }
+
+      // Always refresh last_event_at. Backfill missing contact info (name,
+      // phone, user_id) via conditional updates so we never clobber values the
+      // fan already provided from a prior purchase.
+      const { error: updateLastSeenErr } = await admin
+        .from("attendee_profiles")
+        .update({ last_event_at: now, updated_at: now })
+        .eq("collective_id", collectiveId)
+        .eq("email", email);
+      if (updateLastSeenErr) {
+        console.warn("[analytics] syncRsvpFan profile last_event_at:", updateLastSeenErr.message);
+      }
+
+      if (fullName) {
+        await admin
+          .from("attendee_profiles")
+          .update({ full_name: fullName })
+          .eq("collective_id", collectiveId)
+          .eq("email", email)
+          .is("full_name", null);
+      }
+      if (phone) {
+        await admin
+          .from("attendee_profiles")
+          .update({ phone })
+          .eq("collective_id", collectiveId)
+          .eq("email", email)
+          .is("phone", null);
+      }
+      if (userId) {
+        await admin
+          .from("attendee_profiles")
+          .update({ user_id: userId })
+          .eq("collective_id", collectiveId)
+          .eq("email", email)
+          .is("user_id", null);
+      }
+
+      // ── contacts (unified CRM) ──
+      // Same pattern: insert-if-missing, then refresh last_seen_at.
+      const { error: insertContactErr } = await admin
+        .from("contacts")
+        .upsert(
+          {
+            collective_id: collectiveId,
+            contact_type: "fan",
+            email,
+            full_name: fullName ?? null,
+            phone: phone ?? null,
+            user_id: userId ?? null,
+            source: "rsvp",
+            source_detail: eventTitle ?? eventId,
+            total_events: 0,
+            total_spend: 0,
+            first_seen_at: now,
+            last_seen_at: now,
+            tags: ["rsvp"],
+            metadata: { rsvp_event_id: eventId },
+          },
+          { onConflict: "collective_id,email", ignoreDuplicates: true }
+        );
+      if (insertContactErr) {
+        console.warn("[analytics] syncRsvpFan contact insert:", insertContactErr.message);
+      }
+
+      const { error: updateContactErr } = await admin
+        .from("contacts")
+        .update({ last_seen_at: now, updated_at: now })
+        .eq("collective_id", collectiveId)
+        .eq("email", email);
+      if (updateContactErr) {
+        console.warn("[analytics] syncRsvpFan contact last_seen_at:", updateContactErr.message);
+      }
+
+      if (fullName) {
+        await admin
+          .from("contacts")
+          .update({ full_name: fullName })
+          .eq("collective_id", collectiveId)
+          .eq("email", email)
+          .is("full_name", null);
+      }
+      if (phone) {
+        await admin
+          .from("contacts")
+          .update({ phone })
+          .eq("collective_id", collectiveId)
+          .eq("email", email)
+          .is("phone", null);
+      }
+      if (userId) {
+        await admin
+          .from("contacts")
+          .update({ user_id: userId })
+          .eq("collective_id", collectiveId)
+          .eq("email", email)
+          .is("user_id", null);
+      }
+    } catch (err) {
+      console.error("[analytics] syncRsvpFan failed:", err);
+    }
+  })();
+}

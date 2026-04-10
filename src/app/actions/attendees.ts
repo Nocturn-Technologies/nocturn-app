@@ -12,6 +12,8 @@ export interface AttendeeRow {
   firstEventDate: string;
   lastEventDate: string;
   eventTitles: string[];
+  // Fan source: "ticket" (bought), "rsvp" (RSVP'd only), or "both"
+  source: "ticket" | "rsvp" | "both";
 }
 
 export interface AttendeeStats {
@@ -151,7 +153,10 @@ export async function getAttendees(collectiveId?: string): Promise<{
       };
     }
 
-    // Group tickets by customer email
+    // Group tickets + RSVPs by customer email. RSVPs = fans too, per the
+    // unified-CRM rule, so "yes" / "maybe" RSVPs roll into the same view as
+    // ticket buyers. RSVPs don't contribute to spend or ticket counts, but
+    // they do count toward events attended and show up in the list.
     const emailMap = new Map<
       string,
       {
@@ -161,8 +166,26 @@ export async function getAttendees(collectiveId?: string): Promise<{
         ticketCount: number;
         dates: string[];
         eventTitles: Set<string>;
+        hasTicket: boolean;
+        hasRsvp: boolean;
       }
     >();
+
+    function ensureEntry(normalizedEmail: string) {
+      if (!emailMap.has(normalizedEmail)) {
+        emailMap.set(normalizedEmail, {
+          name: "",
+          events: new Set(),
+          totalSpent: 0,
+          ticketCount: 0,
+          dates: [],
+          eventTitles: new Set(),
+          hasTicket: false,
+          hasRsvp: false,
+        });
+      }
+      return emailMap.get(normalizedEmail)!;
+    }
 
     for (const ticket of tickets ?? []) {
       const meta = ticket.metadata as Record<string, unknown> | null;
@@ -176,25 +199,15 @@ export async function getAttendees(collectiveId?: string): Promise<{
       const normalized = email.toLowerCase().trim();
       const name = (meta?.customer_name ?? meta?.buyer_name ?? meta?.full_name ?? "") as string;
 
-      if (!emailMap.has(normalized)) {
-        emailMap.set(normalized, {
-          name: "",
-          events: new Set(),
-          totalSpent: 0,
-          ticketCount: 0,
-          dates: [],
-          eventTitles: new Set(),
-        });
-      }
-
-      const entry = emailMap.get(normalized)!;
+      const entry = ensureEntry(normalized);
       // Keep the first non-empty name we find
       if (!entry.name && name) {
         entry.name = name;
-      };
+      }
       entry.events.add(ticket.event_id);
       entry.totalSpent += Number(ticket.price_paid) || 0;
       entry.ticketCount += 1;
+      entry.hasTicket = true;
 
       const event = eventMap.get(ticket.event_id);
       if (event) {
@@ -203,10 +216,57 @@ export async function getAttendees(collectiveId?: string): Promise<{
       }
     }
 
-    // Build attendee rows sorted by total spent descending
+    // Merge RSVPs (yes/maybe only) into the same map. This is the "backend
+    // reuse" wire — RSVP fans appear alongside ticket buyers without a
+    // separate page or export.
+    const allRsvps: { event_id: string; email: string | null; full_name: string | null }[] = [];
+    for (let offset = 0; ; offset += BATCH_SIZE) {
+      const { data: batch, error: rsvpBatchError } = await admin
+        .from("rsvps")
+        .select("event_id, email, full_name")
+        .in("event_id", eventIds)
+        .in("status", ["yes", "maybe"])
+        .not("email", "is", null)
+        .range(offset, offset + BATCH_SIZE - 1);
+      if (rsvpBatchError) {
+        console.warn("[getAttendees] rsvp batch error:", rsvpBatchError.message);
+        break;
+      }
+      if (!batch || batch.length === 0) break;
+      allRsvps.push(...(batch as typeof allRsvps));
+      if (batch.length < BATCH_SIZE) break;
+    }
+
+    for (const rsvp of allRsvps) {
+      if (!rsvp.email) continue;
+      const normalized = rsvp.email.toLowerCase().trim();
+      if (!normalized) continue;
+
+      const entry = ensureEntry(normalized);
+      if (!entry.name && rsvp.full_name) {
+        entry.name = rsvp.full_name;
+      }
+      entry.events.add(rsvp.event_id);
+      entry.hasRsvp = true;
+
+      const event = eventMap.get(rsvp.event_id);
+      if (event) {
+        entry.dates.push(event.starts_at);
+        entry.eventTitles.add(event.title);
+      }
+    }
+
+    // Build attendee rows sorted by total spent descending (ticket buyers
+    // naturally rise to the top; RSVP-only fans with $0 spend fall below).
     const attendees: AttendeeRow[] = Array.from(emailMap.entries())
       .map(([email, data]) => {
         const sortedDates = data.dates.sort();
+        const source: AttendeeRow["source"] =
+          data.hasTicket && data.hasRsvp
+            ? "both"
+            : data.hasTicket
+              ? "ticket"
+              : "rsvp";
         return {
           email,
           name: data.name,
@@ -216,6 +276,7 @@ export async function getAttendees(collectiveId?: string): Promise<{
           firstEventDate: sortedDates[0] ?? "",
           lastEventDate: sortedDates[sortedDates.length - 1] ?? "",
           eventTitles: Array.from(data.eventTitles),
+          source,
         };
       })
       .sort((a, b) => b.totalSpent - a.totalSpent);
@@ -258,6 +319,7 @@ export async function exportAttendeesCSV(collectiveId?: string): Promise<{
     const headers = [
       "Name",
       "Email",
+      "Source",
       "Events Attended",
       "Total Tickets",
       "Total Spent",
@@ -269,6 +331,7 @@ export async function exportAttendeesCSV(collectiveId?: string): Promise<{
     const rows = result.attendees.map((a) => [
       csvSafe(a.name),
       csvSafe(a.email),
+      csvSafe(a.source),
       csvSafe(a.totalEvents.toString()),
       csvSafe(a.ticketCount.toString()),
       csvSafe(`$${a.totalSpent.toFixed(2)}`),
