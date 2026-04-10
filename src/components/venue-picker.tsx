@@ -81,7 +81,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
         name: venue.name,
         address: venue.address,
         city: venue.city,
-        capacity: venue.capacity ?? 0,
+        capacity: venue.capacity || 200,
       });
     }, 300);
   }
@@ -99,7 +99,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search venues..."
-            className="h-9 pl-9 pr-8 text-sm bg-zinc-800 border-white/10 focus:border-[#7B2FF7]/50"
+            className="min-h-[44px] pl-9 pr-8 text-sm bg-zinc-800 border-white/10 focus:border-[#7B2FF7]/50"
           />
           {query && (
             <button

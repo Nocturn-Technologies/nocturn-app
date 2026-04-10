@@ -89,6 +89,8 @@ export async function sendEmail({
     }
   }
 
+  // TODO: If all retries fail, enqueue for background retry (e.g., via Vercel Cron)
+  // so buyers always receive their confirmation email.
   console.error("[email] All retry attempts exhausted");
   return { error: lastError ?? "Email send failed after retries", messageId: null };
 }

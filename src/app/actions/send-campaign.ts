@@ -39,16 +39,17 @@ export async function sendCampaignEmail(input: {
 
   if (!event) return { error: "Event not found", sent: 0 };
 
-  // Verify user is a member of this collective
+  // Verify user is an admin or promoter of this collective
   const { data: membership } = await sb
     .from("collective_members")
     .select("role")
     .eq("user_id", user.id)
     .eq("collective_id", event.collective_id)
+    .in("role", ["admin", "promoter"])
     .is("deleted_at", null)
     .maybeSingle();
 
-  if (!membership) return { error: "Not a member of this collective", sent: 0 };
+  if (!membership) return { error: "Only admins and promoters can send campaigns", sent: 0 };
 
   // Get all attendee emails for this event
   const { data: tickets } = await sb
@@ -143,7 +144,9 @@ export async function sendCampaignEmail(input: {
       sent,
       failed,
     });
-  } catch {}
+  } catch (trackErr) {
+    console.error("[sendCampaignEmail] Tracking failed:", trackErr);
+  }
 
   return {
     error: null,

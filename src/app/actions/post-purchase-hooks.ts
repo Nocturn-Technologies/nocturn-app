@@ -2,6 +2,15 @@
 import { sendEmail } from "@/lib/email/send";
 import { referralNudgeEmail, ticketMilestoneEmail } from "@/lib/email/templates";
 import { createAdminClient } from "@/lib/supabase/config";
+import { escapeHtml } from "@/lib/html";
+
+/** Sanitize buyer name for safe use in HTML emails */
+function sanitizeBuyerName(name: string | undefined): string {
+  if (!name) return "there";
+  // Strip control chars, limit length, then HTML-escape
+  const cleaned = name.replace(/[\r\n\x00-\x1f]/g, "").trim().slice(0, 100);
+  return escapeHtml(cleaned) || "there";
+}
 
 /**
  * Run after every ticket purchase. Non-blocking — call with .catch(() => {}).
@@ -13,16 +22,35 @@ export async function runPostPurchaseHooks(input: {
   buyerName?: string;
   ticketToken: string;
 }) {
+  try {
+  // Input validation
+  if (!input.eventId || typeof input.eventId !== "string" || input.eventId.length > 100) {
+    console.error("[post-purchase] Invalid eventId");
+    return;
+  }
+  if (!input.buyerEmail || typeof input.buyerEmail !== "string" || input.buyerEmail.length > 320) {
+    console.error("[post-purchase] Invalid buyerEmail");
+    return;
+  }
+  if (!input.ticketToken || typeof input.ticketToken !== "string" || input.ticketToken.length > 500) {
+    console.error("[post-purchase] Invalid ticketToken");
+    return;
+  }
+
   const sb = createAdminClient();
   const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
   // Get event + collective info
-  const { data: event } = await sb
+  const { data: event, error: eventError } = await sb
     .from("events")
     .select("title, slug, collective_id, collectives(name, slug)")
     .eq("id", input.eventId)
     .maybeSingle();
 
+  if (eventError) {
+    console.error("[post-purchase] Failed to fetch event:", eventError);
+    return;
+  }
   if (!event) return;
 
   const collective = event.collectives as unknown as { name: string; slug: string } | null;
@@ -31,9 +59,11 @@ export async function runPostPurchaseHooks(input: {
   try {
     const referralLink = `${BASE_URL}/e/${collective?.slug ?? ""}/${event.slug}?ref=${input.ticketToken}`;
 
+    const safeName = sanitizeBuyerName(input.buyerName?.split(" ")[0]);
+
     const html = referralNudgeEmail(
       event.title,
-      input.buyerName?.split(" ")[0] ?? "there",
+      safeName,
       referralLink,
       collective?.name ?? "the collective"
     );
@@ -124,5 +154,8 @@ export async function runPostPurchaseHooks(input: {
     }
   } catch (e) {
     console.error("[post-purchase] milestone check failed:", e);
+  }
+  } catch (err) {
+    console.error("[post-purchase] runPostPurchaseHooks failed:", err);
   }
 }

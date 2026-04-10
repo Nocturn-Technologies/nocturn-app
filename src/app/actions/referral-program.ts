@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { isValidUUID } from "@/lib/utils";
 
 /**
  * Get the referral code for a collective. Generate one if it doesn't exist.
@@ -11,6 +12,9 @@ export async function getReferralCode(collectiveId: string): Promise<{
   code: string | null;
 }> {
   try {
+    if (!collectiveId?.trim()) return { error: "Collective ID is required", code: null };
+    if (!isValidUUID(collectiveId)) return { error: "Invalid collective ID format", code: null };
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated", code: null };

@@ -10,6 +10,11 @@ import { CollectiveProfile } from "@/components/public-event/collective-profile"
 import { PastEvents } from "@/components/public-event/past-events";
 import { StickyTicketBar } from "@/components/public-event/sticky-ticket-bar";
 import { AlsoThisWeek } from "@/components/public-event/also-this-week";
+import { RsvpWidget } from "@/components/public-event/rsvp-widget";
+import { EventUpdatesFeed } from "@/components/public-event/event-updates-feed";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
+import { getRsvpCounts, getMyRsvp } from "@/app/actions/rsvps";
+import { listEventUpdatesPublic } from "@/app/actions/event-updates";
 import type { Metadata } from "next";
 import Image from "next/image";
 import { createAdminClient } from "@/lib/supabase/config";
@@ -27,6 +32,7 @@ interface Props {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  // TODO(audit): slug format regex is only applied in PublicEventPage at line ~100. generateMetadata runs on every crawler hit with unbounded slug values. Add /^[a-z0-9-]{1,80}$/i validation here too.
   const { slug, eventSlug } = await params;
   const supabase = createAdminClient();
 
@@ -116,12 +122,12 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // Fetch event with venue + metadata
   const { data: eventRaw2 } = await supabase
     .from("events")
-    .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, venues(name, address, city, capacity)")
+    .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, event_mode, is_free, venues(name, address, city, capacity)")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
     .is("deleted_at", null)
     .maybeSingle();
-  const event = eventRaw2 as { id: string; title: string; slug: string; description: string | null; starts_at: string; ends_at: string | null; doors_at: string | null; status: string; flyer_url: string | null; vibe_tags: string[] | null; min_age: number | null; metadata: Record<string, string> | null; collective_id: string; venues: { name: string; address: string; city: string; capacity: number } | null } | null;
+  const event = eventRaw2 as { id: string; title: string; slug: string; description: string | null; starts_at: string; ends_at: string | null; doors_at: string | null; status: string; flyer_url: string | null; vibe_tags: string[] | null; min_age: number | null; metadata: Record<string, string> | null; collective_id: string; event_mode: string | null; is_free: boolean | null; venues: { name: string; address: string; city: string; capacity: number } | null } | null;
 
   if (!event || event.status === "draft") notFound();
 
@@ -186,6 +192,27 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   for (const r of reactionRows || []) {
     reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
   }
+
+  // Mode detection: free RSVP events show the RSVP widget instead of (or in addition to) tickets
+  const eventMode = (event.event_mode ?? "ticketed") as "ticketed" | "rsvp" | "hybrid";
+  const showRsvp = eventMode === "rsvp" || eventMode === "hybrid";
+  const showTickets = eventMode === "ticketed" || eventMode === "hybrid";
+
+  // RSVP counts + current user's RSVP + event updates — fetched in parallel for RSVP/hybrid events
+  const [rsvpCountsResult, myRsvpResult, updatesResult, currentUserResult] = await Promise.all([
+    showRsvp ? getRsvpCounts(event.id) : Promise.resolve({ error: null, counts: { yes: 0, maybe: 0, no: 0 } }),
+    showRsvp ? getMyRsvp(event.id) : Promise.resolve({ error: null, rsvp: null }),
+    listEventUpdatesPublic(event.id),
+    (async () => {
+      const ssr = await createServerSupabaseClient();
+      const { data: { user } } = await ssr.auth.getUser();
+      return user;
+    })(),
+  ]);
+  const rsvpCounts = rsvpCountsResult.counts;
+  const myRsvpStatus = myRsvpResult.rsvp?.status ?? null;
+  const eventUpdates = updatesResult.updates;
+  const isLoggedIn = !!currentUserResult;
 
   const venue = event.venues;
 
@@ -517,30 +544,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             </div>
           )}
 
-          {/* ═══ TICKETS ═══ */}
-          {isUpcoming && tiers && tiers.length > 0 && (
-            <div id="tickets" className="py-10 border-t border-white/[0.04]">
-              <TicketSection
-                tiers={tiers.map((t) => ({
-                  id: t.id,
-                  name: t.name,
-                  price: Number(t.price),
-                  capacity: t.capacity,
-                  sold: tierSoldCounts[t.id] || 0,
-                  remaining: Math.max(0, t.capacity - (tierSoldCounts[t.id] || 0)),
-                }))}
-                eventId={event.id}
-                accentColor={accentColor}
-                referrerToken={referrerToken}
-              />
-            </div>
-          )}
-
-          {/* ═══ REACTIONS ═══ */}
-          <div className="py-8 border-t border-white/[0.04]">
-            <EventReactions eventId={event.id} initialCounts={reactionCounts} />
-          </div>
-
           {/* Status banners */}
           {event.status === "cancelled" && (
             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-center">
@@ -557,6 +560,58 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
               </p>
             </div>
           )}
+
+          {/* ═══ RSVP (free events) ═══ */}
+          {isUpcoming && showRsvp && (
+            <div className="py-10 border-t border-white/[0.04]">
+              <RsvpWidget
+                eventId={event.id}
+                eventTitle={event.title}
+                accentColor={accentColor}
+                initialCounts={rsvpCounts}
+                initialMyStatus={myRsvpStatus}
+                isLoggedIn={isLoggedIn}
+              />
+            </div>
+          )}
+
+          {/* ═══ TICKETS ═══ */}
+          {isUpcoming && showTickets && tiers && tiers.length > 0 && (
+            <div id="tickets" className="py-10 border-t border-white/[0.04]">
+              <TicketSection
+                tiers={tiers.map((t) => ({
+                  id: t.id,
+                  name: t.name,
+                  price: Number(t.price),
+                  capacity: t.capacity,
+                  sold: tierSoldCounts[t.id] || 0,
+                  remaining: Math.max(0, t.capacity - (tierSoldCounts[t.id] || 0)),
+                }))}
+                eventId={event.id}
+                accentColor={accentColor}
+                eventTitle={event.title}
+                eventDate={eventDate.toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}
+                eventVenue={venue?.name ?? "TBA"}
+                referrerToken={referrerToken}
+              />
+            </div>
+          )}
+
+          {/* ═══ UPDATES FROM ORGANIZER ═══ */}
+          {eventUpdates.length > 0 && (
+            <div className="py-10 border-t border-white/[0.04]">
+              <EventUpdatesFeed
+                updates={eventUpdates}
+                accentColor={accentColor}
+                collectiveName={collective.name}
+              />
+            </div>
+          )}
+
+          {/* ═══ REACTIONS ═══ */}
+          <div className="py-8 border-t border-white/[0.04]">
+            <EventReactions eventId={event.id} initialCounts={reactionCounts} />
+          </div>
 
           {/* ─── Share + About ─── */}
           <div className="space-y-6 py-8 border-t border-white/[0.04]">
@@ -599,8 +654,8 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
       </div>
 
-      {/* Sticky ticket CTA — appears when scrolled past tickets */}
-      {isUpcoming && tiers && tiers.length > 0 && (
+      {/* Sticky ticket CTA — appears when scrolled past tickets (paid events only) */}
+      {isUpcoming && showTickets && tiers && tiers.length > 0 && (
         <StickyTicketBar
           lowestPrice={lowestTierPrice}
           accentColor={accentColor}

@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { randomUUID } from "crypto";
+import { isValidUUID } from "@/lib/utils";
 
 /**
  * Seeds a demo collective with realistic past events, ticket sales,
@@ -15,6 +16,8 @@ export async function seedDemoData(collectiveId: string) {
   if (!process.env.ALLOW_SEED) {
     return { error: "Seeding is disabled" };
   }
+  if (!collectiveId?.trim()) return { error: "Collective ID is required" };
+  if (!isValidUUID(collectiveId)) return { error: "Invalid collective ID format" };
 
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -52,11 +55,15 @@ export async function seedDemoData(collectiveId: string) {
     { name: "Nocturne Bar", slug: "nocturne-bar-to", address: "455 Spadina Ave", city: "Toronto", capacity: 200, contact_email: "events@nocturnebar.com" },
   ];
 
-  const { data: insertedVenues } = await sb
+  const { data: insertedVenues, error: venueError } = await sb
     .from("venues")
     .upsert(venues, { onConflict: "slug" })
     .select("id, name, capacity");
 
+  if (venueError) {
+    console.error("[seedDemoData] Failed to create venues:", venueError);
+    return { error: "Something went wrong" };
+  }
   if (!insertedVenues || insertedVenues.length === 0) {
     return { error: "Failed to create venues" };
   }
@@ -68,11 +75,15 @@ export async function seedDemoData(collectiveId: string) {
     { name: "Pulse Collective", slug: "pulse-collective", genre: ["Drum & Bass", "Jungle"], default_fee: 350 },
   ];
 
-  const { data: insertedArtists } = await sb
+  const { data: insertedArtists, error: artistError } = await sb
     .from("artists")
     .upsert(artists, { onConflict: "slug" })
     .select("id, name, default_fee");
 
+  if (artistError) {
+    console.error("[seedDemoData] Failed to create artists:", artistError);
+    return { error: "Something went wrong" };
+  }
   if (!insertedArtists) {
     console.error("[seedDemoData] Failed to create artists");
     return { error: "Something went wrong" };
@@ -147,11 +158,14 @@ export async function seedDemoData(collectiveId: string) {
       { event_id: event.id, name: "VIP", price: config.vipPrice, capacity: config.vipSold + 10 },
     ];
 
-    const { data: insertedTiers } = await sb
+    const { data: insertedTiers, error: tierError } = await sb
       .from("ticket_tiers")
       .insert(tiers)
       .select("id, name, price");
 
+    if (tierError) {
+      console.error("[seedDemoData] Failed to create ticket tiers:", tierError);
+    }
     if (!insertedTiers) continue;
 
     // Create tickets (all checked_in for past events)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/config";
 import { createClient as createServerClient } from "@/lib/supabase/server";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
@@ -9,6 +10,13 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const state = searchParams.get("state"); // collective_id passed as state during OAuth
+
+  // Rate limit: 10 requests per minute per IP
+  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+  const { success: rateLimitOk } = await rateLimitStrict(`stripe-connect-callback:${clientIp}`, 10, 60_000);
+  if (!rateLimitOk) {
+    return NextResponse.redirect(`${APP_URL}/dashboard/settings?stripe=error`);
+  }
 
   if (!code) {
     // No authorization code — just redirect (e.g., user cancelled)

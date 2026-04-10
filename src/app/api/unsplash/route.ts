@@ -60,8 +60,8 @@ export async function GET(req: NextRequest) {
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: "Failed to search Unsplash" },
-        { status: res.status }
+        { error: "Image search failed" },
+        { status: 502 }
       );
     }
 
@@ -93,13 +93,19 @@ export async function GET(req: NextRequest) {
 // Track download per Unsplash API guidelines
 export async function POST(req: NextRequest) {
   // Auth check — prevent unauthenticated API abuse
+  let authedUserId: string;
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    authedUserId = user.id;
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  // Rate limit: 30 requests per minute per user
+  const { success: rlOk } = await rateLimitStrict(`unsplash-post:${authedUserId}`, 30, 60_000);
+  if (!rlOk) return NextResponse.json({ error: "Rate limit exceeded" }, { status: 429 });
 
   if (!UNSPLASH_ACCESS_KEY) {
     return NextResponse.json({ error: "Not configured" }, { status: 500 });

@@ -7,6 +7,8 @@ import { type TicketTier } from "@/app/actions/ai-parse-event";
 import { getTicketPricingSuggestion, type PricingSuggestion } from "@/app/actions/pricing-suggestion";
 import { calculateBudget, type BudgetResult, type BudgetInput } from "@/app/actions/budget-planner";
 import { applyLaunchPlaybook } from "@/app/actions/launch-playbook";
+import { createClient } from "@/lib/supabase/client";
+import { trackEvent } from "@/lib/track";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +39,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { haptic } from "@/lib/haptics";
@@ -98,10 +101,12 @@ function loadDraft(): DraftState | null {
     const draft = JSON.parse(raw) as DraftState;
     if (draft.version !== DRAFT_VERSION) {
       sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+      // Version mismatch — old draft is incompatible, silently discard
       return null;
     }
     return draft;
   } catch {
+    sessionStorage.removeItem(DRAFT_STORAGE_KEY);
     return null;
   }
 }
@@ -115,7 +120,7 @@ function clearDraft() {
   }
 }
 
-const STEPS: WizardStep[] = ["details", "venue", "tickets", "budget", "review"];
+const ALL_STEPS: WizardStep[] = ["details", "venue", "tickets", "budget", "review"];
 const STEP_LABELS: Record<WizardStep, string> = {
   details: "Details",
   venue: "Venue",
@@ -123,6 +128,13 @@ const STEP_LABELS: Record<WizardStep, string> = {
   budget: "Budget",
   review: "Review",
 };
+
+// Free events skip the Tickets step entirely
+function getSteps(isFree: boolean): WizardStep[] {
+  return isFree
+    ? (["details", "venue", "budget", "review"] as WizardStep[])
+    : ALL_STEPS;
+}
 
 const DEFAULT_FORM: EventFormData = {
   title: "",
@@ -442,28 +454,40 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
 
 // ─── Pricing Insight ─────────────────────────────────────────────────────────
 
+// Cache pricing results across PricingInsight remounts to prevent redundant fetches (#17)
+const pricingCache = new Map<string, PricingSuggestion | null>();
+
 function PricingInsight({ city, date, venueCapacity, tiers }: {
   city: string;
   date: string;
   venueCapacity?: number;
   tiers: TicketTier[];
 }) {
-  const [pricing, setPricing] = useState<PricingSuggestion | null>(null);
+  const cacheKey = `${city}|${date}`;
+  const [pricing, setPricing] = useState<PricingSuggestion | null>(pricingCache.get(cacheKey) ?? null);
   const [loading, setLoading] = useState(false);
-  const [fetched, setFetched] = useState(false);
+  const fetchedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (fetched || !city || !date) return;
+    if (!city || !date) return;
+    if (fetchedRef.current === cacheKey) return;
+    if (pricingCache.has(cacheKey)) {
+      setPricing(pricingCache.get(cacheKey) ?? null);
+      fetchedRef.current = cacheKey;
+      return;
+    }
+    fetchedRef.current = cacheKey;
     setLoading(true);
-    setFetched(true);
     getTicketPricingSuggestion({ city, date, venueCapacity }).then(({ pricing: p }) => {
+      pricingCache.set(cacheKey, p);
       setPricing(p);
       setLoading(false);
     }).catch(() => {
+      pricingCache.set(cacheKey, null);
       setPricing(null);
       setLoading(false);
     });
-  }, [city, date, venueCapacity, fetched]);
+  }, [city, date, venueCapacity, cacheKey]);
 
   if (loading) {
     return (
@@ -894,6 +918,37 @@ export default function NewEventPage() {
   const [venueMode, setVenueMode] = useState<"picker" | "manual">("picker");
   const [calculatingBudget, setCalculatingBudget] = useState(false);
   const [showOptionalDetails, setShowOptionalDetails] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [preflight, setPreflight] = useState<"loading" | "ok" | "no-auth" | "no-collective">("loading");
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [visitedReview, setVisitedReview] = useState(false);
+  const [successBanner, setSuccessBanner] = useState(false);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Auth + collective preflight check ──
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      try {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (cancelled) return;
+        if (!user) { setPreflight("no-auth"); return; }
+        const { count } = await supabase
+          .from("collective_members")
+          .select("*", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .is("deleted_at", null);
+        if (cancelled) return;
+        if (!count || count === 0) { setPreflight("no-collective"); return; }
+        setPreflight("ok");
+      } catch {
+        if (!cancelled) setPreflight("no-auth");
+      }
+    }
+    check();
+    return () => { cancelled = true; };
+  }, []);
 
   // Restore draft on mount
   useEffect(() => {
@@ -906,6 +961,7 @@ export default function NewEventPage() {
       setBudgetResult(draft.budgetResult);
       setPhase(draft.phase === "creating" || draft.phase === "playbook" ? "wizard" : draft.phase);
     }
+    setDraftLoaded(true);
   }, []);
 
   // Save draft on changes
@@ -940,36 +996,49 @@ export default function NewEventPage() {
 
   function goTo(nextStep: WizardStep) {
     setStep(nextStep);
+    if (nextStep === "review") setVisitedReview(true);
+    trackEvent("wizard_step", { step: nextStep });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const currentIdx = STEPS.indexOf(step);
+  const activeSteps = getSteps(formData.isFree);
+  // If the user just toggled to free while sitting on the tickets step, bounce them forward.
+  // useEffect would be cleaner but this guard prevents an out-of-range index on the very next render.
+  const safeStep: WizardStep = activeSteps.includes(step) ? step : "venue";
+  const currentIdx = activeSteps.indexOf(safeStep);
 
   function goNext() {
-    if (currentIdx < STEPS.length - 1) goTo(STEPS[currentIdx + 1]);
+    if (currentIdx < activeSteps.length - 1) goTo(activeSteps[currentIdx + 1]);
   }
 
   function goBack() {
-    if (currentIdx > 0) goTo(STEPS[currentIdx - 1]);
+    if (currentIdx > 0) goTo(activeSteps[currentIdx - 1]);
   }
 
-  // Total expenses from budget input
+  // Total expenses from budget input (bar minimum is a threshold, not a direct expense — matches server logic)
   const totalExpenses =
     (budgetInput.talentFee || 0) +
     (budgetInput.venueCost || 0) +
-    (budgetInput.barMinimum || 0) +
     (budgetInput.deposit || 0) +
     (budgetInput.otherExpenses || 0);
 
   // Validation per step
   function canAdvance(): boolean {
     switch (step) {
-      case "details":
-        return !!formData.title.trim() && !!formData.date;
+      case "details": {
+        if (!formData.title.trim() || !formData.date) return false;
+        // Block past dates at step 1 instead of waiting for server rejection
+        const picked = new Date(formData.date + "T23:59:59");
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (picked < today) return false;
+        return true;
+      }
       case "venue":
         return !!formData.venueName.trim() && !!formData.venueCity.trim() && (typeof formData.venueCapacity === "number" && formData.venueCapacity > 0);
       case "tickets":
-        return formData.isFree || (tiers.length > 0 && tiers.some((t) => t.price >= 0 && t.capacity > 0));
+        // Free mode skips this step entirely, so we only ever hit this for paid.
+        return tiers.length > 0 && tiers.every((t) => t.price >= 0 && t.capacity > 0);
       case "budget":
         return true; // always skippable
       case "review":
@@ -978,6 +1047,15 @@ export default function NewEventPage() {
         return false;
     }
   }
+
+  // Inline validation hints
+  const dateInPast = (() => {
+    if (!formData.date) return false;
+    const picked = new Date(formData.date + "T23:59:59");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return picked < today;
+  })();
 
   // Handle venue selection from picker
   function handleVenueSelect(venue: SelectedVenue) {
@@ -1053,7 +1131,7 @@ export default function NewEventPage() {
         setTiers(scaled);
       }
     } catch {
-      setError("Could not calculate budget. You can still proceed.");
+      setError("Could not calculate budget — try again or skip this step.");
     } finally {
       setCalculatingBudget(false);
     }
@@ -1061,6 +1139,7 @@ export default function NewEventPage() {
 
   // Create event
   async function handleCreate() {
+    if (isSubmitting) return; // guard double-submit
     setError(null);
 
     if (!formData.date) {
@@ -1068,6 +1147,13 @@ export default function NewEventPage() {
       return;
     }
 
+    // Ensure at least one tier for paid events
+    if (!formData.isFree && tiers.length === 0) {
+      setError("Add at least one ticket tier, or mark this as a free event.");
+      return;
+    }
+
+    setIsSubmitting(true);
     setPhase("creating");
 
     let validTiers: { name: string; price: number; quantity: number }[] = [];
@@ -1091,28 +1177,33 @@ export default function NewEventPage() {
         startTime: formData.startTime || "22:00",
         endTime: formData.endTime || null,
         venueName: formData.venueName || "TBA",
-        venueAddress: formData.venueAddress || "",
+        venueAddress: formData.venueAddress || null,
         venueCity: formData.venueCity || "",
         venueCapacity: typeof formData.venueCapacity === "number" ? formData.venueCapacity : 0,
         tiers: validTiers,
+        eventMode: formData.isFree ? "rsvp" : "ticketed",
+        isFree: formData.isFree,
       });
 
       if (result.error) {
         setError(result.error);
         setPhase("wizard");
+        setIsSubmitting(false);
+        // Scroll error into view
+        setTimeout(() => document.getElementById("wizard-error")?.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
         return;
       }
 
       haptic("success");
       clearDraft();
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("event-created", "true");
-      }
       setCreatedEventId(result.eventId ?? null);
+      // Refresh cached route data before showing playbook so the redirect won't race with revalidation (#39)
+      router.refresh();
       setPhase("playbook");
     } catch {
       setError("Network error — please try again.");
       setPhase("wizard");
+      setIsSubmitting(false);
     }
   }
 
@@ -1137,35 +1228,64 @@ export default function NewEventPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
+  // Cleanup redirect timer on unmount
+  useEffect(() => {
+    return () => { if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current); };
+  }, []);
+
   // Playbook phase
   if (phase === "playbook") {
     return (
       <div className="mx-auto max-w-lg px-4 py-6 animate-fade-in">
+        {/* Playbook error banner */}
+        {error && (
+          <div className="mb-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-3 text-sm text-yellow-400 text-center">
+            {error} — your event was still created successfully.
+          </div>
+        )}
         <PlaybookSelector
           eventTitle={formData.title || "Your event"}
           onSelect={async (playbookId) => {
             if (!createdEventId) return;
             setApplyingPlaybook(true);
-            const result = await applyLaunchPlaybook(createdEventId, playbookId);
-            setApplyingPlaybook(false);
-            if (result.error) {
-              setError(result.error);
+            setError(null);
+            try {
+              const result = await applyLaunchPlaybook(createdEventId, playbookId);
+              setApplyingPlaybook(false);
+              if (result.error) {
+                setError(result.error);
+                // Don't block navigation — event exists, playbook is optional
+              }
+            } catch {
+              setApplyingPlaybook(false);
+              setError("Could not apply playbook — you can add tasks manually later.");
             }
             setPhase("done");
-            setTimeout(() => {
+            redirectTimerRef.current = setTimeout(() => {
               router.push(`/dashboard/events/${createdEventId}/tasks`);
               router.refresh();
             }, 1500);
           }}
           onSkip={() => {
             setPhase("done");
-            setTimeout(() => {
+            redirectTimerRef.current = setTimeout(() => {
               router.push(`/dashboard/events/${createdEventId}`);
               router.refresh();
             }, 1500);
           }}
           applying={applyingPlaybook}
         />
+        {/* Skip straight to event if user doesn't want a playbook */}
+        {!applyingPlaybook && (
+          <div className="text-center mt-2">
+            <button
+              onClick={() => router.push(`/dashboard/events/${createdEventId}`)}
+              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+            >
+              Go to event dashboard directly
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -1174,6 +1294,11 @@ export default function NewEventPage() {
   if (phase === "done") {
     return (
       <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-scale-in">
+        {error && (
+          <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-3 text-sm text-yellow-400 text-center max-w-xs">
+            {error}
+          </div>
+        )}
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 animate-pulse">
           <Check className="h-8 w-8 text-green-500" />
         </div>
@@ -1187,12 +1312,60 @@ export default function NewEventPage() {
     );
   }
 
+  // ── Preflight gates ──
+  // Wait for both auth preflight AND draft restoration before rendering form (#3 — prevents empty flash)
+  if (preflight === "loading" || !draftLoaded) {
+    return (
+      <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-fade-in">
+        <Loader2 className="h-10 w-10 animate-spin text-[#7B2FF7]" />
+        <p className="text-sm text-zinc-400">Loading...</p>
+      </div>
+    );
+  }
+
+  if (preflight === "no-auth") {
+    return (
+      <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-fade-in">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500/10">
+          <AlertCircle className="h-8 w-8 text-red-400" />
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-lg font-bold">Session expired</p>
+          <p className="text-sm text-zinc-400">Please log in again to create an event.</p>
+        </div>
+        <Link href="/login">
+          <Button className="bg-nocturn hover:bg-nocturn-light min-h-[44px]">Log in</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  if (preflight === "no-collective") {
+    return (
+      <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-fade-in">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-nocturn/10">
+          <Users className="h-8 w-8 text-nocturn" />
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-lg font-bold">No collective yet</p>
+          <p className="text-sm text-zinc-400 max-w-[280px]">
+            You need a collective before you can create events. Set one up first.
+          </p>
+        </div>
+        <Link href="/onboarding">
+          <Button className="bg-nocturn hover:bg-nocturn-light min-h-[44px]">Create a Collective</Button>
+        </Link>
+      </div>
+    );
+  }
+
   // Creating phase
   if (phase === "creating") {
     return (
       <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-fade-in">
         <Loader2 className="h-10 w-10 animate-spin text-[#7B2FF7]" />
         <p className="text-sm text-zinc-400">Creating your event...</p>
+        <p className="text-[10px] text-zinc-600">This may take a moment while we enrich your event page with AI</p>
       </div>
     );
   }
@@ -1228,7 +1401,7 @@ export default function NewEventPage() {
       </div>
 
       {/* Progress */}
-      <StepProgress current={step} steps={STEPS} />
+      <StepProgress current={step} steps={activeSteps} />
 
       {/* Step content */}
       <div className="flex-1 overflow-y-auto overscroll-contain px-1 pb-32 min-h-0">
@@ -1242,6 +1415,47 @@ export default function NewEventPage() {
               <p className="text-sm text-zinc-500">What&apos;s the event?</p>
             </div>
 
+            {/* Mode selector — free RSVP vs ticketed. This is the single most
+                important decision in the wizard, so it lives at the top. */}
+            <div className="rounded-2xl border border-white/[0.06] bg-card p-4">
+              <p className="text-[11px] font-semibold tracking-wider uppercase text-zinc-500 mb-3">Event type</p>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateForm({ isFree: true });
+                    setTiers([]);
+                  }}
+                  className={`rounded-xl border p-3 text-left transition-all active:scale-[0.98] min-h-[72px] ${
+                    formData.isFree
+                      ? "border-[#7B2FF7] bg-[#7B2FF7]/10"
+                      : "border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Users className="h-4 w-4 text-[#7B2FF7]" />
+                    <span className="text-sm font-semibold text-white">Free · RSVP</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 leading-snug">Collect Yes/Maybe/No RSVPs. No tickets, no fees.</p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateForm({ isFree: false })}
+                  className={`rounded-xl border p-3 text-left transition-all active:scale-[0.98] min-h-[72px] ${
+                    !formData.isFree
+                      ? "border-[#7B2FF7] bg-[#7B2FF7]/10"
+                      : "border-white/10 hover:border-white/20"
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <Ticket className="h-4 w-4 text-[#7B2FF7]" />
+                    <span className="text-sm font-semibold text-white">Ticketed</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 leading-snug">Sell tickets with Stripe. Multiple price tiers.</p>
+                </button>
+              </div>
+            </div>
+
             <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-4">
               <FormField label="Event Name" icon={Sparkles} required>
                 <Input
@@ -1252,6 +1466,11 @@ export default function NewEventPage() {
                   className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
                   autoFocus
                 />
+                {formData.title.length > 150 && (
+                  <p className={`text-[10px] text-right ${formData.title.length > 190 ? "text-yellow-400" : "text-zinc-600"}`}>
+                    {formData.title.length}/200
+                  </p>
+                )}
               </FormField>
 
               <FormField label="Date" icon={Calendar} required>
@@ -1259,8 +1478,14 @@ export default function NewEventPage() {
                   type="date"
                   value={formData.date}
                   onChange={(e) => updateForm({ date: e.target.value })}
-                  className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                  className={`bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50 ${dateInPast ? "border-red-500/50" : ""}`}
                 />
+                {dateInPast && (
+                  <p className="text-[11px] text-red-400 flex items-center gap-1 mt-0.5">
+                    <AlertCircle className="h-3 w-3" />
+                    Date is in the past — pick a future date
+                  </p>
+                )}
               </FormField>
 
               <FormField label="Start Time" icon={Clock} required>
@@ -1270,6 +1495,9 @@ export default function NewEventPage() {
                   onChange={(e) => updateForm({ startTime: e.target.value })}
                   className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
                 />
+                {formData.startTime === "22:00" && (
+                  <p className="text-[10px] text-zinc-500 mt-0.5">Default: 10 PM — adjust if needed</p>
+                )}
               </FormField>
 
               {/* Optional fields */}
@@ -1291,6 +1519,9 @@ export default function NewEventPage() {
                       onChange={(e) => { updateForm({ endTime: e.target.value }); setShowOptionalDetails(true); }}
                       className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
                     />
+                    {formData.endTime && formData.startTime && formData.endTime < formData.startTime && (
+                      <p className="text-[10px] text-zinc-500 mt-0.5">Ends after midnight (next day)</p>
+                    )}
                   </FormField>
 
                   <FormField label="Description" icon={Info}>
@@ -1300,7 +1531,7 @@ export default function NewEventPage() {
                       onChange={(e) => { updateForm({ description: e.target.value }); setShowOptionalDetails(true); }}
                       maxLength={5000}
                       rows={3}
-                      className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground outline-none focus:border-[#7B2FF7]/50 resize-none min-h-[44px]"
+                      className="flex w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-[#7B2FF7]/50 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 resize-none min-h-[44px] transition-colors"
                     />
                   </FormField>
                 </div>
@@ -1377,9 +1608,12 @@ export default function NewEventPage() {
                     value={formData.venueCapacity === "" ? "" : formData.venueCapacity}
                     onChange={(e) => {
                       const val = e.target.value;
-                      updateForm({ venueCapacity: val === "" ? "" : parseInt(val) || "" });
+                      const num = parseInt(val);
+                      if (val === "") { updateForm({ venueCapacity: "" }); return; }
+                      if (!isNaN(num) && num <= 100000) updateForm({ venueCapacity: num });
                     }}
                     min={1}
+                    max={100000}
                     className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
                   />
                 </FormField>
@@ -1399,53 +1633,20 @@ export default function NewEventPage() {
             </div>
 
             <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-5">
-              {/* Free event toggle */}
-              <label className="flex items-center justify-between cursor-pointer">
-                <span className="text-sm font-medium text-zinc-300">Free event</span>
+              {/* Mode was chosen on step 1 — this step is skipped for free events.
+                  Keeping a one-line reminder with a shortcut back to details for rare cases. */}
+              <div className="flex items-center justify-between text-xs text-zinc-500">
+                <span>Paid event · ticketed</span>
                 <button
                   type="button"
-                  role="switch"
-                  aria-checked={formData.isFree}
-                  onClick={() => {
-                    const newVal = !formData.isFree;
-                    updateForm({ isFree: newVal });
-                    if (newVal) setTiers([]);
-                  }}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    formData.isFree ? "bg-[#7B2FF7]" : "bg-zinc-700"
-                  }`}
+                  onClick={() => goTo("details")}
+                  className="text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors"
                 >
-                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    formData.isFree ? "translate-x-6" : "translate-x-1"
-                  }`} />
+                  Change to free
                 </button>
-              </label>
+              </div>
 
-              {formData.isFree ? (
-                <div className="space-y-4">
-                  <p className="text-xs text-zinc-500">No ticket fees for free events. Track bar revenue below (optional).</p>
-                  <FormField label="Projected Bar Sales" icon={DollarSign}>
-                    <Input
-                      type="number"
-                      placeholder="5000"
-                      value={formData.projectedBarSales === "" ? "" : formData.projectedBarSales}
-                      onChange={(e) => updateForm({ projectedBarSales: e.target.value === "" ? "" : parseInt(e.target.value) || "" })}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
-                    />
-                  </FormField>
-                  <FormField label="Your Bar Split %" icon={DollarSign}>
-                    <Input
-                      type="number"
-                      placeholder="15"
-                      min={0}
-                      max={100}
-                      value={formData.barPercent === "" ? "" : formData.barPercent}
-                      onChange={(e) => updateForm({ barPercent: e.target.value === "" ? "" : parseInt(e.target.value) || "" })}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
-                    />
-                  </FormField>
-                </div>
-              ) : (
+              {(
                 <div className="space-y-4">
                   {/* Quick price input */}
                   <FormField label="Quick Price" icon={Ticket}>
@@ -1453,7 +1654,7 @@ export default function NewEventPage() {
                       <Input
                         placeholder="$25 or $20-$50 for a range"
                         onBlur={(e) => {
-                          if (e.target.value.trim() && tiers.length === 0) {
+                          if (e.target.value.trim()) {
                             generateTiersFromPrice(e.target.value.trim());
                           }
                         }}
@@ -1466,7 +1667,9 @@ export default function NewEventPage() {
                         }}
                         className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
                       />
-                      <p className="text-[10px] text-zinc-600">Enter a price to auto-generate tiers, or add them manually below</p>
+                      <p className="text-[10px] text-zinc-600">
+                        {tiers.length > 0 ? "Re-enter a price to regenerate tiers" : "Enter a price to auto-generate tiers, or add them manually below"}
+                      </p>
                     </div>
                   </FormField>
 
@@ -1481,6 +1684,7 @@ export default function NewEventPage() {
                         <div key={i} className="flex items-center gap-2">
                           <div className="flex-1 grid grid-cols-3 gap-2">
                             <Input
+                              aria-label={`Tier ${i + 1} name`}
                               placeholder="Tier name"
                               value={tier.name}
                               onChange={(e) => {
@@ -1491,18 +1695,21 @@ export default function NewEventPage() {
                               className="bg-zinc-900 border-white/10 rounded-lg text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
                             />
                             <Input
+                              aria-label={`Tier ${i + 1} price`}
                               type="number"
                               placeholder="Price"
                               value={tier.price}
                               onChange={(e) => {
                                 const updated = [...tiers];
-                                updated[i] = { ...tier, price: parseFloat(e.target.value) || 0 };
+                                const parsed = parseFloat(e.target.value);
+                                updated[i] = { ...tier, price: Number.isFinite(parsed) ? parsed : tier.price };
                                 setTiers(updated);
                               }}
                               min={0}
                               className="bg-zinc-900 border-white/10 rounded-lg text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
                             />
                             <Input
+                              aria-label={`Tier ${i + 1} quantity`}
                               type="number"
                               placeholder="Qty"
                               value={tier.capacity}
@@ -1516,6 +1723,7 @@ export default function NewEventPage() {
                             />
                           </div>
                           <button
+                            aria-label={`Remove tier ${i + 1}`}
                             onClick={() => setTiers(tiers.filter((_, idx) => idx !== i))}
                             className="p-2 text-zinc-500 hover:text-red-400 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
                           >
@@ -1526,20 +1734,25 @@ export default function NewEventPage() {
                     </div>
                   )}
 
-                  <button
-                    onClick={() => {
-                      const capacity = typeof formData.venueCapacity === "number" ? formData.venueCapacity : 100;
-                      const remaining = capacity - tiers.reduce((s, t) => s + t.capacity, 0);
-                      setTiers([
-                        ...tiers,
-                        { name: `Tier ${tiers.length + 1}`, price: 0, capacity: Math.max(remaining, 10) },
-                      ]);
-                    }}
-                    className="flex items-center gap-1.5 text-sm text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors py-1"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Add tier
-                  </button>
+                  {tiers.length < 10 && (
+                    <button
+                      onClick={() => {
+                        const capacity = typeof formData.venueCapacity === "number" ? formData.venueCapacity : 100;
+                        const remaining = capacity - tiers.reduce((s, t) => s + t.capacity, 0);
+                        setTiers([
+                          ...tiers,
+                          { name: `Tier ${tiers.length + 1}`, price: 0, capacity: Math.max(remaining, 10) },
+                        ]);
+                      }}
+                      className="flex items-center gap-1.5 text-sm text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors py-1"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add tier
+                    </button>
+                  )}
+                  {tiers.length >= 10 && (
+                    <p className="text-[10px] text-zinc-500">Maximum 10 tiers</p>
+                  )}
                 </div>
               )}
             </div>
@@ -1582,7 +1795,7 @@ export default function NewEventPage() {
                   <Music className="h-3.5 w-3.5 text-[#7B2FF7]" />
                   Headliner
                 </span>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Headliner type">
                   {([
                     { value: "international" as const, label: "International", icon: Plane },
                     { value: "local" as const, label: "Local", icon: Music },
@@ -1590,6 +1803,8 @@ export default function NewEventPage() {
                   ]).map((opt) => (
                     <button
                       key={opt.value}
+                      role="radio"
+                      aria-checked={budgetInput.headlinerType === opt.value}
                       onClick={() => setBudgetInput(prev => ({ ...prev, headlinerType: opt.value }))}
                       className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all active:scale-[0.98] ${
                         budgetInput.headlinerType === opt.value
@@ -1705,7 +1920,7 @@ export default function NewEventPage() {
               {/* Calculate button */}
               <Button
                 onClick={handleCalculateBudget}
-                disabled={calculatingBudget}
+                disabled={calculatingBudget || totalExpenses === 0}
                 className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px] transition-all active:scale-[0.98]"
               >
                 {calculatingBudget ? (
@@ -1744,6 +1959,20 @@ export default function NewEventPage() {
                       </div>
                     ))}
                   </div>
+
+                  {/* Apply suggested tiers button if user already has tiers */}
+                  {budgetResult.suggestedTiers.length > 0 && tiers.length > 0 && (
+                    <button
+                      onClick={() => {
+                        const firstPrice = tiers[0]?.price;
+                        const scaled = scaleBudgetTiers(budgetResult.suggestedTiers, firstPrice);
+                        setTiers(scaled);
+                      }}
+                      className="text-xs text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors"
+                    >
+                      Apply suggested tiers ({budgetResult.suggestedTiers.length} tiers)
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -1873,20 +2102,35 @@ export default function NewEventPage() {
               />
             )}
 
-            {/* Error */}
+            {/* Error — placed above create button for visibility */}
             {error && (
-              <div role="alert" className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400 text-center">
+              <div id="wizard-error" role="alert" className="rounded-xl bg-red-500/10 border border-red-500/20 p-3 text-sm text-red-400 text-center">
                 {error}
+              </div>
+            )}
+
+            {/* Warning: no tiers and not free */}
+            {!formData.isFree && tiers.length === 0 && (
+              <div className="rounded-xl bg-yellow-500/10 border border-yellow-500/20 p-3 text-xs text-yellow-400 text-center">
+                No ticket tiers added. Go back to the Tickets step to add pricing, or mark this as a free event.
               </div>
             )}
 
             {/* Create button */}
             <Button
-              onClick={handleCreate}
-              className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[48px] text-base font-semibold transition-all active:scale-[0.98] shadow-lg shadow-[#7B2FF7]/20"
+              onClick={() => {
+                if (!window.confirm("Create this event as a draft? You can edit everything afterwards.")) return;
+                handleCreate();
+              }}
+              disabled={isSubmitting}
+              className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[48px] text-base font-semibold transition-all active:scale-[0.98] shadow-lg shadow-[#7B2FF7]/20 disabled:opacity-50"
             >
-              <Sparkles className="h-5 w-5 mr-2" />
-              Create Event
+              {isSubmitting ? (
+                <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+              ) : (
+                <Sparkles className="h-5 w-5 mr-2" />
+              )}
+              {isSubmitting ? "Creating..." : "Create Event"}
             </Button>
           </div>
         )}
@@ -1898,26 +2142,37 @@ export default function NewEventPage() {
           className="fixed bottom-0 left-0 right-0 border-t border-white/5 bg-background/95 backdrop-blur-sm z-10"
           style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 8px)" }}
         >
-          <div className="mx-auto max-w-lg flex gap-3 px-4 py-3">
-            {currentIdx > 0 ? (
+          <div className="mx-auto max-w-lg flex flex-col gap-2 px-4 py-3">
+            <div className="flex gap-3">
+              {currentIdx > 0 ? (
+                <Button
+                  variant="ghost"
+                  onClick={goBack}
+                  className="flex-1 min-h-[44px] text-zinc-400 hover:text-white rounded-xl"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-1.5" />
+                  Back
+                </Button>
+              ) : (
+                <div className="flex-1" />
+              )}
               <Button
-                variant="ghost"
-                onClick={goBack}
-                className="flex-1 min-h-[44px] text-zinc-400 hover:text-white rounded-xl"
+                onClick={goNext}
+                disabled={!canAdvance()}
+                className="flex-1 bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white min-h-[44px] rounded-xl transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                <ArrowLeft className="h-4 w-4 mr-1.5" />
-                Back
+                {step === "budget" ? "Review" : "Next"}
               </Button>
-            ) : (
-              <div className="flex-1" />
+            </div>
+            {/* Quick jump back to review if user has been there */}
+            {visitedReview && (
+              <button
+                onClick={() => goTo("review")}
+                className="text-xs text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors text-center py-1"
+              >
+                Return to Review
+              </button>
             )}
-            <Button
-              onClick={goNext}
-              disabled={!canAdvance()}
-              className="flex-1 bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white min-h-[44px] rounded-xl transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              {step === "budget" ? "Review" : "Next"}
-            </Button>
           </div>
         </div>
       )}

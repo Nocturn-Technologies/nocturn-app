@@ -30,6 +30,10 @@ export async function generateChatResponse(
   userMessage: string,
   recentMessages?: { role: string; content: string }[]
 ): Promise<{ content: string; messageId: string | null }> {
+  try {
+  if (!channelId?.trim()) return { content: "Channel ID is required", messageId: null };
+  if (!userMessage?.trim()) return { content: "Message is required", messageId: null };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { content: "Not authenticated", messageId: null };
@@ -111,6 +115,10 @@ export async function generateChatResponse(
   }
 
   return { content: aiContent, messageId };
+  } catch (err) {
+    console.error("[generateChatResponse]", err);
+    return { content: "Something went wrong", messageId: null };
+  }
 }
 
 /**
@@ -123,33 +131,47 @@ export async function addExpenseFromChat(
   amount: number,
   category: string = "other"
 ): Promise<{ error: string | null; success: boolean }> {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", success: false };
+  try {
+    if (!channelId?.trim()) return { error: "Channel ID is required", success: false };
+    if (!description?.trim()) return { error: "Description is required", success: false };
+    if (typeof amount !== "number" || amount <= 0) return { error: "Amount must be a positive number", success: false };
 
-  const sb = createAdminClient();
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", success: false };
 
-  // Get channel to find event_id
-  const { data: channel } = await sb
-    .from("channels")
-    .select("event_id")
-    .eq("id", channelId)
-    .maybeSingle();
+    const sb = createAdminClient();
 
-  if (!channel?.event_id) return { error: "This channel is not linked to an event", success: false };
+    // Get channel to find event_id
+    const { data: channel, error: channelError } = await sb
+      .from("channels")
+      .select("event_id")
+      .eq("id", channelId)
+      .maybeSingle();
 
-  const result = await addExpense(channel.event_id, { description, category, amount });
-  if (result.error) return { error: result.error, success: false };
+    if (channelError) {
+      console.error("[addExpenseFromChat] channel lookup failed:", channelError);
+      return { error: "Something went wrong", success: false };
+    }
 
-  // Post a system message confirming the expense was added
-  await sb.from("messages").insert({
-    channel_id: channelId,
-    user_id: user.id,
-    content: `Added expense: ${description} — $${amount.toFixed(2)} (${category})`,
-    type: "system",
-  });
+    if (!channel?.event_id) return { error: "This channel is not linked to an event", success: false };
 
-  return { error: null, success: true };
+    const result = await addExpense(channel.event_id, { description, category, amount });
+    if (result.error) return { error: result.error, success: false };
+
+    // Post a system message confirming the expense was added
+    await sb.from("messages").insert({
+      channel_id: channelId,
+      user_id: user.id,
+      content: `Added expense: ${description} — $${amount.toFixed(2)} (${category})`,
+      type: "system",
+    });
+
+    return { error: null, success: true };
+  } catch (err) {
+    console.error("[addExpenseFromChat]", err);
+    return { error: "Something went wrong", success: false };
+  }
 }
 
 function fallbackResponse(message: string): string {

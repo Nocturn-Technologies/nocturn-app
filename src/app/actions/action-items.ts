@@ -13,6 +13,7 @@ export interface ActionItem {
 }
 
 export async function getActionItems(): Promise<ActionItem[]> {
+  try {
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -20,15 +21,18 @@ export async function getActionItems(): Promise<ActionItem[]> {
 
   if (!user) return [];
 
-  try {
   const admin = createAdminClient();
 
   // Get user's collectives
-  const { data: membershipsRaw } = await admin
+  const { data: membershipsRaw, error: membershipsError } = await admin
     .from("collective_members")
     .select("collective_id")
     .eq("user_id", user.id)
     .is("deleted_at", null);
+  if (membershipsError) {
+    console.error("[getActionItems] Failed to fetch memberships:", membershipsError);
+    return [];
+  }
   const memberships = membershipsRaw as { collective_id: string }[] | null;
 
   const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];

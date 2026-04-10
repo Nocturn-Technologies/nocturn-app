@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
 import { sendEmail } from "@/lib/email/send";
 
 function sanitizeSubject(str: string): string {
   return str.replace(/[\r\n\t\x00-\x1f]/g, "").slice(0, 200);
+}
+
+function safeCompare(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
 }
 import {
   dayOfHypeEmail,
@@ -14,12 +22,12 @@ import { sendEventReminders } from "@/app/actions/event-reminders";
 
 export async function GET(request: Request) {
   // Verify cron secret (Vercel sets this automatically)
-  const authHeader = request.headers.get("authorization");
+  const authHeader = request.headers.get("authorization") ?? "";
   if (!process.env.CRON_SECRET) {
     console.error("[cron] CRON_SECRET is not set — rejecting request");
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
   }
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (!safeCompare(authHeader, `Bearer ${process.env.CRON_SECRET}`)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -53,7 +61,8 @@ export async function GET(request: Request) {
       .eq("status", "published")
       .is("deleted_at", null)
       .gte("starts_at", todayStart.toISOString())
-      .lt("starts_at", todayEnd.toISOString());
+      .lt("starts_at", todayEnd.toISOString())
+      .limit(500);
 
     for (const event of todayEvents ?? []) {
       // Check if we already sent day-of hype for this event
@@ -78,7 +87,8 @@ export async function GET(request: Request) {
         .from("tickets")
         .select("metadata")
         .eq("event_id", event.id)
-        .in("status", ["paid", "checked_in"]);
+        .in("status", ["paid", "checked_in"])
+        .limit(10000);
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const emails = new Set<string>();
@@ -118,12 +128,13 @@ export async function GET(request: Request) {
       }
 
       // Mark as sent
-      await sb.from("audit_logs").insert({
+      const { error: auditError } = await sb.from("audit_logs").insert({
         action: "day_of_hype_sent",
         record_id: event.id,
         table_name: "events",
         new_data: { count: emails.size },
       });
+      if (auditError) console.error("[cron] Failed to insert day_of_hype_sent audit log:", auditError);
 
       results.dayOfHype += emails.size;
     }
@@ -142,7 +153,8 @@ export async function GET(request: Request) {
       .eq("status", "published")
       .is("deleted_at", null)
       .gte("starts_at", in46hr.toISOString())
-      .lte("starts_at", in48hr.toISOString());
+      .lte("starts_at", in48hr.toISOString())
+      .limit(500);
 
     for (const event of soonEvents ?? []) {
       // Check if already sent
@@ -194,12 +206,13 @@ export async function GET(request: Request) {
         });
       }
 
-      await sb.from("audit_logs").insert({
+      const { error: countdownAuditError } = await sb.from("audit_logs").insert({
         action: "countdown_48hr_sent",
         record_id: event.id,
         table_name: "events",
         new_data: { ticketsSold, totalCap },
       });
+      if (countdownAuditError) console.error("[cron] Failed to insert countdown_48hr_sent audit log:", countdownAuditError);
 
       results.countdown48hr++;
     }
@@ -267,12 +280,13 @@ export async function GET(request: Request) {
           html,
         });
 
-        await sb.from("audit_logs").insert({
+        const { error: nudgeAuditError } = await sb.from("audit_logs").insert({
           action: "inactive_nudge_sent",
           record_id: col.id,
           table_name: "collectives",
           new_data: { collective_id: col.id },
         });
+        if (nudgeAuditError) console.error("[cron] Failed to insert inactive_nudge_sent audit log:", nudgeAuditError);
 
         results.inactiveNudge++;
       }

@@ -96,12 +96,44 @@ export function EventCard({ collectiveName, vibe, data, onChange }: EventCardPro
           <div className="h-px bg-border" />
 
           {/* Date */}
-          <div className="flex items-center gap-3 text-sm">
-            <Calendar className="h-4 w-4 text-nocturn shrink-0" />
-            <span className="text-muted-foreground">
-              {formatDate(data.date)} · {formatTime(data.date)}
-            </span>
-          </div>
+          {editingField === "date" ? (
+            <div className="flex items-center gap-3">
+              <Calendar className="h-4 w-4 text-nocturn shrink-0" />
+              <input
+                type="datetime-local"
+                value={(() => {
+                  const d = data.date;
+                  const year = d.getFullYear();
+                  const month = String(d.getMonth() + 1).padStart(2, "0");
+                  const day = String(d.getDate()).padStart(2, "0");
+                  const hours = String(d.getHours()).padStart(2, "0");
+                  const minutes = String(d.getMinutes()).padStart(2, "0");
+                  return `${year}-${month}-${day}T${hours}:${minutes}`;
+                })()}
+                onChange={(e) => {
+                  const newDate = new Date(e.target.value);
+                  if (!isNaN(newDate.getTime())) {
+                    onChange({ ...data, date: newDate });
+                  }
+                }}
+                onBlur={() => setEditingField(null)}
+                onKeyDown={(e) => e.key === "Enter" && setEditingField(null)}
+                autoFocus
+                className="flex-1 rounded-md border border-border bg-card px-3 py-1 text-sm text-foreground focus:border-nocturn focus:ring-1 focus:ring-nocturn outline-none"
+              />
+            </div>
+          ) : (
+            <button
+              onClick={() => setEditingField("date")}
+              className="flex items-center gap-3 text-sm group"
+            >
+              <Calendar className="h-4 w-4 text-nocturn shrink-0" />
+              <span className="text-muted-foreground">
+                {formatDate(data.date)} · {formatTime(data.date)}
+              </span>
+              <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+            </button>
+          )}
 
           {/* Venue */}
           {editingField === "venue" ? (

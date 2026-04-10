@@ -99,6 +99,7 @@ const PLAYBOOK_MAP: Record<string, PlaybookTask[]> = {
 };
 
 export async function getPlaybookOptions(): Promise<PlaybookOption[]> {
+  try {
   return [
     {
       id: "launch-promote",
@@ -123,6 +124,10 @@ export async function getPlaybookOptions(): Promise<PlaybookOption[]> {
       icon: "megaphone",
     },
   ];
+  } catch (err) {
+    console.error("[getPlaybookOptions]", err);
+    return [];
+  }
 }
 
 /**
@@ -327,8 +332,12 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
         });
 
         if (contentTasks.length > 0) {
-          await admin.from("event_tasks").insert(contentTasks);
-          contentTaskCount = contentTasks.length;
+          const { error: contentInsertErr } = await admin.from("event_tasks").insert(contentTasks);
+          if (contentInsertErr) {
+            console.error("[applyLaunchPlaybook] content task insert error", contentInsertErr);
+          } else {
+            contentTaskCount = contentTasks.length;
+          }
         }
       }
     } catch (contentErr) {

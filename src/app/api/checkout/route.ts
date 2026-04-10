@@ -32,8 +32,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let body: CheckoutBody;
   try {
-    const body: CheckoutBody = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 }
+    );
+  }
+
+  try {
     const { eventId, tierId, quantity, promoCode } = body;
     // Normalize email to lowercase to prevent case-variant free ticket bypass
     const buyerEmail = body.buyerEmail?.trim().toLowerCase();
@@ -139,8 +148,11 @@ export async function POST(request: NextRequest) {
       if (capacityError) {
         console.error("[checkout] Capacity check failed:", capacityError.message);
       }
+      if (capacityCheck?.error) {
+        console.error("[checkout] Capacity check error detail:", capacityCheck.error);
+      }
       return NextResponse.json(
-        { error: capacityCheck?.error || "Failed to check capacity" },
+        { error: capacityCheck?.remaining !== undefined ? "Tickets unavailable" : "Failed to check capacity" },
         { status: capacityCheck?.remaining !== undefined ? 409 : 500 }
       );
     }
@@ -415,13 +427,29 @@ export async function POST(request: NextRequest) {
           ...(promoId && { promoId, promoCode: validatedPromoCode ?? "", promoClaimedQuantity: String(quantity) }),
           ...(referrerToken && { referrerToken }),
           ...(discountCents > 0 && { discountCents: String(discountCents) }),
-          pendingTicketIds: JSON.stringify(pendingTicketIds),
+          // Only include pending IDs if they fit Stripe's 500-char metadata value limit
+          ...(pendingTicketIds.length > 0 && JSON.stringify(pendingTicketIds).length < 490 && {
+            pendingTicketIds: JSON.stringify(pendingTicketIds),
+          }),
         },
         success_url: `${APP_URL}/e/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: cancelUrl,
       });
     } catch (stripeErr) {
       console.error("[checkout] Stripe session creation failed:", stripeErr);
+      // Clean up pending tickets to release reserved capacity
+      if (pendingTicketIds.length > 0) {
+        try {
+          await supabaseAdmin
+            .from("tickets")
+            .delete()
+            .in("id", pendingTicketIds)
+            .eq("status", "pending");
+          console.info(`[checkout] Cleaned up ${pendingTicketIds.length} pending ticket(s) after Stripe failure`);
+        } catch (cleanupErr) {
+          console.error("[checkout] Failed to clean up pending tickets:", cleanupErr);
+        }
+      }
       return NextResponse.json(
         { error: "Payment service temporarily unavailable." },
         { status: 500 }

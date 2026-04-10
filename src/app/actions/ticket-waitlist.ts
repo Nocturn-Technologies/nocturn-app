@@ -9,6 +9,9 @@ import { createAdminClient } from "@/lib/supabase/config";
  */
 export async function joinWaitlist(eventId: string, tierId: string, waitlistEmail?: string) {
   try {
+    if (!eventId?.trim()) return { error: "Event ID is required" };
+    if (!tierId?.trim()) return { error: "Tier ID is required" };
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -66,6 +69,9 @@ export async function joinWaitlist(eventId: string, tierId: string, waitlistEmai
  */
 export async function notifyNextOnWaitlist(eventId: string, tierId: string, count: number = 1) {
   try {
+    if (!eventId?.trim()) return { notified: false, notifiedCount: 0 };
+    if (!tierId?.trim()) return { notified: false, notifiedCount: 0 };
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { notified: false, notifiedCount: 0 };
@@ -161,10 +167,14 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string, coun
         });
 
         // Only mark as notified after email successfully sent
-        await sb
+        const { error: updateError } = await sb
           .from("ticket_waitlist")
           .update({ status: "notified", notified_at: new Date().toISOString() })
           .eq("id", entry.id);
+
+        if (updateError) {
+          console.error(`[waitlist] Failed to update status for ${entry.email}:`, updateError);
+        }
 
         notifiedEmails.push(entry.email);
       } catch (emailErr) {

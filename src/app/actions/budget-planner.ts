@@ -93,10 +93,22 @@ function estimateHotelPerNight(city: string): number {
 }
 
 export async function calculateBudget(input: BudgetInput): Promise<BudgetResult> {
+  const emptyResult: BudgetResult = { totalExpenses: 0, travelEstimate: null, suggestedTiers: [], breakEven: { ticketsNeeded: 0, atPrice: 0 }, scenarios: [], summary: "Something went wrong" };
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { totalExpenses: 0, travelEstimate: null, suggestedTiers: [], breakEven: { ticketsNeeded: 0, atPrice: 0 }, scenarios: [], summary: "Not authenticated" };
+    if (!user) return { ...emptyResult, summary: "Not authenticated" };
+
+    // Input validation
+    if (input.venueCapacity !== undefined && (input.venueCapacity < 1 || input.venueCapacity > 100000)) {
+      return { ...emptyResult, summary: "Venue capacity must be between 1 and 100,000" };
+    }
+    if (input.talentFee !== undefined && input.talentFee < 0) {
+      return { ...emptyResult, summary: "Talent fee cannot be negative" };
+    }
+    if (input.venueCost !== undefined && input.venueCost < 0) {
+      return { ...emptyResult, summary: "Venue cost cannot be negative" };
+    }
 
     let travelEstimate: TravelEstimate | null = null;
 
@@ -233,6 +245,6 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
     };
   } catch (err) {
     console.error("[calculateBudget]", err);
-    return { totalExpenses: 0, travelEstimate: null, suggestedTiers: [], breakEven: { ticketsNeeded: 0, atPrice: 0 }, scenarios: [], summary: "Something went wrong" };
+    return emptyResult;
   }
 }

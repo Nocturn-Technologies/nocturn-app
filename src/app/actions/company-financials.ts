@@ -50,25 +50,35 @@ export type RevenueForecastItem = {
 };
 
 async function getCollectiveIds() {
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { user: null, collectiveIds: [] };
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { user: null, collectiveIds: [] };
 
-  const admin = createAdminClient();
-  const { data: memberships } = await admin
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
+    const admin = createAdminClient();
+    const { data: memberships, error } = await admin
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
 
-  const collectiveIds =
-    (memberships as { collective_id: string }[] | null)?.map(
-      (m) => m.collective_id
-    ) ?? [];
+    if (error) {
+      console.error("[getCollectiveIds] query error:", error.message);
+      return { user, collectiveIds: [] };
+    }
 
-  return { user, collectiveIds };
+    const collectiveIds =
+      (memberships as { collective_id: string }[] | null)?.map(
+        (m) => m.collective_id
+      ) ?? [];
+
+    return { user, collectiveIds };
+  } catch (err) {
+    console.error("[getCollectiveIds] Unexpected error:", err);
+    return { user: null, collectiveIds: [] };
+  }
 }
 
 export async function getCompanyFinancials(): Promise<{
@@ -95,12 +105,17 @@ export async function getCompanyFinancials(): Promise<{
     const admin = createAdminClient();
 
     // Get all settlements for aggregates
-    const { data: settlements } = await admin
+    const { data: settlements, error: settlementsError } = await admin
       .from("settlements")
       .select(
         "gross_revenue, net_revenue, profit, platform_fee, stripe_fees, total_artist_fees, total_costs, event_id"
       )
       .in("collective_id", collectiveIds);
+
+    if (settlementsError) {
+      console.error("[getCompanyFinancials] settlements query error:", settlementsError.message);
+      return { error: "Something went wrong", data: null };
+    }
 
     // Get ticket counts for settled events
     const settledEventIds = (settlements ?? []).map((s) => s.event_id);

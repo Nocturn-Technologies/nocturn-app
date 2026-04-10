@@ -32,6 +32,7 @@ export async function searchCollectives(query: string, myCollectiveId: string) {
       .order("name");
 
     if (query.trim()) {
+      // TODO(audit): replace inline sanitizer with shared sanitizePostgRESTInput() from @/lib/utils + length cap
       // Sanitize input to prevent PostgREST filter injection
       const sanitized = query.replace(/\\/g, "").replace(/[%_.,()'"`]/g, "").trim();
       if (sanitized) {
@@ -40,7 +41,11 @@ export async function searchCollectives(query: string, myCollectiveId: string) {
       }
     }
 
-    const { data } = await builder.limit(20);
+    const { data, error } = await builder.limit(20);
+    if (error) {
+      console.error("[searchCollectives] query error:", error.message);
+      return [];
+    }
     return data ?? [];
   } catch (err) {
     console.error("[searchCollectives]", err);
@@ -175,18 +180,26 @@ export async function getCollabChannels(collectiveId: string) {
     if (!memberCount || memberCount === 0) return [];
 
     // Channels where we're the owner
-    const { data: owned } = await sb
+    const { data: owned, error: ownedError } = await sb
       .from("channels")
       .select("*")
       .eq("collective_id", collectiveId)
       .eq("type", "collab");
 
+    if (ownedError) {
+      console.error("[getCollabChannels] owned query error:", ownedError.message);
+    }
+
     // Channels where we're the partner
-    const { data: partnered } = await sb
+    const { data: partnered, error: partneredError } = await sb
       .from("channels")
       .select("*")
       .eq("partner_collective_id", collectiveId)
       .eq("type", "collab");
+
+    if (partneredError) {
+      console.error("[getCollabChannels] partnered query error:", partneredError.message);
+    }
 
     return [...(owned ?? []), ...(partnered ?? [])];
   } catch (err) {
@@ -206,13 +219,19 @@ export async function inviteToCollab(myCollectiveId: string, email: string) {
       return { error: "Collective ID and email are required" };
     }
 
+    // Normalize + validate email format before anything touches the DB
+    const normalizedEmail = email.toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return { error: "Invalid email address" };
+    }
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
 
     const sb = createAdminClient();
 
-    // Verify user is a member of their collective
+    // Verify user is a member of their collective AND has admin/owner role
     const { data: membership } = await sb
       .from("collective_members")
       .select("role")
@@ -223,12 +242,16 @@ export async function inviteToCollab(myCollectiveId: string, email: string) {
 
     if (!membership) return { error: "Not a member of this collective" };
 
+    if (membership.role !== "admin" && membership.role !== "owner") {
+      return { error: "Only admins and owners can invite collab partners" };
+    }
+
     // Check if already invited
     const { data: existing } = await sb
       .from("invitations")
       .select("id, status")
       .eq("collective_id", myCollectiveId)
-      .eq("email", email.toLowerCase().trim())
+      .eq("email", normalizedEmail)
       .eq("type", "collab")
       .maybeSingle();
 
@@ -246,7 +269,7 @@ export async function inviteToCollab(myCollectiveId: string, email: string) {
     } else {
       const { error } = await sb.from("invitations").insert({
         collective_id: myCollectiveId,
-        email: email.toLowerCase().trim(),
+        email: normalizedEmail,
         role: "collab",
         type: "collab",
         invited_by: user.id,

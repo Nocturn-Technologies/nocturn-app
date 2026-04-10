@@ -46,14 +46,24 @@ export interface NetworkCRMResult {
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 async function getCollectiveIds(userId: string): Promise<string[]> {
-  const admin = createAdminClient();
-  const { data } = await admin
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", userId)
-    .is("deleted_at", null);
+  try {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", userId)
+      .is("deleted_at", null);
 
-  return (data as { collective_id: string }[] | null)?.map((m) => m.collective_id) ?? [];
+    if (error) {
+      console.error("[getCollectiveIds]", error);
+      return [];
+    }
+
+    return (data as { collective_id: string }[] | null)?.map((m) => m.collective_id) ?? [];
+  } catch (err) {
+    console.error("[getCollectiveIds]", err);
+    return [];
+  }
 }
 
 // ── Main Action ────────────────────────────────────────────────────────────────

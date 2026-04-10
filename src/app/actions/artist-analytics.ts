@@ -32,21 +32,30 @@ export async function getArtistPerformanceAnalytics(): Promise<{
     const admin = createAdminClient();
 
     // Get user's active collective
-    const { data: membership } = await admin.from("collective_members")
+    const { data: membership, error: membershipError } = await admin.from("collective_members")
       .select("collective_id")
       .eq("user_id", user.id)
       .is("deleted_at", null)
       .limit(1)
       .maybeSingle();
 
+    if (membershipError) {
+      console.error("[getArtistPerformanceAnalytics] membership lookup failed:", membershipError);
+      return { error: "Something went wrong", artists: [], avgTicketsAcrossAll: 0 };
+    }
     if (!membership) return { error: "No collective found", artists: [], avgTicketsAcrossAll: 0 };
     const collectiveId = (membership as { collective_id: string }).collective_id;
 
     // Get all events for this collective (include metadata for external ticket data)
-    const { data: events } = await admin.from("events")
+    const { data: events, error: eventsError } = await admin.from("events")
       .select("id, metadata")
       .eq("collective_id", collectiveId)
       .is("deleted_at", null);
+
+    if (eventsError) {
+      console.error("[getArtistPerformanceAnalytics] events lookup failed:", eventsError);
+      return { error: "Something went wrong", artists: [], avgTicketsAcrossAll: 0 };
+    }
 
     if (!events || (events as { id: string }[]).length === 0) {
       return { error: null, artists: [], avgTicketsAcrossAll: 0 };

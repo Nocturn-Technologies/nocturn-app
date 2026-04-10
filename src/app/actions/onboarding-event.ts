@@ -44,18 +44,22 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
   const admin = createAdminClient();
 
   // Find the collective by slug
-  const { data: collective } = await admin
+  const { data: collective, error: collectiveError } = await admin
     .from("collectives")
     .select("id")
     .eq("slug", input.collectiveSlug)
     .maybeSingle();
 
+  if (collectiveError) {
+    console.error("[createOnboardingEvent]", collectiveError);
+    return { error: "Something went wrong", eventSlug: null };
+  }
   if (!collective) {
     return { error: "Collective not found.", eventSlug: null };
   }
 
   // Verify user is a member
-  const { data: membership } = await admin
+  const { data: membership, error: memberError } = await admin
     .from("collective_members")
     .select("id")
     .eq("collective_id", collective.id)
@@ -63,6 +67,10 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
     .is("deleted_at", null)
     .maybeSingle();
 
+  if (memberError) {
+    console.error("[createOnboardingEvent]", memberError);
+    return { error: "Something went wrong", eventSlug: null };
+  }
   if (!membership) {
     return { error: "You're not a member of this collective.", eventSlug: null };
   }

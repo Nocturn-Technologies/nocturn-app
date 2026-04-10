@@ -41,13 +41,17 @@ export async function getDiscoverCollectives(opts?: {
   const offset = (page - 1) * perPage;
 
   // Get the user's own collective to exclude it
-  const { data: membership } = await sb
+  const { data: membership, error: membershipError } = await sb
     .from("collective_members")
     .select("collective_id")
     .eq("user_id", user.id)
     .is("deleted_at", null)
     .limit(1)
     .maybeSingle();
+
+  if (membershipError) {
+    console.error("[getDiscoverCollectives] membership query error:", membershipError.message);
+  }
 
   const myCollectiveId = membership?.collective_id;
 
@@ -65,6 +69,7 @@ export async function getDiscoverCollectives(opts?: {
 
   // Search filter
   if (opts?.query?.trim()) {
+    // TODO(audit): replace inline sanitizer with shared sanitizePostgRESTInput() from @/lib/utils + length cap
     const sanitized = opts.query
       .replace(/\\/g, "")
       .replace(/[%_.,()'"`]/g, "")
@@ -98,7 +103,11 @@ export async function getDiscoverCollectives(opts?: {
     .order("created_at", { ascending: false })
     .range(offset, offset + perPage - 1);
 
-  if (error || !collectives) return { collectives: [], total: 0 };
+  if (error) {
+    console.error("[getDiscoverCollectives] collectives query error:", error.message);
+    return { collectives: [], total: 0 };
+  }
+  if (!collectives) return { collectives: [], total: 0 };
 
   // Batch-fetch member counts and event counts for all collectives
   const collectiveIds = collectives.map((c) => c.id);

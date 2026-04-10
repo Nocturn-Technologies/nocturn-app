@@ -102,6 +102,7 @@ export default function MyProfilePage() {
     setLoading(false);
   }
 
+  // TODO(audit): path traversal via ext from file.name — derive ext from validated file.type MIME instead. Also move validation to server action.
   async function uploadFile(file: File, path: string): Promise<string | null> {
     const { error } = await supabase.storage
       .from("marketplace")
@@ -200,8 +201,26 @@ export default function MyProfilePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-nocturn" />
+      <div className="space-y-6 max-w-2xl animate-in fade-in duration-300">
+        <div className="space-y-2">
+          <div className="h-7 w-36 rounded-lg bg-muted animate-pulse" />
+          <div className="h-4 w-48 rounded-lg bg-muted animate-pulse" />
+        </div>
+        <div className="rounded-xl border border-border p-6 space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="h-20 w-20 rounded-full bg-muted animate-pulse shrink-0" />
+            <div className="space-y-2 flex-1">
+              <div className="h-5 w-32 rounded bg-muted animate-pulse" />
+              <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+            <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+            <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+          </div>
+          <div className="h-10 w-28 rounded-md bg-muted animate-pulse ml-auto" />
+        </div>
       </div>
     );
   }

@@ -59,6 +59,11 @@ export default async function DashboardPage() {
   let financialPulse: Awaited<ReturnType<typeof getFinancialPulse>> | null = null;
   let actionItems: Awaited<ReturnType<typeof getActionItems>> = [];
   let myTasksData: Record<string, unknown>[] = [];
+  // Setup checklist data
+  let totalEventsCount = 0;
+  let hasTicketTiers = false;
+  let hasPublishedEvent = false;
+  let totalTicketsSold = 0;
 
   if (collectiveIds.length > 0) {
     // Fire ALL queries at once — not sequentially
@@ -71,6 +76,9 @@ export default async function DashboardPage() {
       pulseResult,
       actionItemsResult,
       myTasksResult,
+      totalEventsResult,
+      ticketTiersResult,
+      publishedEventsResult,
     ] = await Promise.all([
       // Upcoming count
       admin
@@ -123,6 +131,27 @@ export default async function DashboardPage() {
 
       // My tasks (catch individually to prevent entire page crash)
       getMyTasks(5).catch((err) => { console.error("[dashboard] getMyTasks failed:", err); return [] as Record<string, unknown>[]; }),
+
+      // Setup checklist: total events (any status)
+      admin
+        .from("events")
+        .select("*", { count: "exact", head: true })
+        .in("collective_id", collectiveIds)
+        .is("deleted_at", null),
+
+      // Setup checklist: any event with ticket tiers
+      admin
+        .from("ticket_tiers")
+        .select("id, events!inner(collective_id)", { count: "exact", head: true })
+        .in("events.collective_id", collectiveIds),
+
+      // Setup checklist: any published event
+      admin
+        .from("events")
+        .select("*", { count: "exact", head: true })
+        .in("collective_id", collectiveIds)
+        .eq("status", "published")
+        .is("deleted_at", null),
     ]);
 
     upcomingCount = upcomingResult.count ?? 0;
@@ -153,6 +182,12 @@ export default async function DashboardPage() {
       (sum: number, t: { price_paid: unknown }) => sum + (Number(t.price_paid) || 0),
       0
     );
+
+    // Setup checklist data
+    totalEventsCount = totalEventsResult.count ?? 0;
+    hasTicketTiers = (ticketTiersResult.count ?? 0) > 0;
+    hasPublishedEvent = (publishedEventsResult.count ?? 0) > 0;
+    totalTicketsSold = totalAttendees; // totalAttendees is already paid/checked_in tickets
   }
 
   // ── AI Briefing loads AFTER the page renders (streamed in) ──
@@ -171,6 +206,10 @@ export default async function DashboardPage() {
       financialPulse={financialPulse}
       briefing={[]}
       collectiveId={collectiveId}
+      totalEventsCount={totalEventsCount}
+      hasTicketTiers={hasTicketTiers}
+      hasPublishedEvent={hasPublishedEvent}
+      totalTicketsSold={totalTicketsSold}
       actionItems={actionItems}
       myTasks={myTasksData.map((t: Record<string, unknown>) => ({
         id: t.id as string,

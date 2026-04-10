@@ -64,8 +64,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // TODO(audit): client sends arbitrary prompt bypassing server-side generatePosterPrompt. Require HMAC-signed prompt or regenerate server-side.
+  let prompt: string;
   try {
-    const { prompt } = await request.json();
+    const body = await request.json();
+    prompt = body.prompt;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  try {
     if (typeof prompt !== "string" || prompt.length > 2000) {
       return NextResponse.json({ error: "Invalid or too-long prompt (max 2000 chars)" }, { status: 400 });
     }
@@ -117,7 +125,7 @@ export async function POST(request: NextRequest) {
 
     if (!imageUrl) {
       return NextResponse.json(
-        { error: "Image generation failed. Check your Replicate API token and billing." },
+        { error: "Poster generation failed" },
         { status: 500 }
       );
     }

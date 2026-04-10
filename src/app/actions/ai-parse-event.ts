@@ -45,6 +45,7 @@ export async function parseEventDetails(
   message: string,
   existingData: Partial<ParsedEventDetails> = {}
 ): Promise<{ parsed: ParsedEventDetails; reply: string }> {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { parsed: {}, reply: "Not authenticated" };
@@ -52,7 +53,7 @@ export async function parseEventDetails(
   const { success: rlOk } = await rateLimitStrict(`ai-parse:${user.id}`, 20, 60_000);
   if (!rlOk) return { parsed: existingData as ParsedEventDetails, reply: "Too many requests. Please wait a moment." };
 
-  if (!message.trim()) return { parsed: existingData as ParsedEventDetails, reply: "I didn't catch that. Try telling me your event details." };
+  if (!message?.trim()) return { parsed: existingData as ParsedEventDetails, reply: "I didn't catch that. Try telling me your event details." };
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   const localParsed = localParse(message, existingData);
@@ -128,6 +129,10 @@ Today is ${new Date().toISOString().split("T")[0]}. "10pm"="22:00". Assume PM fo
   }
 
   return { parsed: merged, reply: generateReply(merged, localParsed) };
+  } catch (err) {
+    console.error("[parseEventDetails]", err);
+    return { parsed: existingData as ParsedEventDetails, reply: "Something went wrong. Try again." };
+  }
 }
 
 function stripEmpty(obj: Record<string, unknown>): Record<string, unknown> {

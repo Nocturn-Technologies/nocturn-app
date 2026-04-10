@@ -49,6 +49,9 @@ export async function getTicketPricingSuggestion(input: {
 
     // Find events in the same city within ±7 days of the target date
     const targetDate = new Date(input.date);
+    if (isNaN(targetDate.getTime())) {
+      return { error: "Invalid date format. Expected YYYY-MM-DD.", pricing: null };
+    }
     const weekBefore = new Date(targetDate.getTime() - 7 * 86400000).toISOString();
     const weekAfter = new Date(targetDate.getTime() + 7 * 86400000).toISOString();
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 const torontoArtists = [
   { name: "deadmau5", genre: ["progressive house", "electro house", "techno"], instagram: "@deadmau5", soundcloud: "https://soundcloud.com/deadmau5", spotify: "https://open.spotify.com/artist/2CIMQHirSU0MQqyYHq0eOx", booking_email: null, default_fee: 50000, bio: "Grammy-nominated electronic music producer from Toronto. One of the biggest names in dance music." },
@@ -55,6 +56,12 @@ export async function POST() {
       return NextResponse.json({ error: "Not authorized" }, { status: 403 });
     }
 
+    // Rate limit: 1 request per minute
+    const { success: rateLimitOk } = await rateLimitStrict(`seed-artists:${user.id}`, 1, 60_000);
+    if (!rateLimitOk) {
+      return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+    }
+
     const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
@@ -79,6 +86,7 @@ export async function POST() {
       });
 
       if (error) {
+        console.error(`[seed-artists] Failed to insert "${artist.name}":`, error);
         skipped++;
       } else {
         inserted++;

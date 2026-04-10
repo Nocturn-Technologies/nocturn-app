@@ -9,18 +9,24 @@ import { escapeHtml } from "@/lib/html";
  * Designed to be called by a cron job or manual trigger.
  */
 export async function sendEventReminders() {
+  try {
   const sb = createAdminClient();
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
   // Find events starting in the next 24 hours that haven't had reminders sent
-  const { data: events } = await sb
+  const { data: events, error: eventsError } = await sb
     .from("events")
     .select("id, title, slug, starts_at, doors_at, metadata, collectives(name, slug), venues(name, address, city)")
     .in("status", ["published", "upcoming"])
     .is("deleted_at", null)
     .gte("starts_at", now.toISOString())
     .lte("starts_at", tomorrow.toISOString());
+
+  if (eventsError) {
+    console.error("[sendEventReminders] events query error:", eventsError.message);
+    return { sent: 0, events: 0 };
+  }
 
   if (!events || events.length === 0) {
     return { sent: 0, events: 0 };
@@ -44,11 +50,16 @@ export async function sendEventReminders() {
     }
 
     // Get all ticket holder emails
-    const { data: tickets } = await sb
+    const { data: tickets, error: ticketsError } = await sb
       .from("tickets")
       .select("metadata")
       .eq("event_id", event.id)
       .in("status", ["paid", "checked_in"]);
+
+    if (ticketsError) {
+      console.error(`[sendEventReminders] tickets query error for event ${event.id}:`, ticketsError.message);
+      continue;
+    }
 
     const emails = new Set<string>();
     for (const ticket of tickets ?? []) {
@@ -120,13 +131,21 @@ export async function sendEventReminders() {
     eventsProcessed++;
 
     // Mark reminders as sent
-    await sb
+    const { error: updateError } = await sb
       .from("events")
       .update({
         metadata: { ...meta, reminders_sent: true, reminders_sent_at: new Date().toISOString() },
       })
       .eq("id", event.id);
+
+    if (updateError) {
+      console.error(`[sendEventReminders] failed to mark reminders sent for event ${event.id}:`, updateError.message);
+    }
   }
 
   return { sent: totalSent, events: eventsProcessed };
+  } catch (err) {
+    console.error("[sendEventReminders]", err);
+    return { sent: 0, events: 0 };
+  }
 }

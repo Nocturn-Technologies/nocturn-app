@@ -5,63 +5,95 @@ import { createAdminClient } from "@/lib/supabase/config";
 import { revalidatePath } from "next/cache";
 
 async function verifyTierOwnership(userId: string, tierId: string) {
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
 
-  const { data: tier } = await admin
-    .from("ticket_tiers")
-    .select("id, event_id")
-    .eq("id", tierId)
-    .maybeSingle();
+    const { data: tier, error: tierError } = await admin
+      .from("ticket_tiers")
+      .select("id, event_id")
+      .eq("id", tierId)
+      .maybeSingle();
 
-  if (!tier) return { error: "Tier not found.", tier: null, eventId: null };
+    if (tierError) {
+      console.error("[verifyTierOwnership] tier lookup error:", tierError);
+      return { error: "Failed to verify tier.", tier: null, eventId: null };
+    }
+    if (!tier) return { error: "Tier not found.", tier: null, eventId: null };
 
-  const { data: event } = await admin
-    .from("events")
-    .select("id, collective_id")
-    .eq("id", tier.event_id)
-    .maybeSingle();
+    const { data: event, error: eventError } = await admin
+      .from("events")
+      .select("id, collective_id")
+      .eq("id", tier.event_id)
+      .maybeSingle();
 
-  if (!event) return { error: "Event not found.", tier: null, eventId: null };
+    if (eventError) {
+      console.error("[verifyTierOwnership] event lookup error:", eventError);
+      return { error: "Failed to verify event.", tier: null, eventId: null };
+    }
+    if (!event) return { error: "Event not found.", tier: null, eventId: null };
 
-  const { data: memberships } = await admin
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", userId)
-    .is("deleted_at", null);
+    const { data: memberships, error: memberError } = await admin
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", userId)
+      .is("deleted_at", null);
 
-  const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
+    if (memberError) {
+      console.error("[verifyTierOwnership] membership lookup error:", memberError);
+      return { error: "Failed to verify permissions.", tier: null, eventId: null };
+    }
 
-  if (!collectiveIds.includes(event.collective_id)) {
-    return { error: "You don't have permission to manage this tier.", tier: null, eventId: null };
+    const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
+
+    if (!collectiveIds.includes(event.collective_id)) {
+      return { error: "You don't have permission to manage this tier.", tier: null, eventId: null };
+    }
+
+    return { error: null, tier, eventId: tier.event_id };
+  } catch (err) {
+    console.error("[verifyTierOwnership]", err);
+    return { error: "Something went wrong", tier: null, eventId: null };
   }
-
-  return { error: null, tier, eventId: tier.event_id };
 }
 
 async function verifyEventOwnership(userId: string, eventId: string) {
-  const admin = createAdminClient();
+  try {
+    const admin = createAdminClient();
 
-  const { data: event } = await admin
-    .from("events")
-    .select("id, collective_id")
-    .eq("id", eventId)
-    .maybeSingle();
+    const { data: event, error: eventError } = await admin
+      .from("events")
+      .select("id, collective_id")
+      .eq("id", eventId)
+      .maybeSingle();
 
-  if (!event) return { error: "Event not found." };
+    if (eventError) {
+      console.error("[verifyEventOwnership] event lookup error:", eventError);
+      return { error: "Failed to verify event." };
+    }
+    if (!event) return { error: "Event not found." };
 
-  const { data: memberships } = await admin
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", userId)
-    .is("deleted_at", null);
+    const { data: memberships, error: memberError } = await admin
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", userId)
+      .is("deleted_at", null);
 
-  const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
+    if (memberError) {
+      console.error("[verifyEventOwnership] membership lookup error:", memberError);
+      return { error: "Failed to verify permissions." };
+    }
 
-  if (!collectiveIds.includes(event.collective_id)) {
-    return { error: "You don't have permission to manage this event." };
+    const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
+
+    if (!collectiveIds.includes(event.collective_id)) {
+      return { error: "You don't have permission to manage this event." };
+    }
+
+    return { error: null };
+  } catch (err) {
+    console.error("[verifyEventOwnership]", err);
+    return { error: "Something went wrong" };
   }
-
-  return { error: null };
 }
 
 export async function updateTicketTier(
@@ -79,6 +111,7 @@ export async function updateTicketTier(
     if (!tierId?.trim()) return { error: "Tier ID is required." };
 
     // Validate inputs
+    if (data.name == null) return { error: "Tier name is required." };
     const trimmedName = data.name.trim();
     if (!trimmedName) return { error: "Tier name is required." };
     if (trimmedName.length > 100) return { error: "Tier name must be under 100 characters." };
@@ -168,6 +201,7 @@ export async function createTicketTier(
     if (!eventId?.trim()) return { error: "Event ID is required." };
 
     // Validate inputs
+    if (data.name == null) return { error: "Tier name is required." };
     const trimmedName = data.name.trim();
     if (!trimmedName) return { error: "Tier name is required." };
     if (trimmedName.length > 100) return { error: "Tier name must be under 100 characters." };

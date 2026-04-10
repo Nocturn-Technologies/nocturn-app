@@ -121,8 +121,26 @@ export default function InquiriesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-nocturn" />
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="space-y-2">
+          <div className="h-7 w-28 rounded-lg bg-muted animate-pulse" />
+          <div className="h-4 w-44 rounded-lg bg-muted animate-pulse" />
+        </div>
+        <div className="space-y-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-4 w-28 rounded-lg bg-muted animate-pulse" />
+                  <div className="h-3 w-36 rounded-lg bg-muted animate-pulse" />
+                </div>
+                <div className="h-5 w-14 rounded-full bg-muted animate-pulse" />
+              </div>
+              <div className="h-12 w-full rounded-lg bg-muted animate-pulse" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

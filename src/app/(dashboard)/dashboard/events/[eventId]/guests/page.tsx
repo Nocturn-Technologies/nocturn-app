@@ -27,6 +27,7 @@ import {
   removeGuest,
   type Guest,
 } from "@/app/actions/guest-list";
+import { createClient } from "@/lib/supabase/client";
 
 const statusConfig: Record<
   string,
@@ -64,6 +65,7 @@ export default function GuestListPage() {
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // Form state
   const [name, setName] = useState("");
@@ -76,11 +78,29 @@ export default function GuestListPage() {
     loadGuests();
   }, [eventId]);
 
+  // Real-time updates for concurrent door staff (#31)
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`guest-list-${eventId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "guest_list", filter: `event_id=eq.${eventId}` }, () => {
+        loadGuests();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [eventId]);
+
   async function loadGuests() {
     setLoading(true);
-    const data = await getGuestList(eventId);
-    setGuests(data);
-    setLoading(false);
+    try {
+      const data = await getGuestList(eventId);
+      setGuests(data);
+      setError(null);
+    } catch {
+      setError("Failed to load guest list");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function resetForm() {
@@ -200,6 +220,16 @@ export default function GuestListPage() {
           </p>
         </div>
       </div>
+
+      {/* Error state */}
+      {error && !loading && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-center space-y-2">
+          <p className="text-sm text-red-400">{error}</p>
+          <button onClick={loadGuests} className="text-xs text-nocturn hover:text-nocturn-light transition-colors">
+            Try again
+          </button>
+        </div>
+      )}
 
       {/* Summary Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

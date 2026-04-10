@@ -58,6 +58,23 @@ export default async function PublicCheckInPage({ params }: Props) {
   const isCheckedIn = typedTicket.status === "checked_in";
   const isPaid = typedTicket.status === "paid";
   const isEventCancelled = event?.status === "cancelled";
+  const isPastEvent = event?.starts_at
+    ? new Date(event.starts_at).getTime() < Date.now()
+    : false;
+
+  const checkedInTime = typedTicket.checked_in_at
+    ? new Date(typedTicket.checked_in_at).toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+
+  const checkedInDate = typedTicket.checked_in_at
+    ? new Date(typedTicket.checked_in_at).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      })
+    : null;
 
   const eventDate = event?.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en-US", {
@@ -130,9 +147,16 @@ export default async function PublicCheckInPage({ params }: Props) {
           </div>
         )}
 
+        {/* Past event banner */}
+        {isPastEvent && !isEventCancelled && (
+          <div className="rounded-xl border-2 border-amber-500/30 bg-amber-500/10 px-5 py-4 text-center">
+            <p className="text-sm font-semibold text-amber-400">This event has already passed.</p>
+          </div>
+        )}
+
         {/* Ticket Summary Card */}
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
-          <div className="bg-nocturn px-6 py-5">
+          <div className={`px-6 py-5 ${isCheckedIn ? "bg-amber-600" : isPaid ? "bg-green-600" : "bg-red-600"}`}>
             <h1 className="text-xl font-bold font-heading text-white">
               {event?.title ?? "Event"}
             </h1>
@@ -146,9 +170,9 @@ export default async function PublicCheckInPage({ params }: Props) {
             <div className="flex items-center justify-center">
               {isCheckedIn ? (
                 <div className="flex flex-col items-center gap-2 py-4">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10">
                     <svg
-                      className="h-8 w-8 text-green-500"
+                      className="h-8 w-8 text-amber-500"
                       fill="none"
                       viewBox="0 0 24 24"
                       strokeWidth={2.5}
@@ -161,20 +185,20 @@ export default async function PublicCheckInPage({ params }: Props) {
                       />
                     </svg>
                   </div>
-                  <p className="text-lg font-semibold text-green-500">
+                  <p className="text-lg font-semibold text-amber-500">
                     Already Checked In
                   </p>
-                  {typedTicket.checked_in_at && (
+                  {checkedInTime && (
                     <p className="text-sm text-muted-foreground">
-                      {typedTicket.checked_in_at ? new Date(typedTicket.checked_in_at).toLocaleString("en-US") : ""}
+                      Checked in at {checkedInTime}{checkedInDate ? ` on ${checkedInDate}` : ""}
                     </p>
                   )}
                 </div>
               ) : isPaid ? (
                 <div className="flex flex-col items-center gap-3 py-4 w-full">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
                     <svg
-                      className="h-8 w-8 text-nocturn"
+                      className="h-8 w-8 text-green-500"
                       fill="none"
                       viewBox="0 0 24 24"
                       strokeWidth={2}
@@ -187,7 +211,7 @@ export default async function PublicCheckInPage({ params }: Props) {
                       />
                     </svg>
                   </div>
-                  <p className="text-base font-medium">Ready to Check In</p>
+                  <p className="text-base font-medium text-green-500">Ready to Check In</p>
                   {canCheckIn && !isEventCancelled ? (
                     <PublicCheckInButton
                       ticketToken={token}
@@ -220,7 +244,7 @@ export default async function PublicCheckInPage({ params }: Props) {
                     Ticket Not Valid
                   </p>
                   <p className="text-sm text-muted-foreground capitalize">
-                    Status: {typedTicket.status}
+                    Status: {typedTicket.status === "refunded" ? "Refunded" : typedTicket.status === "cancelled" ? "Cancelled" : typedTicket.status}
                   </p>
                 </div>
               )}

@@ -17,13 +17,17 @@ export async function addReaction(input: {
     const supabase = createAdminClient();
 
     // Verify the event exists and is public
-    const { data: event } = await supabase
+    const { data: event, error: eventError } = await supabase
       .from("events")
       .select("id")
       .eq("id", input.eventId)
       .is("deleted_at", null)
       .maybeSingle();
 
+    if (eventError) {
+      console.error("[addReaction] event query error:", eventError.message);
+      return { error: "Failed to verify event" };
+    }
     if (!event) return { error: "Event not found" };
 
     const { error } = await supabase

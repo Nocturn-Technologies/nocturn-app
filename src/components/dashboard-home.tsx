@@ -440,41 +440,57 @@ export function DashboardHome(props: DashboardHomeProps) {
                 </span>
               </div>
               <div className="divide-y divide-white/[0.04]">
-                {props.actionItems.map((item) => (
-                  <Link
-                    key={item.id}
-                    href={item.link}
-                    className={`group flex items-center gap-3 px-4 py-3 min-h-[48px] transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06] active:scale-[0.98] ${
-                      item.priority === "urgent"
-                        ? "bg-red-500/[0.04]"
-                        : item.priority === "high"
-                          ? "bg-amber-500/[0.02]"
-                          : ""
-                    }`}
-                  >
-                    <span className="text-base shrink-0">{item.emoji}</span>
-                    <span
-                      className={`text-sm leading-snug flex-1 min-w-0 line-clamp-2 ${
-                        item.priority === "urgent"
-                          ? "text-red-400"
-                          : item.priority === "high"
-                            ? "text-amber-300"
-                            : "text-muted-foreground"
-                      }`}
-                    >
-                      {item.message}
-                    </span>
-                    <ChevronRight
-                      className={`h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 ${
-                        item.priority === "urgent"
-                          ? "text-red-400/60"
-                          : item.priority === "high"
-                            ? "text-amber-400/60"
-                            : "text-muted-foreground/40"
-                      }`}
-                    />
-                  </Link>
-                ))}
+                {props.actionItems.map((item) => {
+                  // Defense-in-depth: only render a <Link> for safe internal paths.
+                  // Anything else (javascript:, data:, external URL, protocol-relative)
+                  // falls back to a non-navigating <div>.
+                  const isSafeInternalLink =
+                    typeof item.link === "string" &&
+                    item.link.startsWith("/") &&
+                    !item.link.startsWith("//") &&
+                    !item.link.includes("\\");
+                  const rowClassName = `group flex items-center gap-3 px-4 py-3 min-h-[48px] transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06] active:scale-[0.98] ${
+                    item.priority === "urgent"
+                      ? "bg-red-500/[0.04]"
+                      : item.priority === "high"
+                        ? "bg-amber-500/[0.02]"
+                        : ""
+                  }`;
+                  const rowBody = (
+                    <>
+                      <span className="text-base shrink-0">{item.emoji}</span>
+                      <span
+                        className={`text-sm leading-snug flex-1 min-w-0 line-clamp-2 ${
+                          item.priority === "urgent"
+                            ? "text-red-400"
+                            : item.priority === "high"
+                              ? "text-amber-300"
+                              : "text-muted-foreground"
+                        }`}
+                      >
+                        {item.message}
+                      </span>
+                      <ChevronRight
+                        className={`h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 ${
+                          item.priority === "urgent"
+                            ? "text-red-400/60"
+                            : item.priority === "high"
+                              ? "text-amber-400/60"
+                              : "text-muted-foreground/40"
+                        }`}
+                      />
+                    </>
+                  );
+                  return isSafeInternalLink ? (
+                    <Link key={item.id} href={item.link} className={rowClassName}>
+                      {rowBody}
+                    </Link>
+                  ) : (
+                    <div key={item.id} className={rowClassName}>
+                      {rowBody}
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -778,22 +794,38 @@ function LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string
             <h2 className="text-xs font-bold uppercase tracking-widest text-nocturn-light">AI Briefing</h2>
           </div>
           <div className="space-y-1.5">
-            {briefing.map((item, i) => (
-              <Link
-                key={i}
-                href={item.link}
-                className={`flex items-start gap-2.5 rounded-lg p-2 -mx-2 transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06] ${
-                  item.priority === "urgent"
-                    ? "text-nocturn-coral"
-                    : item.priority === "high"
-                      ? "text-nocturn-amber"
-                      : "text-muted-foreground"
-                }`}
-              >
-                <span className="text-base shrink-0 mt-0.5">{item.emoji}</span>
-                <span className="text-sm leading-snug">{item.text}</span>
-              </Link>
-            ))}
+            {briefing.map((item, i) => {
+              // Defense-in-depth: the briefing comes from Claude, so even though
+              // the server sanitizes `item.link`, we refuse to render anything
+              // that isn't an internal path here.
+              const isSafeInternalLink =
+                typeof item.link === "string" &&
+                item.link.startsWith("/") &&
+                !item.link.startsWith("//") &&
+                !item.link.includes("\\");
+              const rowClassName = `flex items-start gap-2.5 rounded-lg p-2 -mx-2 transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06] ${
+                item.priority === "urgent"
+                  ? "text-nocturn-coral"
+                  : item.priority === "high"
+                    ? "text-nocturn-amber"
+                    : "text-muted-foreground"
+              }`;
+              const rowBody = (
+                <>
+                  <span className="text-base shrink-0 mt-0.5">{item.emoji}</span>
+                  <span className="text-sm leading-snug">{item.text}</span>
+                </>
+              );
+              return isSafeInternalLink ? (
+                <Link key={i} href={item.link} className={rowClassName}>
+                  {rowBody}
+                </Link>
+              ) : (
+                <div key={i} className={rowClassName}>
+                  {rowBody}
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>

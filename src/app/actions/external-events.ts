@@ -24,6 +24,7 @@ function generateToken(): string {
   return randomUUID().replace(/-/g, "").slice(0, 8);
 }
 
+// TODO(audit): add length caps, eventDate ISO validation, platform enum, ticketsSold/revenue bounds
 export async function addExternalEvent(data: {
   title: string;
   externalUrl: string;
@@ -118,12 +119,17 @@ export async function getPromoterExternalEvents() {
 
     const admin = createAdminClient();
 
-    const { data } = await admin
+    const { data, error } = await admin
       .from("external_events")
       .select("id, title, external_url, platform, event_date, venue_name, promo_links(token, click_count)")
       .eq("promoter_id", user.id)
       .is("deleted_at", null)
       .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("[getPromoterExternalEvents] query error:", error.message);
+      return [];
+    }
 
     return ((data ?? []) as unknown as {
       id: string;

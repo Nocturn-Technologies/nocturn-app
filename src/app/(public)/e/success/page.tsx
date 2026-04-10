@@ -60,10 +60,11 @@ function SuccessContent() {
     // For payment intent redirects (3D Secure), fulfill tickets directly
     if (paymentIntentId && redirectStatus === "succeeded" && !sessionId) {
       setLoading(true);
+      let cancelled = false;
       (async () => {
         try {
-          // Fulfill tickets directly — creates them if they don't exist yet
           const { tickets: fulfilled } = await fulfillPaymentIntent(paymentIntentId);
+          if (cancelled) return;
           if (fulfilled && fulfilled.length > 0) {
             setTickets(fulfilled.map(t => ({
               ticket_token: t.ticket_token,
@@ -74,27 +75,38 @@ function SuccessContent() {
             return;
           }
         } catch {
-          // Fulfillment failed, fall back to polling
+          if (cancelled) return;
         }
 
-        // Fallback: poll for tickets (webhook may have created them)
         let attempts = 0;
         const poll = async () => {
+          if (cancelled) return;
           attempts++;
-          const { tickets: found } = await getTicketsBySessionId(paymentIntentId);
-          if (found && found.length > 0) {
-            setTickets(found);
-            setLoading(false);
-          } else if (attempts < 5) {
-            setTimeout(poll, 2000);
-          } else {
-            setTimedOut(true);
-            setLoading(false);
+          try {
+            const { tickets: found } = await getTicketsBySessionId(paymentIntentId);
+            if (cancelled) return;
+            if (found && found.length > 0) {
+              setTickets(found);
+              setLoading(false);
+            } else if (attempts < 5) {
+              setTimeout(poll, 2000);
+            } else {
+              setTimedOut(true);
+              setLoading(false);
+            }
+          } catch {
+            if (cancelled) return;
+            if (attempts < 5) {
+              setTimeout(poll, 2000);
+            } else {
+              setTimedOut(true);
+              setLoading(false);
+            }
           }
         };
         poll();
       })();
-      return;
+      return () => { cancelled = true; };
     }
 
     if (!sessionId) return;
@@ -269,6 +281,14 @@ function SuccessContent() {
         ) : null}
 
         <div className="pt-4 space-y-3">
+          {!loading && tickets.length > 0 && tickets[0].events && (
+            <Link
+              href={`/ticket/${tickets[0].ticket_token}`}
+              className="inline-flex items-center justify-center rounded-lg border border-border bg-card hover:bg-muted/50 text-foreground font-medium px-6 py-3 transition-colors w-full"
+            >
+              View Your Ticket
+            </Link>
+          )}
           <Link
             href="/"
             className="inline-flex items-center justify-center rounded-lg bg-nocturn hover:bg-nocturn-light text-white font-medium px-6 py-3 transition-colors w-full"

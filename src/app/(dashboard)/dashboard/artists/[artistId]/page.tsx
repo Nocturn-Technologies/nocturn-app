@@ -52,6 +52,7 @@ interface Booking {
 
 export default function ArtistDetailPage() {
   const params = useParams();
+  // TODO(audit): add isValidUUID(artistId) guard here or in a layout.tsx — currently relies solely on RLS
   const artistId = params.artistId as string;
   const supabase = createClient();
 
@@ -89,8 +90,36 @@ export default function ArtistDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      <div className="mx-auto max-w-2xl space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-md bg-muted animate-pulse" />
+          <div className="h-7 w-40 rounded-lg bg-muted animate-pulse" />
+        </div>
+        <Card>
+          <CardContent className="p-4 space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-muted animate-pulse shrink-0" />
+              <div className="space-y-2">
+                <div className="h-6 w-36 rounded-lg bg-muted animate-pulse" />
+                <div className="flex gap-2">
+                  <div className="h-5 w-20 rounded-full bg-muted animate-pulse" />
+                  <div className="h-5 w-20 rounded-full bg-muted animate-pulse" />
+                  <div className="h-5 w-20 rounded-full bg-muted animate-pulse" />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4 text-center space-y-1.5">
+                <div className="h-6 w-10 rounded bg-muted animate-pulse mx-auto" />
+                <div className="h-3 w-20 rounded bg-muted animate-pulse mx-auto" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { MOCK_VENUES } from "@/lib/mock-venues";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -34,6 +35,12 @@ export async function POST() {
       return NextResponse.json({ error: "Not authorized" }, { status: 403 });
     }
 
+    // Rate limit: 1 request per minute
+    const { success: rateLimitOk } = await rateLimitStrict(`seed-venues:${user.id}`, 1, 60_000);
+    if (!rateLimitOk) {
+      return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+    }
+
     const sb = createAdminClient();
 
     const venues = MOCK_VENUES.map((v) => ({
@@ -62,6 +69,7 @@ export async function POST() {
       .select("id, name");
 
     if (error) {
+      console.error("[seed-venues] Upsert failed:", error);
       return NextResponse.json({ error: "Failed to seed venues" }, { status: 500 });
     }
 

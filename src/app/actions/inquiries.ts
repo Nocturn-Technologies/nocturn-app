@@ -24,12 +24,16 @@ export async function getSentInquiries(): Promise<InquiryItem[]> {
 
     const sb = createAdminClient();
 
-    const { data } = await sb.from("marketplace_inquiries")
+    const { data, error: queryError } = await sb.from("marketplace_inquiries")
       .select("id, message, inquiry_type, status, created_at, to_profile_id")
       .eq("from_user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(50);
 
+    if (queryError) {
+      console.error("[getSentInquiries]", queryError);
+      return [];
+    }
     if (!data || data.length === 0) return [];
 
     // Enrich with profile display names
@@ -91,12 +95,16 @@ export async function getReceivedInquiries(): Promise<InquiryItem[]> {
 
     if (!profile) return [];
 
-    const { data } = await sb.from("marketplace_inquiries")
+    const { data, error: queryError } = await sb.from("marketplace_inquiries")
       .select("id, message, inquiry_type, status, created_at, from_user_id")
       .eq("to_profile_id", profile.id)
       .order("created_at", { ascending: false })
       .limit(50);
 
+    if (queryError) {
+      console.error("[getReceivedInquiries]", queryError);
+      return [];
+    }
     if (!data || data.length === 0) return [];
 
     const enriched: InquiryItem[] = [];

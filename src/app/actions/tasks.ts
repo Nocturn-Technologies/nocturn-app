@@ -5,20 +5,33 @@ import { createAdminClient } from "@/lib/supabase/config";
 
 /** Verify user has access to an event via collective membership */
 async function verifyEventAccess(userId: string, eventId: string): Promise<boolean> {
-  const admin = createAdminClient();
-  const { data: event } = await admin
-    .from("events")
-    .select("collective_id")
-    .eq("id", eventId)
-    .maybeSingle();
-  if (!event) return false;
-  const { count } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", event.collective_id)
-    .eq("user_id", userId)
-    .is("deleted_at", null);
-  return (count ?? 0) > 0;
+  try {
+    const admin = createAdminClient();
+    const { data: event, error: eventError } = await admin
+      .from("events")
+      .select("collective_id")
+      .eq("id", eventId)
+      .maybeSingle();
+    if (eventError) {
+      console.error("[verifyEventAccess] event lookup error:", eventError);
+      return false;
+    }
+    if (!event) return false;
+    const { count, error: memberError } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", event.collective_id)
+      .eq("user_id", userId)
+      .is("deleted_at", null);
+    if (memberError) {
+      console.error("[verifyEventAccess] membership lookup error:", memberError);
+      return false;
+    }
+    return (count ?? 0) > 0;
+  } catch (err) {
+    console.error("[verifyEventAccess]", err);
+    return false;
+  }
 }
 
 /** Auth + ownership check. Returns userId if authorized, null otherwise. */
@@ -136,12 +149,13 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
     if (error) return { error: "Failed to create tasks" };
 
     // Log activity
-    await admin.from("event_activity").insert({
+    const { error: activityError } = await admin.from("event_activity").insert({
       event_id: eventId,
       user_id: user.id,
       action: "system",
       description: `Applied playbook and generated ${tasks.length} tasks`,
     });
+    if (activityError) console.error("[applyPlaybook] activity log error:", activityError);
 
     return { error: null, taskCount: tasks.length };
   } catch (err) {
@@ -180,6 +194,7 @@ export async function getEventTasks(eventId: string) {
 }
 
 // Create a single task
+// TODO(audit): validate priority/category enums, UUID-validate assignedTo
 export async function createEventTask(input: {
   eventId: string;
   title: string;
@@ -219,12 +234,13 @@ export async function createEventTask(input: {
 
     if (error) return { error: "Failed to create task" };
 
-    await admin.from("event_activity").insert({
+    const { error: activityError } = await admin.from("event_activity").insert({
       event_id: input.eventId,
       user_id: user.id,
       action: "task_update",
       description: `Created task: ${input.title}`,
     });
+    if (activityError) console.error("[createEventTask] activity log error:", activityError);
 
     return { error: null };
   } catch (err) {
@@ -242,6 +258,9 @@ export async function updateTaskStatus(taskId: string, status: string) {
 
     if (!taskId?.trim()) return { error: "Task ID is required" };
     if (!status?.trim()) return { error: "Status is required" };
+
+    const allowedStatuses = ["todo", "in_progress", "done", "blocked"];
+    if (!allowedStatuses.includes(status)) return { error: "Invalid status value" };
 
     const admin = createAdminClient();
 
@@ -269,12 +288,13 @@ export async function updateTaskStatus(taskId: string, status: string) {
     if (error) return { error: "Failed to update task status" };
     if (!task) return { error: "Task not found" };
 
-    await admin.from("event_activity").insert({
+    const { error: activityError } = await admin.from("event_activity").insert({
       event_id: task.event_id,
       user_id: user.id,
       action: "task_update",
       description: `Marked "${task.title}" as ${status}`,
     });
+    if (activityError) console.error("[updateTaskStatus] activity log error:", activityError);
 
     return { error: null };
   } catch (err) {
@@ -284,6 +304,7 @@ export async function updateTaskStatus(taskId: string, status: string) {
 }
 
 // Update task details (assign, due date)
+// TODO(audit): validate priority/category enums, UUID-validate assignedTo
 export async function updateTaskDetails(taskId: string, updates: { assignedTo?: string | null; dueAt?: string | null; description?: string | null }) {
   try {
     const supabase = await createServerClient();
@@ -292,7 +313,8 @@ export async function updateTaskDetails(taskId: string, updates: { assignedTo?: 
     if (!taskId?.trim()) return { error: "Task ID is required" };
 
     const admin = createAdminClient();
-    const { data: taskCheck } = await admin.from("event_tasks").select("event_id, title").eq("id", taskId).maybeSingle();
+    const { data: taskCheck, error: taskCheckError } = await admin.from("event_tasks").select("event_id, title").eq("id", taskId).maybeSingle();
+    if (taskCheckError) return { error: "Failed to verify task" };
     if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
 
     const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -308,12 +330,13 @@ export async function updateTaskDetails(taskId: string, updates: { assignedTo?: 
     if (updates.dueAt !== undefined) changes.push(`due date ${updates.dueAt ? "set" : "cleared"}`);
     if (updates.description !== undefined) changes.push("note updated");
 
-    await admin.from("event_activity").insert({
+    const { error: activityError } = await admin.from("event_activity").insert({
       event_id: taskCheck.event_id,
       user_id: user.id,
       action: "task_update",
       description: `Updated "${taskCheck.title}": ${changes.join(", ")}`,
     });
+    if (activityError) console.error("[updateTaskDetails] activity log error:", activityError);
 
     return { error: null };
   } catch (err) {
@@ -330,7 +353,11 @@ export async function getEventMembers(eventId: string) {
     if (!userId) return [];
 
     const admin = createAdminClient();
-    const { data: event } = await admin.from("events").select("collective_id").eq("id", eventId).maybeSingle();
+    const { data: event, error: eventError } = await admin.from("events").select("collective_id").eq("id", eventId).maybeSingle();
+    if (eventError) {
+      console.error("[getEventMembers] event lookup error:", eventError);
+      return [];
+    }
     if (!event) return [];
 
     const { data, error } = await admin
@@ -339,7 +366,10 @@ export async function getEventMembers(eventId: string) {
       .eq("collective_id", event.collective_id)
       .is("deleted_at", null);
 
-    if (error) return [];
+    if (error) {
+      console.error("[getEventMembers]", error);
+      return [];
+    }
     return (data ?? []).map((m) => {
       const u = m.users as unknown as { full_name: string; email: string } | null;
       return { id: m.user_id, name: u?.full_name ?? u?.email ?? "Unknown", role: m.role };
@@ -423,18 +453,27 @@ export async function getAITaskSuggestions(eventId: string) {
 
     const admin = createAdminClient();
 
-    const { data: event } = await admin
+    const { data: event, error: eventError } = await admin
       .from("events")
       .select("title, starts_at, status")
       .eq("id", eventId)
       .maybeSingle();
 
+    if (eventError) {
+      console.error("[getAITaskSuggestions] event lookup error:", eventError);
+      return [];
+    }
     if (!event) return [];
 
-    const { data: existingTasks } = await admin
+    const { data: existingTasks, error: tasksError } = await admin
       .from("event_tasks")
       .select("title, status")
       .eq("event_id", eventId);
+
+    if (tasksError) {
+      console.error("[getAITaskSuggestions] tasks lookup error:", tasksError);
+      return [];
+    }
 
     const existingTitles = new Set((existingTasks ?? []).map(t => t.title.toLowerCase()));
     const daysUntil = Math.ceil((new Date(event.starts_at).getTime() - Date.now()) / 86400000);
@@ -504,6 +543,8 @@ export async function getMyTasks(limit = 10) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
 
+    const clampedLimit = Math.max(1, Math.min(limit, 100));
+
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("event_tasks")
@@ -512,7 +553,7 @@ export async function getMyTasks(limit = 10) {
       .in("status", ["todo", "in_progress"])
       .is("deleted_at", null)
       .order("due_at", { ascending: true, nullsFirst: false })
-      .limit(limit);
+      .limit(clampedLimit);
 
     if (error) {
       console.error("[getMyTasks]", error);
@@ -532,9 +573,14 @@ export async function getEventDate(eventId: string): Promise<string | null> {
     const userId = await authAndVerifyEvent(eventId);
     if (!userId) return null;
     const admin = createAdminClient();
-    const { data } = await admin.from("events").select("starts_at").eq("id", eventId).maybeSingle();
+    const { data, error } = await admin.from("events").select("starts_at").eq("id", eventId).maybeSingle();
+    if (error) {
+      console.error("[getEventDate]", error);
+      return null;
+    }
     return (data?.starts_at as string) ?? null;
-  } catch {
+  } catch (err) {
+    console.error("[getEventDate]", err);
     return null;
   }
 }

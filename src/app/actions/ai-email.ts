@@ -17,6 +17,9 @@ function sanitizeAIText(text: string): string {
 
 // Generate a post-event recap email using Claude API
 export async function generatePostEventEmail(eventId: string) {
+  try {
+  if (!eventId?.trim()) return { error: "Event ID is required", email: null };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", email: null };
@@ -27,7 +30,7 @@ export async function generatePostEventEmail(eventId: string) {
   const admin = createAdminClient();
 
   // Get event details
-  const { data: eventRaw } = await admin
+  const { data: eventRaw, error: eventError } = await admin
     .from("events")
     .select("*, venues(name, city), collectives(name, slug)")
     .eq("id", eventId)
@@ -35,6 +38,10 @@ export async function generatePostEventEmail(eventId: string) {
     .maybeSingle();
   const event = eventRaw as { id: string; title: string; slug: string; starts_at: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string } | null; [key: string]: unknown } | null;
 
+  if (eventError) {
+    console.error("[generatePostEventEmail] event lookup failed:", eventError);
+    return { error: "Something went wrong", email: null };
+  }
   if (!event) return { error: "Event not found", email: null };
 
   // Verify ownership
@@ -153,11 +160,17 @@ Return JSON with "subject" and "body" fields. The body should be plain text with
       },
     };
   }
+  } catch (err) {
+    console.error("[generatePostEventEmail]", err);
+    return { error: "Something went wrong", email: null };
+  }
 }
 
 // Generate a promo email for an upcoming event
 export async function generatePromoEmail(eventId: string) {
   try {
+    if (!eventId?.trim()) return { error: "Event ID is required", email: null };
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated", email: null };
@@ -167,7 +180,7 @@ export async function generatePromoEmail(eventId: string) {
 
     const admin = createAdminClient();
 
-    const { data: eventRaw2 } = await admin
+    const { data: eventRaw2, error: eventError2 } = await admin
       .from("events")
       .select("*, venues(name, city, address), collectives(name, slug)")
       .eq("id", eventId)
@@ -175,6 +188,10 @@ export async function generatePromoEmail(eventId: string) {
       .maybeSingle();
     const event = eventRaw2 as { id: string; title: string; slug: string; starts_at: string; collective_id?: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string; address: string } | null; [key: string]: unknown } | null;
 
+    if (eventError2) {
+      console.error("[generatePromoEmail] event lookup failed:", eventError2);
+      return { error: "Something went wrong", email: null };
+    }
     if (!event) return { error: "Event not found", email: null };
 
     // Verify ownership — user must be a member of the event's collective

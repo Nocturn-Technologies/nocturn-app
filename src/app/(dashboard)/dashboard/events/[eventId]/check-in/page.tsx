@@ -16,17 +16,53 @@ const QrScanner = dynamic(() => import("@/components/qr-scanner").then(m => m.Qr
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, ScanLine, CheckCircle2, XCircle, Users, RotateCcw, Keyboard } from "lucide-react";
+import { ArrowLeft, ScanLine, CheckCircle2, XCircle, AlertTriangle, Users, RotateCcw, Keyboard, Volume2, VolumeX } from "lucide-react";
 import Link from "next/link";
 import { haptic } from "@/lib/haptics";
 
 type ScanResult = {
-  type: "success" | "error";
+  type: "success" | "error" | "duplicate" | "queued";
   message: string;
   guestName?: string;
   tierName?: string;
   failedToken?: string; // for retry
 };
+
+// --- Audio feedback (Web Audio API) ---
+let audioCtx: AudioContext | null = null;
+
+function playTone(frequency: number, duration: number, type: OscillatorType = "sine") {
+  if (!audioCtx) {
+    audioCtx = new AudioContext();
+  }
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type;
+  osc.frequency.value = frequency;
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration / 1000);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(audioCtx.currentTime);
+  osc.stop(audioCtx.currentTime + duration / 1000);
+}
+
+function playSuccessTone() {
+  playTone(440, 100);
+  setTimeout(() => playTone(660, 100), 120);
+}
+
+function playDuplicateTone() {
+  playTone(500, 200);
+}
+
+function playErrorTone() {
+  playTone(220, 300);
+}
+
+function playQueuedTone() {
+  playTone(880, 100);
+}
 
 export default function CheckInScannerPage() {
   const params = useParams();
@@ -44,13 +80,73 @@ export default function CheckInScannerPage() {
   const [manualToken, setManualToken] = useState("");
   const scannedTokensRef = useRef<Set<string>>(new Set());
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isOnline, setIsOnline] = useState(true);
+  const [offlineQueue, setOfflineQueue] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem(`nocturn_offline_queue_${eventId}`);
+      return stored ? (JSON.parse(stored) as string[]) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [muted, setMuted] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("nocturn_checkin_muted") === "true";
+  });
 
-  // Load initial stats
+  // Unified door list: ticket holders + guest list entries (#25)
+  const [guests, setGuests] = useState<{ name: string; status: string; type: "ticket" | "guest"; email?: string }[]>([]);
+
+  async function loadDoorList() {
+    const supabase = createClient();
+    const [{ data: ticketHolders }, { data: guestEntries }] = await Promise.all([
+      supabase
+        .from("tickets")
+        .select("id, status, metadata, ticket_tiers(name)")
+        .eq("event_id", eventId)
+        .in("status", ["paid", "checked_in"])
+        .order("created_at", { ascending: false })
+        .limit(200),
+      supabase
+        .from("guest_list")
+        .select("id, name, status, email, plus_ones")
+        .eq("event_id", eventId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(200),
+    ]);
+
+    const combined: typeof guests = [];
+    for (const t of ticketHolders || []) {
+      const meta = t.metadata as Record<string, unknown> | null;
+      const email = (meta?.customer_email ?? meta?.buyer_email ?? "") as string;
+      const tier = t.ticket_tiers as unknown as { name: string } | null;
+      combined.push({
+        name: email || tier?.name || "Ticket holder",
+        status: t.status,
+        type: "ticket",
+        email: email || undefined,
+      });
+    }
+    for (const g of guestEntries || []) {
+      combined.push({
+        name: g.name + ((g.plus_ones ?? 0) > 0 ? ` +${g.plus_ones}` : ""),
+        status: g.status ?? "pending",
+        type: "guest",
+        email: g.email || undefined,
+      });
+    }
+    setGuests(combined);
+  }
+
+  // Load initial stats + door list
   useEffect(() => {
     getCheckInStats(eventId).then(setStats).catch((err) => {
       console.error("[check-in] Failed to load initial stats:", err);
       setStatsError("Failed to load stats");
     });
+    loadDoorList();
   }, [eventId]);
 
   // Supabase Realtime: listen for ticket status changes → refresh stats instantly
@@ -67,8 +163,9 @@ export default function CheckInScannerPage() {
           filter: `event_id=eq.${eventId}`,
         },
         () => {
-          // A ticket was updated (likely checked in) — refresh stats
+          // A ticket was updated (likely checked in) — refresh stats + door list (#31)
           getCheckInStats(eventId).then(setStats).catch(() => {});
+          loadDoorList();
         }
       )
       .subscribe();
@@ -85,6 +182,7 @@ export default function CheckInScannerPage() {
         console.error("[check-in] Failed to refresh stats:", err);
         setStatsError("Failed to load stats");
       });
+      loadDoorList();
     }, 30000);
     return () => clearInterval(interval);
   }, [eventId]);
@@ -95,6 +193,50 @@ export default function CheckInScannerPage() {
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
+
+  // Persist offline queue to localStorage
+  useEffect(() => {
+    try {
+      if (offlineQueue.length > 0) {
+        localStorage.setItem(`nocturn_offline_queue_${eventId}`, JSON.stringify(offlineQueue));
+      } else {
+        localStorage.removeItem(`nocturn_offline_queue_${eventId}`);
+      }
+    } catch { /* localStorage full or unavailable */ }
+  }, [offlineQueue, eventId]);
+
+  // Online/offline detection (#35)
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    setIsOnline(navigator.onLine);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  // Flush offline queue when back online (#35)
+  useEffect(() => {
+    if (!isOnline || offlineQueue.length === 0) return;
+    const flush = async () => {
+      const queue = [...offlineQueue];
+      setOfflineQueue([]);
+      for (const token of queue) {
+        try {
+          await checkInTicket(token, eventId);
+        } catch { /* will show in next stats refresh */ }
+      }
+      // Clear localStorage after flushing
+      try { localStorage.removeItem(`nocturn_offline_queue_${eventId}`); } catch {}
+      // Refresh stats after flushing
+      getCheckInStats(eventId).then(setStats).catch(() => {});
+      loadDoorList();
+    };
+    flush();
+  }, [isOnline, offlineQueue, eventId]);
 
   const handleScan = useCallback(
     async (decodedText: string) => {
@@ -131,6 +273,18 @@ export default function CheckInScannerPage() {
           type: "error",
           message: "Invalid QR code — not a valid ticket",
         });
+        if (!muted) playErrorTone();
+        setProcessing(false);
+        clearAfterDelay();
+        return;
+      }
+
+      // If offline, queue for later (#35)
+      if (!navigator.onLine) {
+        setOfflineQueue(prev => [...prev, ticketToken]);
+        setScanResult({ type: "queued", message: `Queued for check-in (offline). ${offlineQueue.length + 1} in queue.` });
+        haptic("light");
+        if (!muted) playQueuedTone();
         setProcessing(false);
         clearAfterDelay();
         return;
@@ -141,6 +295,7 @@ export default function CheckInScannerPage() {
 
       if (result.success) {
         haptic('success');
+        if (!muted) playSuccessTone();
         setScanResult({
           type: "success",
           message: "Checked in!",
@@ -157,19 +312,44 @@ export default function CheckInScannerPage() {
           trackEvent("checkin_scanned", { eventId })
         ).catch(() => {});
       } else {
-        haptic('heavy');
-        // Include the failed token so user can retry
+        // If we went offline during the request, queue instead (#35)
         const isNetworkError = !result.error || result.error === "Something went wrong" || result.error === "Failed to check in ticket. Please try again.";
-        setScanResult({
-          type: "error",
-          message: result.error ?? "Check-in failed",
-          guestName: result.ticket?.guestName,
-          tierName: result.ticket?.tierName,
-          failedToken: isNetworkError ? ticketToken : undefined,
-        });
-        // Allow re-scan of this token if it was a network error
-        if (isNetworkError) {
+        if (!navigator.onLine && isNetworkError) {
+          setOfflineQueue(prev => [...prev, ticketToken]);
+          setScanResult({ type: "queued", message: `Queued for check-in (offline). ${offlineQueue.length + 1} in queue.` });
+          haptic("light");
+          if (!muted) playQueuedTone();
           scannedTokensRef.current.delete(decodedText);
+        } else {
+          // Detect "already checked in" vs real error
+          const errorMsg = result.error ?? "Check-in failed";
+          const isDuplicate = /already checked in/i.test(errorMsg);
+
+          if (isDuplicate) {
+            haptic('medium');
+            if (!muted) playDuplicateTone();
+            setScanResult({
+              type: "duplicate",
+              message: errorMsg,
+              guestName: result.ticket?.guestName,
+              tierName: result.ticket?.tierName,
+            });
+          } else {
+            haptic('heavy');
+            if (!muted) playErrorTone();
+            // Include the failed token so user can retry
+            setScanResult({
+              type: "error",
+              message: errorMsg,
+              guestName: result.ticket?.guestName,
+              tierName: result.ticket?.tierName,
+              failedToken: isNetworkError ? ticketToken : undefined,
+            });
+            // Allow re-scan of this token if it was a network error
+            if (isNetworkError) {
+              scannedTokensRef.current.delete(decodedText);
+            }
+          }
         }
       }
 
@@ -225,7 +405,29 @@ export default function CheckInScannerPage() {
             Door Check-In
           </h1>
         </div>
+        <button
+          onClick={() => {
+            const next = !muted;
+            setMuted(next);
+            localStorage.setItem("nocturn_checkin_muted", String(next));
+          }}
+          className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+          aria-label={muted ? "Unmute scan sounds" : "Mute scan sounds"}
+        >
+          {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
+        </button>
       </div>
+
+      {/* Offline Banner (#35) */}
+      {!isOnline && (
+        <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3 flex items-center gap-2 mb-4">
+          <div className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+          <p className="text-sm text-yellow-400">
+            Offline mode — scans will be queued and synced when back online
+            {offlineQueue.length > 0 && ` (${offlineQueue.length} queued)`}
+          </p>
+        </div>
+      )}
 
       {/* Stats Banner */}
       {statsError && (
@@ -308,12 +510,20 @@ export default function CheckInScannerPage() {
           className={`rounded-2xl border-2 p-5 transition-all animate-fade-in-up ${
             scanResult.type === "success"
               ? "border-green-500/50 bg-green-500/15"
+              : scanResult.type === "duplicate"
+              ? "border-amber-500/50 bg-amber-500/15"
+              : scanResult.type === "queued"
+              ? "border-yellow-500/50 bg-yellow-500/15"
               : "border-red-500/50 bg-red-500/15"
           }`}
         >
           <div className="flex items-center gap-4">
             {scanResult.type === "success" ? (
               <CheckCircle2 className="h-10 w-10 shrink-0 text-green-400" />
+            ) : scanResult.type === "duplicate" ? (
+              <AlertTriangle className="h-10 w-10 shrink-0 text-amber-400" />
+            ) : scanResult.type === "queued" ? (
+              <CheckCircle2 className="h-10 w-10 shrink-0 text-yellow-400" />
             ) : (
               <XCircle className="h-10 w-10 shrink-0 text-red-400" />
             )}
@@ -322,6 +532,10 @@ export default function CheckInScannerPage() {
                 className={`text-xl font-bold ${
                   scanResult.type === "success"
                     ? "text-green-400"
+                    : scanResult.type === "duplicate"
+                    ? "text-amber-400"
+                    : scanResult.type === "queued"
+                    ? "text-yellow-400"
                     : "text-red-400"
                 }`}
               >
@@ -375,6 +589,30 @@ export default function CheckInScannerPage() {
                     hour: "numeric",
                     minute: "2-digit",
                   })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Unified Door List (#25) */}
+      {guests.length > 0 && (
+        <div className="mt-6 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-foreground">Door List</h3>
+            <span className="text-xs text-zinc-500">{guests.length} entries</span>
+          </div>
+          <div className="space-y-1 max-h-[300px] overflow-y-auto rounded-xl border border-white/5 bg-card p-2">
+            {guests.map((g, i) => (
+              <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-800/50 text-sm">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${g.status === "checked_in" ? "bg-green-500" : g.status === "confirmed" || g.status === "paid" ? "bg-blue-500" : "bg-zinc-600"}`} />
+                  <span className="truncate text-foreground">{g.name}</span>
+                  <span className="text-[10px] text-zinc-600 shrink-0">{g.type === "guest" ? "GUEST" : "TICKET"}</span>
+                </div>
+                <span className={`text-xs shrink-0 ${g.status === "checked_in" ? "text-green-400" : "text-zinc-500"}`}>
+                  {g.status === "checked_in" ? "\u2713 In" : g.status}
                 </span>
               </div>
             ))}

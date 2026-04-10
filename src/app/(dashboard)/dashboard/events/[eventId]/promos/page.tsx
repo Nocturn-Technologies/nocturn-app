@@ -35,6 +35,7 @@ export default function PromosPage() {
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   // Form state
@@ -110,8 +111,10 @@ export default function PromosPage() {
   }
 
   async function handleToggle(codeId: string, currentActive: boolean) {
+    setTogglingId(codeId);
     await togglePromoCode(codeId, !currentActive);
     await loadCodes();
+    setTogglingId(null);
   }
 
   function handleCopy(promoCode: string, id: string) {
@@ -356,8 +359,11 @@ export default function PromosPage() {
                     onClick={() => handleToggle(promo.id, promo.is_active)}
                     className="shrink-0"
                     title={promo.is_active ? "Deactivate" : "Activate"}
+                    disabled={togglingId === promo.id}
                   >
-                    {promo.is_active ? (
+                    {togglingId === promo.id ? (
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    ) : promo.is_active ? (
                       <ToggleRight className="h-6 w-6 text-green-500" />
                     ) : (
                       <ToggleLeft className="h-6 w-6 text-muted-foreground" />

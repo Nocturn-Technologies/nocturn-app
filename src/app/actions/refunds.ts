@@ -127,8 +127,8 @@ export async function refundTicket(ticketId: string) {
         const { notifyNextOnWaitlist } = await import("@/app/actions/ticket-waitlist");
         await notifyNextOnWaitlist(ticket.event_id, tierId);
       }
-    } catch {
-      // Waitlist notification failure is non-blocking
+    } catch (waitlistErr) {
+      console.error("[refundTicket] Waitlist notification failed:", waitlistErr);
     }
 
     // Track refund
@@ -139,13 +139,17 @@ export async function refundTicket(ticketId: string) {
         eventId: ticket.event_id,
         amount: pricePaid,
       });
-    } catch {}
+    } catch (trackErr) {
+      console.error("[refundTicket] Tracking failed:", trackErr);
+    }
 
     // Analytics tracking
     try {
       const { trackTicketRefunded } = await import("@/lib/analytics");
       trackTicketRefunded(ticket.event_id, 1, pricePaid);
-    } catch { /* non-critical */ }
+    } catch (analyticsErr) {
+      console.error("[refundTicket] Analytics tracking failed:", analyticsErr);
+    }
 
     // Send refund notification email
     try {
@@ -178,8 +182,8 @@ export async function refundTicket(ticketId: string) {
           `,
         });
       }
-    } catch {
-      // Email failure is non-blocking
+    } catch (emailErr) {
+      console.error("[refundTicket] Email notification failed:", emailErr);
     }
 
     revalidatePath("/dashboard/events"); return { error: null, refundedAmount: pricePaid };

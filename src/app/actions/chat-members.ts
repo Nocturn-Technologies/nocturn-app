@@ -31,11 +31,16 @@ export interface InvitableUser {
 // ---------------------------------------------------------------------------
 
 async function getAuthenticatedUser() {
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    return user;
+  } catch (err) {
+    console.error("[getAuthenticatedUser] Unexpected error:", err);
+    return null;
+  }
 }
 
 async function verifyCollectiveMembership(
@@ -43,14 +48,23 @@ async function verifyCollectiveMembership(
   userId: string,
   collectiveId: string
 ) {
-  const { data } = await sb
-    .from("collective_members")
-    .select("role")
-    .eq("user_id", userId)
-    .eq("collective_id", collectiveId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  return data;
+  try {
+    const { data, error } = await sb
+      .from("collective_members")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("collective_id", collectiveId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (error) {
+      console.error("[verifyCollectiveMembership] query error:", error.message);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.error("[verifyCollectiveMembership] Unexpected error:", err);
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -90,12 +104,17 @@ export async function getChannelMembers(
     if (!membership) return [];
 
     // Fetch channel members joined with users table
-    const { data: members } = await sb
+    const { data: members, error: membersError } = await sb
       .from("channel_members")
       .select(
         "id, channel_id, user_id, role, joined_at, last_seen_at, is_online, users!inner(full_name, email, avatar_url)"
       )
       .eq("channel_id", channelId);
+
+    if (membersError) {
+      console.error("[getChannelMembers] query error:", membersError.message);
+      return [];
+    }
 
     if (!members || members.length === 0) return [];
 
@@ -139,6 +158,7 @@ export async function getChannelMembers(
 /**
  * Add a user to a channel. Caller must be admin or manager of the collective.
  */
+// TODO(audit): validate role against ["member","admin"] enum
 export async function addChannelMember(
   channelId: string,
   userId: string,
@@ -330,6 +350,7 @@ export async function searchInvitableUsers(
       .is("deleted_at", null);
 
     if (query?.trim()) {
+      // TODO(audit): replace inline sanitizer with shared sanitizePostgRESTInput() from @/lib/utils + length cap
       const sanitized = query
         .replace(/\\/g, "")
         .replace(/[%_.,()'"`]/g, "")

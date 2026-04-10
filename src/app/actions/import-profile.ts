@@ -28,7 +28,6 @@ const CANONICAL_DOMAINS = [
   "instagram.com",
   "soundcloud.com",
   "spotify.com",
-  "linktr.ee",
 ];
 
 const ALLOWED_SUBDOMAINS = ["www", "m", "open"];
@@ -52,13 +51,34 @@ function isAllowedUrl(url: string): boolean {
     if (
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
+      hostname.startsWith("127.") ||
       hostname.startsWith("10.") ||
-      hostname.startsWith("172.") ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
       hostname.startsWith("192.168.") ||
       hostname.startsWith("169.254.") ||
       hostname === "0.0.0.0" ||
       hostname.endsWith(".internal") ||
       hostname.endsWith(".local")
+    ) {
+      return false;
+    }
+
+    // Block IPv6 loopback, unique-local (fc00::/7), and link-local (fe80::/10)
+    if (
+      /^\[?::1\]?$/.test(hostname) ||
+      /^\[?fc/i.test(hostname) ||
+      /^\[?fd/i.test(hostname) ||
+      /^\[?fe80/i.test(hostname)
+    ) {
+      return false;
+    }
+
+    // Block alternate IPv4 encodings: hex (0x...), octal (leading 0),
+    // and pure-integer decimal encodings (e.g. 2130706433 === 127.0.0.1)
+    if (
+      /^0x/i.test(hostname) ||
+      /^0\d/.test(hostname) ||
+      /^\d+$/.test(hostname)
     ) {
       return false;
     }
@@ -100,6 +120,7 @@ export async function importProfileFromUrl(
   url: string,
   userType: string
 ): Promise<{ error: string | null; data: ImportedProfileData | null }> {
+  try {
   // Auth check
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -134,15 +155,22 @@ export async function importProfileFromUrl(
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
 
+    // NOTE: redirect following is disabled to prevent SSRF via redirect chains. DNS rebinding is not fully prevented — an additional mitigation would be to resolve the hostname and verify the IP before fetch.
     const response = await fetch(trimmedUrl, {
       signal: controller.signal,
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; NocturnBot/1.0)",
         Accept: "text/html,application/xhtml+xml",
       },
-      redirect: "follow",
+      redirect: "manual",
     });
     clearTimeout(timeout);
+
+    // Reject any 3xx redirect — we do not follow redirects because the
+    // destination would bypass the allowlist and enable SSRF.
+    if (response.status >= 300 && response.status < 400) {
+      return { error: "External redirects are not allowed for security reasons", data: null };
+    }
 
     if (!response.ok) {
       return { error: `Could not load that page (${response.status}). Make sure the profile is public.`, data: null };
@@ -272,6 +300,10 @@ Return ONLY the JSON object. No markdown, no explanation.`;
     return { error: null, data };
   } catch {
     return { error: "Could not parse the profile data. Try entering your info manually.", data: null };
+  }
+  } catch (err) {
+    console.error("[importProfileFromUrl]", err);
+    return { error: "Something went wrong", data: null };
   }
 }
 

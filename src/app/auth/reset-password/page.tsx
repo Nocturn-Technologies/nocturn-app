@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -105,7 +106,7 @@ export default function ResetPasswordPage() {
               className="w-full bg-nocturn hover:bg-nocturn-light"
               disabled={loading}
             >
-              {loading ? "Updating..." : "Update password"}
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Updating...</> : "Update password"}
             </Button>
           </form>
         </CardContent>

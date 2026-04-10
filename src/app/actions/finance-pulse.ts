@@ -23,11 +23,16 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
     const admin = createAdminClient();
 
     // Get user's collectives
-    const { data: memberships } = await admin
+    const { data: memberships, error: membershipsError } = await admin
       .from("collective_members")
       .select("collective_id")
       .eq("user_id", user.id)
       .is("deleted_at", null);
+
+    if (membershipsError) {
+      console.error("[getFinancialPulse] memberships query error:", membershipsError.message);
+      return { revenue: 0, expenses: 0, netPL: 0, outstandingSettlements: 0, recentEvents: [] };
+    }
 
     const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
 
@@ -40,7 +45,7 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
     // Get events this month
-    const { data: events } = await admin
+    const { data: events, error: eventsError } = await admin
       .from("events")
       .select("id, title, starts_at")
       .in("collective_id", collectiveIds)
@@ -48,16 +53,24 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
       .order("starts_at", { ascending: false })
       .limit(10);
 
+    if (eventsError) {
+      console.error("[getFinancialPulse] events query error:", eventsError.message);
+    }
+
     const eventIds = events?.map((e) => e.id) ?? [];
 
     // Get this month's ticket revenue
     let revenue = 0;
     if (eventIds.length > 0) {
-      const { data: tickets } = await admin
+      const { data: tickets, error: ticketsError } = await admin
         .from("tickets")
         .select("price_paid")
         .in("event_id", eventIds)
         .in("status", ["paid", "checked_in"]);
+
+      if (ticketsError) {
+        console.error("[getFinancialPulse] tickets query error:", ticketsError.message);
+      }
 
       revenue = (tickets ?? []).reduce(
         (sum, t) => sum + (Number(t.price_paid) || 0),
@@ -67,11 +80,15 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
 
     // Get this month's expenses from settlements
     let expenses = 0;
-    const { data: settlements } = await admin
+    const { data: settlements, error: settlementsError } = await admin
       .from("settlements")
       .select("total_costs, total_artist_fees, stripe_fees, platform_fee, gross_revenue, profit, events(title)")
       .in("collective_id", collectiveIds)
       .gte("created_at", monthStart);
+
+    if (settlementsError) {
+      console.error("[getFinancialPulse] settlements query error:", settlementsError.message);
+    }
 
     if (settlements && settlements.length > 0) {
       expenses = settlements.reduce(
@@ -89,11 +106,15 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
     const netPL = revenue - expenses;
 
     // Count outstanding (unapproved) settlements
-    const { count: outstandingCount } = await admin
+    const { count: outstandingCount, error: outstandingError } = await admin
       .from("settlements")
       .select("*", { count: "exact", head: true })
       .in("collective_id", collectiveIds)
       .eq("status", "draft");
+
+    if (outstandingError) {
+      console.error("[getFinancialPulse] outstanding settlements query error:", outstandingError.message);
+    }
 
     const outstandingSettlements = outstandingCount ?? 0;
 

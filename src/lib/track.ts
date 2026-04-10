@@ -6,7 +6,7 @@ import { track as vercelTrack } from "@vercel/analytics";
  * Safe to call on server or client — gracefully no-ops if unavailable.
  */
 export function trackEvent(
-  event: "event_created" | "event_published" | "ticket_purchased" | "ticket_free_registered" | "checkin_scanned" | "settlement_generated" | "promo_code_applied" | "email_campaign_sent",
+  event: "event_created" | "event_published" | "ticket_purchased" | "ticket_free_registered" | "checkin_scanned" | "settlement_generated" | "promo_code_applied" | "email_campaign_sent" | "wizard_step",
   properties?: Record<string, string | number | boolean>
 ) {
   try {

@@ -12,13 +12,16 @@ export interface ExternalTicketData {
   ticketUrl: string | null;
 }
 
+// TODO(audit): add length caps, eventDate ISO validation, platform enum, ticketsSold/revenue bounds
 export async function saveExternalTicketData(data: ExternalTicketData): Promise<{ error: string | null }> {
   try {
     const supabase = await createServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return { error: "Not logged in" };
+    if (!user) return { error: "Not authenticated" };
+
+    if (!data.eventId?.trim()) return { error: "Event ID is required" };
 
     if (data.ticketsSold < 0 || data.revenue < 0) {
       return { error: "Numbers cannot be negative" };
@@ -31,20 +34,28 @@ export async function saveExternalTicketData(data: ExternalTicketData): Promise<
     const admin = createAdminClient();
 
     // Verify user owns this event
-    const { data: event } = await admin.from("events")
+    const { data: event, error: eventError } = await admin.from("events")
       .select("id, collective_id, metadata")
       .eq("id", data.eventId)
       .maybeSingle();
 
+    if (eventError) {
+      console.error("[saveExternalTicketData] event query error:", eventError.message);
+      return { error: "Failed to load event" };
+    }
     if (!event) return { error: "Event not found" };
 
-    const { data: membership } = await admin.from("collective_members")
+    const { data: membership, error: memberError } = await admin.from("collective_members")
       .select("id")
       .eq("collective_id", (event as { collective_id: string }).collective_id)
       .eq("user_id", user.id)
       .is("deleted_at", null)
       .maybeSingle();
 
+    if (memberError) {
+      console.error("[saveExternalTicketData] membership query error:", memberError.message);
+      return { error: "Failed to verify membership" };
+    }
     if (!membership) return { error: "Not authorized" };
 
     // Store in event metadata
@@ -65,7 +76,10 @@ export async function saveExternalTicketData(data: ExternalTicketData): Promise<
       .update({ metadata: updatedMeta })
       .eq("id", data.eventId);
 
-    if (error) return { error: "Something went wrong" };
+    if (error) {
+      console.error("[saveExternalTicketData] update error:", error.message);
+      return { error: "Failed to save ticket data" };
+    }
 
     revalidatePath(`/dashboard/events/${data.eventId}`);
     return { error: null };
@@ -88,23 +102,33 @@ export async function getExternalTicketData(eventId: string): Promise<{
     } = await supabase.auth.getUser();
     if (!user) return null;
 
+    if (!eventId?.trim()) return null;
+
     const admin = createAdminClient();
 
     // Verify collective membership
-    const { data: event } = await admin.from("events")
+    const { data: event, error: eventError } = await admin.from("events")
       .select("metadata, collective_id")
       .eq("id", eventId)
       .maybeSingle();
 
+    if (eventError) {
+      console.error("[getExternalTicketData] event query error:", eventError.message);
+      return null;
+    }
     if (!event) return null;
 
-    const { data: membership } = await admin.from("collective_members")
+    const { data: membership, error: memberError } = await admin.from("collective_members")
       .select("id")
       .eq("collective_id", (event as { collective_id: string }).collective_id)
       .eq("user_id", user.id)
       .is("deleted_at", null)
       .maybeSingle();
 
+    if (memberError) {
+      console.error("[getExternalTicketData] membership query error:", memberError.message);
+      return null;
+    }
     if (!membership) return null;
 
     const meta = (event as { metadata: Record<string, unknown> | null }).metadata;

@@ -7,29 +7,38 @@ const VIP_EVENT_THRESHOLD = 5;
 const VIP_SPEND_THRESHOLD = 500;
 
 export async function enrichAttendeeCRM(eventId: string) {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
+  if (!eventId?.trim()) return { error: "Event ID is required" };
+
   const admin = createAdminClient();
 
   // Verify ownership
-  const { data: ev } = await admin
+  const { data: ev, error: evError } = await admin
     .from("events")
     .select("collective_id")
     .eq("id", eventId)
     .is("deleted_at", null)
     .maybeSingle();
+  if (evError) {
+    console.error("[enrichAttendeeCRM] event query error:", evError.message);
+    return { error: "Failed to load event" };
+  }
   if (!ev) return { error: "Event not found" };
-  const { count: memberCount } = await admin
+  const { count: memberCount, error: memberError } = await admin
     .from("collective_members")
     .select("*", { count: "exact", head: true })
     .eq("collective_id", ev.collective_id)
     .eq("user_id", user.id)
     .is("deleted_at", null);
+  if (memberError) {
+    console.error("[enrichAttendeeCRM] membership query error:", memberError.message);
+    return { error: "Failed to verify membership" };
+  }
   if (!memberCount) return { error: "Not authorized" };
-
-  try {
     // 1. Get all paid/checked-in tickets for this event
     const { data: tickets, error: ticketsError } = await admin
       .from("tickets")

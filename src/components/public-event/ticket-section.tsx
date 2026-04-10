@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Minus, Plus, Ticket, Check, AlertCircle, Bell, Loader2 } from "lucide-react";
 import dynamic from "next/dynamic";
 const StripeCheckout = dynamic(() => import("@/components/stripe-checkout").then(m => m.StripeCheckout), { ssr: false, loading: () => <div className="flex items-center justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-[#7B2FF7] border-t-transparent" /></div> });
@@ -15,17 +15,25 @@ interface Tier {
   capacity: number;
   sold?: number;
   remaining?: number;
+  sales_start?: string | null;
+  sales_end?: string | null;
 }
 
 export function TicketSection({
   tiers,
   eventId,
   accentColor = "#7B2FF7",
+  eventTitle,
+  eventDate,
+  eventVenue,
   referrerToken,
 }: {
   tiers: Tier[];
   eventId: string;
   accentColor?: string;
+  eventTitle?: string;
+  eventDate?: string;
+  eventVenue?: string;
   referrerToken?: string;
 }) {
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
@@ -52,6 +60,8 @@ export function TicketSection({
   } | null>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
   const [promoValidating, setPromoValidating] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+  const [liveRemaining, setLiveRemaining] = useState<Record<string, number> | null>(null);
 
   const selected = tiers.find((t) => t.id === selectedTier);
   const baseTicketPrice = selected ? Number(selected.price) : 0;
@@ -79,6 +89,25 @@ export function TicketSection({
     if (!waitlistEmail) return false;
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(waitlistEmail);
   }, [waitlistEmail]);
+
+  // Poll for capacity updates every 30s to catch sold-out-mid-browse (#10)
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/tier-availability?eventId=${eventId}`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (data.remaining && !cancelled) {
+          setLiveRemaining(data.remaining);
+        }
+      } catch { /* non-critical */ }
+    };
+    // First poll after 15s, then every 30s
+    const firstTimeout = setTimeout(poll, 15_000);
+    const interval = setInterval(poll, 30_000);
+    return () => { cancelled = true; clearTimeout(firstTimeout); clearInterval(interval); };
+  }, [eventId]);
 
   async function handleFreeCheckout() {
     if (!selectedTier || !email || emailValid !== true || freeCheckoutLoading) return;
@@ -148,6 +177,9 @@ export function TicketSection({
             quantity={quantity}
             buyerEmail={email}
             totalAmount={total}
+            eventTitle={eventTitle}
+            eventDate={eventDate}
+            eventVenue={eventVenue}
             referrerToken={referrerToken}
             promoCode={promoApplied?.code}
             onAmountResolved={(amount) => setResolvedAmount(amount)}
@@ -179,13 +211,15 @@ export function TicketSection({
           return sortedTiers.map((tier, idx) => {
             const isSelected = selectedTier === tier.id;
             const price = Number(tier.price);
-            const remaining = Math.max(0, tier.remaining ?? tier.capacity);
+            const remaining = liveRemaining ? Math.max(0, liveRemaining[tier.id] ?? tier.remaining ?? tier.capacity) : Math.max(0, tier.remaining ?? tier.capacity);
             const isSoldOut = remaining <= 0;
 
             // A tier is "locked" if it's not sold out AND a cheaper tier before it still has availability
             const isActive = !isSoldOut && !activeFound;
             if (isActive) activeFound = true;
             const isLocked = !isSoldOut && !isActive;
+            const salesNotStarted = tier.sales_start && new Date(tier.sales_start) > new Date();
+            const salesEnded = tier.sales_end && new Date(tier.sales_end) < new Date();
 
             return (
               <div key={tier.id}>
@@ -194,6 +228,7 @@ export function TicketSection({
                     if (isSoldOut) {
                       setWaitlistTierId(waitlistTierId === tier.id ? null : tier.id);
                       setWaitlistJoined(false);
+                      if (email && !waitlistEmail) setWaitlistEmail(email);
                       return;
                     }
                     if (isLocked) return;
@@ -201,19 +236,20 @@ export function TicketSection({
                     setSelectedTier(tier.id);
                     setQuantity(1);
                     setShowCheckout(false);
+                    setShowConfirmation(false);
                     setWaitlistTierId(null);
                   }}
                   className={`w-full rounded-2xl border p-5 text-left transition-all duration-300 ease-out ${
                     isSoldOut
                       ? "border-white/[0.04] bg-white/[0.01] hover:border-amber-500/20 cursor-pointer"
-                      : isLocked
+                      : (isLocked || salesNotStarted || salesEnded)
                         ? "border-white/[0.04] bg-white/[0.01] cursor-not-allowed opacity-40"
                         : isSelected
                           ? "border-2 bg-white/[0.04] backdrop-blur-sm scale-[1.01] shadow-lg shadow-black/20 active:scale-[0.99]"
                           : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12] hover:bg-white/[0.04] active:scale-[0.99]"
                   }`}
                   style={isSelected && !isSoldOut && !isLocked ? { borderColor: accentColor } : undefined}
-                  disabled={isLocked}
+                  disabled={isLocked || !!salesNotStarted || !!salesEnded}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -230,13 +266,17 @@ export function TicketSection({
                           {tier.name}
                         </p>
                         <p className="text-sm text-white/40">
-                          {isSoldOut
-                            ? "Sold out — tap to join waitlist"
-                            : isLocked
-                              ? `Unlocks when ${sortedTiers[idx - 1]?.name ?? "previous tier"} sells out`
-                              : remaining <= 10
-                                ? `Only ${remaining} left`
-                                : `${remaining} remaining`}
+                          {salesNotStarted
+                            ? `Sales start ${new Date(tier.sales_start!).toLocaleDateString("en", { month: "short", day: "numeric" })}`
+                            : salesEnded
+                              ? "Sales ended"
+                              : isSoldOut
+                                ? "Sold out — tap to join waitlist"
+                                : isLocked
+                                  ? `Unlocks when ${sortedTiers[idx - 1]?.name ?? "previous tier"} sells out`
+                                  : remaining <= 10
+                                    ? `Only ${remaining} left`
+                                    : `${remaining} remaining`}
                         </p>
                       </div>
                     </div>
@@ -317,7 +357,7 @@ export function TicketSection({
       {/* Expanded section when tier selected */}
       {selectedTier && (() => {
         const selectedTierData = tiers.find(t => t.id === selectedTier);
-        const remaining = selectedTierData ? (selectedTierData.remaining ?? selectedTierData.capacity) : 10;
+        const remaining = liveRemaining && selectedTierData ? Math.max(0, liveRemaining[selectedTierData.id] ?? selectedTierData.remaining ?? selectedTierData.capacity) : (selectedTierData ? (selectedTierData.remaining ?? selectedTierData.capacity) : 10);
         const maxQuantity = Math.min(10, remaining);
         return (
         <div className="space-y-4 rounded-2xl border border-white/[0.06] bg-white/[0.02] backdrop-blur-sm p-5 animate-fade-in-up">
@@ -326,7 +366,7 @@ export function TicketSection({
             <span className="text-sm font-medium text-white/60">Quantity</span>
             <div className="flex items-center gap-3">
               <button
-                onClick={() => { haptic('light'); setQuantity(Math.max(1, quantity - 1)); }}
+                onClick={() => { haptic('light'); setQuantity(Math.max(1, quantity - 1)); setShowConfirmation(false); }}
                 disabled={quantity <= 1}
                 aria-label="Decrease quantity"
                 className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
@@ -337,7 +377,7 @@ export function TicketSection({
                 {quantity}
               </span>
               <button
-                onClick={() => { haptic('light'); setQuantity(Math.min(maxQuantity, quantity + 1)); }}
+                onClick={() => { haptic('light'); setQuantity(Math.min(maxQuantity, quantity + 1)); setShowConfirmation(false); }}
                 disabled={quantity >= maxQuantity}
                 aria-label="Increase quantity"
                 className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white transition-all duration-200 hover:bg-white/[0.08] hover:border-white/[0.15] disabled:opacity-20"
@@ -458,6 +498,33 @@ export function TicketSection({
         );
       })()}
 
+      {/* Order confirmation */}
+      {showConfirmation && selectedTier && selected && !showCheckout && (
+        <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 space-y-2 animate-fade-in-up">
+          <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Order Summary</p>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-white/70">{quantity}× {selected.name}</span>
+            <span className="text-white font-medium">${subtotal.toFixed(2)}</span>
+          </div>
+          {totalFees > 0 && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-white/40">Service fee</span>
+              <span className="text-white/60">${totalFees.toFixed(2)}</span>
+            </div>
+          )}
+          {promoDiscount > 0 && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-green-400">Promo discount</span>
+              <span className="text-green-400">-${(promoDiscount * quantity).toFixed(2)}</span>
+            </div>
+          )}
+          <div className="border-t border-white/[0.06] pt-2 flex items-center justify-between text-sm font-semibold">
+            <span className="text-white">Total</span>
+            <span className="text-white">${total.toFixed(2)}</span>
+          </div>
+        </div>
+      )}
+
       {/* Sticky CTA */}
       {selectedTier && !showCheckout && (
         <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-white/5 bg-[#09090B]/95 backdrop-blur-lg p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:static sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
@@ -470,10 +537,15 @@ export function TicketSection({
                   handleFreeCheckout();
                   return;
                 }
+                if (!showConfirmation) {
+                  setShowConfirmation(true);
+                  return;
+                }
                 setBuying(true);
                 setTimeout(() => {
                   setShowCheckout(true);
                   setBuying(false);
+                  setShowConfirmation(false);
                 }, 400);
               }}
               disabled={!email || emailValid !== true || buying || freeCheckoutLoading}
@@ -494,6 +566,8 @@ export function TicketSection({
                   ? "Securing your spot..."
                   : isFree
                     ? "RSVP — Free"
+                    : showConfirmation
+                    ? `Confirm & Pay — $${total.toFixed(2)}`
                     : `Get Tickets — $${total.toFixed(2)}`}
             </button>
             {freeCheckoutError && (

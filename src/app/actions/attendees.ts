@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/config";
 
 export interface AttendeeRow {
   email: string;
+  name: string;
   totalEvents: number;
   totalSpent: number;
   ticketCount: number;
@@ -20,14 +21,24 @@ export interface AttendeeStats {
 }
 
 async function getCollectiveIds(userId: string) {
-  const admin = createAdminClient();
-  const { data: memberships } = await admin
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", userId)
-    .is("deleted_at", null);
+  try {
+    const admin = createAdminClient();
+    const { data: memberships, error } = await admin
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", userId)
+      .is("deleted_at", null);
 
-  return (memberships as { collective_id: string }[] | null)?.map((m) => m.collective_id) ?? [];
+    if (error) {
+      console.error("[getCollectiveIds] query error:", error.message);
+      return [];
+    }
+
+    return (memberships as { collective_id: string }[] | null)?.map((m) => m.collective_id) ?? [];
+  } catch (err) {
+    console.error("[getCollectiveIds] Unexpected error:", err);
+    return [];
+  }
 }
 
 export async function getAttendees(collectiveId?: string): Promise<{
@@ -84,11 +95,20 @@ export async function getAttendees(collectiveId?: string): Promise<{
 
     // Get all events for these collectives
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: eventsRaw } = await admin
+    const { data: eventsRaw, error: eventsError } = await admin
       .from("events")
       .select("id, title, starts_at")
       .in("collective_id", collectiveIds)
       .is("deleted_at", null);
+
+    if (eventsError) {
+      console.error("[getAttendees] events query error:", eventsError.message);
+      return {
+        error: "Failed to load events",
+        attendees: [],
+        stats: { totalAttendees: 0, repeatAttendees: 0, totalRevenue: 0 },
+      };
+    }
     const events = eventsRaw as { id: string; title: string; starts_at: string }[] | null;
 
     if (!events || events.length === 0) {
@@ -135,6 +155,7 @@ export async function getAttendees(collectiveId?: string): Promise<{
     const emailMap = new Map<
       string,
       {
+        name: string;
         events: Set<string>;
         totalSpent: number;
         ticketCount: number;
@@ -153,9 +174,11 @@ export async function getAttendees(collectiveId?: string): Promise<{
       if (!email) continue;
 
       const normalized = email.toLowerCase().trim();
+      const name = (meta?.customer_name ?? meta?.buyer_name ?? meta?.full_name ?? "") as string;
 
       if (!emailMap.has(normalized)) {
         emailMap.set(normalized, {
+          name: "",
           events: new Set(),
           totalSpent: 0,
           ticketCount: 0,
@@ -165,6 +188,10 @@ export async function getAttendees(collectiveId?: string): Promise<{
       }
 
       const entry = emailMap.get(normalized)!;
+      // Keep the first non-empty name we find
+      if (!entry.name && name) {
+        entry.name = name;
+      };
       entry.events.add(ticket.event_id);
       entry.totalSpent += Number(ticket.price_paid) || 0;
       entry.ticketCount += 1;
@@ -182,6 +209,7 @@ export async function getAttendees(collectiveId?: string): Promise<{
         const sortedDates = data.dates.sort();
         return {
           email,
+          name: data.name,
           totalEvents: data.events.size,
           totalSpent: data.totalSpent,
           ticketCount: data.ticketCount,
@@ -221,12 +249,14 @@ export async function exportAttendeesCSV(collectiveId?: string): Promise<{
     }
 
     // Sanitize CSV fields to prevent formula injection
+    // TODO(audit): prefix CSV cells starting with =/+/-/@ to prevent Excel formula injection
     function csvSafe(field: string): string {
       const escaped = field.replace(/"/g, '""');
       return `"${escaped}"`;
     }
 
     const headers = [
+      "Name",
       "Email",
       "Events Attended",
       "Total Tickets",
@@ -237,6 +267,7 @@ export async function exportAttendeesCSV(collectiveId?: string): Promise<{
     ];
 
     const rows = result.attendees.map((a) => [
+      csvSafe(a.name),
       csvSafe(a.email),
       csvSafe(a.totalEvents.toString()),
       csvSafe(a.ticketCount.toString()),

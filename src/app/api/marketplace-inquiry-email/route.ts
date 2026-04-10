@@ -1,8 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "crypto";
+
+function safeCompare(a: string, b: string): boolean {
+  const aBuf = Buffer.from(a);
+  const bBuf = Buffer.from(b);
+  if (aBuf.length !== bBuf.length) return false;
+  return timingSafeEqual(aBuf, bBuf);
+}
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-// Use dedicated internal secret — never fall back to service role key
-const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET || process.env.CRON_SECRET || "";
+// SECURITY: never fall back to CRON_SECRET — these serve different trust boundaries
+const INTERNAL_SECRET = (() => {
+  const s = process.env.INTERNAL_API_SECRET;
+  if (s && s.length >= 16) return s;
+  console.error(
+    "[marketplace-inquiry-email] INTERNAL_API_SECRET is not set or is too short (min 16 chars). " +
+    "This route will reject all requests until it is configured. " +
+    "Do NOT reuse CRON_SECRET — these secrets serve different trust boundaries."
+  );
+  return "";
+})();
 
 function escapeHtml(str: string): string {
   return str
@@ -18,10 +35,11 @@ function sanitizeHeaderValue(str: string): string {
 }
 
 export async function POST(req: NextRequest) {
-  // Auth check: Only allow calls from our own server actions (via shared secret)
-  const authHeader = req.headers.get("authorization");
+  // Auth check: Only allow calls from our own server actions (via shared secret).
+  // Use timing-safe comparison to prevent secret extraction via response timing.
+  const authHeader = req.headers.get("authorization") ?? "";
   const expectedToken = `Bearer ${INTERNAL_SECRET}`;
-  if (!INTERNAL_SECRET || authHeader !== expectedToken) {
+  if (!INTERNAL_SECRET || !safeCompare(authHeader, expectedToken)) {
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401 }
@@ -163,7 +181,7 @@ export async function POST(req: NextRequest) {
       console.error("Resend API error:", res.status, errData);
       return NextResponse.json(
         { error: "Failed to send email" },
-        { status: res.status }
+        { status: 500 }
       );
     }
 

@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { isValidUUID } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ export async function analyzeTicketSalesPatterns(
 ): Promise<{ error: string | null; data: SalesPatterns | null }> {
   try {
     if (!collectiveId?.trim()) return { error: "Collective ID is required", data: null };
+    if (!isValidUUID(collectiveId)) return { error: "Invalid collective ID format", data: null };
 
     const supabase = await createServerClient();
     const {
@@ -52,7 +54,7 @@ export async function analyzeTicketSalesPatterns(
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return { error: "You must be logged in.", data: null };
+      return { error: "Not authenticated", data: null };
     }
 
     const admin = createAdminClient();
@@ -163,6 +165,7 @@ export async function generatePromoSchedule(
 ): Promise<{ error: string | null; data: PromoScheduleItem[] | null }> {
   try {
     if (!eventId?.trim()) return { error: "Event ID is required", data: null };
+    if (!isValidUUID(eventId)) return { error: "Invalid event ID format", data: null };
 
     const supabase = await createServerClient();
     const {
@@ -170,7 +173,7 @@ export async function generatePromoSchedule(
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return { error: "You must be logged in.", data: null };
+      return { error: "Not authenticated", data: null };
     }
 
     const admin = createAdminClient();
@@ -286,6 +289,7 @@ export async function getAudienceInsights(
 ): Promise<{ error: string | null; data: AudienceInsights | null }> {
   try {
     if (!collectiveId?.trim()) return { error: "Collective ID is required", data: null };
+    if (!isValidUUID(collectiveId)) return { error: "Invalid collective ID format", data: null };
 
     const supabase = await createServerClient();
     const {
@@ -293,7 +297,7 @@ export async function getAudienceInsights(
     } = await supabase.auth.getUser();
 
     if (!user) {
-      return { error: "You must be logged in.", data: null };
+      return { error: "Not authenticated", data: null };
     }
 
     const admin = createAdminClient();

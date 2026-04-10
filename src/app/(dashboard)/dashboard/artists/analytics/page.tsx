@@ -88,8 +88,17 @@ export default function ArtistAnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center gap-3">
+          <div className="h-11 w-11 rounded-lg bg-muted animate-pulse" />
+          <div className="h-7 w-36 rounded-lg bg-muted animate-pulse" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Card><CardContent className="p-4"><div className="h-20 w-full rounded-lg bg-muted animate-pulse" /></CardContent></Card>
+          <Card><CardContent className="p-4"><div className="h-20 w-full rounded-lg bg-muted animate-pulse" /></CardContent></Card>
+          <Card><CardContent className="p-4"><div className="h-20 w-full rounded-lg bg-muted animate-pulse" /></CardContent></Card>
+        </div>
+        <Card><CardContent className="p-4"><div className="h-48 w-full rounded-lg bg-muted animate-pulse" /></CardContent></Card>
       </div>
     );
   }

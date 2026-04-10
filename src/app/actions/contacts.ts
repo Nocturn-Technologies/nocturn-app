@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
+import { sanitizePostgRESTInput } from "@/lib/utils";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,149 @@ export interface ContactFilters {
 
 const PAGE_SIZE = 25;
 
+/** Allowed roles for industry contacts. */
+const ALLOWED_CONTACT_ROLES = [
+  "artist",
+  "promoter",
+  "venue",
+  "press",
+  "photographer",
+  "other",
+] as const;
+
+type ContactFieldInput = {
+  fullName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  instagram?: string | null;
+  notes?: string | null;
+  role?: string | null;
+};
+
+type ContactFieldOutput = {
+  fullName?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  instagram?: string | null;
+  notes?: string | null;
+  role?: string | null;
+};
+
+/**
+ * Validate + sanitize contact fields shared across addContact, updateContact, and importContacts.
+ * Trims strings, enforces length caps, validates email format, strips unsafe phone chars,
+ * and restricts role to the allowlist.
+ *
+ * Returns `{ error }` on failure or `{ data }` with sanitized fields on success.
+ * Only fields present in `input` (non-undefined) appear in `data`, so callers can distinguish
+ * "not provided" from "explicitly set to null" and build partial update payloads cleanly.
+ */
+function validateContactFields(
+  input: ContactFieldInput
+): { error: string; data: null } | { error: null; data: ContactFieldOutput } {
+  const data: ContactFieldOutput = {};
+
+  if (input.fullName !== undefined) {
+    if (input.fullName === null) {
+      data.fullName = null;
+    } else {
+      const trimmed = String(input.fullName).trim();
+      if (trimmed.length === 0) {
+        return { error: "Full name cannot be empty", data: null };
+      }
+      if (trimmed.length > 200) {
+        return { error: "Full name is too long (max 200 characters)", data: null };
+      }
+      data.fullName = trimmed;
+    }
+  }
+
+  if (input.email !== undefined) {
+    if (input.email === null) {
+      data.email = null;
+    } else {
+      const trimmed = String(input.email).trim().toLowerCase();
+      if (trimmed.length === 0) {
+        data.email = null;
+      } else {
+        if (trimmed.length > 254) {
+          return { error: "Email is too long", data: null };
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+          return { error: "Invalid email address", data: null };
+        }
+        data.email = trimmed;
+      }
+    }
+  }
+
+  if (input.phone !== undefined) {
+    if (input.phone === null) {
+      data.phone = null;
+    } else {
+      // Strip to digits + `+ -()` characters; cap at 50
+      const stripped = String(input.phone).trim().replace(/[^0-9+\-() ]/g, "");
+      if (stripped.length === 0) {
+        data.phone = null;
+      } else if (stripped.length > 50) {
+        return { error: "Phone number is too long (max 50 characters)", data: null };
+      } else {
+        data.phone = stripped;
+      }
+    }
+  }
+
+  if (input.instagram !== undefined) {
+    if (input.instagram === null) {
+      data.instagram = null;
+    } else {
+      const trimmed = String(input.instagram).trim().replace(/^@/, "");
+      if (trimmed.length === 0) {
+        data.instagram = null;
+      } else if (trimmed.length > 100) {
+        return { error: "Instagram handle is too long (max 100 characters)", data: null };
+      } else {
+        data.instagram = trimmed;
+      }
+    }
+  }
+
+  if (input.notes !== undefined) {
+    if (input.notes === null) {
+      data.notes = null;
+    } else {
+      const trimmed = String(input.notes).trim();
+      if (trimmed.length === 0) {
+        data.notes = null;
+      } else if (trimmed.length > 2000) {
+        return { error: "Notes are too long (max 2000 characters)", data: null };
+      } else {
+        data.notes = trimmed;
+      }
+    }
+  }
+
+  if (input.role !== undefined) {
+    if (input.role === null) {
+      data.role = null;
+    } else {
+      const trimmed = String(input.role).trim().toLowerCase();
+      if (trimmed.length === 0) {
+        data.role = null;
+      } else if (!(ALLOWED_CONTACT_ROLES as readonly string[]).includes(trimmed)) {
+        return {
+          error: `Invalid role. Must be one of: ${ALLOWED_CONTACT_ROLES.join(", ")}`,
+          data: null,
+        };
+      } else {
+        data.role = trimmed;
+      }
+    }
+  }
+
+  return { error: null, data };
+}
+
 /** Map a DB row to our Contact interface */
 function rowToContact(row: Record<string, unknown>): Contact {
   return {
@@ -101,33 +245,38 @@ function rowToContact(row: Record<string, unknown>): Contact {
 async function verifyCollectiveAccess(
   collectiveId: string
 ): Promise<{ userId: string; error: null } | { userId: null; error: string }> {
-  const supabase = await createServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  if (!user) {
-    return { userId: null, error: "Not authenticated" };
+    if (!user) {
+      return { userId: null, error: "Not authenticated" };
+    }
+
+    const admin = createAdminClient();
+    const { count, error: memberError } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", collectiveId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+
+    if (memberError) {
+      console.error("[verifyCollectiveAccess] query error:", memberError.message);
+      return { userId: null, error: "Something went wrong" };
+    }
+
+    if (!count || count === 0) {
+      return { userId: null, error: "Not a member of this collective" };
+    }
+
+    return { userId: user.id, error: null };
+  } catch (err) {
+    console.error("[verifyCollectiveAccess] Unexpected error:", err);
+    return { userId: null, error: "Something went wrong" };
   }
-
-  const admin = createAdminClient();
-  const { count } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", collectiveId)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-
-  if (!count || count === 0) {
-    return { userId: null, error: "Not a member of this collective" };
-  }
-
-  return { userId: user.id, error: null };
-}
-
-/** Basic email validation */
-function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 /**
@@ -174,6 +323,8 @@ export async function getContacts(
 }> {
   const empty = { error: null as string | null, contacts: [] as Contact[], totalCount: 0, segmentCounts: {} };
   try {
+  if (!collectiveId?.trim()) return { ...empty, error: "Collective ID is required" };
+
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { ...empty, error: auth.error };
 
@@ -192,10 +343,12 @@ export async function getContacts(
     query = query.eq("contact_type", filters.contactType);
   }
 
-  // Search by name or email
-  if (filters.search) {
-    const term = `%${filters.search}%`;
-    query = query.or(`full_name.ilike.${term},email.ilike.${term}`);
+  // Search by name or email (sanitize to prevent PostgREST injection)
+  if (filters.search?.trim()) {
+    const sanitized = sanitizePostgRESTInput(filters.search);
+    if (sanitized) {
+      query = query.or(`full_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%`);
+    }
   }
 
   // Filter by tags (all provided tags must be present)
@@ -310,6 +463,8 @@ export async function getContactDetail(
   contactId: string
 ): Promise<{ error: string | null; detail: ContactDetail | null }> {
   try {
+  if (!contactId?.trim()) return { error: "Contact ID is required", detail: null };
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -441,6 +596,8 @@ export async function importContacts(
   }
 ): Promise<{ error: string | null; result: ImportResult | null }> {
   try {
+  if (!collectiveId?.trim()) return { error: "Collective ID is required", result: null };
+
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { error: auth.error, result: null };
 
@@ -528,8 +685,27 @@ export async function importContacts(
     const rows = [];
 
     for (const row of chunk) {
-      if (!isValidEmail(row.email)) {
-        result.errors.push(`Invalid email: ${row.email}`);
+      // Shared validation per row: email regex, length caps, role allowlist, phone sanitize
+      const validation = validateContactFields({
+        fullName: row.fullName,
+        email: row.email,
+        phone: row.phone,
+        instagram: row.instagram,
+        role: input.role,
+      });
+
+      if (validation.error !== null) {
+        result.errors.push(
+          `Invalid contact (${row.email || "no email"}): ${validation.error}`
+        );
+        result.skipped++;
+        continue;
+      }
+      const sanitized = validation.data;
+      if (!sanitized.email) {
+        result.errors.push(
+          `Invalid contact (${row.email || "no email"}): email required`
+        );
         result.skipped++;
         continue;
       }
@@ -537,11 +713,11 @@ export async function importContacts(
       rows.push({
         collective_id: collectiveId,
         contact_type: input.contactType,
-        email: row.email,
-        full_name: row.fullName || null,
-        phone: row.phone || null,
-        instagram: row.instagram || null,
-        role: input.role || null,
+        email: sanitized.email,
+        full_name: sanitized.fullName ?? null,
+        phone: sanitized.phone ?? null,
+        instagram: sanitized.instagram ?? null,
+        role: sanitized.role ?? null,
         source: "import",
         source_detail: input.sourceDetail || null,
         tags: input.tags ?? [],
@@ -602,6 +778,8 @@ export async function addContact(
   }
 ): Promise<{ error: string | null; contact: Contact | null }> {
   try {
+  if (!collectiveId?.trim()) return { error: "Collective ID is required", contact: null };
+
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { error: auth.error, contact: null };
 
@@ -609,8 +787,21 @@ export async function addContact(
   const rl = await rateLimitStrict(`add-contact:${auth.userId}`, 20, 60_000);
   if (!rl.success) return { error: "Rate limit exceeded. Try again in a minute.", contact: null };
 
-  const email = data.email?.trim().toLowerCase();
-  if (!email || !isValidEmail(email)) {
+  // Shared validation: trims, length caps, email regex, role allowlist, phone sanitization
+  const validation = validateContactFields({
+    fullName: data.fullName,
+    email: data.email,
+    phone: data.phone,
+    instagram: data.instagram,
+    notes: data.notes,
+    role: data.role,
+  });
+  if (validation.error !== null) {
+    return { error: validation.error, contact: null };
+  }
+  const sanitized = validation.data;
+
+  if (!sanitized.email) {
     return { error: "A valid email is required", contact: null };
   }
 
@@ -621,15 +812,15 @@ export async function addContact(
       {
         collective_id: collectiveId,
         contact_type: data.contactType,
-        email,
-        full_name: data.fullName || null,
-        phone: data.phone || null,
-        instagram: data.instagram || null,
-        role: data.role || null,
+        email: sanitized.email,
+        full_name: sanitized.fullName ?? null,
+        phone: sanitized.phone ?? null,
+        instagram: sanitized.instagram ?? null,
+        role: sanitized.role ?? null,
         source: "manual",
         source_detail: "quick_add",
         tags: data.tags ?? [],
-        notes: data.notes || null,
+        notes: sanitized.notes ?? null,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "collective_id,email", ignoreDuplicates: false }
@@ -665,6 +856,8 @@ export async function updateContact(
   }
 ): Promise<{ error: string | null; contact: Contact | null }> {
   try {
+  if (!contactId?.trim()) return { error: "Contact ID is required", contact: null };
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -690,18 +883,33 @@ export async function updateContact(
   const auth = await verifyCollectiveAccess(existing.collective_id as string);
   if (auth.error) return { error: auth.error, contact: null };
 
+  // Shared validation: trims, length caps, email regex, role allowlist, phone sanitization.
+  // Only the fields the caller provided will be validated + returned.
+  const validation = validateContactFields({
+    fullName: updates.fullName,
+    email: updates.email,
+    phone: updates.phone,
+    instagram: updates.instagram,
+    notes: updates.notes,
+    role: updates.role,
+  });
+  if (validation.error !== null) {
+    return { error: validation.error, contact: null };
+  }
+  const sanitized = validation.data;
+
   // Build update payload — only include provided fields
   const payload: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
   if (updates.tags !== undefined) payload.tags = updates.tags;
-  if (updates.notes !== undefined) payload.notes = updates.notes;
   if (updates.followUpAt !== undefined) payload.follow_up_at = updates.followUpAt;
-  if (updates.fullName !== undefined) payload.full_name = updates.fullName;
-  if (updates.email !== undefined) payload.email = updates.email;
-  if (updates.phone !== undefined) payload.phone = updates.phone;
-  if (updates.instagram !== undefined) payload.instagram = updates.instagram;
-  if (updates.role !== undefined) payload.role = updates.role;
+  if (sanitized.fullName !== undefined) payload.full_name = sanitized.fullName;
+  if (sanitized.email !== undefined) payload.email = sanitized.email;
+  if (sanitized.phone !== undefined) payload.phone = sanitized.phone;
+  if (sanitized.instagram !== undefined) payload.instagram = sanitized.instagram;
+  if (sanitized.notes !== undefined) payload.notes = sanitized.notes;
+  if (sanitized.role !== undefined) payload.role = sanitized.role;
 
   const { data: row, error } = await admin.from("contacts")
     .update(payload)

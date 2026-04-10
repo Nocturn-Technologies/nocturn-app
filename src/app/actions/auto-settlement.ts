@@ -6,13 +6,14 @@ import { createAdminClient } from "@/lib/supabase/config";
 import { enrichAttendeeCRM } from "./crm-enrichment";
 
 export async function generateAutoSettlement(eventId: string) {
+  try {
+  if (!eventId?.trim()) return { error: "Event ID is required" };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
   const admin = createAdminClient();
-
-  try {
     // 1. Get event + collective_id
     const { data: event, error: eventError } = await admin
       .from("events")
@@ -100,10 +101,15 @@ export async function generateAutoSettlement(eventId: string) {
     );
 
     // 5. Fetch expenses
-    const { data: expenses } = await admin
+    const { data: expenses, error: expensesError } = await admin
       .from("expenses")
       .select("amount")
       .eq("event_id", eventId);
+
+    if (expensesError) {
+      console.error("[generateAutoSettlement] expenses query error:", expensesError.message);
+      return { error: "Failed to calculate expenses" };
+    }
 
     const totalExpenses = (expenses ?? []).reduce(
       (sum, e) => sum + (Number(e.amount) || 0),

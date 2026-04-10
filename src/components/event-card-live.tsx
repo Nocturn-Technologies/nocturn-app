@@ -79,7 +79,16 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
       });
   }, [eventId]);
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="mx-3 mt-2 mb-1 rounded-2xl border border-border bg-card overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-3">
+          <div className="h-4 w-4 rounded bg-muted animate-pulse" />
+          <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (

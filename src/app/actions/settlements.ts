@@ -4,10 +4,14 @@ import { revalidatePath } from "next/cache";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
+import { isValidUUID } from "@/lib/utils";
 
 // Generate a settlement for a completed event
 export async function generateSettlement(eventId: string) {
   try {
+  if (!eventId?.trim()) return { error: "Event ID is required" };
+  if (!isValidUUID(eventId)) return { error: "Invalid event ID format" };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -195,15 +199,18 @@ export async function generateSettlement(eventId: string) {
     }
   }
 
-  import("@/lib/track-server").then(({ trackServerEvent }) =>
-    trackServerEvent("settlement_generated", {
+  try {
+    const { trackServerEvent } = await import("@/lib/track-server");
+    await trackServerEvent("settlement_generated", {
       eventId,
       settlementId: settlement.id,
       grossRevenue,
       profit,
       ticketCount,
-    })
-  ).catch(() => {});
+    });
+  } catch (trackErr) {
+    console.error("[generateSettlement] Tracking failed:", trackErr);
+  }
 
   revalidatePath("/dashboard/finance"); return { error: null, settlementId: settlement.id };
   } catch (err) {
@@ -215,6 +222,9 @@ export async function generateSettlement(eventId: string) {
 // Approve a settlement
 export async function approveSettlement(settlementId: string) {
   try {
+  if (!settlementId?.trim()) return { error: "Settlement ID is required" };
+  if (!isValidUUID(settlementId)) return { error: "Invalid settlement ID format" };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
@@ -270,6 +280,9 @@ export async function approveSettlement(settlementId: string) {
 // Get settlement for an event
 export async function getSettlement(eventId: string) {
   try {
+  if (!eventId?.trim()) return { error: "Event ID is required", settlement: null, lines: [] };
+  if (!isValidUUID(eventId)) return { error: "Invalid event ID format", settlement: null, lines: [] };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", settlement: null, lines: [] };
@@ -295,19 +308,27 @@ export async function getSettlement(eventId: string) {
 
   if (!count || count === 0) return { error: "Not authorized", settlement: null, lines: [] };
 
-  const { data: settlement } = await admin
+  const { data: settlement, error: settlementError } = await admin
     .from("settlements")
     .select("*")
     .eq("event_id", eventId)
     .maybeSingle();
 
+  if (settlementError) {
+    console.error("[getSettlement] DB error:", settlementError);
+    return { error: "Something went wrong", settlement: null, lines: [] };
+  }
   if (!settlement) return { settlement: null, lines: [] };
 
-  const { data: lines } = await admin
+  const { data: lines, error: linesError } = await admin
     .from("settlement_lines")
     .select("*")
     .eq("settlement_id", settlement.id)
     .order("created_at");
+
+  if (linesError) {
+    console.error("[getSettlement] Failed to fetch lines:", linesError);
+  }
 
   return { settlement, lines: lines ?? [] };
   } catch (err) {
@@ -327,6 +348,7 @@ export async function addEventExpense(input: {
   // Input validation
   const VALID_EXPENSE_CATEGORIES = ["supply", "venue", "artist", "travel", "marketing", "production", "staff", "other"];
   if (!input.eventId || typeof input.eventId !== "string") return { error: "Invalid event ID" };
+  if (!isValidUUID(input.eventId)) return { error: "Invalid event ID format" };
   if (!VALID_EXPENSE_CATEGORIES.includes(input.category)) return { error: "Invalid expense category" };
   if (!input.description || input.description.length > 500) return { error: "Description is required and must be under 500 characters" };
   if (!Number.isFinite(input.amount) || input.amount <= 0 || input.amount > 1000000) return { error: "Amount must be between $0.01 and $1,000,000" };
@@ -379,20 +401,39 @@ export async function addEventExpense(input: {
 // Get expenses for an event
 export async function getEventExpenses(eventId: string) {
   try {
+  if (!eventId?.trim()) {
+    console.error("[getEventExpenses] Missing event ID");
+    return [];
+  }
+  if (!isValidUUID(eventId)) {
+    console.error("[getEventExpenses] Invalid event ID format");
+    return [];
+  }
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  if (!user) {
+    console.error("[getEventExpenses] Not authenticated");
+    return [];
+  }
 
   const admin = createAdminClient();
 
   // Get event's collective_id
-  const { data: event } = await admin
+  const { data: event, error: eventError } = await admin
     .from("events")
     .select("collective_id")
     .eq("id", eventId)
     .maybeSingle();
 
-  if (!event) return [];
+  if (eventError) {
+    console.error("[getEventExpenses] Failed to look up event:", eventError);
+    return [];
+  }
+  if (!event) {
+    console.error("[getEventExpenses] Event not found:", eventId);
+    return [];
+  }
 
   // Verify user is a member of this collective
   const { count } = await admin
@@ -402,13 +443,21 @@ export async function getEventExpenses(eventId: string) {
     .eq("user_id", user.id)
     .is("deleted_at", null);
 
-  if (!count || count === 0) return [];
+  if (!count || count === 0) {
+    console.error("[getEventExpenses] User not authorized for event:", eventId);
+    return [];
+  }
 
-  const { data } = await admin
+  const { data, error: expensesError } = await admin
     .from("event_expenses")
     .select("*")
     .eq("event_id", eventId)
     .order("created_at", { ascending: false });
+
+  if (expensesError) {
+    console.error("[getEventExpenses] Failed to fetch expenses:", expensesError);
+    return [];
+  }
 
   return data ?? [];
   } catch (err) {

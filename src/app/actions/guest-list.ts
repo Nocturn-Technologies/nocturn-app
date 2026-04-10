@@ -8,34 +8,47 @@ import { DEFAULT_TIMEZONE } from "@/lib/utils";
 
 /** Verify the caller is an admin/member of the collective that owns this event */
 async function verifyEventAccess(eventId: string): Promise<{ error: string | null; userId: string | null }> {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", userId: null };
+  try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", userId: null };
 
-  const admin = createAdminClient();
+    const admin = createAdminClient();
 
-  // Get the event's collective
-  const { data: event } = await admin
-    .from("events")
-    .select("collective_id")
-    .eq("id", eventId)
-    .maybeSingle();
+    // Get the event's collective
+    const { data: event, error: eventError } = await admin
+      .from("events")
+      .select("collective_id")
+      .eq("id", eventId)
+      .maybeSingle();
 
-  if (!event) return { error: "Event not found", userId: null };
+    if (eventError) {
+      console.error("[verifyEventAccess]", eventError);
+      return { error: "Something went wrong", userId: null };
+    }
+    if (!event) return { error: "Event not found", userId: null };
 
-  // Check membership with role verification
-  const { data: membership } = await admin
-    .from("collective_members")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("collective_id", event.collective_id)
-    .in("role", ["admin", "promoter", "door_staff"])
-    .is("deleted_at", null)
-    .maybeSingle();
+    // Check membership with role verification
+    const { data: membership, error: memberError } = await admin
+      .from("collective_members")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("collective_id", event.collective_id)
+      .in("role", ["admin", "promoter", "door_staff"])
+      .is("deleted_at", null)
+      .maybeSingle();
 
-  if (!membership) return { error: "You don't have access to this event", userId: null };
+    if (memberError) {
+      console.error("[verifyEventAccess]", memberError);
+      return { error: "Something went wrong", userId: null };
+    }
+    if (!membership) return { error: "You don't have access to this event", userId: null };
 
-  return { error: null, userId: user.id };
+    return { error: null, userId: user.id };
+  } catch (err) {
+    console.error("[verifyEventAccess]", err);
+    return { error: "Something went wrong", userId: null };
+  }
 }
 
 export interface Guest {
@@ -52,6 +65,7 @@ export interface Guest {
   created_at: string;
 }
 
+// TODO(audit): add name length cap, email format, phone format, plusOnes bounds 0-20
 export async function addGuest(input: {
   eventId: string;
   name: string;
@@ -175,15 +189,24 @@ export async function getGuestList(eventId: string): Promise<Guest[]> {
 
 /** Look up event_id from a guest record and verify access */
 async function verifyGuestAccess(guestId: string): Promise<{ error: string | null }> {
-  const supabase = createAdminClient();
-  const { data: guest } = await supabase
-    .from("guest_list")
-    .select("event_id")
-    .eq("id", guestId)
-    .maybeSingle();
+  try {
+    const supabase = createAdminClient();
+    const { data: guest, error: guestError } = await supabase
+      .from("guest_list")
+      .select("event_id")
+      .eq("id", guestId)
+      .maybeSingle();
 
-  if (!guest) return { error: "Guest not found" };
-  return verifyEventAccess(guest.event_id);
+    if (guestError) {
+      console.error("[verifyGuestAccess]", guestError);
+      return { error: "Something went wrong" };
+    }
+    if (!guest) return { error: "Guest not found" };
+    return verifyEventAccess(guest.event_id);
+  } catch (err) {
+    console.error("[verifyGuestAccess]", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 export async function checkInGuest(guestId: string) {
@@ -221,6 +244,9 @@ export async function updateGuestStatus(
 ) {
   try {
     if (!guestId?.trim()) return { error: "Guest ID is required" };
+
+    const validStatuses = ["pending", "confirmed", "checked_in", "no_show"];
+    if (!validStatuses.includes(status)) return { error: "Invalid status" };
 
     const { error: authError } = await verifyGuestAccess(guestId);
     if (authError) return { error: authError };

@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { isValidUUID } from "@/lib/utils";
 
 export interface ReferralStats {
   userId: string;
@@ -21,6 +22,9 @@ export async function getEventReferralStats(eventId: string): Promise<{
   totalReferrals: number;
 }> {
   try {
+  if (!eventId?.trim()) return { error: "Event ID is required", stats: [], totalReferrals: 0 };
+  if (!isValidUUID(eventId)) return { error: "Invalid event ID format", stats: [], totalReferrals: 0 };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", stats: [], totalReferrals: 0 };

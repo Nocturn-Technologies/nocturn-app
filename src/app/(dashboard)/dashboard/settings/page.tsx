@@ -152,8 +152,41 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="space-y-2">
+          <div className="h-7 w-24 rounded-lg bg-muted animate-pulse" />
+          <div className="h-4 w-48 rounded-lg bg-muted animate-pulse" />
+        </div>
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+                <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-4 w-20 rounded bg-muted animate-pulse" />
+                <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+              </div>
+            </div>
+            <div className="h-10 w-28 rounded-md bg-muted animate-pulse" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+                <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+              </div>
+              <div className="space-y-2">
+                <div className="h-4 w-16 rounded bg-muted animate-pulse" />
+                <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+              </div>
+            </div>
+            <div className="h-10 w-32 rounded-md bg-muted animate-pulse" />
+          </CardContent>
+        </Card>
       </div>
     );
   }

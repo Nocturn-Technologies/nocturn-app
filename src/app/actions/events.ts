@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/config";
 import { generateAutoSettlement } from "./auto-settlement";
 import { getStripe } from "@/lib/stripe";
 import { DEFAULT_TIMEZONE } from "@/lib/utils";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 function slugify(text: string): string {
   return text
@@ -23,11 +24,13 @@ interface CreateEventInput {
   startTime: string;
   endTime: string | null;
   venueName: string;
-  venueAddress: string;
+  venueAddress: string | null;
   venueCity: string;
   venueCapacity: number;
   tiers: { name: string; price: number; quantity: number }[];
   timezone?: string; // IANA timezone, defaults to America/Toronto
+  eventMode?: "ticketed" | "rsvp" | "hybrid";
+  isFree?: boolean;
 }
 
 interface UpdateEventInput {
@@ -38,7 +41,7 @@ interface UpdateEventInput {
   startTime: string;
   endTime: string | null;
   venueName: string;
-  venueAddress: string;
+  venueAddress: string | null;
   venueCity: string;
   venueCapacity: number;
   tiers: { id?: string; name: string; price: number; quantity: number }[];
@@ -61,6 +64,11 @@ export async function createEvent(input: CreateEventInput) {
     return { error: "You must be logged in." };
   }
 
+  const { success: rlOk } = await rateLimitStrict(`createEvent:${user.id}`, 5, 60_000);
+  if (!rlOk) {
+    return { error: "Too many requests. Please wait a moment." };
+  }
+
   if (input.description && input.description.length > 5000) {
     return { error: "Description is too long. Please keep it under 5,000 characters." };
   }
@@ -73,6 +81,8 @@ export async function createEvent(input: CreateEventInput) {
   if (trimmedTitle.length > 200) {
     return { error: "Event title must be under 200 characters." };
   }
+
+  const trimmedAddress = input.venueAddress?.trim() || null;
 
   // Tier validation (same rules as ticket-tiers.ts createTicketTier)
   for (const t of input.tiers) {
@@ -91,15 +101,24 @@ export async function createEvent(input: CreateEventInput) {
     }
   }
 
+  if (input.tiers.length > 0 && input.tiers.length > 10) {
+    return { error: "Maximum 10 ticket tiers allowed." };
+  }
+
   const admin = createAdminClient();
 
   // Get user's first collective
-  const { data: memberships } = await admin
+  const { data: memberships, error: membershipsError } = await admin
     .from("collective_members")
     .select("collective_id")
     .eq("user_id", user.id)
     .is("deleted_at", null)
     .limit(1);
+
+  if (membershipsError) {
+    console.error("[createEvent] memberships query error:", membershipsError.message);
+    return { error: "Failed to verify membership" };
+  }
 
   if (!memberships || memberships.length === 0) {
     return { error: "No collective found. Please create one first." };
@@ -109,6 +128,7 @@ export async function createEvent(input: CreateEventInput) {
 
   // Create or find venue
   let venueId: string;
+  let venueWasNewlyCreated = false;
   const { data: existingVenue } = await admin
     .from("venues")
     .select("id")
@@ -119,6 +139,14 @@ export async function createEvent(input: CreateEventInput) {
 
   if (existingVenue) {
     venueId = existingVenue.id;
+    // Update venue details in case address or capacity changed
+    await admin
+      .from("venues")
+      .update({
+        address: trimmedAddress || undefined,
+        capacity: input.venueCapacity || undefined,
+      })
+      .eq("id", venueId);
   } else {
     // Include city in slug to avoid collisions (e.g. "story-miami" vs "story-toronto")
     const baseSlug = slugify(`${input.venueName} ${input.venueCity || ""}`);
@@ -140,7 +168,7 @@ export async function createEvent(input: CreateEventInput) {
       .insert({
         name: input.venueName,
         slug: venueSlug,
-        address: input.venueAddress,
+        address: trimmedAddress,
         city: input.venueCity,
         capacity: input.venueCapacity,
       })
@@ -153,6 +181,7 @@ export async function createEvent(input: CreateEventInput) {
     }
     if (!newVenue) return { error: "Failed to create venue" };
     venueId = newVenue.id;
+    venueWasNewlyCreated = true;
   }
 
   // Build timestamps from date + time inputs
@@ -243,7 +272,10 @@ export async function createEvent(input: CreateEventInput) {
   }
 
   // Check for slug collision, append random suffix if needed
-  let eventSlug = input.slug;
+  let eventSlug = slugify(input.slug);
+  if (!eventSlug || eventSlug.length < 2) {
+    eventSlug = `event-${Math.random().toString(36).slice(2, 8)}`;
+  }
   const { data: slugCheck } = await admin
     .from("events")
     .select("id")
@@ -252,6 +284,13 @@ export async function createEvent(input: CreateEventInput) {
   if (slugCheck) {
     eventSlug = `${eventSlug}-${Math.random().toString(36).slice(2, 6)}`;
   }
+
+  // Validate + default event mode
+  const eventMode: "ticketed" | "rsvp" | "hybrid" =
+    input.eventMode === "rsvp" || input.eventMode === "hybrid" || input.eventMode === "ticketed"
+      ? input.eventMode
+      : "ticketed";
+  const isFree = typeof input.isFree === "boolean" ? input.isFree : eventMode === "rsvp";
 
   // Create event
   const { data: event, error: eventError } = await admin
@@ -266,6 +305,8 @@ export async function createEvent(input: CreateEventInput) {
       ends_at: endsAt,
       doors_at: doorsAt,
       status: "draft",
+      event_mode: eventMode,
+      is_free: isFree,
       vibe_tags: vibeTags.length > 0 ? vibeTags : undefined,
       metadata: {
         timezone: tz,
@@ -298,6 +339,10 @@ export async function createEvent(input: CreateEventInput) {
       console.error("Ticket tier error:", tierError);
       // Cleanup: delete the event that was just created
       await admin.from("events").delete().eq("id", event.id);
+      // Cleanup: delete the venue if it was newly created (not pre-existing)
+      if (venueWasNewlyCreated) {
+        await admin.from("venues").delete().eq("id", venueId);
+      }
       console.error("[createEvent] tier error:", tierError.message);
       return { error: "Failed to create ticket tiers" };
     }
@@ -328,8 +373,19 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     return { error: "You must be logged in." };
   }
 
+  if (!eventId?.trim()) return { error: "Event ID is required" };
+
   if (input.description && input.description.length > 5000) {
     return { error: "Description is too long. Please keep it under 5,000 characters." };
+  }
+
+  // Title validation (mirrors createEvent)
+  const trimmedTitle = input.title?.trim();
+  if (!trimmedTitle || trimmedTitle.length === 0) {
+    return { error: "Event title is required." };
+  }
+  if (trimmedTitle.length > 200) {
+    return { error: "Event title must be under 200 characters." };
   }
 
   const ownership = await verifyEventOwnership(user.id, eventId);
@@ -341,6 +397,29 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
   }
 
   const admin = createAdminClient();
+
+  // Only regenerate slug when title actually changed — check collision within same collective
+  const { data: currentEventRow } = await admin
+    .from("events")
+    .select("title, collective_id")
+    .eq("id", eventId)
+    .maybeSingle();
+
+  let newSlug: string | null = null;
+  if (currentEventRow && currentEventRow.title !== trimmedTitle) {
+    const baseSlug = slugify(trimmedTitle);
+    newSlug = baseSlug;
+    const { data: slugCollision } = await admin
+      .from("events")
+      .select("id")
+      .eq("collective_id", currentEventRow.collective_id)
+      .eq("slug", newSlug)
+      .neq("id", eventId)
+      .maybeSingle();
+    if (slugCollision) {
+      newSlug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
+    }
+  }
 
   // Create or find venue
   let venueId: string;
@@ -411,8 +490,21 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
   }
 
   const startsAt = toTimestamp(input.date, input.startTime);
+
+  // Cross-midnight handling: if end time is before start time, add one day
+  let endDate = input.date;
+  if (input.endTime) {
+    const [startHour, startMinute] = input.startTime.split(":").map(Number);
+    const [endHour, endMinute] = input.endTime.split(":").map(Number);
+    if (endHour < startHour || (endHour === startHour && endMinute < startMinute)) {
+      const nextDay = new Date(`${input.date}T00:00:00`);
+      nextDay.setDate(nextDay.getDate() + 1);
+      endDate = nextDay.toISOString().split("T")[0];
+    }
+  }
+
   const endsAt = input.endTime
-    ? toTimestamp(input.date, input.endTime)
+    ? toTimestamp(endDate, input.endTime)
     : null;
   const doorsAt = input.doorsOpen
     ? toTimestamp(input.date, input.doorsOpen)
@@ -424,21 +516,24 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
   }
 
   // Update event
+  const eventUpdatePayload: Record<string, unknown> = {
+    venue_id: venueId,
+    title: trimmedTitle,
+    description: input.description,
+    starts_at: startsAt,
+    ends_at: endsAt,
+    doors_at: doorsAt,
+    bar_minimum: input.barMinimum ?? null,
+    venue_deposit: input.venueDeposit ?? null,
+    venue_cost: input.venueCost ?? null,
+    estimated_bar_revenue: input.estimatedBarRevenue ?? null,
+  };
+  if (newSlug) {
+    eventUpdatePayload.slug = newSlug;
+  }
   const { error: eventError } = await admin
     .from("events")
-    .update({
-      venue_id: venueId,
-      title: input.title,
-      slug: slugify(input.title),
-      description: input.description,
-      starts_at: startsAt,
-      ends_at: endsAt,
-      doors_at: doorsAt,
-      bar_minimum: input.barMinimum ?? null,
-      venue_deposit: input.venueDeposit ?? null,
-      venue_cost: input.venueCost ?? null,
-      estimated_bar_revenue: input.estimatedBarRevenue ?? null,
-    })
+    .update(eventUpdatePayload)
     .eq("id", eventId);
 
   if (eventError) {
@@ -513,11 +608,16 @@ async function verifyEventOwnership(userId: string, eventId: string) {
   const admin = createAdminClient();
 
   // Get user's collectives
-  const { data: memberships } = await admin
+  const { data: memberships, error: membershipsError } = await admin
     .from("collective_members")
     .select("collective_id")
     .eq("user_id", userId)
     .is("deleted_at", null);
+
+  if (membershipsError) {
+    console.error("[verifyEventOwnership] memberships query error:", membershipsError.message);
+    return { error: "Failed to verify membership.", event: null };
+  }
 
   if (!memberships || memberships.length === 0) {
     return { error: "No collective found.", event: null };
@@ -526,11 +626,16 @@ async function verifyEventOwnership(userId: string, eventId: string) {
   const collectiveIds = memberships.map((m) => m.collective_id);
 
   // Fetch event and verify it belongs to one of user's collectives
-  const { data: event } = await admin
+  const { data: event, error: eventError } = await admin
     .from("events")
     .select("id, status, collective_id")
     .eq("id", eventId)
     .maybeSingle();
+
+  if (eventError) {
+    console.error("[verifyEventOwnership] event query error:", eventError.message);
+    return { error: "Failed to load event.", event: null };
+  }
 
   if (!event) {
     return { error: "Event not found.", event: null };
@@ -552,6 +657,8 @@ export async function publishEvent(eventId: string) {
 
   if (!user) return { error: "You must be logged in." };
 
+  if (!eventId?.trim()) return { error: "Event ID is required" };
+
   const ownership = await verifyEventOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error };
   if (!ownership.event) return { error: "Event not found." };
@@ -563,10 +670,15 @@ export async function publishEvent(eventId: string) {
   const admin = createAdminClient();
 
   // Verify event has at least 1 ticket tier
-  const { count: tierCount } = await admin
+  const { count: tierCount, error: tierCountError } = await admin
     .from("ticket_tiers")
     .select("*", { count: "exact", head: true })
     .eq("event_id", eventId);
+
+  if (tierCountError) {
+    console.error("[publishEvent] tier count query error:", tierCountError.message);
+    return { error: "Failed to verify ticket tiers" };
+  }
 
   if (!tierCount || tierCount === 0) {
     return { error: "Add at least one ticket tier before publishing. Your event needs a way for people to get in." };
@@ -605,6 +717,8 @@ export async function cancelEvent(eventId: string) {
 
   if (!user) return { error: "You must be logged in." };
 
+  if (!eventId?.trim()) return { error: "Event ID is required" };
+
   const ownership = await verifyEventOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error };
   if (!ownership.event) return { error: "Event not found." };
@@ -629,11 +743,15 @@ export async function cancelEvent(eventId: string) {
   }
 
   // --- Refund all paid and checked-in tickets ---
-  const { data: paidTickets } = await admin
+  const { data: paidTickets, error: ticketsError } = await admin
     .from("tickets")
     .select("id, price_paid, stripe_payment_intent_id, metadata")
     .eq("event_id", eventId)
     .in("status", ["paid", "checked_in"]);
+
+  if (ticketsError) {
+    console.error("[cancelEvent] tickets query error:", ticketsError.message);
+  }
 
   const refundResults: { ticketId: string; success: boolean; error?: string }[] = [];
 
@@ -745,6 +863,8 @@ export async function completeEvent(eventId: string) {
 
   if (!user) return { error: "You must be logged in." };
 
+  if (!eventId?.trim()) return { error: "Event ID is required" };
+
   const ownership = await verifyEventOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error };
   if (!ownership.event) return { error: "Event not found." };
@@ -802,8 +922,77 @@ export async function updateEventDesign(eventId: string, input: EventDesignInput
 
   if (!user) return { error: "You must be logged in." };
 
+  if (!eventId?.trim()) return { error: "Event ID is required" };
+
   const ownership = await verifyEventOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error };
+
+  // Validate description length
+  if (input.description != null && input.description.length > 5000) {
+    return { error: "Description is too long. Please keep it under 5,000 characters." };
+  }
+
+  // Validate flyerUrl: require https:// and cap length at 500
+  if (input.flyerUrl != null && input.flyerUrl !== "") {
+    if (typeof input.flyerUrl !== "string" || input.flyerUrl.length > 500) {
+      return { error: "Invalid flyer URL" };
+    }
+    if (!/^https:\/\//i.test(input.flyerUrl)) {
+      return { error: "Invalid flyer URL" };
+    }
+  }
+
+  // Validate themeColor against strict hex regex (prevents CSS injection)
+  if (input.themeColor != null && input.themeColor !== "") {
+    if (
+      typeof input.themeColor !== "string" ||
+      !/^#[0-9a-f]{3}([0-9a-f]{3})?$/i.test(input.themeColor)
+    ) {
+      return { error: "Invalid theme color" };
+    }
+  }
+
+  // Cap vibeTags at 10 items, each max 50 chars; trim each
+  let sanitizedVibeTags: string[] | undefined;
+  if (input.vibeTags !== undefined) {
+    if (!Array.isArray(input.vibeTags)) {
+      return { error: "Invalid vibe tags" };
+    }
+    sanitizedVibeTags = input.vibeTags
+      .slice(0, 10)
+      .map((t) => (typeof t === "string" ? t.trim().slice(0, 50) : ""))
+      .filter((t) => t.length > 0);
+  }
+
+  // Bound minAge 0-99 integer
+  if (input.minAge != null) {
+    if (!Number.isInteger(input.minAge) || input.minAge < 0 || input.minAge > 99) {
+      return { error: "Invalid minimum age" };
+    }
+  }
+
+  // Cap dressCode at 200 chars, hostMessage at 500 chars. Trim both.
+  let sanitizedDressCode: string | null | undefined;
+  if (input.dressCode !== undefined) {
+    if (input.dressCode === null) {
+      sanitizedDressCode = null;
+    } else if (typeof input.dressCode !== "string") {
+      return { error: "Invalid dress code" };
+    } else {
+      sanitizedDressCode = input.dressCode.trim().slice(0, 200);
+    }
+  }
+
+  let sanitizedHostMessage: string | null | undefined;
+  if (input.hostMessage !== undefined) {
+    if (input.hostMessage === null) {
+      sanitizedHostMessage = null;
+    } else if (typeof input.hostMessage !== "string") {
+      return { error: "Invalid host message" };
+    } else {
+      sanitizedHostMessage = input.hostMessage.trim().slice(0, 500);
+    }
+  }
 
   const admin = createAdminClient();
 
@@ -825,8 +1014,8 @@ export async function updateEventDesign(eventId: string, input: EventDesignInput
   if (input.description !== undefined) {
     updatePayload.description = input.description;
   }
-  if (input.vibeTags !== undefined) {
-    updatePayload.vibe_tags = input.vibeTags;
+  if (sanitizedVibeTags !== undefined) {
+    updatePayload.vibe_tags = sanitizedVibeTags;
   }
   if (input.minAge !== undefined) {
     updatePayload.min_age = input.minAge;
@@ -834,14 +1023,14 @@ export async function updateEventDesign(eventId: string, input: EventDesignInput
 
   // Store extras in metadata JSONB
   const newMetadata = { ...existingMetadata };
-  if (input.dressCode !== undefined) {
-    newMetadata.dressCode = input.dressCode;
+  if (sanitizedDressCode !== undefined) {
+    newMetadata.dressCode = sanitizedDressCode;
   }
   if (input.themeColor !== undefined) {
     newMetadata.themeColor = input.themeColor;
   }
-  if (input.hostMessage !== undefined) {
-    newMetadata.hostMessage = input.hostMessage;
+  if (sanitizedHostMessage !== undefined) {
+    newMetadata.hostMessage = sanitizedHostMessage;
   }
   updatePayload.metadata = newMetadata;
 
@@ -870,6 +1059,8 @@ export async function getEventDesign(eventId: string) {
 
   if (!user) return { error: "You must be logged in.", event: null };
 
+  if (!eventId?.trim()) return { error: "Event ID is required", event: null };
+
   const ownership = await verifyEventOwnership(user.id, eventId);
   if (ownership.error) return { error: ownership.error, event: null };
 
@@ -885,6 +1076,11 @@ export async function getEventDesign(eventId: string) {
       .select("artists(name)")
       .eq("event_id", eventId),
   ]);
+
+  if (eventRes.error || artistsRes.error) {
+    console.error("[getEventDesign]", eventRes.error?.message || artistsRes.error?.message);
+    return { error: "Failed to load event data", event: null };
+  }
 
   const event = eventRes.data;
   if (!event) return { error: "Event not found.", event: null };

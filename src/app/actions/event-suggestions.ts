@@ -15,26 +15,30 @@ export interface Suggestion {
 export async function getEventSuggestions(
   collectiveId: string
 ): Promise<Suggestion[]> {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return [];
 
-  if (!collectiveId) return [];
+  if (!collectiveId?.trim()) return [];
 
-  try {
   const admin = createAdminClient();
 
   // Verify caller is a member of the supplied collective
-  const { count } = await admin
+  const { count, error: memberError } = await admin
     .from("collective_members")
     .select("*", { count: "exact", head: true })
     .eq("collective_id", collectiveId)
     .eq("user_id", user.id)
     .is("deleted_at", null);
+  if (memberError) {
+    console.error("[getEventSuggestions] membership query error:", memberError.message);
+    return [];
+  }
   if (!count) return [];
 
   // Fetch past events for this collective to analyze patterns
-  const { data: pastEvents } = await admin
+  const { data: pastEvents, error: pastEventsError } = await admin
     .from("events")
     .select("id, title, starts_at, status, venues(name, city)")
     .eq("collective_id", collectiveId)
@@ -43,15 +47,23 @@ export async function getEventSuggestions(
     .order("starts_at", { ascending: false })
     .limit(20);
 
+  if (pastEventsError) {
+    console.error("[getEventSuggestions] past events query error:", pastEventsError.message);
+  }
+
   // Fetch upcoming events to avoid scheduling conflicts
   const now = new Date().toISOString();
-  const { data: upcomingEvents } = await admin
+  const { data: upcomingEvents, error: upcomingError } = await admin
     .from("events")
     .select("starts_at")
     .eq("collective_id", collectiveId)
     .gte("starts_at", now)
     .is("deleted_at", null)
     .order("starts_at", { ascending: true });
+
+  if (upcomingError) {
+    console.error("[getEventSuggestions] upcoming events query error:", upcomingError.message);
+  }
 
   // Fetch ticket data for past events to gauge popularity
   const eventIds = (pastEvents ?? []).map((e) => e.id);

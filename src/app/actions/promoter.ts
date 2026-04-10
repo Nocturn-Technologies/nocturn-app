@@ -39,7 +39,7 @@ export async function getPromoterDashboard(): Promise<PromoterDashboardData> {
     const userId = user.id;
 
     // Parallel: my referred tickets + upcoming published events for browsing
-    const [{ data: referredTickets }, { data: upcomingEvents }] = await Promise.all([
+    const [{ data: referredTickets, error: referredError }, { data: upcomingEvents, error: upcomingError }] = await Promise.all([
       admin
         .from("tickets")
         .select("event_id, events(id, title, starts_at, flyer_url, slug, collectives(slug))")
@@ -53,6 +53,9 @@ export async function getPromoterDashboard(): Promise<PromoterDashboardData> {
         .order("starts_at", { ascending: true })
         .limit(20),
     ]);
+
+    if (referredError) console.error("[getPromoterDashboard] Failed to fetch referred tickets:", referredError);
+    if (upcomingError) console.error("[getPromoterDashboard] Failed to fetch upcoming events:", upcomingError);
 
     // Aggregate referred tickets by event
     const eventMap = new Map<string, PromoterEvent>();

@@ -47,6 +47,8 @@ export default function OnboardingPage() {
   const [createdEventSlug, setCreatedEventSlug] = useState("");
 
   const [error, setError] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isPaidEvent, setIsPaidEvent] = useState(false);
 
   // Restore progress from localStorage on mount
   useEffect(() => {
@@ -79,7 +81,11 @@ export default function OnboardingPage() {
   // Auth guard
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (!user) router.push("/login");
+      if (!user) {
+        router.push("/login");
+      } else {
+        setAuthChecked(true);
+      }
     });
   }, [supabase, router]);
 
@@ -102,7 +108,7 @@ export default function OnboardingPage() {
     const vibeOption = VIBE_OPTIONS.find((v) => v.key === selectedVibe);
     const bio = `${name} — curating ${vibeOption?.label.toLowerCase() ?? "unforgettable"} nights in ${city}.`;
 
-    // 1. Create collective
+    // 1. Create collective (with idempotency for duplicate slug)
     const result = await createCollective({
       name,
       slug,
@@ -113,9 +119,31 @@ export default function OnboardingPage() {
     });
 
     if (result.error) {
-      setError(result.error);
-      setStep(skipEvent ? "vibe" : "event");
-      return;
+      // If the collective already exists (duplicate slug), look it up and proceed
+      const isDuplicate = result.error.toLowerCase().includes("already exists")
+        || result.error.toLowerCase().includes("unique")
+        || result.error.toLowerCase().includes("duplicate");
+
+      if (isDuplicate) {
+        // Collective was already created (user closed tab mid-flow) — verify it exists
+        const { data: existing } = await supabase
+          .from("collectives")
+          .select("id")
+          .eq("slug", slug)
+          .maybeSingle();
+
+        if (!existing) {
+          // Slug conflict but not ours — genuine error
+          setError(result.error);
+          setStep(skipEvent ? "vibe" : "event");
+          return;
+        }
+        // Collective exists and is ours — continue to event creation
+      } else {
+        setError(result.error);
+        setStep(skipEvent ? "vibe" : "event");
+        return;
+      }
     }
 
     // 2. Create event (if not skipped)
@@ -139,6 +167,11 @@ export default function OnboardingPage() {
       }
     }
 
+    // Track if this is a paid event (created as draft, not live)
+    if (!skipEvent && eventData && eventData.tierPrice > 0) {
+      setIsPaidEvent(true);
+    }
+
     localStorage.removeItem(STORAGE_KEY);
     setStep("share");
   }
@@ -154,8 +187,20 @@ export default function OnboardingPage() {
     router.refresh();
   }
 
-  const currentStep = step === "name_city" ? 1 : step === "vibe" ? 2 : step === "event" ? 3 : 0;
+  const currentStep = step === "name_city" ? 1 : step === "vibe" ? 2 : step === "event" ? 3 : step === "share" ? 3 : 0;
   const totalSteps = 3;
+
+  // Show loading spinner until auth check completes
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-3 border-nocturn border-t-transparent" />
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
@@ -315,6 +360,7 @@ export default function OnboardingPage() {
               eventTitle={skipEvent ? name : eventData?.title ?? name}
               collectiveSlug={slug}
               eventSlug={createdEventSlug}
+              isPaidEvent={isPaidEvent}
               onDashboard={goToDashboard}
             />
           )}

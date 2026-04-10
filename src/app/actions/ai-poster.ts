@@ -60,6 +60,8 @@ export async function generatePosterPrompt(eventData: {
   styleDirection?: string;
 }): Promise<{ prompt: string; error: string | null }> {
   try {
+    if (!eventData?.title?.trim()) return { prompt: "", error: "Event title is required" };
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { prompt: "", error: "Not authenticated" };

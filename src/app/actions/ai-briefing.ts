@@ -16,6 +16,40 @@ interface BriefingItem {
   link: string;
 }
 
+// ─── Link Sanitization ──────────────────────────────────────────────────────
+
+/**
+ * Sanitizes an AI-generated link to prevent javascript:/data:/vbscript: XSS
+ * and external open-redirects. Only allows safe relative paths under the app.
+ * Returns null if the link is unsafe or invalid.
+ */
+function sanitizeBriefingLink(link: unknown): string | null {
+  if (typeof link !== "string") return null;
+  const trimmed = link.trim();
+  if (!trimmed) return null;
+  // Cap length to avoid pathological inputs
+  if (trimmed.length > 500) return null;
+
+  const lower = trimmed.toLowerCase();
+
+  // Reject any scheme-like or protocol-relative prefixes
+  if (lower.includes("://")) return null;
+  if (lower.startsWith("//")) return null;
+  if (lower.startsWith("javascript:")) return null;
+  if (lower.startsWith("data:")) return null;
+  if (lower.startsWith("vbscript:")) return null;
+  // Reject backslashes which some browsers treat like '/'
+  if (trimmed.includes("\\")) return null;
+  // Reject encoded slashes to prevent bypass
+  if (/%2f/i.test(trimmed) || /%5c/i.test(trimmed)) return null;
+
+  // Only allow paths that are clearly relative to our app root
+  if (trimmed.startsWith("/dashboard/") || trimmed === "/dashboard") return trimmed;
+  if (trimmed.startsWith("/")) return trimmed;
+
+  return null;
+}
+
 // ─── System Prompt ──────────────────────────────────────────────────────────
 
 import { SYSTEM_PROMPTS } from "@/lib/ai-prompts";
@@ -123,10 +157,28 @@ Generate the morning briefing JSON array.`;
 
       if (result) {
         const cleaned = result.replace(/```json?\n?/g, "").replace(/```\n?/g, "").trim();
-        const parsed: BriefingItem[] = JSON.parse(cleaned);
+        const parsed: unknown = JSON.parse(cleaned);
 
         if (Array.isArray(parsed) && parsed.length >= 1) {
-          return parsed.slice(0, 5);
+          // Sanitize every link field defensively — Claude's output is untrusted
+          const sanitized: BriefingItem[] = parsed
+            .slice(0, 5)
+            .map((raw) => {
+              const item = raw as Partial<BriefingItem>;
+              const safeLink = sanitizeBriefingLink(item.link) ?? "/dashboard";
+              return {
+                emoji: typeof item.emoji === "string" ? item.emoji : "•",
+                text: typeof item.text === "string" ? item.text : "",
+                priority:
+                  item.priority === "urgent" || item.priority === "high" || item.priority === "normal"
+                    ? item.priority
+                    : "normal",
+                link: safeLink,
+              };
+            })
+            .filter((item) => item.text.length > 0);
+
+          if (sanitized.length >= 1) return sanitized;
         }
       }
     } catch {
@@ -143,6 +195,8 @@ Generate the morning briefing JSON array.`;
 
 export async function generateMorningBriefing(collectiveId: string): Promise<BriefingItem[]> {
   try {
+    if (!collectiveId?.trim()) return [];
+
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return [];
@@ -153,12 +207,16 @@ export async function generateMorningBriefing(collectiveId: string): Promise<Bri
     const sb = createAdminClient();
 
     // Verify caller is a member of the supplied collective
-    const { count } = await sb
+    const { count, error: memberError } = await sb
       .from("collective_members")
       .select("*", { count: "exact", head: true })
       .eq("collective_id", collectiveId)
       .eq("user_id", user.id)
       .is("deleted_at", null);
+    if (memberError) {
+      console.error("[generateMorningBriefing] membership check failed:", memberError);
+      return [];
+    }
     if (!count) return [];
 
     // Generate (or return cached) briefing — cached per collective for 4 hours

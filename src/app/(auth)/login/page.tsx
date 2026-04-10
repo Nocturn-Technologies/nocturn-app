@@ -16,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -315,7 +315,7 @@ export default function LoginPage() {
             {isLockedOut
               ? `Locked (${lockoutSeconds}s)`
               : loading
-                ? "Signing in..."
+                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Signing in...</>
                 : "Sign in"}
           </Button>
         </form>

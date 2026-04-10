@@ -12,10 +12,30 @@ function slugify(name: string): string {
     .slice(0, 80);
 }
 
+// TODO(audit): cap name/address/city lengths, sanitize website/photo_url, validate metadata shape
 export async function saveVenue(venue: VenueResult) {
   try {
     if (!venue?.place_id?.trim() || !venue?.name?.trim()) {
       return { error: "Venue details are required" };
+    }
+
+    // Validate capacity if provided
+    if (venue.capacity != null) {
+      if (typeof venue.capacity !== "number" || venue.capacity < 0 || venue.capacity > 500000 || !Number.isInteger(venue.capacity)) {
+        return { error: "Capacity must be a positive integer under 500,000" };
+      }
+    }
+
+    // Validate latitude/longitude if provided
+    if (venue.latitude != null) {
+      if (typeof venue.latitude !== "number" || venue.latitude < -90 || venue.latitude > 90) {
+        return { error: "Latitude must be between -90 and 90" };
+      }
+    }
+    if (venue.longitude != null) {
+      if (typeof venue.longitude !== "number" || venue.longitude < -180 || venue.longitude > 180) {
+        return { error: "Longitude must be between -180 and 180" };
+      }
     }
 
     const supabase = await createServerClient();
@@ -74,7 +94,7 @@ export async function saveVenue(venue: VenueResult) {
           },
         })
         .select("id")
-        .single();
+        .maybeSingle();
 
       if (venueError || !newVenue) return { error: "Failed to save venue" };
       venueId = newVenue.id;

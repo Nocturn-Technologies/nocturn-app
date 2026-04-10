@@ -19,6 +19,33 @@ export async function saveVenueScoutNotes(notes: ScoutNote) {
     } = await supabase.auth.getUser();
     if (!user) return { error: "Not logged in" };
 
+    // Validate input fields
+    if (!notes.place_id?.trim()) return { error: "Place ID is required" };
+
+    if (typeof notes.sound_quality !== "number" || notes.sound_quality < 1 || notes.sound_quality > 10 || !Number.isInteger(notes.sound_quality)) {
+      return { error: "Sound quality must be an integer between 1 and 10" };
+    }
+
+    if (notes.crowd_estimate != null) {
+      if (typeof notes.crowd_estimate !== "number" || notes.crowd_estimate < 0 || notes.crowd_estimate > 100000 || !Number.isInteger(notes.crowd_estimate)) {
+        return { error: "Crowd estimate must be a positive integer under 100,000" };
+      }
+    }
+
+    if (typeof notes.vibe_notes !== "string" || notes.vibe_notes.trim().length === 0) {
+      return { error: "Vibe notes are required" };
+    }
+    if (notes.vibe_notes.length > 2000) {
+      return { error: "Vibe notes must be under 2,000 characters" };
+    }
+
+    if (!notes.scouted_at?.trim()) return { error: "Scouted date is required" };
+    // Validate ISO date format
+    const scoutedDate = new Date(notes.scouted_at);
+    if (isNaN(scoutedDate.getTime())) {
+      return { error: "Invalid scouted date format" };
+    }
+
     const admin = createAdminClient();
 
     // Get the saved venue row for this place_id
@@ -33,10 +60,21 @@ export async function saveVenueScoutNotes(notes: ScoutNote) {
       return { error: "Venue not found in your saved venues" };
     }
 
-    // Append to existing notes array (stored as JSONB)
-    const existingNotes = Array.isArray(savedVenue.notes)
-      ? savedVenue.notes
-      : [];
+    // NOTE: saved_venues.notes is a TEXT column per generated DB types.
+    // We persist the notes array as a JSON-encoded string, and parse on read.
+    // TODO(audit): table also lacks user_id/place_id columns — the query at line 55-56
+    // references fields that don't exist on saved_venues. This whole function needs
+    // a schema refactor to either add user_id/place_id or rewrite queries against
+    // the actual collective_id/venue_id columns.
+    let existingNotes: Array<Record<string, unknown>> = [];
+    if (typeof savedVenue.notes === "string" && savedVenue.notes.trim().length > 0) {
+      try {
+        const parsed = JSON.parse(savedVenue.notes);
+        if (Array.isArray(parsed)) existingNotes = parsed;
+      } catch {
+        existingNotes = [];
+      }
+    }
 
     const updatedNotes = [
       ...existingNotes,

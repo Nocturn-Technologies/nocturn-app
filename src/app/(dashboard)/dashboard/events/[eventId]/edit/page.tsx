@@ -1,5 +1,4 @@
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
 import { notFound } from "next/navigation";
 import { EditEventForm } from "./edit-event-form";
@@ -17,9 +16,7 @@ export default async function EditEventPage({ params }: Props) {
 
   if (!user) notFound();
 
-  const admin = createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  const admin = createAdminClient();
 
   // Verify user owns this event via collective membership
   const { data: memberships } = await admin

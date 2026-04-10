@@ -69,9 +69,29 @@ export function QrScanner({ onScan, paused }: QrScannerProps) {
       })
       .catch((err: unknown) => {
         console.error("[qr-scanner] Failed to start:", err);
-        setError(
-          "Could not access camera. Please grant camera permission and try again."
-        );
+        const message = String(err ?? "").toLowerCase();
+        if (
+          message.includes("notallowederror") ||
+          message.includes("permission") ||
+          message.includes("denied")
+        ) {
+          setError(
+            "Camera access denied. Please allow camera permissions in your browser settings."
+          );
+        } else if (
+          message.includes("notfounderror") ||
+          message.includes("no camera") ||
+          message.includes("requested device not found") ||
+          message.includes("no video")
+        ) {
+          setError(
+            "No camera found on this device. Use manual entry instead."
+          );
+        } else {
+          setError(
+            "Could not access camera. Please grant camera permission and try again."
+          );
+        }
       });
   }, []);
 

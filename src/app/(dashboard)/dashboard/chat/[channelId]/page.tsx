@@ -33,6 +33,7 @@ interface Channel {
 
 export default function ChatRoomPage() {
   const params = useParams();
+  // TODO(audit): add isValidUUID(channelId) guard here or in a layout.tsx — currently relies solely on RLS
   const channelId = params.channelId as string;
   const supabase = createClient();
 
@@ -356,6 +357,7 @@ export default function ChatRoomPage() {
   };
 
   // Send voice message — upload blob to Supabase Storage, then insert message
+  // TODO(audit): voice upload has no size/duration validation. Add 10MB + 5min caps.
   const handleSendVoice = async (blob: Blob, duration: number) => {
     if (!userId || !channelId) return;
 
@@ -372,6 +374,7 @@ export default function ChatRoomPage() {
       return;
     }
 
+    // TODO(audit): switch to createSignedUrl() with 1-hour expiry — bucket is now private
     const { data: urlData } = supabase.storage
       .from("recordings")
       .getPublicUrl(fileName);

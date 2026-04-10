@@ -29,12 +29,14 @@ export async function enrichEventContent(input: {
   tiers?: Array<{ name: string; price: number }>;
 }): Promise<EnrichedEventContent> {
   try {
+  if (!input?.title?.trim()) return { description: "Event details coming soon.", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { description: "", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
+  if (!user) return { description: input.title ? `${input.title} — details coming soon.` : "Event details coming soon.", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
 
   const { success: rlOk } = await rateLimitStrict(`ai-enrich:${user.id}`, 10, 60_000);
-  if (!rlOk) return { description: "", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
+  if (!rlOk) return { description: input.title ? `${input.title} — details coming soon.` : "Event details coming soon.", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
 
   const admin = createAdminClient();
 
@@ -44,15 +46,19 @@ export async function enrichEventContent(input: {
   let venueAddress: string | null = null;
 
   if (input.venueName) {
+    // TODO(audit): replace inline sanitizer with shared sanitizePostgRESTInput() from @/lib/utils + length cap
     const safeName = input.venueName
       .replace(/\\/g, "\\\\")
       .replace(/%/g, "\\%")
       .replace(/_/g, "\\_");
-    const { data: venueRaw } = await admin
+    const { data: venueRaw, error: venueError } = await admin
       .from("venues")
       .select("description, capacity, address, city, metadata")
       .ilike("name", `%${safeName}%`)
       .maybeSingle();
+    if (venueError) {
+      console.error("[enrichEventContent] venue lookup failed:", venueError);
+    }
     const venue = venueRaw as { description: string | null; capacity: number | null; address: string | null; city: string | null; metadata: Record<string, unknown> | null } | null;
 
     if (venue) {
@@ -152,7 +158,7 @@ Return valid JSON:
   };
   } catch (err) {
     console.error("[enrichEventContent]", err);
-    return { description: "", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
+    return { description: input.title ? `${input.title} — details coming soon.` : "Event details coming soon.", vibeTags: [], dressCode: null, hostMessage: null, venueDescription: null, venueCapacity: null, venueAddress: null };
   }
 }
 

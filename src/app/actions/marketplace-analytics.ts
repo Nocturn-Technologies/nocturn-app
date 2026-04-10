@@ -15,6 +15,10 @@ export async function getProfilePerformanceWithCollective(
   profileUserId: string
 ): Promise<ProfilePerformance | null> {
   try {
+    if (!profileUserId || typeof profileUserId !== "string" || profileUserId.length > 100) {
+      return null;
+    }
+
     const supabase = await createServerClient();
     const {
       data: { user },
@@ -24,7 +28,7 @@ export async function getProfilePerformanceWithCollective(
     const admin = createAdminClient();
 
     // Only show performance data for the viewer's own collective — prevents privacy leaks
-    const { data: membership } = await admin.from("collective_members")
+    const { data: membership, error: membershipError } = await admin.from("collective_members")
       .select("collective_id")
       .eq("user_id", user.id)
       .in("role", ["admin", "owner"])
@@ -32,6 +36,10 @@ export async function getProfilePerformanceWithCollective(
       .limit(1)
       .maybeSingle();
 
+    if (membershipError) {
+      console.error("[getProfilePerformanceWithCollective]", membershipError);
+      return null;
+    }
     if (!membership) return null;
     const collectiveId = (membership as { collective_id: string }).collective_id;
 

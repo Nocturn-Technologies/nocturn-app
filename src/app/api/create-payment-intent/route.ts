@@ -12,6 +12,7 @@ import {
 } from "@/lib/checkout-helpers";
 
 export async function POST(request: NextRequest) {
+  // TODO(audit): rate limit is per-IP only; add per-email limit to prevent card-testing via IP rotation
   const clientIp = request.headers.get("x-real-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const { success } = await rateLimitStrict(`payment-intent:${clientIp}`, 10, 60000); // 10 requests per minute
   if (!success) {
@@ -21,13 +22,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let body: any;
   try {
-    const body = await request.json();
-    const { eventId, tierId, quantity, buyerEmail: rawBuyerEmail, promoCode } = body;
-    const buyerEmail = typeof rawBuyerEmail === "string" ? rawBuyerEmail.trim().toLowerCase() : rawBuyerEmail;
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const eventId = typeof body.eventId === "string" ? body.eventId : "";
+    const tierId = typeof body.tierId === "string" ? body.tierId : "";
+    const quantity = typeof body.quantity === "number" ? body.quantity : 0;
+    const promoCode = typeof body.promoCode === "string" ? body.promoCode : undefined;
+    const rawBuyerEmail = typeof body.buyerEmail === "string" ? body.buyerEmail : "";
+    const buyerEmail = rawBuyerEmail.trim().toLowerCase();
     // Validate referrerToken as UUID to prevent FK violations downstream
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const referrerToken = body.referrerToken && uuidRegex.test(body.referrerToken) ? body.referrerToken : undefined;
+    const rawReferrerToken = typeof body.referrerToken === "string" ? body.referrerToken : "";
+    const referrerToken = rawReferrerToken && uuidRegex.test(rawReferrerToken) ? rawReferrerToken : undefined;
 
     if (!eventId || !tierId || !quantity || !buyerEmail) {
       return NextResponse.json(
@@ -107,8 +123,11 @@ export async function POST(request: NextRequest) {
       if (capacityError) {
         console.error("[create-payment-intent] Capacity check failed:", capacityError.message);
       }
+      if (capacityCheck?.error) {
+        console.error("[create-payment-intent] Capacity check error detail:", capacityCheck.error);
+      }
       return NextResponse.json(
-        { error: capacityCheck?.error || "Failed to check capacity" },
+        { error: capacityCheck?.remaining !== undefined ? "Tickets unavailable" : "Failed to check capacity" },
         { status: capacityCheck?.remaining !== undefined ? 409 : 500 }
       );
     }
@@ -182,28 +201,53 @@ export async function POST(request: NextRequest) {
       await convertAmount(totalUsdCents, targetCurrency);
 
     // Create PaymentIntent in buyer's local currency
-    const paymentIntent = await getStripe().paymentIntents.create({
-      amount: chargeAmount,
-      currency: chargeCurrency,
-      receipt_email: buyerEmail,
-      metadata: {
-        eventId,
-        tierId,
-        quantity: String(quantity),
-        buyerEmail,
-        ticketPriceCents: String(unitAmountCents),
-        baseCurrency: "usd",
-        baseAmountCents: String(totalUsdCents),
-        chargeCurrency,
-        fxRate: String(fxRate),
-        ...(buyerCountry && { buyerCountry }),
-        ...(referrerToken && { referrerToken }),
-        ...(promoId && { promoId, promoCode: validatedPromoCode ?? "", promoClaimedQuantity: String(quantity) }),
-        ...(discountCents > 0 && { discountCents: String(discountCents) }),
-        pendingTicketIds: JSON.stringify(pendingTicketIds),
-      },
-      automatic_payment_methods: { enabled: true },
-    });
+    let paymentIntent;
+    try {
+      paymentIntent = await getStripe().paymentIntents.create({
+        amount: chargeAmount,
+        currency: chargeCurrency,
+        receipt_email: buyerEmail,
+        metadata: {
+          eventId,
+          tierId,
+          quantity: String(quantity),
+          buyerEmail,
+          ticketPriceCents: String(unitAmountCents),
+          baseCurrency: "usd",
+          baseAmountCents: String(totalUsdCents),
+          chargeCurrency,
+          fxRate: String(fxRate),
+          ...(buyerCountry && { buyerCountry }),
+          ...(referrerToken && { referrerToken }),
+          ...(promoId && { promoId, promoCode: validatedPromoCode ?? "", promoClaimedQuantity: String(quantity) }),
+          ...(discountCents > 0 && { discountCents: String(discountCents) }),
+          // Only include pending IDs if they fit Stripe's 500-char metadata value limit
+          ...(pendingTicketIds.length > 0 && JSON.stringify(pendingTicketIds).length < 490 && {
+            pendingTicketIds: JSON.stringify(pendingTicketIds),
+          }),
+        },
+        automatic_payment_methods: { enabled: true },
+      });
+    } catch (stripeErr) {
+      console.error("[create-payment-intent] Stripe PaymentIntent creation failed:", stripeErr);
+      // Clean up pending tickets to release reserved capacity
+      if (pendingTicketIds.length > 0) {
+        try {
+          await supabase
+            .from("tickets")
+            .delete()
+            .in("id", pendingTicketIds)
+            .eq("status", "pending");
+          console.info(`[create-payment-intent] Cleaned up ${pendingTicketIds.length} pending ticket(s) after Stripe failure`);
+        } catch (cleanupErr) {
+          console.error("[create-payment-intent] Failed to clean up pending tickets:", cleanupErr);
+        }
+      }
+      return NextResponse.json(
+        { error: "Payment service temporarily unavailable." },
+        { status: 500 }
+      );
+    }
 
     // Link pending tickets to this PaymentIntent so webhooks can find them
     if (pendingTicketIds.length > 0) {

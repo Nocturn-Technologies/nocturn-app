@@ -6,6 +6,7 @@ import { rateLimitStrict } from "@/lib/rate-limit";
 
 const VALID_USER_TYPES = [
   "collective",
+  "host",
   "promoter",
   "artist",
   "venue",
@@ -27,9 +28,16 @@ export async function signUpUser(formData: {
   email: string;
   password: string;
   fullName: string;
-  userType?: "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
+  userType?: "collective" | "host" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
 }) {
   try {
+  // Input validation
+  if (!formData.email?.trim()) return { error: "Email is required" };
+  if (!formData.password || formData.password.length < 8) return { error: "Password must be at least 8 characters" };
+  if (!formData.fullName?.trim()) return { error: "Full name is required" };
+  if (formData.fullName.length > 200) return { error: "Full name must be 200 characters or fewer" };
+  if (formData.email.length > 320) return { error: "Email is too long" };
+
   // Rate limit: 3 attempts per 5 minutes per email
   const rl = await rateLimitStrict(`signup:${formData.email}`, 3, 5 * 60 * 1000);
   if (!rl.success) {
@@ -44,8 +52,9 @@ export async function signUpUser(formData: {
     return { error: "Invalid user type" };
   }
 
-  // Collectives and promoters require manual approval
-  const requiresApproval = userType === "collective" || userType === "promoter";
+  // Collectives, hosts, and promoters require manual approval
+  const requiresApproval =
+    userType === "collective" || userType === "host" || userType === "promoter";
   const isApproved = !requiresApproval;
 
   // Create user with auto-confirm via admin API (no email confirmation needed)
@@ -83,7 +92,9 @@ export async function signUpUser(formData: {
   // dashboard layout's "must have ≥1 collective membership" requirement
   if (userType !== "collective") {
     const firstName = formData.fullName.split(" ")[0] || "My";
-    const collectiveName = `${firstName}'s ${userType === "promoter" ? "Promos" : "Profile"}`;
+    const collectiveName = `${firstName}'s ${
+      userType === "promoter" ? "Promos" : userType === "host" ? "Events" : "Profile"
+    }`;
     // Use 12 chars of UUID to reduce slug collision risk
     const slug = `${firstName.toLowerCase().replace(/[^a-z0-9]/g, "")}-${userType.replace("_", "-")}-${userId.replace(/-/g, "").slice(0, 12)}`;
     const { data: collective, error: collectiveError } = await admin
@@ -106,7 +117,7 @@ export async function signUpUser(formData: {
       const { error: memberError } = await admin.from("collective_members").insert({
         collective_id: collective.id,
         user_id: userId,
-        role: userType === "promoter" ? "promoter" : "admin",
+        role: userType === "promoter" ? "promoter" : userType === "host" ? "owner" : "admin",
       });
       if (memberError) {
         console.error(`[signup] Failed to add ${userType} as collective member:`, memberError.message);
@@ -152,6 +163,7 @@ async function sendWelcomeEmail(email: string, name: string, userType: string) {
 
   const typeMessages: Record<string, string> = {
     collective: "You're all set to create events, sell tickets, and grow your collective. Start by creating your first event — our AI will help you set everything up.",
+    host: "You're ready to throw your first night. Create an event, invite your people, and collect RSVPs in minutes. Want to sell tickets later? Flip the switch whenever you're ready.",
     promoter: "You're ready to start promoting. Find events, grab your link, and share it with your network. Every ticket sold through your link is tracked automatically.",
     artist: "Your profile is live on the Nocturn directory. Collectives in your city can now discover and book you. Fill out your SoundCloud and Spotify to stand out.",
     venue: "Your venue is listed on Nocturn. Promoters can now find your space and reach out for bookings. Add your capacity and pricing to attract the right events.",
@@ -204,6 +216,7 @@ async function sendWelcomeEmail(email: string, name: string, userType: string) {
   }
 }
 
+// TODO(audit): enforce slug regex /^[a-z0-9][a-z0-9-]{1,79}$/, sanitize instagram/website, trim description
 export async function createCollective(formData: {
   name: string;
   slug: string;
@@ -213,6 +226,11 @@ export async function createCollective(formData: {
   website: string | null;
 }) {
   try {
+  // Required field validation
+  if (!formData.name?.trim()) return { error: "Collective name is required" };
+  if (!formData.slug?.trim()) return { error: "Slug is required" };
+  if (!formData.city?.trim()) return { error: "City is required" };
+
   // Input length validation
   if (formData.name.length > 100) {
     return { error: "Collective name must be 100 characters or fewer." };

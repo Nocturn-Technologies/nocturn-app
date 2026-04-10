@@ -1,18 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { createHmac, randomBytes, timingSafeEqual } from "crypto";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
+// SECURITY: never fall back to CRON_SECRET — these serve different trust boundaries
 const APPROVAL_SECRET = (() => {
   const adminSecret = process.env.ADMIN_APPROVAL_SECRET;
   if (adminSecret && adminSecret.length >= 16) return adminSecret;
-  if (process.env.CRON_SECRET && process.env.CRON_SECRET.length >= 16) {
-    console.warn(
-      "[approve-user] ADMIN_APPROVAL_SECRET not set, falling back to CRON_SECRET. " +
-      "Set ADMIN_APPROVAL_SECRET to a separate value for better security."
-    );
-    return process.env.CRON_SECRET;
-  }
-  // Empty/short secrets are treated as unset — HMAC with empty key is insecure
+  // Empty/short/unset secrets are treated as unset — HMAC with empty key is insecure.
+  // Callers (generateApprovalUrls, GET/POST handlers) check for this and fail closed.
+  console.error(
+    "[approve-user] ADMIN_APPROVAL_SECRET is not set or is too short (min 16 chars). " +
+    "Approval endpoints will return 500 until it is configured. " +
+    "Do NOT reuse CRON_SECRET — these secrets serve different trust boundaries."
+  );
   return "";
 })();
 
@@ -77,7 +78,7 @@ function verifyActionToken(userId: string, action: string, token: string): boole
  */
 export function generateApprovalUrls(userId: string): { approveUrl: string; denyUrl: string } {
   if (!APPROVAL_SECRET) {
-    throw new Error("Cannot generate approval URLs: ADMIN_APPROVAL_SECRET (or CRON_SECRET) not set");
+    throw new Error("Cannot generate approval URLs: ADMIN_APPROVAL_SECRET is not set (min 16 chars). Do not fall back to CRON_SECRET.");
   }
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
   const approveToken = generateActionToken(userId, "approve");
@@ -97,6 +98,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const ip = request.headers.get("x-forwarded-for") || "unknown";
+    const { success } = await rateLimitStrict(`approve-user-get:${ip}`, 20, 60_000);
+    if (!success) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get("user_id");
     const action = searchParams.get("action") ?? "approve";
@@ -104,6 +111,15 @@ export async function GET(request: NextRequest) {
 
     if (!userId || !token) {
       return NextResponse.json({ error: "Missing user_id or token" }, { status: 400 });
+    }
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(userId)) {
+      return NextResponse.json({ error: "Invalid user_id" }, { status: 400 });
+    }
+
+    if (action !== "approve" && action !== "deny") {
+      return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
     // Verify HMAC-signed token (per-user, per-action, time-limited)
@@ -188,6 +204,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const ip = request.headers.get("x-forwarded-for") || "unknown";
+    const { success } = await rateLimitStrict(`approve-user-post:${ip}`, 10, 60_000);
+    if (!success) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+
     const formData = await request.formData();
     const userId = formData.get("user_id") as string | null;
     const action = formData.get("action") as string | null;
@@ -197,8 +219,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing user_id or token" }, { status: 400 });
     }
 
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(userId)) {
+      return NextResponse.json({ error: "Invalid user_id" }, { status: 400 });
+    }
+
+    if (action !== "approve" && action !== "deny") {
+      return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    }
+
     // Verify HMAC-signed token (per-user, per-action, time-limited)
-    if (!verifyActionToken(userId, action ?? "approve", token)) {
+    if (!verifyActionToken(userId, action, token)) {
       return NextResponse.json({ error: "Invalid or expired approval token" }, { status: 401 });
     }
 
@@ -206,13 +237,23 @@ export async function POST(request: NextRequest) {
 
     if (action === "deny") {
       // Set is_approved to false in users table and mark as denied in auth metadata
-      await admin.from("users")
+      const { error: dbError } = await admin.from("users")
         .update({ is_approved: false })
         .eq("id", userId);
 
-      await admin.auth.admin.updateUserById(userId, {
+      if (dbError) {
+        console.error("[approve-user] DB update failed (deny):", dbError);
+        return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
+      }
+
+      const { error: authError } = await admin.auth.admin.updateUserById(userId, {
         user_metadata: { is_approved: false, is_denied: true },
       });
+
+      if (authError) {
+        console.error("[approve-user] Auth update failed (deny):", authError);
+        return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
+      }
 
       const safeUserId = escapeHtml(userId);
 
@@ -228,13 +269,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Approve: update users table and auth metadata
-    await admin.from("users")
+    const { error: dbError } = await admin.from("users")
       .update({ is_approved: true })
       .eq("id", userId);
 
-    await admin.auth.admin.updateUserById(userId, {
+    if (dbError) {
+      console.error("[approve-user] DB update failed (approve):", dbError);
+      return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
+    }
+
+    const { error: authError } = await admin.auth.admin.updateUserById(userId, {
       user_metadata: { is_approved: true, is_denied: false },
     });
+
+    if (authError) {
+      console.error("[approve-user] Auth update failed (approve):", authError);
+      return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
+    }
 
     // Get user email to send approval notification
     const { data: userData } = await admin.auth.admin.getUserById(userId);

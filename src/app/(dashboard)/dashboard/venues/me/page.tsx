@@ -143,8 +143,23 @@ export default function VenueMePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      <div className="mx-auto max-w-2xl space-y-6 animate-in fade-in duration-300">
+        <div className="space-y-2">
+          <div className="h-7 w-28 rounded-lg bg-muted animate-pulse" />
+          <div className="h-4 w-56 rounded-lg bg-muted animate-pulse" />
+        </div>
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+            <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+              <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+            </div>
+            <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+            <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+          </CardContent>
+        </Card>
       </div>
     );
   }

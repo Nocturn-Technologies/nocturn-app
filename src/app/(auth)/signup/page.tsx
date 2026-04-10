@@ -15,9 +15,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Users, Music, MapPin, ArrowLeft, Megaphone, Camera, Video, Speaker, Lightbulb, BadgeDollarSign, Briefcase, Plane, CalendarCheck, UserCheck, Mic, Palette, Newspaper } from "lucide-react";
+import { Users, Music, MapPin, ArrowLeft, Megaphone, Camera, Video, Speaker, Lightbulb, BadgeDollarSign, Briefcase, Plane, CalendarCheck, UserCheck, Mic, Palette, Newspaper, Loader2, PartyPopper } from "lucide-react";
 
-type UserType = "collective" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
+type UserType = "collective" | "host" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
 
 const USER_TYPES: Array<{ type: UserType; icon: typeof Users; label: string; description: string }> = [
   {
@@ -25,6 +25,12 @@ const USER_TYPES: Array<{ type: UserType; icon: typeof Users; label: string; des
     icon: Users,
     label: "Collective",
     description: "Run events, sell tickets, manage your crew",
+  },
+  {
+    type: "host",
+    icon: PartyPopper,
+    label: "Host",
+    description: "Throw a night, invite friends, collect RSVPs in minutes",
   },
   {
     type: "promoter",
@@ -141,8 +147,8 @@ export default function SignupPage() {
       return;
     }
 
-    // Route based on user type — collectives and promoters need approval
-    if (userType === "collective" || userType === "promoter") {
+    // Route based on user type — collectives, hosts, and promoters need approval
+    if (userType === "collective" || userType === "host" || userType === "promoter") {
       router.push("/pending-approval");
     } else {
       router.push("/dashboard");
@@ -152,10 +158,10 @@ export default function SignupPage() {
 
   // Split into primary types (full cards) and marketplace types (compact grid)
   const primaryTypes = USER_TYPES.filter((t) =>
-    ["collective", "promoter"].includes(t.type)
+    ["collective", "host", "promoter"].includes(t.type)
   );
   const marketplaceTypes = USER_TYPES.filter(
-    (t) => !["collective", "promoter"].includes(t.type)
+    (t) => !["collective", "host", "promoter"].includes(t.type)
   );
 
   if (step === "type") {
@@ -267,6 +273,7 @@ export default function SignupPage() {
                 userType === "venue" ? "e.g. CODA Toronto" :
                 userType === "artist" ? "e.g. DJ Shadow" :
                 userType === "promoter" ? "Your name" :
+                userType === "host" ? "Your name" :
                 "Your full name"
               }
               value={fullName}
@@ -295,11 +302,11 @@ export default function SignupPage() {
               id="password"
               type="password"
               autoComplete="new-password"
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={6}
+              minLength={8}
               disabled={loading}
             />
           </div>
@@ -307,7 +314,7 @@ export default function SignupPage() {
             <p className="text-sm text-destructive">{error}</p>
           )}
           <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={loading}>
-            {loading ? "Creating account..." : "Create account"}
+            {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating account...</> : "Create account"}
           </Button>
         </form>
       </CardContent>

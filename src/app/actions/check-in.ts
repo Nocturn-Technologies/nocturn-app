@@ -8,30 +8,45 @@ import { rateLimitStrict } from "@/lib/rate-limit";
  * Verify the authenticated user is a member of the event's collective.
  */
 async function verifyCheckInAccess(eventId: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated" };
 
-  const admin = createAdminClient();
-  const { data: event } = await admin
-    .from("events")
-    .select("collective_id")
-    .eq("id", eventId)
-    .is("deleted_at", null)
-    .maybeSingle();
+    const admin = createAdminClient();
+    const { data: event, error: eventError } = await admin
+      .from("events")
+      .select("collective_id")
+      .eq("id", eventId)
+      .is("deleted_at", null)
+      .maybeSingle();
 
-  if (!event) return { error: "Event not found" };
+    if (eventError) {
+      console.error("[verifyCheckInAccess] event query error:", eventError.message);
+      return { error: "Something went wrong" };
+    }
 
-  const { count } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", event.collective_id)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
+    if (!event) return { error: "Event not found" };
 
-  if (!count || count === 0) return { error: "You don't have access to this event" };
+    const { count, error: memberError } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", event.collective_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
 
-  return { error: null };
+    if (memberError) {
+      console.error("[verifyCheckInAccess] membership check error:", memberError.message);
+      return { error: "Something went wrong" };
+    }
+
+    if (!count || count === 0) return { error: "You don't have access to this event" };
+
+    return { error: null };
+  } catch (err) {
+    console.error("[verifyCheckInAccess] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
 }
 
 /**
@@ -43,6 +58,9 @@ async function verifyCheckInAccess(eventId: string) {
  */
 export async function checkInTicket(ticketToken: string, eventId: string) {
   try {
+    if (!ticketToken?.trim()) return { success: false, error: "Ticket token is required", ticket: null };
+    if (!eventId?.trim()) return { success: false, error: "Event ID is required", ticket: null };
+
     // Auth check: only collective members can check in tickets
     const access = await verifyCheckInAccess(eventId);
     if (access.error) {
@@ -103,6 +121,7 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
       return {
         success: false,
         error: `Already checked in at ${checkedInTime}`,
+        duplicate: true,
         ticket: {
           tierName: ((ticket.ticket_tiers as Record<string, unknown> | null)?.name as string) ?? "General",
           guestName: ((ticket.users as Record<string, unknown> | null)?.full_name as string) ?? "Guest",
@@ -144,7 +163,12 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
       return {
         success: false,
         error: "Ticket was already checked in by another scanner.",
-        ticket: null,
+        duplicate: true,
+        ticket: {
+          tierName: (ticket.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
+          guestName: (ticket.users as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
+          guestEmail: (ticket.users as unknown as { full_name: string; email: string } | null)?.email ?? null,
+        },
       };
     }
 
@@ -182,6 +206,8 @@ export interface CheckInStats {
  */
 export async function getCheckInStats(eventId: string): Promise<CheckInStats> {
   try {
+    if (!eventId?.trim()) return { totalTickets: 0, checkedIn: 0, recentCheckIns: [] };
+
     // Auth check: only collective members can view check-in stats
     const access = await verifyCheckInAccess(eventId);
     if (access.error) {

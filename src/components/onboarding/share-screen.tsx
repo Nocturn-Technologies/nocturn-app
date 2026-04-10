@@ -8,10 +8,11 @@ interface ShareScreenProps {
   eventTitle: string;
   collectiveSlug: string;
   eventSlug: string;
+  isPaidEvent?: boolean;
   onDashboard: () => void;
 }
 
-export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard }: ShareScreenProps) {
+export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, isPaidEvent, onDashboard }: ShareScreenProps) {
   const [copied, setCopied] = useState(false);
   const [showConfetti, setShowConfetti] = useState(true);
   const hasEvent = !!eventSlug;
@@ -48,8 +49,20 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard
     window.open(`mailto:?subject=${subject}&body=${body}`, "_blank");
   }
 
-  function handleInstagramShare() {
-    // Copy link + prompt user to share on IG story
+  async function handleInstagramShare() {
+    // Use Web Share API if available, otherwise fall back to clipboard copy
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: eventTitle,
+          text: `Check out ${eventTitle}`,
+          url: shareUrl,
+        });
+        return;
+      } catch {
+        // User cancelled or share failed — fall back to copy
+      }
+    }
     handleCopy();
   }
 
@@ -90,7 +103,7 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard
       <div className="text-center space-y-1">
         <h2 className="text-2xl font-bold">{eventTitle}</h2>
         <p className="text-lg text-nocturn font-semibold">
-          {hasEvent ? "is LIVE" : "is ready"}
+          {hasEvent ? (isPaidEvent ? "is ready" : "is LIVE") : "is ready"}
         </p>
       </div>
 
@@ -122,7 +135,7 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, onDashboard
             onClick={handleInstagramShare}
             className="w-full bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 py-5 text-base"
           >
-            Share to IG Story
+            Copy Link for IG Story
           </Button>
         )}
 

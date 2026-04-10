@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { seedDemoData } from "@/app/actions/seed-demo";
 import { createClient } from "@/lib/supabase/server";
+import { rateLimitStrict } from "@/lib/rate-limit";
 
 export async function POST(_request: NextRequest) {
   try {
@@ -29,10 +30,17 @@ export async function POST(_request: NextRequest) {
       return NextResponse.json({ error: "No admin collective found" }, { status: 403 });
     }
 
+    // Rate limit: 1 request per minute
+    const { success: rateLimitOk } = await rateLimitStrict(`seed-demo:${user.id}`, 1, 60_000);
+    if (!rateLimitOk) {
+      return NextResponse.json({ error: "Too many requests. Please try again shortly." }, { status: 429 });
+    }
+
     const result = await seedDemoData(membership.collective_id);
 
     if (result.error) {
-      return NextResponse.json({ error: result.error }, { status: 400 });
+      console.error("[seed-demo] seedDemoData error:", result.error);
+      return NextResponse.json({ error: "Failed to seed demo data" }, { status: 400 });
     }
 
     return NextResponse.json(result);

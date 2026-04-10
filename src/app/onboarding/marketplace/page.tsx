@@ -30,10 +30,37 @@ import { MarketplaceConnect } from "@/components/onboarding/marketplace-connect"
 
 type Step = "import" | "review" | "connect" | "creating" | "done";
 
+const STORAGE_KEY = "nocturn_marketplace_onboarding";
+
+interface SavedMarketplaceProgress {
+  step: Step;
+  displayName: string;
+  city: string;
+  bio: string;
+  instagram: string;
+  selectedTags: string[];
+  rateRange: string;
+  availability: string;
+  portfolioUrls: string[];
+  pastVenues: string;
+  soundcloudUrl: string;
+  websiteUrl: string;
+  importUrl: string;
+}
+
+function saveMarketplaceProgress(data: SavedMarketplaceProgress) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+}
+
+function clearMarketplaceProgress() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch {}
+}
+
 export default function MarketplaceOnboardingPage() {
   const router = useRouter();
   const supabase = createClient();
 
+  const [authChecked, setAuthChecked] = useState(false);
   const [step, setStep] = useState<Step>("import");
   const [userType, setUserType] = useState<string>("");
   const [_fullName, setFullName] = useState("");
@@ -64,6 +91,52 @@ export default function MarketplaceOnboardingPage() {
   // Editing mode on review screen
   const [editing, setEditing] = useState(false);
 
+  // Restore progress from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const data: SavedMarketplaceProgress = JSON.parse(saved);
+        if (data.displayName) setDisplayName(data.displayName);
+        if (data.city) setCity(data.city);
+        if (data.bio) setBio(data.bio);
+        if (data.instagram) setInstagram(data.instagram);
+        if (data.selectedTags?.length) setSelectedTags(data.selectedTags);
+        if (data.rateRange) setRateRange(data.rateRange);
+        if (data.availability) setAvailability(data.availability);
+        if (data.portfolioUrls?.length) setPortfolioUrls(data.portfolioUrls);
+        if (data.pastVenues) setPastVenues(data.pastVenues);
+        if (data.soundcloudUrl) setSoundcloudUrl(data.soundcloudUrl);
+        if (data.websiteUrl) setWebsiteUrl(data.websiteUrl);
+        if (data.importUrl) setImportUrl(data.importUrl);
+        // Restore to step (but not terminal steps)
+        if (data.step && data.step !== "creating" && data.step !== "done" && data.step !== "connect") {
+          setStep(data.step);
+        }
+      }
+    } catch {}
+  }, []);
+
+  // Save progress whenever state changes (skip terminal steps)
+  useEffect(() => {
+    if (step === "creating" || step === "done" || step === "connect") return;
+    saveMarketplaceProgress({
+      step,
+      displayName,
+      city,
+      bio,
+      instagram,
+      selectedTags,
+      rateRange,
+      availability,
+      portfolioUrls,
+      pastVenues,
+      soundcloudUrl,
+      websiteUrl,
+      importUrl,
+    });
+  }, [step, displayName, city, bio, instagram, selectedTags, rateRange, availability, portfolioUrls, pastVenues, soundcloudUrl, websiteUrl, importUrl]);
+
   // Fetch user info on mount
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -72,8 +145,10 @@ export default function MarketplaceOnboardingPage() {
         return;
       }
       setFullName(user.user_metadata?.full_name ?? "");
-      setDisplayName(user.user_metadata?.full_name ?? "");
+      // Only set displayName from user metadata if not already restored from localStorage
+      setDisplayName((prev) => prev || (user.user_metadata?.full_name ?? ""));
       setUserType(user.user_metadata?.user_type ?? "artist");
+      setAuthChecked(true);
     });
   }, [supabase, router]);
 
@@ -185,11 +260,20 @@ export default function MarketplaceOnboardingPage() {
     }
 
     setProfileSlug(result.slug);
+    clearMarketplaceProgress();
     setStep("connect");
   }
 
   // Progress indicator
   const stepNumber = step === "import" ? 1 : step === "review" || step === "creating" ? 2 : 3;
+
+  if (!authChecked) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-10 w-10 animate-spin rounded-full border-3 border-nocturn border-t-transparent" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">

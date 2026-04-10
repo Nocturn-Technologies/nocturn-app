@@ -23,33 +23,38 @@ export async function askNocturn(
   collectiveId: string,
   history?: { role: "user" | "assistant"; content: string }[]
 ): Promise<string> {
+  try {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return "Not authenticated";
+
+  if (!collectiveId?.trim()) return "Collective ID is required.";
+  if (!question?.trim()) {
+    return "Ask me anything about your events, revenue, audience, or how to use Nocturn.";
+  }
 
   // Rate limit: 15 questions per minute per user
   const { success: rlOk } = await rateLimitStrict(`ask-nocturn:${user.id}`, 15, 60_000);
   if (!rlOk) return "You're asking too fast. Please wait a moment.";
 
-  if (!question.trim()) {
-    return "Ask me anything about your events, revenue, audience, or how to use Nocturn.";
-  }
-
   const sb = createAdminClient();
 
   // Verify user belongs to this collective
-  const { count: memberCount } = await sb
+  const { count: memberCount, error: memberError } = await sb
     .from("collective_members")
     .select("*", { count: "exact", head: true })
     .eq("collective_id", collectiveId)
     .eq("user_id", user.id)
     .is("deleted_at", null);
 
+  if (memberError) {
+    console.error("[ask-nocturn] membership check error:", memberError.message);
+    return fallbackResponse(question);
+  }
+
   if (!memberCount || memberCount === 0) {
     return "You don't have access to this collective's data.";
   }
-
-  try {
     // Query relevant data in parallel
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -192,8 +197,8 @@ export async function askNocturn(
     // Pass conversation history as structured messages for proper prompt caching
     const response = await generateWithClaude(question, fullSystem, history);
     return response || fallbackResponse(question);
-  } catch (error) {
-    console.error("[ask-nocturn] Error:", error);
+  } catch (err) {
+    console.error("[ask-nocturn] Error:", err);
     return fallbackResponse(question);
   }
 }

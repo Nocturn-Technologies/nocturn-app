@@ -351,6 +351,7 @@ export default function EventDesignPage() {
         // Convert data URL to blob
         const response = await fetch(generatedUrl);
         const blob = await response.blob();
+        // TODO(audit): predictable poster filename + upsert:true allows overwrite. Add crypto.randomUUID() to filename.
         const fileName = `posters/${eventId}-${Date.now()}.png`;
 
         const { error: uploadError } = await supabase.storage
@@ -371,6 +372,7 @@ export default function EventDesignPage() {
             return;
           }
 
+          // TODO(audit): switch to createSignedUrl() with 1-hour expiry — bucket is now private
           const { data: urlData } = supabase.storage
             .from("recordings")
             .getPublicUrl(fileName);

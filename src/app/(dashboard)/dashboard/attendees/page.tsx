@@ -52,8 +52,11 @@ export default function AttendeesPage() {
   // Reset page when search changes
   useEffect(() => { setPage(1); }, [debouncedSearch]);
 
+  const q = debouncedSearch.toLowerCase();
   const filtered = attendees.filter((a) =>
-    a.email.toLowerCase().includes(debouncedSearch.toLowerCase())
+    a.email.toLowerCase().includes(q) ||
+    (a.name && a.name.toLowerCase().includes(q)) ||
+    a.eventTitles?.some((t) => t.toLowerCase().includes(q))
   );
   const totalPages = Math.ceil(filtered.length / PER_PAGE);
   const paginatedAttendees = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
@@ -234,7 +237,7 @@ export default function AttendeesPage() {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by email..."
+            placeholder="Search by name, email, or event..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="pl-9 rounded-xl transition-colors duration-200 focus:border-nocturn/40"
@@ -253,7 +256,7 @@ export default function AttendeesPage() {
             </p>
           </div>
           <div className="hidden sm:grid grid-cols-12 gap-2 px-4 text-xs font-medium text-muted-foreground">
-            <span className="col-span-4">Email</span>
+            <span className="col-span-4">Attendee</span>
             <span className="col-span-2 text-center">Events</span>
             <span className="col-span-2 text-center">Tickets</span>
             <span className="col-span-2 text-right">Total Spent</span>
@@ -267,13 +270,19 @@ export default function AttendeesPage() {
                 <div className="hidden sm:grid grid-cols-12 items-center gap-2">
                   <div className="col-span-4 min-w-0">
                     <p className="truncate font-medium text-sm">
-                      {attendee.email}
+                      {attendee.name || attendee.email}
                     </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {attendee.eventTitles.slice(0, 2).join(", ")}
-                      {attendee.eventTitles.length > 2 &&
-                        ` +${attendee.eventTitles.length - 2} more`}
-                    </p>
+                    {attendee.name ? (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {attendee.email}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {attendee.eventTitles.slice(0, 2).join(", ")}
+                        {attendee.eventTitles.length > 2 &&
+                          ` +${attendee.eventTitles.length - 2} more`}
+                      </p>
+                    )}
                   </div>
                   <p className="col-span-2 text-center text-sm">
                     {attendee.totalEvents}
@@ -297,9 +306,16 @@ export default function AttendeesPage() {
                 {/* Mobile layout */}
                 <div className="sm:hidden space-y-2">
                   <div className="flex items-center justify-between">
-                    <p className="truncate font-medium text-sm flex-1 min-w-0 mr-2">
-                      {attendee.email}
-                    </p>
+                    <div className="flex-1 min-w-0 mr-2">
+                      <p className="truncate font-medium text-sm">
+                        {attendee.name || attendee.email}
+                      </p>
+                      {attendee.name && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {attendee.email}
+                        </p>
+                      )}
+                    </div>
                     <p className="font-medium text-nocturn shrink-0">
                       ${attendee.totalSpent.toFixed(2)}
                     </p>

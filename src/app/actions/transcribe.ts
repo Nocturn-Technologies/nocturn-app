@@ -17,15 +17,21 @@ function stripHtmlTags(str: string): string {
  * Downloads the file server-side, chunks if needed, transcribes with Whisper.
  */
 export async function transcribeFromStorage(storagePath: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", transcript: "", summary: "", action_items: [], key_decisions: [] };
-
-  // Rate limit: 5 transcriptions per hour per user (Whisper + GPT are expensive)
-  const { success: rlOk } = await rateLimitStrict(`transcribe:${user.id}`, 5, 3_600_000);
-  if (!rlOk) return { error: "Rate limit exceeded. Max 5 transcriptions per hour.", transcript: "", summary: "", action_items: [], key_decisions: [] };
-
   try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", transcript: "", summary: "", action_items: [], key_decisions: [] };
+
+    // Rate limit: 5 transcriptions per hour per user (Whisper + GPT are expensive)
+    const { success: rlOk } = await rateLimitStrict(`transcribe:${user.id}`, 5, 3_600_000);
+    if (!rlOk) return { error: "Rate limit exceeded. Max 5 transcriptions per hour.", transcript: "", summary: "", action_items: [], key_decisions: [] };
+
+    // Validate storagePath — no path traversal
+    if (!storagePath?.trim()) return { error: "Storage path is required", transcript: "", summary: "", action_items: [], key_decisions: [] };
+    if (storagePath.includes("..") || storagePath.includes("\0")) {
+      return { error: "Invalid storage path", transcript: "", summary: "", action_items: [], key_decisions: [] };
+    }
+
     const admin = createAdminClient();
 
     // Verify ownership: the recording must belong to the authenticated user
@@ -123,16 +129,33 @@ If the transcript is casual conversation with no clear action items or decisions
       temperature: 0.3,
     });
 
-    const parsed = JSON.parse(analysis.choices[0].message.content ?? "{}");
+    const choiceContent = analysis.choices?.[0]?.message?.content;
+    if (!choiceContent) {
+      return {
+        error: null,
+        transcript,
+        summary: "Analysis could not be generated.",
+        action_items: [],
+        key_decisions: [],
+      };
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(choiceContent);
+    } catch {
+      console.error("[transcribeFromStorage] Failed to parse analysis JSON");
+      parsed = {};
+    }
 
     revalidatePath("/dashboard/record");
 
     return {
       error: null,
       transcript,
-      summary: stripHtmlTags(parsed.summary ?? "No summary available."),
-      action_items: (parsed.action_items ?? []).map((item: string) => stripHtmlTags(item)),
-      key_decisions: (parsed.key_decisions ?? []).map((item: string) => stripHtmlTags(item)),
+      summary: stripHtmlTags((parsed.summary as string) ?? "No summary available."),
+      action_items: ((parsed.action_items as string[]) ?? []).map((item: string) => stripHtmlTags(item)),
+      key_decisions: ((parsed.key_decisions as string[]) ?? []).map((item: string) => stripHtmlTags(item)),
     };
   } catch (err: unknown) {
     console.error("[transcribeFromStorage]", err);
@@ -151,19 +174,24 @@ If the transcript is casual conversation with no clear action items or decisions
  * For longer recordings, use transcribeFromStorage instead.
  */
 export async function transcribeAudio(audioBase64: string, mimeType: string) {
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", transcript: "", summary: "", action_items: [], key_decisions: [] };
-
-  // Rate limit: 5 transcriptions per hour per user
-  const { success: rlOk } = await rateLimitStrict(`transcribe:${user.id}`, 5, 3_600_000);
-  if (!rlOk) return { error: "Rate limit exceeded. Max 5 transcriptions per hour.", transcript: "", summary: "", action_items: [], key_decisions: [] };
-
-  if (audioBase64.length > 35_000_000) {
-    return { error: "Audio file too large", transcript: "", summary: "", action_items: [], key_decisions: [] };
-  }
-
   try {
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", transcript: "", summary: "", action_items: [], key_decisions: [] };
+
+    // Rate limit: 5 transcriptions per hour per user
+    const { success: rlOk } = await rateLimitStrict(`transcribe:${user.id}`, 5, 3_600_000);
+    if (!rlOk) return { error: "Rate limit exceeded. Max 5 transcriptions per hour.", transcript: "", summary: "", action_items: [], key_decisions: [] };
+
+    // Validate mimeType against allowlist
+    const allowedMimeTypes = ["audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-m4a", "audio/mp3"];
+    if (!mimeType || !allowedMimeTypes.includes(mimeType)) {
+      return { error: "Unsupported audio format", transcript: "", summary: "", action_items: [], key_decisions: [] };
+    }
+
+    if (!audioBase64 || audioBase64.length > 35_000_000) {
+      return { error: "Audio file too large", transcript: "", summary: "", action_items: [], key_decisions: [] };
+    }
     const buffer = Buffer.from(audioBase64, "base64");
     const file = new File([buffer], "recording.webm", { type: mimeType });
 
@@ -213,16 +241,33 @@ If the transcript is casual conversation with no clear action items or decisions
       temperature: 0.3,
     });
 
-    const parsed = JSON.parse(analysis.choices[0].message.content ?? "{}");
+    const choiceContent = analysis.choices?.[0]?.message?.content;
+    if (!choiceContent) {
+      return {
+        error: null,
+        transcript,
+        summary: "Analysis could not be generated.",
+        action_items: [],
+        key_decisions: [],
+      };
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(choiceContent);
+    } catch {
+      console.error("[transcribeAudio] Failed to parse analysis JSON");
+      parsed = {};
+    }
 
     revalidatePath("/dashboard/record");
 
     return {
       error: null,
       transcript,
-      summary: stripHtmlTags(parsed.summary ?? "No summary available."),
-      action_items: (parsed.action_items ?? []).map((item: string) => stripHtmlTags(item)),
-      key_decisions: (parsed.key_decisions ?? []).map((item: string) => stripHtmlTags(item)),
+      summary: stripHtmlTags((parsed.summary as string) ?? "No summary available."),
+      action_items: ((parsed.action_items as string[]) ?? []).map((item: string) => stripHtmlTags(item)),
+      key_decisions: ((parsed.key_decisions as string[]) ?? []).map((item: string) => stripHtmlTags(item)),
     };
   } catch (err: unknown) {
     console.error("[transcribeAudio]", err);

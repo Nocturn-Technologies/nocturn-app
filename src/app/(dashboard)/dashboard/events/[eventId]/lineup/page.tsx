@@ -20,7 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ArrowLeft, Plus, Music, MoreVertical, Check, X, Clock } from "lucide-react";
+import { ArrowLeft, Plus, Music, MoreVertical, Check, X, Clock, Loader2 } from "lucide-react";
 import Link from "next/link";
 
 interface EventArtist {
@@ -56,6 +56,7 @@ export default function LineupPage() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [changingStatusId, setChangingStatusId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Add to lineup form
@@ -129,12 +130,13 @@ export default function LineupPage() {
   }
 
   async function handleStatusChange(eventArtistId: string, status: "pending" | "confirmed" | "declined" | "cancelled") {
+    setChangingStatusId(eventArtistId);
     const result = await updateBookingStatus({ eventArtistId, status });
     if (result.error) {
       setError(result.error);
-      return;
     }
-    loadData();
+    await loadData();
+    setChangingStatusId(null);
   }
 
   // Filter out already-booked artists
@@ -158,8 +160,27 @@ export default function LineupPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      <div className="mx-auto max-w-2xl space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-md bg-muted animate-pulse" />
+          <div className="space-y-1.5">
+            <div className="h-7 w-24 rounded-lg bg-muted animate-pulse" />
+            <div className="h-4 w-32 rounded-lg bg-muted animate-pulse" />
+          </div>
+        </div>
+        <div className="h-11 w-full rounded-md bg-muted animate-pulse" />
+        {[...Array(3)].map((_, i) => (
+          <Card key={i}>
+            <CardContent className="flex items-center gap-4 p-4">
+              <div className="h-10 w-10 rounded-full bg-muted animate-pulse shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-4 w-28 rounded bg-muted animate-pulse" />
+                <div className="h-3 w-36 rounded bg-muted animate-pulse" />
+              </div>
+              <div className="h-6 w-20 rounded-full bg-muted animate-pulse" />
+            </CardContent>
+          </Card>
+        ))}
       </div>
     );
   }
@@ -275,7 +296,7 @@ export default function LineupPage() {
                 </div>
                 <div className="flex gap-2">
                   <Button type="submit" className="bg-nocturn hover:bg-nocturn-light" disabled={saving || !selectedArtistId}>
-                    {saving ? "Booking..." : "Book Artist"}
+                    {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Booking...</> : "Book Artist"}
                   </Button>
                   <Button type="button" variant="ghost" onClick={() => setShowAdd(false)}>
                     Cancel
@@ -334,24 +355,24 @@ export default function LineupPage() {
                     {item.status}
                   </span>
                   <DropdownMenu>
-                    <DropdownMenuTrigger className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent">
-                      <MoreVertical className="h-4 w-4" />
+                    <DropdownMenuTrigger className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent" disabled={changingStatusId === item.id}>
+                      {changingStatusId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       {item.status !== "confirmed" && (
-                        <DropdownMenuItem onClick={() => handleStatusChange(item.id, "confirmed")}>
+                        <DropdownMenuItem onClick={() => handleStatusChange(item.id, "confirmed")} disabled={!!changingStatusId}>
                           <Check className="mr-2 h-4 w-4 text-green-500" />
                           Confirm
                         </DropdownMenuItem>
                       )}
                       {item.status !== "declined" && (
-                        <DropdownMenuItem onClick={() => handleStatusChange(item.id, "declined")}>
+                        <DropdownMenuItem onClick={() => handleStatusChange(item.id, "declined")} disabled={!!changingStatusId}>
                           <X className="mr-2 h-4 w-4 text-red-500" />
                           Decline
                         </DropdownMenuItem>
                       )}
                       {item.status !== "cancelled" && (
-                        <DropdownMenuItem onClick={() => handleStatusChange(item.id, "cancelled")}>
+                        <DropdownMenuItem onClick={() => handleStatusChange(item.id, "cancelled")} disabled={!!changingStatusId}>
                           Cancel booking
                         </DropdownMenuItem>
                       )}

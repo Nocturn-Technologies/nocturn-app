@@ -3,9 +3,12 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
+import { isValidUUID } from "@/lib/utils";
 
 // Verify user owns the event via collective membership
 async function verifyEventAccess(eventId: string) {
+  if (!isValidUUID(eventId)) return { error: "Invalid event ID", userId: null };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", userId: null };
@@ -74,6 +77,7 @@ function toPromoCode(row: Record<string, unknown>): PromoCode {
   };
 }
 
+// TODO(audit): bound maxUses 1-100000, validate expiresAt as real date
 export async function createPromoCode(input: {
   eventId: string;
   code: string;
@@ -189,6 +193,12 @@ export async function validatePromoCode(eventId: string, code: string) {
     if (!eventId?.trim() || !code?.trim()) {
       return { valid: false, error: "Invalid promo code", discount: null };
     }
+    if (!isValidUUID(eventId)) {
+      return { valid: false, error: "Invalid event ID format", discount: null };
+    }
+    if (code.trim().length > 50 || !/^[A-Z0-9_-]+$/i.test(code.trim())) {
+      return { valid: false, error: "Invalid promo code format", discount: null };
+    }
 
     const supabase = createAdminClient();
 
@@ -238,6 +248,7 @@ export async function validatePromoCode(eventId: string, code: string) {
 export async function togglePromoCode(codeId: string, isActive: boolean) {
   try {
     if (!codeId?.trim()) return { error: "Promo code ID is required" };
+    if (!isValidUUID(codeId)) return { error: "Invalid promo code ID format" };
 
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();

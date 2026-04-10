@@ -25,6 +25,7 @@ function sanitizeUrl(url: string | null | undefined): string | null {
 
 // ── Actions ──────────────────────────────────────────────────────────
 
+// TODO(audit): add length caps on displayName/city/rateRange/availability, sanitize URL fields, UUID-validate profileId in saveProfile/unsaveProfile
 export async function createMarketplaceProfile(data: {
   displayName: string;
   city?: string | null;
@@ -41,6 +42,13 @@ export async function createMarketplaceProfile(data: {
   pastVenues?: string[] | null;
 }): Promise<{ error: string | null; slug: string | null }> {
   try {
+  if (!data.displayName || typeof data.displayName !== "string" || data.displayName.trim().length === 0) {
+    return { error: "Display name is required", slug: null };
+  }
+  if (data.displayName.length > 100) {
+    return { error: "Display name must be under 100 characters", slug: null };
+  }
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -103,6 +111,7 @@ export async function createMarketplaceProfile(data: {
   }
 }
 
+// TODO(audit): add length caps on displayName/city/rateRange/availability, sanitize URL fields, UUID-validate profileId in saveProfile/unsaveProfile
 export async function updateMarketplaceProfile(data: {
   displayName?: string;
   city?: string | null;
@@ -180,10 +189,15 @@ export async function getMarketplaceProfile() {
 
   const admin = createAdminClient();
 
-  const { data } = await admin.from("marketplace_profiles")
+  const { data, error: queryError } = await admin.from("marketplace_profiles")
     .select("*")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  if (queryError) {
+    console.error("[getMarketplaceProfile]", queryError);
+    return null;
+  }
 
   return data ?? null;
   } catch (err) {
@@ -198,10 +212,15 @@ export async function getProfileBySlug(slug: string) {
 
   const admin = createAdminClient();
 
-  const { data } = await admin.from("marketplace_profiles")
+  const { data, error: queryError } = await admin.from("marketplace_profiles")
     .select("id, slug, user_type, user_id, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, is_verified, created_at, users(full_name)")
     .eq("slug", slug)
     .maybeSingle();
+
+  if (queryError) {
+    console.error("[getProfileBySlug]", queryError);
+    return null;
+  }
 
   return data ?? null;
   } catch (err) {
@@ -210,6 +229,7 @@ export async function getProfileBySlug(slug: string) {
   }
 }
 
+// TODO(audit): replace inline sanitizer with shared sanitizePostgRESTInput() from @/lib/utils + length cap
 /** Escape special Postgres LIKE/ILIKE pattern chars and PostgREST filter delimiters */
 function sanitizeSearchInput(input: string): string {
   return input
@@ -227,6 +247,14 @@ export async function searchProfiles(filters: {
   page?: number;
 }): Promise<{ profiles: Record<string, unknown>[]; total: number }> {
   try {
+    // Input validation
+    if (filters.query && typeof filters.query !== "string") return { profiles: [], total: 0 };
+    if (filters.type && typeof filters.type !== "string") return { profiles: [], total: 0 };
+    if (filters.city && typeof filters.city !== "string") return { profiles: [], total: 0 };
+    if (filters.page !== undefined && (typeof filters.page !== "number" || filters.page < 1 || !Number.isFinite(filters.page))) {
+      return { profiles: [], total: 0 };
+    }
+
     const admin = createAdminClient();
     const page = filters.page ?? 1;
     const perPage = 20;
@@ -276,6 +304,10 @@ export async function saveProfile(
   profileId: string
 ): Promise<{ error: string | null }> {
   try {
+  if (!profileId || typeof profileId !== "string" || profileId.length > 100) {
+    return { error: "Invalid profile ID" };
+  }
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -343,6 +375,10 @@ export async function unsaveProfile(
   profileId: string
 ): Promise<{ error: string | null }> {
   try {
+  if (!profileId || typeof profileId !== "string" || profileId.length > 100) {
+    return { error: "Invalid profile ID" };
+  }
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -371,6 +407,10 @@ export async function unsaveProfile(
 
 export async function isProfileSaved(profileId: string): Promise<boolean> {
   try {
+  if (!profileId || typeof profileId !== "string" || profileId.length > 100) {
+    return false;
+  }
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -432,6 +472,7 @@ export async function getSavedProfiles(): Promise<{
   }
 }
 
+// TODO(audit): add length caps on displayName/city/rateRange/availability, sanitize URL fields, UUID-validate profileId in saveProfile/unsaveProfile
 export async function sendInquiry(data: {
   toProfileId: string;
   eventId?: string | null;
@@ -439,6 +480,13 @@ export async function sendInquiry(data: {
   inquiryType?: string;
 }): Promise<{ error: string | null }> {
   try {
+  if (!data.toProfileId || typeof data.toProfileId !== "string" || data.toProfileId.length > 100) {
+    return { error: "Invalid profile ID" };
+  }
+  if (!data.message || typeof data.message !== "string") {
+    return { error: "Message is required" };
+  }
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -485,13 +533,20 @@ export async function sendInquiry(data: {
     .eq("id", data.toProfileId)
     .maybeSingle();
 
-  if (profile?.users?.email) {
+  // SECURITY: never fall back to CRON_SECRET — these serve different trust boundaries.
+  // If INTERNAL_API_SECRET is unset, skip the email entirely rather than sending
+  // unauthenticated internal requests.
+  const internalSecret = process.env.INTERNAL_API_SECRET;
+  const internalSecretOk = !!internalSecret && internalSecret.length >= 16;
+  if (!internalSecretOk) {
+    console.warn(
+      "[marketplace] INTERNAL_API_SECRET is not set or too short — skipping inquiry email"
+    );
+  }
+
+  if (profile?.users?.email && internalSecretOk) {
     try {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.trynocturn.com";
-      if (!process.env.INTERNAL_API_SECRET) {
-        console.warn("INTERNAL_API_SECRET is not set — internal API calls will not be authenticated");
-      }
-      const internalSecret = process.env.INTERNAL_API_SECRET || "";
       fetch(`${appUrl}/api/marketplace-inquiry-email`, {
         method: "POST",
         headers: {

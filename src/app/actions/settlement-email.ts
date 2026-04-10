@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { getResendClient } from "@/lib/resend";
+import { isValidUUID } from "@/lib/utils";
 
 function escapeHtml(str: string): string {
   return str
@@ -16,6 +17,9 @@ function escapeHtml(str: string): string {
 // Generate a settlement report email and return it (for now, no Resend — just generates the content)
 export async function generateSettlementReport(settlementId: string) {
   try {
+  if (!settlementId?.trim()) return { error: "Settlement ID is required", report: null };
+  if (!isValidUUID(settlementId)) return { error: "Invalid settlement ID format", report: null };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", report: null };
@@ -23,12 +27,16 @@ export async function generateSettlementReport(settlementId: string) {
   const admin = createAdminClient();
 
   // Get settlement with event and collective
-  const { data: settlement } = await admin
+  const { data: settlement, error: settlementError } = await admin
     .from("settlements")
     .select("*, events(title, starts_at, venues(name, city)), collectives(name)")
     .eq("id", settlementId)
     .maybeSingle();
 
+  if (settlementError) {
+    console.error("[generateSettlementReport] DB error:", settlementError);
+    return { error: "Something went wrong", report: null };
+  }
   if (!settlement) return { error: "Settlement not found", report: null };
 
   // Verify user is an admin or promoter of this collective

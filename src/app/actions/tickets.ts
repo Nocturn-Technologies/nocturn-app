@@ -8,6 +8,9 @@ import { logPaymentEvent } from "@/lib/payment-events";
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
 // In-memory rate limit for fulfillPaymentIntent: max 5 calls per minute per PI ID
+// NOTE: This rate limit is per-serverless-instance (resets on cold start).
+// It's a best-effort guard against rapid client retries, not a global rate limit.
+// The real protection is Stripe PaymentIntent verification + DB idempotency checks.
 const fulfillRateLimit = new Map<string, number[]>();
 const FULFILL_RATE_LIMIT = 5;
 const FULFILL_RATE_WINDOW_MS = 60_000;
@@ -72,6 +75,9 @@ export async function generateTicketQRCode(ticketToken: string) {
     errorCorrectionLevel: "H",
   });
 
+  // TODO: Store QR as a URL to Supabase Storage instead of inline data URI to reduce
+  // ticket table bloat. The email flow already uploads to storage (lib/email/send.ts).
+
   // Persist the QR code to the ticket record
   const { error: updateError } = await admin
     .from("tickets")
@@ -95,6 +101,7 @@ export async function generateTicketQRCode(ticketToken: string) {
  * If the user is authenticated, verifies ownership.
  * If not authenticated, returns limited public data (for check-in page / ticket view).
  */
+// TODO(audit): defense-in-depth gap — add isValidUUID(ticketToken) guard. Current callers validate upstream, but any new caller introduces regression.
 export async function getTicketByToken(ticketToken: string) {
   try {
   const supabase = await createServerClient();
@@ -252,6 +259,20 @@ async function sendConfirmationEmail(params: {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
   try {
+    // Dedup check: if any ticket already has confirmation_email_sent flag, skip
+    if (ticketIds && ticketIds.length > 0) {
+      const { data: sentCheck } = await admin
+        .from("tickets")
+        .select("id, metadata")
+        .in("id", ticketIds)
+        .limit(1);
+      if (sentCheck?.[0]?.metadata && typeof sentCheck[0].metadata === "object" &&
+          (sentCheck[0].metadata as Record<string, unknown>).confirmation_email_sent === true) {
+        console.info("[sendConfirmationEmail] Email already sent, skipping duplicate");
+        return;
+      }
+    }
+
     // Generate QR codes for tickets that don't have them yet
     const QRCodeLib = (await import("qrcode")).default;
     const qrCodes: string[] = [];
@@ -311,6 +332,30 @@ async function sendConfirmationEmail(params: {
       ticketTokens,
     });
     console.info("[fulfillPaymentIntent] Confirmation email sent with QR codes");
+
+    // Mark tickets as having had email sent (dedup flag for concurrent client+webhook)
+    if (ticketIds && ticketIds.length > 0) {
+      // Merge confirmation_email_sent into existing metadata for each ticket
+      const { data: currentTickets } = await admin
+        .from("tickets")
+        .select("id, metadata")
+        .in("id", ticketIds);
+      if (currentTickets) {
+        await Promise.all(
+          currentTickets.map((t) =>
+            admin
+              .from("tickets")
+              .update({
+                metadata: {
+                  ...((t.metadata as Record<string, unknown>) ?? {}),
+                  confirmation_email_sent: true,
+                },
+              })
+              .eq("id", t.id)
+          )
+        ).catch(() => { /* non-blocking */ });
+      }
+    }
   } catch (err) {
     console.error("[fulfillPaymentIntent] Email failed:", err);
   }
@@ -380,17 +425,22 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     return { error: null, tickets: existingTickets.map((t) => ({ ticket_token: t.ticket_token, status: t.status, created_at: t.created_at })) };
   }
 
-  // Verify the PaymentIntent with Stripe — this is the security check
+  // Verify the PaymentIntent with Stripe — this is the security check (with retry)
   const { getStripe } = await import("@/lib/stripe");
   let pi;
-  try {
-    pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
-  } catch {
-    return { error: "Could not verify payment", tickets: null };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
+      break;
+    } catch (stripeErr) {
+      console.error(`[fulfillPaymentIntent] Stripe retrieve attempt ${attempt + 1} failed:`, stripeErr);
+      if (attempt === 2) return { error: "Could not verify payment — please refresh the page", tickets: null };
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1))); // 1s, 2s backoff
+    }
   }
 
-  if (pi.status !== "succeeded") {
-    return { error: `Payment status is ${pi.status}, not succeeded`, tickets: null };
+  if (!pi || pi.status !== "succeeded") {
+    return { error: "Payment has not succeeded yet. Please try again.", tickets: null };
   }
 
   const metadata = pi.metadata;
@@ -446,7 +496,14 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
   };
 
   // Try to update pending tickets (created at checkout) to "paid" first (Gap 9 + 25).
-  const pendingTicketIds: string[] = metadata.pendingTicketIds ? JSON.parse(metadata.pendingTicketIds) : [];
+  let pendingTicketIds: string[] = [];
+  if (metadata.pendingTicketIds) {
+    try {
+      pendingTicketIds = JSON.parse(metadata.pendingTicketIds);
+    } catch (parseErr) {
+      console.error("[fulfillPaymentIntent] Failed to parse pendingTicketIds:", parseErr);
+    }
+  }
 
   if (pendingTicketIds.length > 0) {
     const { data: updatedTickets, error: updateError } = await admin
@@ -510,7 +567,7 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
             upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
           }
         }
-      } catch { /* non-critical */ }
+      } catch (analyticsErr) { console.error("[fulfillPaymentIntent] Analytics tracking failed (non-blocking):", analyticsErr); }
 
       return {
         error: null,
@@ -566,12 +623,14 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     if (atomicError) throw atomicError;
     insertedTickets = atomicResult as unknown as { id: string; ticket_token: string; is_new?: boolean }[];
 
-    // The atomic function returns is_new=false for pre-existing tickets.
-    // Use this deterministic flag to avoid double-counting promo/analytics.
+    // We passed the idempotency check above (lines 341-345), so if the RPC returns results,
+    // they are either newly created or the RPC found them via the advisory lock.
+    // The idempotency check already handled the "pre-existing" case.
     if (insertedTickets && insertedTickets.length > 0) {
-      wasNewlyCreated = insertedTickets[0]?.is_new !== false;
+      wasNewlyCreated = true;
     }
-  } catch {
+  } catch (atomicFallbackErr) {
+    console.error("[fulfillPaymentIntent] Atomic RPC failed, falling back to manual insert:", atomicFallbackErr);
     // Fallback: manual insert (for pre-migration compatibility)
     // Re-check for existing tickets first (idempotency)
     const { data: postLockTickets } = await admin
@@ -676,7 +735,7 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
           if (eventForAnalytics?.collective_id) {
             upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
           }
-        } catch { /* non-critical */ }
+        } catch (profileErr) { console.error("[fulfillPaymentIntent] Attendee profile upsert failed (non-blocking):", profileErr); }
       }
     } catch (analyticsErr) {
       console.error("[fulfillPaymentIntent] Analytics tracking failed (non-blocking):", analyticsErr);
@@ -693,6 +752,18 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
       ticketIds: insertedTickets.map((t) => t.id),
       eventId, tierId, buyerEmail, quantity, pricePaid,
     });
+  }
+
+  // Post-purchase hooks: referral nudge + milestone emails (#8)
+  if (buyerEmail && insertedTickets && wasNewlyCreated) {
+    try {
+      const { runPostPurchaseHooks } = await import("@/app/actions/post-purchase-hooks");
+      await runPostPurchaseHooks({
+        eventId,
+        buyerEmail,
+        ticketToken: insertedTickets[0]?.ticket_token || "",
+      });
+    } catch (hookErr) { console.error("[fulfillPaymentIntent] Post-purchase hooks failed (non-blocking):", hookErr); }
   }
 
   return {

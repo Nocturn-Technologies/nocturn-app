@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, Suspense } from "react";
+import { EventCreatedToast } from "@/components/events/event-created-toast";
 import { useParams, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -178,6 +179,7 @@ function EventTasksPageInner() {
   // Message
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [addingSuggestionIdx, setAddingSuggestionIdx] = useState<number | null>(null);
 
   // Completion animation
   const [showCelebration, setShowCelebration] = useState(false);
@@ -269,7 +271,8 @@ function EventTasksPageInner() {
     );
   }
 
-  async function handleAddSuggestion(suggestion: Suggestion) {
+  async function handleAddSuggestion(suggestion: Suggestion, idx: number) {
+    setAddingSuggestionIdx(idx);
     await createEventTask({
       eventId,
       title: suggestion.title,
@@ -278,6 +281,7 @@ function EventTasksPageInner() {
       priority: suggestion.priority,
     });
     await loadAll();
+    setAddingSuggestionIdx(null);
   }
 
   async function handleSendMessage(e: React.FormEvent) {
@@ -629,8 +633,9 @@ function EventTasksPageInner() {
                       <p className="text-sm font-medium">{s.title}</p>
                       <p className="text-xs text-muted-foreground">{s.description}</p>
                     </div>
-                    <Button size="sm" variant="ghost" className="text-nocturn hover:bg-nocturn/10 shrink-0" onClick={() => handleAddSuggestion(s)}>
-                      <Plus className="h-3 w-3 mr-1" /> Add
+                    <Button size="sm" variant="ghost" className="text-nocturn hover:bg-nocturn/10 shrink-0" onClick={() => handleAddSuggestion(s, i)} disabled={addingSuggestionIdx !== null}>
+                      {addingSuggestionIdx === i ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
+                      {addingSuggestionIdx === i ? "Adding..." : "Add"}
                     </Button>
                   </div>
                 ))}
@@ -795,6 +800,8 @@ function EventTasksPageInner() {
 
 export default function EventTasksPage() {
   return (
+    <>
+    <EventCreatedToast />
     <Suspense
       fallback={
         <div className="flex items-center justify-center py-20">
@@ -809,6 +816,7 @@ export default function EventTasksPage() {
     >
       <EventTasksPageInner />
     </Suspense>
+    </>
   );
 }
 

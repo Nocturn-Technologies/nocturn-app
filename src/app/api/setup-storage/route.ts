@@ -14,7 +14,7 @@ export async function POST(request: Request) {
 
     // Require CRON_SECRET to be set
     if (!cronSecret) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
     }
 
     // Timing-safe comparison to prevent timing attacks
@@ -27,32 +27,57 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
     const results: Record<string, string> = {};
 
-    // Buckets that need to exist with public access
-    const publicBuckets = ["marketplace", "recordings"];
+    // Bucket configuration.
+    // NOTE: `recordings` is PRIVATE — it stores voice chat messages and call
+    // recordings that must not be publicly accessible. Callers MUST use
+    // `createSignedUrl()` (with a short expiry like 1 hour) instead of
+    // `getPublicUrl()` to surface these files to the client.
+    const buckets: Array<{
+      name: string;
+      public: boolean;
+      allowedMimeTypes: string[];
+      fileSizeLimit: number;
+    }> = [
+      {
+        name: "marketplace",
+        public: true,
+        allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime"],
+        fileSizeLimit: 10 * 1024 * 1024, // 10MB
+      },
+      {
+        name: "recordings",
+        public: false, // private — use createSignedUrl() to access
+        allowedMimeTypes: ["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg"],
+        fileSizeLimit: 100 * 1024 * 1024, // 100MB
+      },
+    ];
 
-    for (const bucketName of publicBuckets) {
-      const { data: existing } = await admin.storage.getBucket(bucketName);
+    for (const cfg of buckets) {
+      const { data: existing } = await admin.storage.getBucket(cfg.name);
 
       if (existing) {
-        // Ensure it's public
-        const { error: updateError } = await admin.storage.updateBucket(bucketName, {
-          public: true,
-          allowedMimeTypes: bucketName === "marketplace"
-            ? ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime"]
-            : ["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg"],
-          fileSizeLimit: bucketName === "marketplace" ? 10 * 1024 * 1024 : 100 * 1024 * 1024, // 10MB media, 100MB recordings
+        const { error: updateError } = await admin.storage.updateBucket(cfg.name, {
+          public: cfg.public,
+          allowedMimeTypes: cfg.allowedMimeTypes,
+          fileSizeLimit: cfg.fileSizeLimit,
         });
-        results[bucketName] = updateError ? "update failed" : "exists, updated to public";
+        results[cfg.name] = updateError ? "update failed" : `exists, updated (public=${cfg.public})`;
       } else {
-        const { error: createError } = await admin.storage.createBucket(bucketName, {
-          public: true,
-          allowedMimeTypes: bucketName === "marketplace"
-            ? ["image/jpeg", "image/png", "image/webp", "image/gif", "video/mp4", "video/webm", "video/quicktime"]
-            : ["audio/webm", "audio/mp4", "audio/mpeg", "audio/ogg"],
-          fileSizeLimit: bucketName === "marketplace" ? 10 * 1024 * 1024 : 100 * 1024 * 1024,
+        const { error: createError } = await admin.storage.createBucket(cfg.name, {
+          public: cfg.public,
+          allowedMimeTypes: cfg.allowedMimeTypes,
+          fileSizeLimit: cfg.fileSizeLimit,
         });
-        results[bucketName] = createError ? "create failed" : "created";
+        results[cfg.name] = createError ? "create failed" : "created";
       }
+    }
+
+    const failures = Object.entries(results).filter(([, v]) => v.includes("failed"));
+    if (failures.length > 0) {
+      return NextResponse.json(
+        { success: false, error: `Bucket operations failed: ${failures.map(([k]) => k).join(", ")}`, buckets: results },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ success: true, buckets: results });

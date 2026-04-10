@@ -56,11 +56,16 @@ export interface EventFinancials {
 async function verifyOwnership(userId: string, eventId: string) {
   const admin = createAdminClient();
 
-  const { data: memberships } = await admin
+  const { data: memberships, error: membershipsError } = await admin
     .from("collective_members")
     .select("collective_id")
     .eq("user_id", userId)
     .is("deleted_at", null);
+
+  if (membershipsError) {
+    console.error("[verifyOwnership] memberships query error:", membershipsError.message);
+    return { error: "Failed to verify membership.", collectiveId: null };
+  }
 
   if (!memberships || memberships.length === 0) {
     return { error: "No collective found.", collectiveId: null };
@@ -68,11 +73,16 @@ async function verifyOwnership(userId: string, eventId: string) {
 
   const collectiveIds = memberships.map((m) => m.collective_id);
 
-  const { data: event } = await admin
+  const { data: event, error: eventError } = await admin
     .from("events")
     .select("id, collective_id, title, venue_cost, venue_deposit, bar_minimum, estimated_bar_revenue")
     .eq("id", eventId)
     .maybeSingle();
+
+  if (eventError) {
+    console.error("[verifyOwnership] event query error:", eventError.message);
+    return { error: "Failed to load event.", collectiveId: null };
+  }
 
   if (!event || !collectiveIds.includes(event.collective_id)) {
     return { error: "Event not found or access denied.", collectiveId: null };

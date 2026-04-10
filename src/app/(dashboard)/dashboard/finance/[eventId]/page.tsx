@@ -113,8 +113,34 @@ export default function SettlementDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-md bg-muted animate-pulse" />
+          <div className="space-y-1.5">
+            <div className="h-7 w-36 rounded-lg bg-muted animate-pulse" />
+            <div className="h-4 w-52 rounded-lg bg-muted animate-pulse" />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {[...Array(3)].map((_, i) => (
+            <Card key={i}>
+              <CardContent className="p-4 flex items-center gap-3">
+                <div className="h-9 w-9 rounded-full bg-muted animate-pulse shrink-0" />
+                <div className="space-y-1.5">
+                  <div className="h-5 w-16 rounded bg-muted animate-pulse" />
+                  <div className="h-3 w-20 rounded bg-muted animate-pulse" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-10 w-full rounded-lg bg-muted animate-pulse" />
+            ))}
+          </CardContent>
+        </Card>
       </div>
     );
   }

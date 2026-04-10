@@ -49,6 +49,8 @@ export async function getPostEventInsights(eventId: string): Promise<{
   insights: PostEventInsight[];
 }> {
   try {
+  if (!eventId?.trim()) return { error: "Event ID is required", insights: [] };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", insights: [] };
@@ -75,10 +77,15 @@ export async function getPostEventInsights(eventId: string): Promise<{
   if (!memberCount || memberCount === 0) return { error: "Not a member of this collective", insights: [] };
 
   // Get all events for this collective
-  const { data: collectiveEvents } = await admin
+  const { data: collectiveEvents, error: collectiveEventsError } = await admin
     .from("events")
     .select("id, title")
     .eq("collective_id", event.collective_id);
+
+  if (collectiveEventsError) {
+    console.error("[getPostEventInsights] collective events query error:", collectiveEventsError.message);
+    return { error: "Something went wrong", insights: [] };
+  }
 
   const allEventIds = collectiveEvents?.map((e) => e.id) ?? [];
   const totalCollectiveEvents = allEventIds.length;

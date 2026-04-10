@@ -36,12 +36,21 @@ async function sendInvitationEmail(
   }
 }
 
+const ALLOWED_ROLES = ["admin", "promoter", "talent_buyer", "door_staff", "member", "owner"];
+
 export async function inviteMember(
   collectiveId: string,
   email: string,
   role: string = "member"
 ) {
   try {
+  if (!collectiveId || typeof collectiveId !== "string" || collectiveId.length > 100) {
+    return { error: "Invalid collective ID" };
+  }
+  if (!ALLOWED_ROLES.includes(role)) {
+    return { error: "Invalid role. Allowed: " + ALLOWED_ROLES.join(", ") };
+  }
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -61,16 +70,26 @@ export async function inviteMember(
 
   const admin = createAdminClient();
 
-  // Verify caller is a member of this collective
-  const { count: callerMemberCount } = await admin
+  // Verify caller is a member of this collective AND has admin/owner role
+  const { data: callerMembership } = await admin
     .from("collective_members")
-    .select("*", { count: "exact", head: true })
+    .select("role")
     .eq("collective_id", collectiveId)
     .eq("user_id", user.id)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  if (!callerMemberCount || callerMemberCount === 0) {
+  if (!callerMembership) {
     return { error: "You don't have permission to invite members to this collective." };
+  }
+
+  if (callerMembership.role !== "admin" && callerMembership.role !== "owner") {
+    return { error: "Only admins and owners can invite members" };
+  }
+
+  // Only owners can mint new owners
+  if (role === "owner" && callerMembership.role !== "owner") {
+    return { error: "Only owners can invite new owners" };
   }
 
   // Check if user already exists in the users table
@@ -251,6 +270,10 @@ export async function getTeamMembers() {
 
 export async function getPendingInvitations(collectiveId: string) {
   try {
+  if (!collectiveId || typeof collectiveId !== "string" || collectiveId.length > 100) {
+    return { error: "Invalid collective ID", data: null };
+  }
+
   // Auth check: only collective members can view invitations
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -290,6 +313,10 @@ export async function getPendingInvitations(collectiveId: string) {
 
 export async function cancelInvitation(invitationId: string) {
   try {
+  if (!invitationId || typeof invitationId !== "string" || invitationId.length > 100) {
+    return { error: "Invalid invitation ID" };
+  }
+
   const supabase = await createServerClient();
   const {
     data: { user },
@@ -310,14 +337,19 @@ export async function cancelInvitation(invitationId: string) {
 
   if (!invitation) return { error: "Invitation not found." };
 
-  const { count } = await admin
+  const { data: callerMembership } = await admin
     .from("collective_members")
-    .select("*", { count: "exact", head: true })
+    .select("role")
     .eq("collective_id", invitation.collective_id)
     .eq("user_id", user.id)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  if (!count || count === 0) return { error: "You don't have permission." };
+  if (!callerMembership) return { error: "You don't have permission." };
+
+  if (callerMembership.role !== "admin" && callerMembership.role !== "owner") {
+    return { error: "Only admins and owners can cancel members" };
+  }
 
   const { error } = await admin
     .from("invitations")
@@ -338,6 +370,10 @@ export async function cancelInvitation(invitationId: string) {
 
 export async function acceptInvitation(token: string) {
   try {
+  if (!token || typeof token !== "string" || token.length > 500) {
+    return { error: "Invalid invitation token" };
+  }
+
   const supabase = await createServerClient();
   const {
     data: { user },

@@ -1160,6 +1160,54 @@ export type Database = {
           },
         ]
       }
+      event_updates: {
+        Row: {
+          author_id: string
+          body: string
+          created_at: string
+          email_sent: boolean
+          emailed_at: string | null
+          event_id: string
+          id: string
+          recipient_count: number
+        }
+        Insert: {
+          author_id: string
+          body: string
+          created_at?: string
+          email_sent?: boolean
+          emailed_at?: string | null
+          event_id: string
+          id?: string
+          recipient_count?: number
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          created_at?: string
+          email_sent?: boolean
+          emailed_at?: string | null
+          event_id?: string
+          id?: string
+          recipient_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_updates_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "event_dashboard"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "event_updates_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       events: {
         Row: {
           bar_minimum: number | null
@@ -1170,6 +1218,7 @@ export type Database = {
           doors_at: string | null
           ends_at: string | null
           estimated_bar_revenue: number | null
+          event_mode: string
           flyer_url: string | null
           id: string
           is_free: boolean | null
@@ -1196,6 +1245,7 @@ export type Database = {
           doors_at?: string | null
           ends_at?: string | null
           estimated_bar_revenue?: number | null
+          event_mode?: string
           flyer_url?: string | null
           id?: string
           is_free?: boolean | null
@@ -1222,6 +1272,7 @@ export type Database = {
           doors_at?: string | null
           ends_at?: string | null
           estimated_bar_revenue?: number | null
+          event_mode?: string
           flyer_url?: string | null
           id?: string
           is_free?: boolean | null
@@ -2240,6 +2291,60 @@ export type Database = {
           },
         ]
       }
+      rsvps: {
+        Row: {
+          created_at: string
+          email: string | null
+          event_id: string
+          full_name: string | null
+          id: string
+          message: string | null
+          plus_ones: number
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          event_id: string
+          full_name?: string | null
+          id?: string
+          message?: string | null
+          plus_ones?: number
+          status: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          event_id?: string
+          full_name?: string | null
+          id?: string
+          message?: string | null
+          plus_ones?: number
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rsvps_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "event_dashboard"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "rsvps_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_venues: {
         Row: {
           collective_id: string
@@ -3115,6 +3220,30 @@ export type Database = {
             columns: ["collective_id"]
             isOneToOne: false
             referencedRelation: "collectives"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_rsvp_counts: {
+        Row: {
+          count: number | null
+          event_id: string | null
+          plus_ones_total: number | null
+          status: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rsvps_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "event_dashboard"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "rsvps_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
             referencedColumns: ["id"]
           },
         ]

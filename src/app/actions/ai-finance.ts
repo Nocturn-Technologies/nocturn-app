@@ -55,6 +55,8 @@ export async function generateEventForecast(eventId: string): Promise<{
   forecast: ForecastData | null;
 }> {
   try {
+  if (!eventId?.trim()) return { error: "Event ID is required", forecast: null };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", forecast: null };
@@ -66,13 +68,17 @@ export async function generateEventForecast(eventId: string): Promise<{
   const admin = createAdminClient();
 
   // Get event
-  const { data: eventRaw } = await admin
+  const { data: eventRaw, error: eventError } = await admin
     .from("events")
     .select("id, title, starts_at, collective_id, bar_minimum, venue_deposit, venue_cost, estimated_bar_revenue")
     .eq("id", eventId)
     .maybeSingle();
   const event = eventRaw as { id: string; title: string; starts_at: string; collective_id: string; bar_minimum: number | null; venue_deposit: number | null; venue_cost: number | null; estimated_bar_revenue: number | null } | null;
 
+  if (eventError) {
+    console.error("[generateEventForecast] event lookup failed:", eventError);
+    return { error: "Something went wrong", forecast: null };
+  }
   if (!event) return { error: "Event not found", forecast: null };
 
   // Verify caller is a member of the event's collective
@@ -338,6 +344,8 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   recap: PostEventRecap | null;
 }> {
   try {
+  if (!eventId?.trim()) return { error: "Event ID is required", recap: null };
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", recap: null };
@@ -348,13 +356,17 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   const admin = createAdminClient();
 
   // Get event with venue
-  const { data: eventRaw2 } = await admin
+  const { data: eventRaw2, error: eventError2 } = await admin
     .from("events")
     .select("id, title, starts_at, collective_id, status, venues(name, city)")
     .eq("id", eventId)
     .maybeSingle();
   const event = eventRaw2 as { id: string; title: string; starts_at: string; collective_id: string; status: string; venues: { name: string; city: string } | null } | null;
 
+  if (eventError2) {
+    console.error("[generatePostEventRecap] event lookup failed:", eventError2);
+    return { error: "Something went wrong", recap: null };
+  }
   if (!event) return { error: "Event not found", recap: null };
 
   // Verify caller is a member of the event's collective

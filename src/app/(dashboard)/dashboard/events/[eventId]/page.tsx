@@ -1,12 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
-import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } from "@/lib/supabase/config";
+import { createAdminClient } from "@/lib/supabase/config";
 import { safeBgUrl } from "@/lib/utils";
 import { notFound } from "next/navigation";
+import { EventCreatedToast } from "@/components/events/event-created-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
+  AlertTriangle,
   ArrowLeft,
   Calendar,
   Clock,
@@ -33,10 +34,13 @@ import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
 import { LiveModeBanner } from "./live-mode-banner";
 import { EventShareCard } from "./event-share-card";
-import { EventCreatedToast } from "./event-created-toast";
+// EventCreatedToast imported from shared components
 import { ExternalTicketsForm } from "./external-tickets";
 import { getExternalTicketData } from "@/app/actions/external-tickets";
 import { TicketTierEditor } from "@/components/ticket-tier-editor";
+import { LiveTicketStats } from "@/components/events/live-ticket-stats";
+import { EventUpdatesComposer } from "@/components/events/event-updates-composer";
+import { listEventUpdatesPublic } from "@/app/actions/event-updates";
 
 interface Props {
   params: Promise<{ eventId: string }>;
@@ -88,9 +92,7 @@ export default async function EventDetailPage({ params }: Props) {
   if (!user) notFound();
 
   // Use admin client to bypass RLS
-  const admin = createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  const admin = createAdminClient();
 
   // Verify user owns this event via collective membership
   const { data: memberships } = await admin
@@ -141,6 +143,7 @@ export default async function EventDetailPage({ params }: Props) {
 
     if (soldData) {
       for (const ticket of soldData) {
+        if (!ticket.ticket_tier_id) continue;
         tierSoldCounts[ticket.ticket_tier_id] =
           (tierSoldCounts[ticket.ticket_tier_id] ?? 0) + 1;
       }
@@ -153,6 +156,28 @@ export default async function EventDetailPage({ params }: Props) {
     sold: tierSoldCounts[t.id] ?? 0,
   })) ?? [];
 
+  // Get check-in count for progress bar
+  const { count: checkedInCount } = await admin
+    .from("tickets")
+    .select("*", { count: "exact", head: true })
+    .eq("event_id", eventId)
+    .eq("status", "checked_in");
+
+  // Get refunded/disputed ticket count
+  const { count: refundedCount } = await admin
+    .from("tickets")
+    .select("*", { count: "exact", head: true })
+    .eq("event_id", eventId)
+    .eq("status", "refunded");
+
+  // Get disputed ticket count
+  const { count: disputedCount } = await admin
+    .from("tickets")
+    .select("*", { count: "exact", head: true })
+    .eq("event_id", eventId)
+    .eq("status", "cancelled")
+    .filter("metadata->>disputed", "eq", "true");
+
   // Fetch task progress for playbook
   const { data: taskStats } = await admin
     .from("event_tasks")
@@ -163,6 +188,9 @@ export default async function EventDetailPage({ params }: Props) {
   const taskTotal = taskStats?.length ?? 0;
   const taskDone = taskStats?.filter((t: { status: string | null }) => t.status === "done").length ?? 0;
   const taskPercent = taskTotal > 0 ? Math.round((taskDone / taskTotal) * 100) : 0;
+
+  // Fetch existing updates for the composer
+  const { updates: existingUpdates } = await listEventUpdatesPublic(eventId);
 
   const venue = event.venues as unknown as {
     name: string;
@@ -232,6 +260,23 @@ export default async function EventDetailPage({ params }: Props) {
 
       {/* Status Actions */}
       <EventStatusActions eventId={event.id} status={event.status} />
+
+      {/* Dispute Warning */}
+      {(disputedCount ?? 0) > 0 && (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 flex items-center gap-3">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/20 shrink-0">
+            <AlertTriangle className="h-4 w-4 text-red-400" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-red-400">
+              {disputedCount} ticket{disputedCount !== 1 ? "s" : ""} disputed
+            </p>
+            <p className="text-xs text-red-400/70">
+              Check your Stripe dashboard for dispute details and response deadlines.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Quick Links */}
       <div className="flex flex-wrap gap-2">
@@ -447,12 +492,32 @@ export default async function EventDetailPage({ params }: Props) {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Live ticket sales summary */}
+              {tiers.length > 0 && (
+                <div className="mb-3">
+                  <LiveTicketStats
+                    eventId={event.id}
+                    initialSold={tiers.reduce((sum, t) => sum + (t.sold || 0), 0)}
+                    initialCapacity={tiers.reduce((sum, t) => sum + (t.capacity ?? 0), 0)}
+                    initialRevenue={tiers.reduce((sum, t) => sum + ((t.sold || 0) * Number(t.price)), 0)}
+                    initialCheckedIn={checkedInCount ?? 0}
+                  />
+                </div>
+              )}
+          {(refundedCount ?? 0) > 0 && (
+            <p className="text-xs text-zinc-500 mt-1 mb-3">
+              {refundedCount} ticket{refundedCount !== 1 ? "s" : ""} refunded
+            </p>
+          )}
           <TicketTierEditor eventId={event.id} initialTiers={tiers} />
         </CardContent>
       </Card>
 
       {/* External Ticket Data */}
       <ExternalTicketsFormWrapper eventId={event.id} />
+
+      {/* Updates Composer — Post announcements to attendees */}
+      <EventUpdatesComposer eventId={event.id} initialUpdates={existingUpdates} />
 
       {/* Flyer Preview */}
       {event.flyer_url && (
