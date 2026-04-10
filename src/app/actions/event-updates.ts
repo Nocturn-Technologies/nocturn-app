@@ -264,9 +264,10 @@ async function sendUpdateEmails(input: SendUpdateEmailsInput): Promise<void> {
   const userIdsNeedingLookup: string[] = [];
 
   // Explicit row types — Supabase's Promise.all + .in() inference can break and return
-  // SelectQueryError sentinel types, so we narrow manually here.
-  const rsvpRows = (rsvpRes.data ?? []) as Array<{ email: string | null; user_id: string | null }>;
-  const ticketRows = (ticketEmailsRes.data ?? []) as Array<{ buyer_email: string | null }>;
+  // SelectQueryError sentinel types which don't overlap with our row shape, so we must
+  // cast via `unknown` first to satisfy TypeScript.
+  const rsvpRows = (rsvpRes.data ?? []) as unknown as Array<{ email: string | null; user_id: string | null }>;
+  const ticketRows = (ticketEmailsRes.data ?? []) as unknown as Array<{ buyer_email: string | null }>;
 
   for (const row of rsvpRows) {
     const addr = (row.email ?? "").trim().toLowerCase();
