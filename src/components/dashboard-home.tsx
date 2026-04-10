@@ -19,6 +19,11 @@ import {
   MessageSquare,
   AlertTriangle,
   ListChecks,
+  CheckCircle2,
+  Circle,
+  Ticket,
+  Globe,
+  ShoppingBag,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -59,6 +64,11 @@ interface DashboardHomeProps {
   financialPulse: FinancialPulseData | null;
   briefing?: BriefingItem[];
   collectiveId?: string;
+  // Setup checklist data
+  totalEventsCount?: number;
+  hasTicketTiers?: boolean;
+  hasPublishedEvent?: boolean;
+  totalTicketsSold?: number;
   actionItems?: ActionItemData[];
   myTasks?: Array<{
     id: string;
@@ -245,6 +255,141 @@ function getInsights(props: DashboardHomeProps): Array<{ text: string; href: str
   return insights.slice(0, 3);
 }
 
+function SetupChecklist(props: DashboardHomeProps) {
+  const [dismissed, setDismissed] = React.useState(false);
+
+  // Check localStorage for dismissal on mount
+  React.useEffect(() => {
+    try {
+      const val = localStorage.getItem("nocturn_setup_checklist_dismissed");
+      if (val === "true") setDismissed(true);
+    } catch {}
+  }, []);
+
+  const steps = [
+    {
+      label: "Create your collective",
+      done: true, // always true — they're on the dashboard
+      href: "/dashboard",
+      icon: CheckCircle2,
+    },
+    {
+      label: "Create your first event",
+      done: (props.totalEventsCount ?? 0) > 0,
+      href: "/dashboard/events/new",
+      icon: Plus,
+    },
+    {
+      label: "Add ticket tiers",
+      done: props.hasTicketTiers ?? false,
+      href: "/dashboard/events",
+      icon: Ticket,
+    },
+    {
+      label: "Publish your event",
+      done: props.hasPublishedEvent ?? false,
+      href: "/dashboard/events",
+      icon: Globe,
+    },
+    {
+      label: "Sell your first ticket",
+      done: (props.totalTicketsSold ?? 0) > 0,
+      href: "/dashboard/events",
+      icon: ShoppingBag,
+    },
+  ];
+
+  const completedCount = steps.filter((s) => s.done).length;
+  const allComplete = completedCount === steps.length;
+  const isNew = (props.totalTicketsSold ?? 0) === 0 || props.collectiveAge < 14;
+
+  // Hide if dismissed, all complete, or collective is older than 14 days with tickets sold
+  if (dismissed || allComplete || !isNew) return null;
+
+  function handleDismiss() {
+    setDismissed(true);
+    try { localStorage.setItem("nocturn_setup_checklist_dismissed", "true"); } catch {}
+  }
+
+  const progressPercent = (completedCount / steps.length) * 100;
+
+  return (
+    <div className="animate-fade-in-up delay-25 relative z-10">
+      <Card className="rounded-2xl overflow-hidden ring-1 ring-nocturn/20 bg-nocturn/[0.04]">
+        <CardContent className="p-4">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-nocturn/20">
+                <ListChecks className="h-3.5 w-3.5 text-nocturn-light" />
+              </div>
+              <h2 className="text-xs font-bold uppercase tracking-widest text-nocturn-light">
+                Setup Checklist
+              </h2>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-muted-foreground">
+                {completedCount} of {steps.length} complete
+              </span>
+              <button
+                onClick={handleDismiss}
+                className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="h-1.5 w-full rounded-full bg-accent mb-4">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-nocturn to-nocturn-light transition-all duration-500"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Checklist items */}
+          <div className="space-y-1">
+            {steps.map((step) => {
+              const Icon = step.icon;
+              return (
+                <Link
+                  key={step.label}
+                  href={step.done ? "#" : step.href}
+                  className={`flex items-center gap-3 rounded-lg px-2 py-2.5 -mx-2 min-h-[44px] transition-all duration-200 ${
+                    step.done
+                      ? "opacity-60"
+                      : "hover:bg-white/[0.04] active:bg-white/[0.06]"
+                  }`}
+                  onClick={step.done ? (e) => e.preventDefault() : undefined}
+                >
+                  {step.done ? (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-nocturn" />
+                  ) : (
+                    <Circle className="h-5 w-5 shrink-0 text-muted-foreground/40" />
+                  )}
+                  <span
+                    className={`text-sm flex-1 ${
+                      step.done
+                        ? "text-muted-foreground line-through"
+                        : "text-foreground"
+                    }`}
+                  >
+                    {step.label}
+                  </span>
+                  {!step.done && (
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-nocturn opacity-50" />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export function DashboardHome(props: DashboardHomeProps) {
   const greeting = getGreeting();
   const message = getContextualMessage(props);
@@ -277,6 +422,9 @@ export function DashboardHome(props: DashboardHomeProps) {
 
 {/* AI Briefing — gated for MVP, restore post-launch */}
 
+      {/* ── Setup Checklist — shown for new collectives ── */}
+      <SetupChecklist {...props} />
+
       {/* ── Needs Attention — action items / alerts ── */}
       {props.actionItems && props.actionItems.length > 0 && (
         <div className="animate-fade-in-up delay-50 relative z-10">
@@ -296,7 +444,7 @@ export function DashboardHome(props: DashboardHomeProps) {
                   <Link
                     key={item.id}
                     href={item.link}
-                    className={`flex items-center gap-3 px-4 py-3 min-h-[48px] transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06] ${
+                    className={`group flex items-center gap-3 px-4 py-3 min-h-[48px] transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06] active:scale-[0.98] ${
                       item.priority === "urgent"
                         ? "bg-red-500/[0.04]"
                         : item.priority === "high"
@@ -317,7 +465,7 @@ export function DashboardHome(props: DashboardHomeProps) {
                       {item.message}
                     </span>
                     <ChevronRight
-                      className={`h-4 w-4 shrink-0 ${
+                      className={`h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5 ${
                         item.priority === "urgent"
                           ? "text-red-400/60"
                           : item.priority === "high"
@@ -335,17 +483,17 @@ export function DashboardHome(props: DashboardHomeProps) {
 
       {/* ── My Tasks ── */}
       {props.myTasks && props.myTasks.length > 0 && (
-        <div className="space-y-3">
+        <div className="animate-fade-in-up delay-50 relative z-10 space-y-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+            <h2 className="text-sm font-bold text-muted-foreground flex items-center gap-2">
               <ListChecks className="h-4 w-4" /> Your Tasks
             </h2>
-            <Link href="/dashboard/events" className="text-xs text-nocturn hover:underline">View all</Link>
+            <Link href="/dashboard/events" className="text-xs text-nocturn hover:text-nocturn-light transition-colors duration-200">View all</Link>
           </div>
           <div className="space-y-2">
             {props.myTasks.map((task) => (
               <Link key={task.id} href={`/dashboard/events/${task.eventId}/tasks`}>
-                <Card className="rounded-xl hover:border-nocturn/20 transition-all active:scale-[0.98]">
+                <Card className="rounded-2xl hover:border-nocturn/20 hover:shadow-md hover:shadow-nocturn/5 transition-all duration-200 active:scale-[0.98]">
                   <CardContent className="p-3 flex items-center gap-3">
                     <div className={`h-2 w-2 rounded-full shrink-0 ${
                       task.priority === "urgent" ? "bg-red-500" :
@@ -544,7 +692,7 @@ export function DashboardHome(props: DashboardHomeProps) {
             <Link
               key={i}
               href={insight.href}
-              className="flex items-start gap-2 group rounded-lg px-2 py-2.5 -mx-2 min-h-[44px] transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06]"
+              className="flex items-start gap-2 group rounded-lg px-2 py-2.5 -mx-2 min-h-[44px] transition-all duration-200 hover:bg-white/[0.04] active:bg-white/[0.06] active:scale-[0.98]"
             >
               <ArrowRight className="h-3.5 w-3.5 shrink-0 mt-0.5 text-nocturn opacity-50 group-hover:opacity-100 transition-opacity duration-200" />
               <p className="text-sm text-muted-foreground group-hover:text-foreground transition-colors duration-200 line-clamp-2">
