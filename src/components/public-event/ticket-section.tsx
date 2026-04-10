@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Minus, Plus, Ticket, Check, AlertCircle, Bell, Loader2 } from "lucide-react";
+import { Minus, Plus, Ticket, Check, AlertCircle, Bell, Loader2, Phone } from "lucide-react";
 import dynamic from "next/dynamic";
 const StripeCheckout = dynamic(() => import("@/components/stripe-checkout").then(m => m.StripeCheckout), { ssr: false, loading: () => <div className="flex items-center justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-[#7B2FF7] border-t-transparent" /></div> });
 import { joinWaitlist } from "@/app/actions/ticket-waitlist";
@@ -39,6 +39,7 @@ export function TicketSection({
   const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [showCheckout, setShowCheckout] = useState(false);
 
   const [buying, setBuying] = useState(false);
@@ -85,6 +86,14 @@ export function TicketSection({
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }, [email]);
 
+  const phoneValid = useMemo(() => {
+    if (!phone) return null;
+    const digits = phone.replace(/[^0-9]/g, "");
+    return digits.length >= 7 && digits.length <= 15;
+  }, [phone]);
+
+  const contactValid = emailValid === true && phoneValid === true;
+
   const waitlistEmailValid = useMemo(() => {
     if (!waitlistEmail) return false;
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(waitlistEmail);
@@ -110,7 +119,7 @@ export function TicketSection({
   }, [eventId]);
 
   async function handleFreeCheckout() {
-    if (!selectedTier || !email || emailValid !== true || freeCheckoutLoading) return;
+    if (!selectedTier || !email || !phone || !contactValid || freeCheckoutLoading) return;
     setFreeCheckoutLoading(true);
     setFreeCheckoutError(null);
     try {
@@ -122,6 +131,7 @@ export function TicketSection({
           tierId: selectedTier,
           quantity,
           buyerEmail: email,
+          buyerPhone: phone,
           ...(promoApplied?.code && { promoCode: promoApplied.code }),
           ...(referrerToken && { referrerToken }),
         }),
@@ -176,6 +186,7 @@ export function TicketSection({
             tierName={selected.name}
             quantity={quantity}
             buyerEmail={email}
+            buyerPhone={phone}
             totalAmount={total}
             eventTitle={eventTitle}
             eventDate={eventDate}
@@ -416,6 +427,39 @@ export function TicketSection({
             </div>
           </div>
 
+          {/* Phone */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-white/60" htmlFor="ticket-phone">
+              Phone number
+            </label>
+            <div className="relative">
+              <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+              <input
+                id="ticket-phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="(555) 123-4567"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                maxLength={32}
+                className={`w-full rounded-xl border bg-white/[0.03] pl-10 pr-10 py-3.5 text-[16px] text-white placeholder:text-white/25 outline-none focus:ring-1 transition-all duration-200 ${
+                  phoneValid === true
+                    ? "border-green-500/40 focus:border-green-500/60 focus:ring-green-500/10"
+                    : phoneValid === false
+                      ? "border-red-500/40 focus:border-red-500/60 focus:ring-red-500/10"
+                      : "border-white/[0.08] focus:border-white/20 focus:ring-white/5"
+                }`}
+              />
+              {phoneValid === true && (
+                <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />
+              )}
+              {phoneValid === false && (
+                <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" />
+              )}
+            </div>
+          </div>
+
           {/* Promo code */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-white/60" htmlFor="promo-code">
@@ -531,7 +575,7 @@ export function TicketSection({
           <div className="mx-auto max-w-[640px]">
             <button
               onClick={() => {
-                if (!email || emailValid !== true || buying || freeCheckoutLoading) return;
+                if (!email || !phone || !contactValid || buying || freeCheckoutLoading) return;
                 haptic('confirm');
                 if (isFree) {
                   handleFreeCheckout();
@@ -548,7 +592,7 @@ export function TicketSection({
                   setShowConfirmation(false);
                 }, 400);
               }}
-              disabled={!email || emailValid !== true || buying || freeCheckoutLoading}
+              disabled={!email || !phone || !contactValid || buying || freeCheckoutLoading}
               className="flex w-full items-center justify-center gap-2.5 rounded-2xl px-6 py-4 text-lg font-bold text-white transition-all duration-200 hover:brightness-110 hover:shadow-lg hover:shadow-black/30 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed relative overflow-hidden"
               style={{ backgroundColor: accentColor }}
             >

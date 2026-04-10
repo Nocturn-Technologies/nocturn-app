@@ -18,8 +18,19 @@ interface CheckoutBody {
   tierId: string;
   quantity: number;
   buyerEmail: string;
+  buyerPhone: string;
   promoCode?: string;
   referrerToken?: string;
+}
+
+// Phone validation — allow +, digits, spaces, dashes, parens, dots; require 7-15 digits
+function validatePhone(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 32) return null;
+  const digits = trimmed.replace(/[^0-9]/g, "");
+  if (digits.length < 7 || digits.length > 15) return null;
+  return trimmed;
 }
 
 export async function POST(request: NextRequest) {
@@ -46,6 +57,7 @@ export async function POST(request: NextRequest) {
     const { eventId, tierId, quantity, promoCode } = body;
     // Normalize email to lowercase to prevent case-variant free ticket bypass
     const buyerEmail = body.buyerEmail?.trim().toLowerCase();
+    const buyerPhone = validatePhone(body.buyerPhone);
     // referrerToken must be a valid UUID (user ID from ?ref= link)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     let referrerToken = body.referrerToken && uuidRegex.test(body.referrerToken) ? body.referrerToken : undefined;
@@ -53,6 +65,13 @@ export async function POST(request: NextRequest) {
     if (!eventId || !tierId || !quantity || !buyerEmail) {
       return NextResponse.json(
         { error: "Missing required fields: eventId, tierId, quantity, buyerEmail" },
+        { status: 400 }
+      );
+    }
+
+    if (!buyerPhone) {
+      return NextResponse.json(
+        { error: "A valid phone number is required" },
         { status: 400 }
       );
     }
@@ -227,6 +246,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           registration_type: "free",
           customer_email: buyerEmail,
+          customer_phone: buyerPhone,
           ...(promoId && { promo_id: promoId, promo_code: promoCode }),
           ...(referrerToken && { referrer_token: referrerToken }),
         },
@@ -307,6 +327,7 @@ export async function POST(request: NextRequest) {
             collective_id: event.collective_id,
             contact_type: "fan",
             email: buyerEmail,
+            phone: buyerPhone,
             full_name: null,
             source: "ticket",
             total_events: 1,
@@ -314,6 +335,28 @@ export async function POST(request: NextRequest) {
             last_seen_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           }, { onConflict: "collective_id,email", ignoreDuplicates: false });
+
+          // Backfill phone on attendee_profiles (insert-if-missing pattern)
+          await supabaseAdmin.from("attendee_profiles").upsert(
+            {
+              collective_id: event.collective_id,
+              email: buyerEmail,
+              phone: buyerPhone,
+              total_spent: 0,
+              total_tickets: 0,
+              total_events: 0,
+              segment: "new",
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "collective_id,email", ignoreDuplicates: true }
+          );
+          // Only fill phone if null so we never clobber an existing value
+          await supabaseAdmin
+            .from("attendee_profiles")
+            .update({ phone: buyerPhone })
+            .eq("collective_id", event.collective_id)
+            .eq("email", buyerEmail)
+            .is("phone", null);
         }
       } catch (contactErr) {
         console.error("[checkout] Contact upsert failed (non-blocking):", contactErr);
@@ -366,6 +409,7 @@ export async function POST(request: NextRequest) {
         tierId,
         quantity,
         email: buyerEmail,
+        phone: buyerPhone,
       });
       pendingTicketIds = pendingResult.pendingTicketIds;
     } catch (err) {
@@ -424,6 +468,7 @@ export async function POST(request: NextRequest) {
           quantity: String(quantity),
           ticketPriceCents: String(unitAmountCents),
           serviceFeeCents: String(serviceFeePerTicketCents),
+          buyerPhone,
           ...(promoId && { promoId, promoCode: validatedPromoCode ?? "", promoClaimedQuantity: String(quantity) }),
           ...(referrerToken && { referrerToken }),
           ...(discountCents > 0 && { discountCents: String(discountCents) }),

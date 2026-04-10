@@ -81,12 +81,24 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
+    metadataBase: new URL(appUrl),
     openGraph: {
       title: event.title,
       description,
       type: "website",
       url: canonicalUrl,
-      images: [{ url: ogImageUrl, width: 1200, height: 630, alt: event.title }],
+      siteName: "Nocturn",
+      locale: "en_US",
+      images: [
+        {
+          url: ogImageUrl,
+          secureUrl: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: event.title,
+          type: "image/png",
+        },
+      ],
     },
     twitter: {
       card: "summary_large_image",
@@ -96,6 +108,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     },
     alternates: {
       canonical: canonicalUrl,
+    },
+    other: {
+      // iMessage / Apple link previews key off these, and some
+      // clients still read the legacy non-OG tags.
+      "og:image:width": "1200",
+      "og:image:height": "630",
     },
   };
 }
@@ -222,6 +240,18 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const myRsvpStatus = myRsvpResult.rsvp?.status ?? null;
   const eventUpdates = updatesResult.updates;
   const isLoggedIn = !!currentUserResult;
+
+  // Pre-fill phone from the logged-in user's profile so the confirm form
+  // doesn't force them to retype it every time.
+  let viewerPhone: string | null = null;
+  if (currentUserResult && showRsvp) {
+    const { data: viewerProfile } = await supabase
+      .from("users")
+      .select("phone")
+      .eq("auth_id", currentUserResult.id)
+      .maybeSingle();
+    viewerPhone = viewerProfile?.phone ?? null;
+  }
 
   const venue = event.venues;
 
@@ -584,6 +614,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                 initialCounts={rsvpCounts}
                 initialMyStatus={myRsvpStatus}
                 isLoggedIn={isLoggedIn}
+                initialPhone={viewerPhone}
               />
             </div>
           )}

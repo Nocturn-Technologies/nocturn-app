@@ -232,3 +232,74 @@ export function inactiveNudgeEmail(
     <p style="color: #71717A; font-size: 12px;">Don't want these reminders? Reply "stop" and we'll pause them.</p>
   `);
 }
+
+// ── RSVP confirmation (free events) ──
+export function rsvpConfirmationEmail({
+  eventTitle,
+  collectiveName,
+  startsAt,
+  venueName,
+  venueCity,
+  status,
+  eventUrl,
+  firstName,
+}: {
+  eventTitle: string;
+  collectiveName: string;
+  startsAt: string;
+  venueName: string | null;
+  venueCity: string | null;
+  status: "yes" | "maybe" | "no";
+  eventUrl: string;
+  firstName: string | null;
+}): string {
+  const dateLabel = (() => {
+    try {
+      return new Date(startsAt).toLocaleDateString("en", {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+    } catch {
+      return "";
+    }
+  })();
+  const timeLabel = (() => {
+    try {
+      return new Date(startsAt).toLocaleTimeString("en", {
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    } catch {
+      return "";
+    }
+  })();
+
+  const greeting = firstName ? `Hey ${escapeHtml(firstName)} —` : "Hey —";
+  const headline =
+    status === "yes"
+      ? `You're on the list for ${escapeHtml(eventTitle)} 🎉`
+      : `We've got you marked as maybe for ${escapeHtml(eventTitle)}`;
+  const subhead =
+    status === "yes"
+      ? `${escapeHtml(collectiveName)} has you confirmed. Here's what you need to know:`
+      : `${escapeHtml(collectiveName)} will keep a spot warm — update your RSVP any time.`;
+
+  const venueLine = venueName
+    ? `${escapeHtml(venueName)}${venueCity ? `, ${escapeHtml(venueCity)}` : ""}`
+    : "Venue details coming soon";
+
+  return baseTemplate(`
+    <h2>${headline}</h2>
+    <p>${greeting} ${subhead}</p>
+    <div class="card">
+      <p style="color: #FAFAFA; margin: 0 0 12px 0; font-size: 18px; font-weight: 700;">${escapeHtml(eventTitle)}</p>
+      <p style="color: #A1A1AA; margin: 0 0 4px 0; font-size: 14px;">📅 ${escapeHtml(dateLabel)}${timeLabel ? ` · ${escapeHtml(timeLabel)}` : ""}</p>
+      <p style="color: #A1A1AA; margin: 0 0 4px 0; font-size: 14px;">📍 ${venueLine}</p>
+      <p style="color: #A1A1AA; margin: 0; font-size: 14px;">🎟️ Hosted by ${escapeHtml(collectiveName)}</p>
+    </div>
+    <a href="${sanitizeUrl(eventUrl)}" class="btn">View Event →</a>
+    <p>Plans changed? Open the event page and update your RSVP — zero pressure.</p>
+  `);
+}

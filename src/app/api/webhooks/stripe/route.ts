@@ -505,6 +505,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     const { data: referrerUser } = await supabase.from("users").select("id").eq("id", referrerToken).maybeSingle();
     if (!referrerUser) referrerToken = null;
   }
+  const buyerPhone = metadata.buyerPhone || null;
   const tickets = Array.from({ length: quantity }, () => ({
     event_id: eventId,
     ticket_tier_id: tierId,
@@ -518,6 +519,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     metadata: {
       checkout_session_id: session.id,
       customer_email: session.customer_email ?? session.customer_details?.email,
+      ...(buyerPhone && { customer_phone: buyerPhone }),
       ...(referrerToken && { referrer_token: referrerToken }),
       ...(session.metadata?.promoId && { promo_id: session.metadata.promoId, promo_code: session.metadata.promoCode }),
       ...(session.metadata?.discountCents && { discount_cents: session.metadata.discountCents }),
@@ -552,6 +554,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         metadata: {
           checkout_session_id: session.id,
           customer_email: session.customer_email ?? session.customer_details?.email,
+          ...(buyerPhone && { customer_phone: buyerPhone }),
           ...(referrerToken && { referrer_token: referrerToken }),
           ...(session.metadata?.promoId && { promo_id: session.metadata.promoId, promo_code: session.metadata.promoCode }),
           ...(session.metadata?.discountCents && { discount_cents: session.metadata.discountCents }),
@@ -587,6 +590,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         p_metadata: {
           checkout_session_id: session.id,
           customer_email: session.customer_email ?? session.customer_details?.email,
+          ...(buyerPhone && { customer_phone: buyerPhone }),
           ...(referrerToken && { referrer_token: referrerToken }),
           ...(session.metadata?.promoId && { promo_id: session.metadata.promoId, promo_code: session.metadata.promoCode }),
           ...(session.metadata?.discountCents && { discount_cents: session.metadata.discountCents }),
@@ -641,6 +645,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           collective_id: eventForContact.collective_id,
           contact_type: "fan",
           email: contactEmail,
+          phone: buyerPhone,
           full_name: fullNameValue,
           source: "ticket",
           total_events: 1,
@@ -660,6 +665,23 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
               .eq("collective_id", eventForContact.collective_id)
               .eq("email", contactEmail);
           }
+          // Backfill phone if missing — never clobber existing value
+          if (buyerPhone) {
+            await supabase.from("contacts")
+              .update({ phone: buyerPhone })
+              .eq("collective_id", eventForContact.collective_id)
+              .eq("email", contactEmail)
+              .is("phone", null);
+          }
+        }
+
+        // Backfill attendee_profiles.phone if missing
+        if (buyerPhone) {
+          await supabase.from("attendee_profiles")
+            .update({ phone: buyerPhone })
+            .eq("collective_id", eventForContact.collective_id)
+            .eq("email", contactEmail)
+            .is("phone", null);
         }
       }
     }
@@ -877,6 +899,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   }
 
   const buyerEmail = metadata.buyerEmail || paymentIntent.receipt_email;
+  const buyerPhone = metadata.buyerPhone || null;
   const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
   const supabase = createAdminClient();
@@ -959,6 +982,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   const ticketMetadata = {
     payment_intent_id: paymentIntent.id,
     customer_email: buyerEmail,
+    ...(buyerPhone && { customer_phone: buyerPhone }),
     fulfilled_by: "webhook",
     ...(metadata.chargeCurrency && metadata.chargeCurrency !== "usd" && {
       charge_currency: metadata.chargeCurrency,
@@ -1089,6 +1113,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
             collective_id: eventForContact.collective_id,
             contact_type: "fan",
             email: contactEmail,
+            phone: buyerPhone,
             full_name: fullNameValue,
             source: "ticket",
             total_events: 1,
@@ -1108,6 +1133,23 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
                 .eq("collective_id", eventForContact.collective_id)
                 .eq("email", contactEmail);
             }
+            // Backfill phone if missing — never clobber existing
+            if (buyerPhone) {
+              await supabase.from("contacts")
+                .update({ phone: buyerPhone })
+                .eq("collective_id", eventForContact.collective_id)
+                .eq("email", contactEmail)
+                .is("phone", null);
+            }
+          }
+
+          // Backfill attendee_profiles.phone if missing
+          if (buyerPhone) {
+            await supabase.from("attendee_profiles")
+              .update({ phone: buyerPhone })
+              .eq("collective_id", eventForContact.collective_id)
+              .eq("email", contactEmail)
+              .is("phone", null);
           }
         }
       }

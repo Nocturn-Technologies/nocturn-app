@@ -40,6 +40,15 @@ export async function POST(request: NextRequest) {
     const promoCode = typeof body.promoCode === "string" ? body.promoCode : undefined;
     const rawBuyerEmail = typeof body.buyerEmail === "string" ? body.buyerEmail : "";
     const buyerEmail = rawBuyerEmail.trim().toLowerCase();
+
+    // Phone — required for all ticket purchases
+    const rawBuyerPhone = typeof body.buyerPhone === "string" ? body.buyerPhone.trim() : "";
+    const phoneDigits = rawBuyerPhone.replace(/[^0-9]/g, "");
+    const buyerPhone =
+      rawBuyerPhone && rawBuyerPhone.length <= 32 && phoneDigits.length >= 7 && phoneDigits.length <= 15
+        ? rawBuyerPhone
+        : null;
+
     // Validate referrerToken as UUID to prevent FK violations downstream
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const rawReferrerToken = typeof body.referrerToken === "string" ? body.referrerToken : "";
@@ -48,6 +57,13 @@ export async function POST(request: NextRequest) {
     if (!eventId || !tierId || !quantity || !buyerEmail) {
       return NextResponse.json(
         { error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    if (!buyerPhone) {
+      return NextResponse.json(
+        { error: "A valid phone number is required" },
         { status: 400 }
       );
     }
@@ -142,6 +158,7 @@ export async function POST(request: NextRequest) {
         tierId,
         quantity,
         email: buyerEmail,
+        phone: buyerPhone,
       });
       pendingTicketIds = pendingResult.pendingTicketIds;
     } catch (err) {
@@ -212,6 +229,7 @@ export async function POST(request: NextRequest) {
           tierId,
           quantity: String(quantity),
           buyerEmail,
+          buyerPhone,
           ticketPriceCents: String(unitAmountCents),
           baseCurrency: "usd",
           baseAmountCents: String(totalUsdCents),
@@ -257,6 +275,7 @@ export async function POST(request: NextRequest) {
           stripe_payment_intent_id: paymentIntent.id,
           metadata: {
             customer_email: buyerEmail,
+            customer_phone: buyerPhone,
             pending_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
             payment_intent_id: paymentIntent.id,
           },

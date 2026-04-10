@@ -156,6 +156,7 @@ export async function insertPendingTickets(
     tierId: string;
     quantity: number;
     email: string;
+    phone?: string | null;
     expiresInMs?: number;
   }
 ): Promise<PendingTicketResult> {
@@ -172,6 +173,7 @@ export async function insertPendingTickets(
     ticket_token: randomUUID(),
     metadata: {
       customer_email: opts.email,
+      ...(opts.phone && { customer_phone: opts.phone }),
       pending_expires_at: expiresAt,
     },
   }));

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Check, HelpCircle, X, Users, Loader2, Mail } from "lucide-react";
+import { Check, HelpCircle, X, Users, Loader2, Mail, Phone } from "lucide-react";
 import { submitRsvp, type RsvpStatus } from "@/app/actions/rsvps";
 
 interface RsvpWidgetProps {
@@ -11,6 +11,8 @@ interface RsvpWidgetProps {
   initialCounts: { yes: number; maybe: number; no: number };
   initialMyStatus: RsvpStatus | null;
   isLoggedIn: boolean;
+  /** User's phone number on file, if any — pre-fills the confirm form */
+  initialPhone?: string | null;
 }
 
 const OPTIONS: Array<{
@@ -31,26 +33,36 @@ export function RsvpWidget({
   initialCounts,
   initialMyStatus,
   isLoggedIn,
+  initialPhone,
 }: RsvpWidgetProps) {
   const [counts, setCounts] = useState(initialCounts);
   const [myStatus, setMyStatus] = useState<RsvpStatus | null>(initialMyStatus);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showGuestForm, setShowGuestForm] = useState(false);
+  const [showMemberForm, setShowMemberForm] = useState(false);
   const [pendingChoice, setPendingChoice] = useState<RsvpStatus | null>(null);
   const [guestEmail, setGuestEmail] = useState("");
+  const [guestPhone, setGuestPhone] = useState("");
   const [guestName, setGuestName] = useState("");
+  const [memberPhone, setMemberPhone] = useState(initialPhone ?? "");
   const [submitted, setSubmitted] = useState(false);
 
   const total = counts.yes + counts.maybe;
 
-  function doSubmit(status: RsvpStatus, email: string | null, fullName: string | null) {
+  function doSubmit(
+    status: RsvpStatus,
+    email: string | null,
+    fullName: string | null,
+    phone: string | null
+  ) {
     setError(null);
     startTransition(async () => {
       const result = await submitRsvp({
         eventId,
         status,
         email,
+        phone,
         fullName,
       });
       if (result.error) {
@@ -67,15 +79,17 @@ export function RsvpWidget({
       setMyStatus(status);
       setSubmitted(true);
       setShowGuestForm(false);
+      setShowMemberForm(false);
       setPendingChoice(null);
     });
   }
 
   function handleChoose(status: RsvpStatus) {
+    setError(null);
+    setPendingChoice(status);
     if (isLoggedIn) {
-      doSubmit(status, null, null);
+      setShowMemberForm(true);
     } else {
-      setPendingChoice(status);
       setShowGuestForm(true);
     }
   }
@@ -91,7 +105,23 @@ export function RsvpWidget({
       setError("Please enter a valid email");
       return;
     }
-    doSubmit(pendingChoice, guestEmail.trim(), guestName.trim());
+    const phoneDigits = guestPhone.replace(/[^0-9]/g, "");
+    if (!guestPhone.trim() || phoneDigits.length < 7 || phoneDigits.length > 15) {
+      setError("Please enter a valid phone number");
+      return;
+    }
+    doSubmit(pendingChoice, guestEmail.trim(), guestName.trim(), guestPhone.trim());
+  }
+
+  function handleMemberSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!pendingChoice) return;
+    const phoneDigits = memberPhone.replace(/[^0-9]/g, "");
+    if (!memberPhone.trim() || phoneDigits.length < 7 || phoneDigits.length > 15) {
+      setError("Please enter a valid phone number");
+      return;
+    }
+    doSubmit(pendingChoice, null, null, memberPhone.trim());
   }
 
   return (
@@ -162,11 +192,11 @@ export function RsvpWidget({
         })}
       </div>
 
-      {/* Guest email form */}
+      {/* Guest full form (name + email + phone) */}
       {showGuestForm && !isLoggedIn && (
         <form onSubmit={handleGuestSubmit} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in">
           <p className="text-xs text-white/60">
-            Your name and email so the organizer knows who&apos;s coming and can reach you with updates.
+            Your name, email, and phone so the organizer knows who&apos;s coming and can reach you with updates.
           </p>
           <input
             type="text"
@@ -187,6 +217,20 @@ export function RsvpWidget({
               onChange={(e) => setGuestEmail(e.target.value)}
               required
               maxLength={320}
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
+            />
+          </div>
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(555) 123-4567"
+              value={guestPhone}
+              onChange={(e) => setGuestPhone(e.target.value)}
+              required
+              maxLength={32}
               className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
             />
           </div>
@@ -214,6 +258,53 @@ export function RsvpWidget({
         </form>
       )}
 
+      {/* Member phone-only form (logged in — we already have name + email) */}
+      {showMemberForm && isLoggedIn && (
+        <form onSubmit={handleMemberSubmit} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in">
+          <p className="text-xs text-white/60">
+            {initialPhone
+              ? "Confirm your phone so the organizer can reach you with updates."
+              : "Add your phone so the organizer can reach you with updates."}
+          </p>
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(555) 123-4567"
+              value={memberPhone}
+              onChange={(e) => setMemberPhone(e.target.value)}
+              required
+              autoFocus={!initialPhone}
+              maxLength={32}
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-10 pr-3 py-2.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[44px]"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setShowMemberForm(false);
+                setPendingChoice(null);
+                setError(null);
+              }}
+              className="flex-1 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-white/60 hover:text-white hover:border-white/20 transition-all min-h-[44px]"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={pending}
+              className="flex-1 rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-50 min-h-[44px] flex items-center justify-center gap-2"
+              style={{ backgroundColor: accentColor }}
+            >
+              {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm RSVP"}
+            </button>
+          </div>
+        </form>
+      )}
+
       {/* Error */}
       {error && (
         <p className="text-xs text-red-400" role="alert">
@@ -222,7 +313,7 @@ export function RsvpWidget({
       )}
 
       {/* Confirmation */}
-      {submitted && !showGuestForm && myStatus && (
+      {submitted && !showGuestForm && !showMemberForm && myStatus && (
         <p className="text-xs text-white/40 flex items-center gap-1.5">
           <Check className="h-3 w-3" style={{ color: accentColor }} />
           You&apos;re marked as <span className="text-white/60">{OPTIONS.find((o) => o.key === myStatus)?.label}</span>.

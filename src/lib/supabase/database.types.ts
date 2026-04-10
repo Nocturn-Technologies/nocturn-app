@@ -2299,6 +2299,7 @@ export type Database = {
           full_name: string | null
           id: string
           message: string | null
+          phone: string | null
           plus_ones: number
           status: string
           updated_at: string
@@ -2311,6 +2312,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           message?: string | null
+          phone?: string | null
           plus_ones?: number
           status: string
           updated_at?: string
@@ -2323,6 +2325,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           message?: string | null
+          phone?: string | null
           plus_ones?: number
           status?: string
           updated_at?: string

@@ -23,6 +23,7 @@ interface StripeCheckoutProps {
   tierName: string;
   quantity: number;
   buyerEmail: string;
+  buyerPhone: string;
   totalAmount: number; // in dollars
   eventTitle?: string;
   eventDate?: string;
@@ -294,6 +295,7 @@ export function StripeCheckout({
   tierName,
   quantity,
   buyerEmail,
+  buyerPhone,
   totalAmount,
   eventTitle,
   eventDate,
@@ -317,7 +319,7 @@ export function StripeCheckout({
         const res = await fetch("/api/create-payment-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ eventId, tierId, quantity, buyerEmail, ...(referrerToken && { referrerToken }), ...(promoCode && { promoCode }) }),
+          body: JSON.stringify({ eventId, tierId, quantity, buyerEmail, buyerPhone, ...(referrerToken && { referrerToken }), ...(promoCode && { promoCode }) }),
           signal: controller.signal,
         });
 
@@ -345,7 +347,7 @@ export function StripeCheckout({
     createIntent();
 
     return () => controller.abort();
-  }, [eventId, tierId, quantity, buyerEmail, referrerToken, promoCode]);
+  }, [eventId, tierId, quantity, buyerEmail, buyerPhone, referrerToken, promoCode]);
 
   if (loading) {
     return (
