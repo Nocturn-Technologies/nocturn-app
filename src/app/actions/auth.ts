@@ -146,13 +146,22 @@ export async function signUpUser(formData: {
     }
   }
 
-  // Send welcome email (non-blocking)
-  sendWelcomeEmail(formData.email, formData.fullName, userType).catch(() => {});
-
-  // If requires approval, notify admin (Shawn)
+  // Await email sends — Vercel's serverless lambda freezes the moment this
+  // action returns, killing any in-flight fetch(). Previously these were
+  // fire-and-forget (`.catch(() => {})`) which ate the promise AND the
+  // error, so silent Resend 422s (from the wrong FROM address) were
+  // completely invisible. `Promise.allSettled` keeps one failure from
+  // blocking the other, and lets the user finish signup even if email
+  // delivery fails.
+  const emailTasks: Promise<unknown>[] = [
+    sendWelcomeEmail(formData.email, formData.fullName, userType),
+  ];
   if (requiresApproval) {
-    sendApprovalRequestEmail(userId, formData.email, formData.fullName, userType).catch(() => {});
+    emailTasks.push(
+      sendApprovalRequestEmail(userId, formData.email, formData.fullName, userType)
+    );
   }
+  await Promise.allSettled(emailTasks);
 
   // Sign in the user so they get a session cookie
   const supabase = await createServerClient();
@@ -178,8 +187,16 @@ function escapeHtml(str: string): string {
 }
 
 async function sendWelcomeEmail(email: string, name: string, userType: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
+  // Route through the shared sendEmail helper so welcome emails get:
+  //   - retries (3 attempts, 1s backoff, 4xx vs 5xx awareness)
+  //   - consistent FROM address (RESEND_FROM_EMAIL via FROM_EMAIL constant)
+  //   - dev-mode skip guard
+  //
+  // Previously this fired a raw fetch() to Resend with the literal FROM
+  // `Nocturn <nocturn@trynocturn.com>` which does NOT match the verified
+  // identity `noreply@trynocturn.com` — every welcome email was being
+  // silently rejected with a 422 and the `catch {}` was eating the error.
+  const { sendEmail } = await import("@/lib/email/send");
   const safeName = escapeHtml(name.split(" ")[0]);
 
   const typeMessages: Record<string, string> = {
@@ -202,38 +219,34 @@ async function sendWelcomeEmail(email: string, name: string, userType: string) {
     pr_publicist: "Your PR profile is live on the Nocturn marketplace. Connect with artists and collectives looking for media outreach.",
   };
 
-  try {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        from: "Nocturn <nocturn@trynocturn.com>",
-        to: email,
-        subject: `Welcome to Nocturn, ${safeName}`,
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
-            <div style="margin-bottom: 32px;">
-              <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
-            </div>
-            <h1 style="font-size: 28px; font-weight: 800; margin: 0 0 16px; line-height: 1.2;">
-              Welcome, ${safeName}.
-            </h1>
-            <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
-              ${typeMessages[userType] || typeMessages.collective}
-            </p>
-            <a href="https://app.trynocturn.com/dashboard" style="display: inline-block; background: #7B2FF7; color: white; padding: 12px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 14px;">
-              Open Nocturn
-            </a>
-            <p style="color: #71717A; font-size: 12px; margin-top: 40px; line-height: 1.5;">
-              You run the night. Nocturn runs the business.<br>
-              <a href="https://trynocturn.com" style="color: #7B2FF7; text-decoration: none;">trynocturn.com</a>
-            </p>
-          </div>
-        `,
-      }),
-    });
-  } catch {
-    // Non-critical — don't block signup
+  const html = `
+    <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
+      <div style="margin-bottom: 32px;">
+        <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
+      </div>
+      <h1 style="font-size: 28px; font-weight: 800; margin: 0 0 16px; line-height: 1.2;">
+        Welcome, ${safeName}.
+      </h1>
+      <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
+        ${typeMessages[userType] || typeMessages.collective}
+      </p>
+      <a href="https://app.trynocturn.com/dashboard" style="display: inline-block; background: #7B2FF7; color: white; padding: 12px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 14px;">
+        Open Nocturn
+      </a>
+      <p style="color: #71717A; font-size: 12px; margin-top: 40px; line-height: 1.5;">
+        You run the night. Nocturn runs the business.<br>
+        <a href="https://trynocturn.com" style="color: #7B2FF7; text-decoration: none;">trynocturn.com</a>
+      </p>
+    </div>
+  `;
+
+  const result = await sendEmail({
+    to: email,
+    subject: `Welcome to Nocturn, ${safeName}`,
+    html,
+  });
+  if (result.error) {
+    console.error("[signup] welcome email failed:", result.error);
   }
 }
 
@@ -300,6 +313,32 @@ export async function createCollective(formData: {
     });
   }
 
+  // Pre-check: collective name / slug must be unique. Check both because two
+  // visually-different names can collide on slug ("Midnight Society" and
+  // "midnight society" both slugify to "midnight-society"), and two
+  // visually-similar names can have different slugs ("MidnightSociety" vs
+  // "Midnight Society"). Surface a clear, actionable error in either case
+  // instead of letting the DB unique constraint fire as a generic 500.
+  const { data: existingBySlug } = await admin
+    .from("collectives")
+    .select("id")
+    .eq("slug", formData.slug)
+    .maybeSingle();
+
+  if (existingBySlug) {
+    return { error: "That collective name is already taken. Try a different one." };
+  }
+
+  const { data: existingByName } = await admin
+    .from("collectives")
+    .select("id")
+    .ilike("name", formData.name)
+    .maybeSingle();
+
+  if (existingByName) {
+    return { error: "That collective name is already taken. Try a different one." };
+  }
+
   // Create collective
   const { data: collective, error: collectiveError } = await admin
     .from("collectives")
@@ -316,6 +355,18 @@ export async function createCollective(formData: {
 
   if (collectiveError) {
     console.error("[createCollective] insert error:", collectiveError.message);
+    // Race condition: another signup grabbed the slug between our pre-check
+    // and the insert. Postgres unique-constraint violations come back as
+    // code 23505. Surface the same friendly message either way.
+    const msg = collectiveError.message.toLowerCase();
+    if (
+      collectiveError.code === "23505" ||
+      msg.includes("duplicate key") ||
+      msg.includes("unique constraint") ||
+      msg.includes("already exists")
+    ) {
+      return { error: "That collective name is already taken. Try a different one." };
+    }
     return { error: "Failed to create collective" };
   }
   if (!collective) return { error: "Failed to create collective" };
@@ -342,8 +393,13 @@ export async function createCollective(formData: {
 }
 
 async function sendApprovalRequestEmail(userId: string, email: string, name: string, userType: string) {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) return;
+  // Same treatment as sendWelcomeEmail: route through the shared helper so
+  // we get retries, a consistent verified FROM, and errors we can actually
+  // see. The previous raw-fetch version hardcoded `nocturn@trynocturn.com`
+  // — not the verified Resend identity — and wrapped everything in an
+  // empty catch, so approval notifications were silently dropping and
+  // Shawn was only finding out about new signups via Supabase dashboard.
+  const { sendEmail } = await import("@/lib/email/send");
 
   // Use HMAC-signed tokens instead of raw secret in URLs
   const { generateApprovalUrls } = await import("@/app/api/approve-user/route");
@@ -353,44 +409,40 @@ async function sendApprovalRequestEmail(userId: string, email: string, name: str
 
   const adminEmail = process.env.ADMIN_EMAIL || "shawn@trynocturn.com";
 
-  try {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        from: "Nocturn <nocturn@trynocturn.com>",
-        to: adminEmail,
-        subject: `New ${userType} signup needs approval: ${name}`,
-        html: `
-          <div style="font-family: -apple-system, sans-serif; max-width: 520px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
-            <div style="margin-bottom: 32px;">
-              <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
-              <span style="color: #71717A; font-size: 14px; margin-left: 8px;">Account Approval</span>
-            </div>
-            <h1 style="font-size: 24px; font-weight: 800; margin: 0 0 16px;">
-              New ${userType} signup
-            </h1>
-            <div style="background: #18181B; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-              <p style="color: #FAFAFA; font-size: 16px; font-weight: 600; margin: 0 0 4px;">${safeName}</p>
-              <p style="color: #A1A1AA; font-size: 14px; margin: 0 0 4px;">${safeEmail}</p>
-              <p style="color: #71717A; font-size: 13px; margin: 0;">Type: ${userType}</p>
-            </div>
-            <div style="display: flex; gap: 12px;">
-              <a href="${approveUrl}" style="display: inline-block; background: #2DD4BF; color: #09090B; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px;">
-                Approve
-              </a>
-              <a href="${denyUrl}" style="display: inline-block; background: #FB7185; color: #09090B; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px;">
-                Deny
-              </a>
-            </div>
-            <p style="color: #71717A; font-size: 12px; margin-top: 32px;">
-              Click Approve to give them full access. Click Deny to remove their account.
-            </p>
-          </div>
-        `,
-      }),
-    });
-  } catch {
-    // Non-critical
+  const html = `
+    <div style="font-family: -apple-system, sans-serif; max-width: 520px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
+      <div style="margin-bottom: 32px;">
+        <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
+        <span style="color: #71717A; font-size: 14px; margin-left: 8px;">Account Approval</span>
+      </div>
+      <h1 style="font-size: 24px; font-weight: 800; margin: 0 0 16px;">
+        New ${userType} signup
+      </h1>
+      <div style="background: #18181B; border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+        <p style="color: #FAFAFA; font-size: 16px; font-weight: 600; margin: 0 0 4px;">${safeName}</p>
+        <p style="color: #A1A1AA; font-size: 14px; margin: 0 0 4px;">${safeEmail}</p>
+        <p style="color: #71717A; font-size: 13px; margin: 0;">Type: ${userType}</p>
+      </div>
+      <div style="display: flex; gap: 12px;">
+        <a href="${approveUrl}" style="display: inline-block; background: #2DD4BF; color: #09090B; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px;">
+          Approve
+        </a>
+        <a href="${denyUrl}" style="display: inline-block; background: #FB7185; color: #09090B; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px;">
+          Deny
+        </a>
+      </div>
+      <p style="color: #71717A; font-size: 12px; margin-top: 32px;">
+        Click Approve to give them full access. Click Deny to remove their account.
+      </p>
+    </div>
+  `;
+
+  const result = await sendEmail({
+    to: adminEmail,
+    subject: `New ${userType} signup needs approval: ${name}`,
+    html,
+  });
+  if (result.error) {
+    console.error("[signup] approval request email failed:", result.error);
   }
 }

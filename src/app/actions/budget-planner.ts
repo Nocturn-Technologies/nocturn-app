@@ -155,8 +155,21 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
       : 0;
 
     // Suggest tiers
-    const gaPrice = Math.max(breakEvenPrice, 15); // minimum $15
-    const earlyBirdPrice = Math.round(gaPrice * 0.75);
+    // Round all marketed prices UP to the nearest $5 — flat numbers like
+    // $25/$30/$40 are easier to promote on flyers and IG stories than
+    // odd values like $23 or $37. Break-even stays raw because it's the
+    // underlying math, not a price we ever show on a flyer.
+    const roundUpToFive = (n: number) => Math.ceil(n / 5) * 5;
+
+    const gaPriceRaw = Math.max(breakEvenPrice, 15); // minimum $15
+    const tier1Price = roundUpToFive(gaPriceRaw);
+    // Compute bumps off the rounded tier1 so the gaps stay clean ($5/$10).
+    const tier2Price = roundUpToFive(tier1Price * 1.25);
+    const tier3Price = roundUpToFive(tier1Price * 1.5);
+    // Early bird: nearest $5 to 0.75x tier1, but always strictly below
+    // tier1 (otherwise the discount vanishes on small numbers like $15).
+    const earlyBirdRounded = Math.round((tier1Price * 0.75) / 5) * 5;
+    const earlyBirdPrice = Math.max(Math.min(earlyBirdRounded, tier1Price - 5), 5);
 
     const suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning: string }> = [];
 
@@ -165,9 +178,6 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
     // Tier 1 is the main price
     // Tier 2 is a slight bump for later buyers
     // Tier 3 is door price / last minute
-    const tier1Price = gaPrice;
-    const tier2Price = Math.round(tier1Price * 1.25);
-    const tier3Price = Math.round(tier1Price * 1.5);
 
     suggestedTiers.push({
       name: "Early Bird",
@@ -230,7 +240,7 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
     const profitAt75 = scenarios[1].profit;
     const summary = profitAt75 >= 0
       ? `Total expenses: $${totalExpenses.toLocaleString()}. At 75% capacity you'd make $${profitAt75.toLocaleString()} profit. ${barMinimum > 0 ? `Bar minimum of $${barMinimum.toLocaleString()} — if you don't hit it, you lose your $${deposit.toLocaleString()} deposit.` : ""}`
-      : `Total expenses: $${totalExpenses.toLocaleString()}. You'd need to sell ${Math.ceil(capacity * 0.75)} tickets at $${gaPrice} to break even. ${barMinimum > 0 ? `Bar minimum of $${barMinimum.toLocaleString()} adds risk.` : ""} Consider reducing costs or raising ticket prices.`;
+      : `Total expenses: $${totalExpenses.toLocaleString()}. You'd need to sell ${Math.ceil(capacity * 0.75)} tickets at $${tier1Price} to break even. ${barMinimum > 0 ? `Bar minimum of $${barMinimum.toLocaleString()} adds risk.` : ""} Consider reducing costs or raising ticket prices.`;
 
     return {
       totalExpenses,

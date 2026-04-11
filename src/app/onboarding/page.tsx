@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { createCollective } from "@/app/actions/auth";
 import { createOnboardingEvent } from "@/app/actions/onboarding-event";
+import { checkCollectiveNameAvailability, type NameAvailability } from "@/app/actions/check-collective-name";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NocturnLogo } from "@/components/nocturn-logo";
 import { VibePicker } from "@/components/onboarding/vibe-picker";
 import { EventCard, createInitialEventData, type EventCardData } from "@/components/onboarding/event-card";
 import { ShareScreen } from "@/components/onboarding/share-screen";
-import { ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowLeft, Sparkles, Check, Loader2 } from "lucide-react";
 import { type VibeKey, VIBE_OPTIONS } from "@/lib/event-templates";
 
 type Step = "name_city" | "vibe" | "event" | "creating" | "share";
@@ -49,6 +50,15 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [isPaidEvent, setIsPaidEvent] = useState(false);
+
+  // Live name availability check (debounced).
+  // "idle" = nothing typed yet or just changed; "checking" = request in flight;
+  // "available" = unique; "taken" = collision (Continue is blocked).
+  const [nameCheck, setNameCheck] = useState<
+    | { status: "idle" }
+    | { status: "checking" }
+    | NameAvailability
+  >({ status: "idle" });
 
   // Restore progress from localStorage on mount
   useEffect(() => {
@@ -92,7 +102,41 @@ export default function OnboardingPage() {
   function handleNameChange(value: string) {
     setName(value);
     setSlug(slugify(value));
+    // Clear any "name taken" error as soon as the user edits the name.
+    if (error) setError(null);
+    // Reset live-check state — the debounce effect will re-run.
+    setNameCheck({ status: "idle" });
   }
+
+  // Debounced live availability check. Fires 400ms after the user stops
+  // typing, only when the name is long enough to be worth checking.
+  // The submit-time check in createCollective is still the source of truth
+  // — this is purely UX so users catch collisions before clicking Continue.
+  useEffect(() => {
+    if (step !== "name_city") return;
+    const trimmed = name.trim();
+    if (trimmed.length < 2) {
+      setNameCheck({ status: "idle" });
+      return;
+    }
+
+    let cancelled = false;
+    setNameCheck({ status: "checking" });
+
+    const timer = setTimeout(async () => {
+      try {
+        const result = await checkCollectiveNameAvailability(trimmed);
+        if (!cancelled) setNameCheck(result);
+      } catch {
+        if (!cancelled) setNameCheck({ status: "error", reason: "Could not check availability" });
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [name, step]);
 
   // When vibe is selected, initialize event data
   function handleVibeSelect(vibe: VibeKey) {
@@ -108,7 +152,13 @@ export default function OnboardingPage() {
     const vibeOption = VIBE_OPTIONS.find((v) => v.key === selectedVibe);
     const bio = `${name} — curating ${vibeOption?.label.toLowerCase() ?? "unforgettable"} nights in ${city}.`;
 
-    // 1. Create collective (with idempotency for duplicate slug)
+    // 1. Create collective. If the name is taken, send the user back to
+    // Screen 1 with a clear error so they can pick a different name.
+    // (Previously this had "idempotency" logic that silently let users
+    // join a collective they didn't create if RLS allowed reading it —
+    // that's a security smell. Server-side createCollective now does a
+    // pre-check + race-safe constraint handling, so we just trust its
+    // error and route the user back to fix the name.)
     const result = await createCollective({
       name,
       slug,
@@ -119,31 +169,12 @@ export default function OnboardingPage() {
     });
 
     if (result.error) {
-      // If the collective already exists (duplicate slug), look it up and proceed
-      const isDuplicate = result.error.toLowerCase().includes("already exists")
-        || result.error.toLowerCase().includes("unique")
-        || result.error.toLowerCase().includes("duplicate");
-
-      if (isDuplicate) {
-        // Collective was already created (user closed tab mid-flow) — verify it exists
-        const { data: existing } = await supabase
-          .from("collectives")
-          .select("id")
-          .eq("slug", slug)
-          .maybeSingle();
-
-        if (!existing) {
-          // Slug conflict but not ours — genuine error
-          setError(result.error);
-          setStep(skipEvent ? "vibe" : "event");
-          return;
-        }
-        // Collective exists and is ours — continue to event creation
-      } else {
-        setError(result.error);
-        setStep(skipEvent ? "vibe" : "event");
-        return;
-      }
+      setError(result.error);
+      const isNameConflict = result.error.toLowerCase().includes("already taken");
+      // Name conflict → back to Screen 1 to edit the name.
+      // Anything else → back to wherever they were so they can retry.
+      setStep(isNameConflict ? "name_city" : skipEvent ? "vibe" : "event");
+      return;
     }
 
     // 2. Create event (if not skipped)
@@ -249,8 +280,24 @@ export default function OnboardingPage() {
                     autoFocus
                   />
                   {slug && (
-                    <p className="text-xs text-muted-foreground px-1">
-                      nocturn.app/<span className="text-nocturn font-medium">{slug}</span>
+                    <p className="text-xs text-muted-foreground px-1 flex items-center gap-2">
+                      <span>
+                        nocturn.app/<span className="text-nocturn font-medium">{slug}</span>
+                      </span>
+                      {nameCheck.status === "checking" && (
+                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                      )}
+                      {nameCheck.status === "available" && (
+                        <span className="flex items-center gap-1 text-emerald-500">
+                          <Check className="h-3 w-3" />
+                          Available
+                        </span>
+                      )}
+                    </p>
+                  )}
+                  {nameCheck.status === "taken" && (
+                    <p className="text-xs text-destructive px-1 animate-fade-in-up">
+                      &ldquo;{nameCheck.conflictingName}&rdquo; is already taken — try a different name
                     </p>
                   )}
                 </div>
@@ -261,13 +308,30 @@ export default function OnboardingPage() {
                   onChange={(e) => setCity(e.target.value)}
                   className="text-base h-12"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && name.trim() && city.trim()) setStep("vibe");
+                    if (
+                      e.key === "Enter" &&
+                      name.trim() &&
+                      city.trim() &&
+                      nameCheck.status !== "taken" &&
+                      nameCheck.status !== "checking"
+                    ) {
+                      setStep("vibe");
+                    }
                   }}
                 />
 
+                {error && (
+                  <p className="text-sm text-destructive text-center animate-fade-in-up">{error}</p>
+                )}
+
                 <Button
                   onClick={() => setStep("vibe")}
-                  disabled={!name.trim() || !city.trim()}
+                  disabled={
+                    !name.trim() ||
+                    !city.trim() ||
+                    nameCheck.status === "taken" ||
+                    nameCheck.status === "checking"
+                  }
                   className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base min-h-[48px]"
                 >
                   Continue
