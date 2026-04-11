@@ -3,7 +3,6 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { revalidatePath } from "next/cache";
-import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -36,13 +35,14 @@ export interface EventFinancials {
   expenses: ExpenseRow[];
   artistFees: ArtistFeeRow[];
   // Calculated totals
+  // Note: Stripe + Nocturn fees are NOT in this view. Buyers pay them at
+  // checkout (the buyer fee on top of face value covers both), so the
+  // organizer keeps 100% of grossRevenue. Showing those line items here
+  // confused promoters into thinking the fees came out of their pocket.
   grossRevenue: number;
   totalTicketsSold: number;
   totalExpenses: number;
   totalArtistFees: number;
-  platformFees: number;
-  stripeFees: number;
-  netRevenue: number;
   profitLoss: number;
   // Event-level financial fields
   venueCost: number | null;
@@ -179,18 +179,14 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
     const totalExpenses = expenseRows.reduce((sum, e) => sum + e.amount, 0);
     const totalArtistFees = artistFeeRows.reduce((sum, a) => sum + a.fee, 0);
 
-    // Platform fees (buyer pays — not deducted from organizer)
-    const platformFees = grossRevenue * (PLATFORM_FEE_PERCENT / 100) + (PLATFORM_FEE_FLAT_CENTS / 100) * totalTicketsSold;
-
-    // Stripe fees (~2.9% + $0.30 per transaction)
-    const stripeFees = grossRevenue > 0
-      ? grossRevenue * 0.029 + 0.30 * totalTicketsSold
-      : 0;
-
+    // Stripe + Nocturn fees are buyer-paid — Nocturn is the merchant of
+    // record, so neither comes out of the organizer's pocket. The P&L here
+    // is purely from the organizer's perspective: revenue is the full
+    // ticket face value, expenses are the costs they actually write checks
+    // for (artists, venue, gear, promo, etc.).
     const venueCostNum = event.venue_cost ? Number(event.venue_cost) : 0;
     const venueDepositNum = event.venue_deposit ? Number(event.venue_deposit) : 0;
-    const netRevenue = grossRevenue - stripeFees;
-    const profitLoss = netRevenue - totalExpenses - totalArtistFees - venueCostNum - venueDepositNum;
+    const profitLoss = grossRevenue - totalExpenses - totalArtistFees - venueCostNum - venueDepositNum;
 
     return {
       error: null,
@@ -204,9 +200,6 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
         totalTicketsSold,
         totalExpenses: Math.round(totalExpenses * 100) / 100,
         totalArtistFees: Math.round(totalArtistFees * 100) / 100,
-        platformFees: Math.round(platformFees * 100) / 100,
-        stripeFees: Math.round(stripeFees * 100) / 100,
-        netRevenue: Math.round(netRevenue * 100) / 100,
         profitLoss: Math.round(profitLoss * 100) / 100,
         venueCost: event.venue_cost ? Number(event.venue_cost) : null,
         venueDeposit: event.venue_deposit ? Number(event.venue_deposit) : null,

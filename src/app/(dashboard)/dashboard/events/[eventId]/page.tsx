@@ -21,7 +21,6 @@ import {
   ListChecks,
   Tag,
   ClipboardList,
-  BarChart3,
   FileText,
   Palette,
   Coffee,
@@ -234,7 +233,7 @@ export default async function EventDetailPage({ params }: Props) {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href="/dashboard/events">
-          <Button variant="ghost" size="icon" className="shrink-0 min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
+          <Button variant="ghost" size="icon" className="shrink-0 min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200" aria-label="Back to events">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -347,13 +346,7 @@ export default async function EventDetailPage({ params }: Props) {
         <Link href={`/dashboard/events/${event.id}/financials`}>
           <Button variant="outline" size="sm" className="min-h-[44px] border-green-400/30 text-green-400 hover:bg-green-400/10 active:scale-95 transition-all duration-200">
             <Sheet className="mr-2 h-3 w-3" />
-            P&L
-          </Button>
-        </Link>
-        <Link href={`/dashboard/events/${event.id}/forecast`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn-teal/30 text-nocturn-teal hover:bg-nocturn-teal/10 active:scale-95 transition-all duration-200">
-            <BarChart3 className="mr-2 h-3 w-3" />
-            Forecast
+            Financials
           </Button>
         </Link>
         {(event.status === "completed" || event.status === "settled") && (

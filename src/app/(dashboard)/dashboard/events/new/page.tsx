@@ -1293,6 +1293,17 @@ export default function NewEventPage() {
         tiers: validTiers,
         eventMode: formData.isFree ? "rsvp" : "ticketed",
         isFree: formData.isFree,
+        // Persist the wizard's budget step. Without these, the P&L page
+        // shows $0 expenses and the edit form's Venue Financials section
+        // renders empty — even though the user already typed all of it.
+        // The wizard uses `deposit` as the field name for venue deposit;
+        // travel cost comes from the AI budget calculation, not user input.
+        talentFee: budgetInput.talentFee ?? null,
+        venueCost: budgetInput.venueCost ?? null,
+        venueDeposit: budgetInput.deposit ?? null,
+        barMinimum: budgetInput.barMinimum ?? null,
+        otherExpenses: budgetInput.otherExpenses ?? null,
+        travelCost: budgetResult?.travelEstimate?.total ?? null,
       });
 
       if (result.error) {
@@ -1485,7 +1496,7 @@ export default function NewEventPage() {
       {/* Header */}
       <div className="flex items-center gap-3 pb-2 shrink-0 px-1">
         <Link href="/dashboard/events">
-          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200" aria-label="Back to events">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>

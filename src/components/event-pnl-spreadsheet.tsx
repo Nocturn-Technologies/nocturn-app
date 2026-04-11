@@ -110,6 +110,7 @@ function EditableAmountCell({
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Save amount"
           className="h-6 w-6 text-green-400 hover:text-green-300 hover:bg-green-400/10"
           onClick={handleSave}
           disabled={saving}
@@ -119,6 +120,7 @@ function EditableAmountCell({
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Cancel edit"
           className="h-6 w-6 text-muted-foreground hover:text-foreground hover:bg-muted"
           onClick={handleCancel}
           disabled={saving}
@@ -205,6 +207,7 @@ function EditableTextCell({
         <Button
           variant="ghost"
           size="icon"
+          aria-label="Save text"
           className="h-6 w-6 shrink-0 text-green-400 hover:text-green-300 hover:bg-green-400/10"
           onClick={handleSave}
           disabled={saving}
@@ -335,6 +338,7 @@ function AddExpenseRow({ eventId }: { eventId: string }) {
           <Button
             variant="ghost"
             size="icon"
+            aria-label="Save expense"
             className="h-7 w-7 text-green-400 hover:text-green-300 hover:bg-green-400/10"
             onClick={handleSubmit}
             disabled={isPending}
@@ -344,6 +348,7 @@ function AddExpenseRow({ eventId }: { eventId: string }) {
           <Button
             variant="ghost"
             size="icon"
+            aria-label="Cancel add expense"
             className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted"
             onClick={() => setOpen(false)}
             disabled={isPending}
@@ -398,7 +403,13 @@ export function EventPnlSpreadsheet({ financials }: Props) {
         </div>
       )}
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/*
+        Three cards, not four. Dropped the old "Net Revenue / After Stripe
+        fees" card because it confused organizers — Stripe is buyer-paid,
+        so net == gross from their perspective. Showing both was just
+        duplicate numbers.
+      */}
+      <div className="grid grid-cols-3 gap-3">
         <SummaryCard
           label="Gross Revenue"
           value={financials.grossRevenue}
@@ -407,14 +418,8 @@ export function EventPnlSpreadsheet({ financials }: Props) {
         />
         <SummaryCard
           label="Total Costs"
-          value={financials.totalExpenses + financials.totalArtistFees + financials.stripeFees}
-          subtitle="Expenses + fees"
-        />
-        <SummaryCard
-          label="Net Revenue"
-          value={financials.netRevenue}
-          subtitle="After Stripe fees"
-          positive={financials.netRevenue > 0}
+          value={financials.totalExpenses + financials.totalArtistFees}
+          subtitle="Your out-of-pocket"
         />
         <SummaryCard
           label="Profit / Loss"
@@ -453,18 +458,6 @@ export function EventPnlSpreadsheet({ financials }: Props) {
             <span className="text-xs font-bold uppercase tracking-wider text-red-400">Expenses</span>
           </div>
           <div className="divide-y divide-border/50">
-            {financials.stripeFees > 0 && (
-              <div className="px-4 py-3 flex items-center justify-between">
-                <div><p className="text-sm">Stripe Fees</p><p className="text-xs text-muted-foreground">Processing</p></div>
-                <span className="text-sm font-mono tabular-nums text-red-400">-{formatCurrency(financials.stripeFees)}</span>
-              </div>
-            )}
-            {financials.platformFees > 0 && (
-              <div className="px-4 py-3 flex items-center justify-between">
-                <div><p className="text-sm">Platform Fee</p><p className="text-xs text-muted-foreground">Nocturn 7% + $0.50</p></div>
-                <span className="text-sm font-mono tabular-nums text-red-400">-{formatCurrency(financials.platformFees)}</span>
-              </div>
-            )}
             {financials.expenses.map((exp) => (
               <div key={exp.id} className="px-4 py-3 flex items-center justify-between">
                 <div className="min-w-0"><p className="text-sm truncate">{exp.description || "Expense"}</p><p className="text-xs text-muted-foreground">{exp.category}</p></div>
@@ -477,12 +470,6 @@ export function EventPnlSpreadsheet({ financials }: Props) {
         {/* Totals */}
         <div className="rounded-xl border border-border bg-card overflow-hidden">
           <div className="divide-y divide-border/50">
-            <div className="px-4 py-3 flex items-center justify-between">
-              <span className="text-sm font-semibold">Net Revenue</span>
-              <span className={`text-sm font-bold font-mono tabular-nums ${financials.netRevenue >= 0 ? "text-foreground" : "text-red-400"}`}>
-                {formatCurrency(financials.netRevenue)}
-              </span>
-            </div>
             <div className={`px-4 py-4 flex items-center justify-between ${isProfitable ? "bg-green-500/10" : "bg-red-500/10"}`}>
               <span className="text-sm font-bold uppercase tracking-wide">{isProfitable ? "Profit" : "Loss"}</span>
               <span className={`text-lg font-black font-mono tabular-nums ${isProfitable ? "text-green-400" : "text-red-400"}`}>
@@ -676,6 +663,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                     <Button
                       variant="ghost"
                       size="icon"
+                      aria-label="Delete expense"
                       className="h-7 w-7 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all"
                       onClick={() => handleDeleteExpense(expense.id)}
                       disabled={isPending}
@@ -750,60 +738,15 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                 </>
               )}
 
-              {/* ── PLATFORM & PROCESSING FEES ─────────────────── */}
-              <tr className="border-b border-border bg-muted/20">
-                <td colSpan={4} className="px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      Processing Fees
-                    </span>
-                  </div>
-                </td>
-              </tr>
-
-              <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-2.5 text-muted-foreground text-xs">Stripe</td>
-                <td className="px-4 py-2.5 text-sm text-muted-foreground">
-                  2.9% + $0.30 per ticket
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <span className="text-sm font-mono tabular-nums text-muted-foreground">
-                    ({formatCurrency(financials.stripeFees)})
-                  </span>
-                </td>
-                <td />
-              </tr>
-
-              <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                <td className="px-4 py-2.5 text-muted-foreground text-xs">Nocturn</td>
-                <td className="px-4 py-2.5 text-sm text-muted-foreground">
-                  7% + $0.50 per ticket (buyer pays)
-                </td>
-                <td className="px-4 py-2.5 text-right">
-                  <span className="text-sm font-mono tabular-nums text-green-400/50 italic">
-                    {formatCurrency(financials.platformFees)} (not deducted)
-                  </span>
-                </td>
-                <td />
-              </tr>
+              {/*
+                Processing fees section removed. Stripe + Nocturn fees are
+                buyer-paid (Nocturn is the merchant of record), so they
+                never come out of the organizer's pocket. Showing them as
+                line items here made promoters think they were being
+                charged twice.
+              */}
 
               {/* ── TOTALS ─────────────────────────────────────── */}
-              <tr className="border-b border-border bg-muted/30">
-                <td className="px-4 py-3" />
-                <td className="px-4 py-3 text-right text-sm font-semibold">
-                  Net Revenue
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <span className={`text-sm font-bold font-mono tabular-nums ${
-                    financials.netRevenue >= 0 ? "text-foreground" : "text-red-400"
-                  }`}>
-                    {formatCurrency(financials.netRevenue)}
-                  </span>
-                </td>
-                <td />
-              </tr>
-
               <tr className={`${isProfitable ? "bg-green-500/10" : "bg-red-500/10"}`}>
                 <td className="px-4 py-4" />
                 <td className="px-4 py-4 text-right text-sm font-bold uppercase tracking-wide">

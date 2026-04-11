@@ -31,6 +31,21 @@ interface CreateEventInput {
   timezone?: string; // IANA timezone, defaults to America/Toronto
   eventMode?: "ticketed" | "rsvp" | "hybrid";
   isFree?: boolean;
+  // ── Budget fields from the wizard's budget step ──
+  // These are optional because the budget step is skippable. When present,
+  // they get persisted so the P&L page can read them back instead of asking
+  // the user to re-enter every cost on a separate screen.
+  talentFee?: number | null;
+  venueCost?: number | null;
+  venueDeposit?: number | null;
+  barMinimum?: number | null;
+  estimatedBarRevenue?: number | null;
+  // Free-form bucket from the budget step ("sound, lights, security, promo").
+  // Stored as a single line in the expenses table so it shows up in the P&L.
+  otherExpenses?: number | null;
+  // Talent travel (flights/hotel/transport/per diem). May be a server-computed
+  // estimate from calculateBudget rather than a user input.
+  travelCost?: number | null;
 }
 
 interface UpdateEventInput {
@@ -292,6 +307,22 @@ export async function createEvent(input: CreateEventInput) {
       : "ticketed";
   const isFree = typeof input.isFree === "boolean" ? input.isFree : eventMode === "rsvp";
 
+  // Sanitize budget fields. NUMERIC(10,2) caps and non-negative — anything
+  // out of range gets dropped silently rather than blowing up the whole
+  // event create. The wizard already enforces these but defense in depth.
+  function safeMoney(n: number | null | undefined): number | null {
+    if (n == null) return null;
+    if (!Number.isFinite(n) || n < 0 || n > 9999999.99) return null;
+    return Math.round(n * 100) / 100;
+  }
+  const venueCostClean = safeMoney(input.venueCost);
+  const venueDepositClean = safeMoney(input.venueDeposit);
+  const barMinimumClean = safeMoney(input.barMinimum);
+  const estimatedBarRevenueClean = safeMoney(input.estimatedBarRevenue);
+  const talentFeeClean = safeMoney(input.talentFee);
+  const otherExpensesClean = safeMoney(input.otherExpenses);
+  const travelCostClean = safeMoney(input.travelCost);
+
   // Create event
   const { data: event, error: eventError } = await admin
     .from("events")
@@ -308,6 +339,13 @@ export async function createEvent(input: CreateEventInput) {
       event_mode: eventMode,
       is_free: isFree,
       vibe_tags: vibeTags.length > 0 ? vibeTags : undefined,
+      // Persist event-level financial fields so the P&L page can read them
+      // back. Previously the wizard collected these and threw them away,
+      // forcing the user to re-enter every cost on the financials screen.
+      venue_cost: venueCostClean,
+      venue_deposit: venueDepositClean,
+      bar_minimum: barMinimumClean,
+      estimated_bar_revenue: estimatedBarRevenueClean,
       metadata: {
         timezone: tz,
         ...(dressCode ? { dress_code: dressCode } : {}),
@@ -345,6 +383,52 @@ export async function createEvent(input: CreateEventInput) {
       }
       console.error("[createEvent] tier error:", tierError.message);
       return { error: "Failed to create ticket tiers" };
+    }
+  }
+
+  // Persist budget-step line items as expense rows so the P&L reads them
+  // back without asking the user to re-enter every cost. These mirror the
+  // buckets the wizard's budget step collects. Failure here is non-fatal
+  // — the event itself is already saved and the user can re-add expenses
+  // manually on the financials page.
+  const budgetExpenseRows: Array<{
+    event_id: string;
+    collective_id: string;
+    description: string;
+    category: string;
+    amount: number;
+  }> = [];
+  if (talentFeeClean && talentFeeClean > 0) {
+    budgetExpenseRows.push({
+      event_id: event.id,
+      collective_id: collectiveId,
+      description: "Talent fee",
+      category: "artist",
+      amount: talentFeeClean,
+    });
+  }
+  if (travelCostClean && travelCostClean > 0) {
+    budgetExpenseRows.push({
+      event_id: event.id,
+      collective_id: collectiveId,
+      description: "Talent travel (flights, hotel, transport)",
+      category: "transportation",
+      amount: travelCostClean,
+    });
+  }
+  if (otherExpensesClean && otherExpensesClean > 0) {
+    budgetExpenseRows.push({
+      event_id: event.id,
+      collective_id: collectiveId,
+      description: "Other expenses (sound, lights, security, promo)",
+      category: "other",
+      amount: otherExpensesClean,
+    });
+  }
+  if (budgetExpenseRows.length > 0) {
+    const { error: expErr } = await admin.from("expenses").insert(budgetExpenseRows);
+    if (expErr) {
+      console.error("[createEvent] budget expense insert failed (non-fatal):", expErr.message);
     }
   }
 

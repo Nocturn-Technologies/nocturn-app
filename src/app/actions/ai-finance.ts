@@ -50,7 +50,16 @@ export interface ForecastData {
 }
 
 // Pre-event financial forecast
-export async function generateEventForecast(eventId: string): Promise<{
+//
+// `options.skipNarrative` skips the Claude API call (the only slow part of
+// this function — everything else is fast SQL + math). The narrative isn't
+// rendered anywhere right now, so callers can safely pass `true` whenever
+// they only need the structured forecast data. Callers that DO want the
+// narrative (none today) can omit the flag.
+export async function generateEventForecast(
+  eventId: string,
+  options: { skipNarrative?: boolean } = {}
+): Promise<{
   error: string | null;
   forecast: ForecastData | null;
 }> {
@@ -185,19 +194,23 @@ export async function generateEventForecast(eventId: string): Promise<{
 
   const estimatedExpenses = (expenses ?? []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
-  // Calculate fees
-  const stripeFees = Math.round((projectedRevenue * 0.029 + projectedTickets * 0.30) * 100) / 100;
-  const platformFee = Math.round(projectedRevenue * (PLATFORM_FEE_PERCENT / 100) * 100) / 100;
+  // Stripe + Nocturn fees are buyer-paid (Nocturn is the merchant of
+  // record), so the organizer keeps the full ticket face value. We zero
+  // these fields out — kept on the response for backwards compatibility
+  // with any client code that still reads them, but they no longer
+  // distort the projected profit.
+  const stripeFees = 0;
+  const platformFee = 0;
 
-  const totalCosts = stripeFees + platformFee + artistFees + talentTravelCosts + venueCost + estimatedExpenses;
+  const totalCosts = artistFees + talentTravelCosts + venueCost + estimatedExpenses;
   const totalRevenue = projectedRevenue + estimatedBarRevenue;
   const projectedProfit = totalRevenue - totalCosts - (depositAtRisk ? venueDeposit : 0);
 
-  // Break-even calculation (includes all fixed costs)
+  // Break-even uses face value (no fee deduction) because the organizer
+  // keeps 100% of what's printed on the ticket.
   const fixedCosts = artistFees + talentTravelCosts + venueCost + estimatedExpenses;
-  const netPerTicket = avgTicketPrice * (1 - PLATFORM_FEE_PERCENT / 100 - 0.029) - 0.30;
-  const breakEvenTickets = netPerTicket > 0
-    ? Math.ceil(Math.max(0, fixedCosts - estimatedBarRevenue) / netPerTicket)
+  const breakEvenTickets = avgTicketPrice > 0
+    ? Math.ceil(Math.max(0, fixedCosts - estimatedBarRevenue) / avgTicketPrice)
     : 0;
 
   // Generate insights
@@ -243,27 +256,31 @@ export async function generateEventForecast(eventId: string): Promise<{
     insights.push(`✈️ Talent travel costs: $${talentTravelCosts.toFixed(0)} (flights, hotel, transport).`);
   }
 
-  // AI narrative — send computed data to Claude for a plain-English summary
-  // Calculate ticket velocity: tickets sold / days since first ticket sale
-  const { data: firstTicketRaw } = await admin
-    .from("tickets")
-    .select("created_at")
-    .eq("event_id", eventId)
-    .in("status", ["paid", "checked_in"])
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  const firstTicket = firstTicketRaw as { created_at: string } | null;
+  // AI narrative — only generated when explicitly requested. Most callers
+  // (the merged financials page) skip this because it's a slow Claude call
+  // and the rendered UI uses `insights` instead.
+  let aiNarrative = "";
+  if (!options.skipNarrative) {
+    // Calculate ticket velocity: tickets sold / days since first ticket sale
+    const { data: firstTicketRaw } = await admin
+      .from("tickets")
+      .select("created_at")
+      .eq("event_id", eventId)
+      .in("status", ["paid", "checked_in"])
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const firstTicket = firstTicketRaw as { created_at: string } | null;
 
-  const daysSinceSalesStarted = firstTicket?.created_at
-    ? Math.max(1, Math.ceil((Date.now() - new Date(firstTicket.created_at).getTime()) / 86400000))
-    : 1;
-  const ticketsPerDay = ticketsSoldSoFar > 0
-    ? ticketsSoldSoFar / daysSinceSalesStarted
-    : 0;
+    const daysSinceSalesStarted = firstTicket?.created_at
+      ? Math.max(1, Math.ceil((Date.now() - new Date(firstTicket.created_at).getTime()) / 86400000))
+      : 1;
+    const ticketsPerDay = ticketsSoldSoFar > 0
+      ? ticketsSoldSoFar / daysSinceSalesStarted
+      : 0;
 
-  const { SYSTEM_PROMPTS } = await import("@/lib/ai-prompts");
-  const forecastPrompt = `${SYSTEM_PROMPTS.forecast}
+    const { SYSTEM_PROMPTS } = await import("@/lib/ai-prompts");
+    const forecastPrompt = `${SYSTEM_PROMPTS.forecast}
 
 Given this event forecast data, write a 2-3 sentence plain English explanation of where ticket sales stand and the financial outlook, followed by exactly 2 tactical recommendations. No headers, no bullet points — just a short paragraph.
 
@@ -278,7 +295,8 @@ Artist fees: $${artistFees.toFixed(2)}
 Other expenses: $${estimatedExpenses.toFixed(2)}
 Tier breakdown: ${tierData.map(t => `${t.name}: ${t.sold}/${t.capacity} @ $${t.price}`).join(", ")}`;
 
-  const aiNarrative = await generateWithClaude(forecastPrompt) ?? "";
+    aiNarrative = await generateWithClaude(forecastPrompt) ?? "";
+  }
 
   return {
     error: null,
