@@ -14,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -193,9 +193,19 @@ export default function SettingsPage() {
 
   if (loadError) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 gap-3">
-        <p className="text-sm text-destructive">{loadError}</p>
-        <Button variant="outline" onClick={() => window.location.reload()}>
+      <div className="flex flex-col items-center justify-center py-16 gap-4 animate-in fade-in duration-300">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+          <AlertCircle className="h-7 w-7 text-destructive" />
+        </div>
+        <div className="text-center space-y-1">
+          <h2 className="text-lg font-bold">Couldn&apos;t load settings</h2>
+          <p className="text-sm text-muted-foreground max-w-sm truncate">{loadError}</p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => window.location.reload()}
+          className="min-h-[44px] transition-all duration-200 active:scale-[0.98]"
+        >
           Try again
         </Button>
       </div>
@@ -203,21 +213,21 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
+    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300">
       <div className="min-w-0">
-        <h1 className="text-2xl font-bold font-heading">Settings</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-2xl font-bold font-heading truncate">Settings</h1>
+        <p className="text-sm text-muted-foreground truncate">
           Manage your profile and collective
         </p>
       </div>
 
       {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive animate-in fade-in slide-in-from-top-1 duration-200">
           {error}
         </div>
       )}
       {success && (
-        <div className="rounded-md bg-emerald-500/10 p-3 text-sm text-emerald-500">
+        <div className="rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-500 animate-in fade-in slide-in-from-top-1 duration-200">
           Saved successfully!
         </div>
       )}
@@ -250,7 +260,11 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-            <Button type="submit" className="bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={saving}>
+            <Button
+              type="submit"
+              className="bg-nocturn hover:bg-nocturn-light min-h-[44px] transition-all duration-200 active:scale-[0.98] disabled:active:scale-100"
+              disabled={saving}
+            >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {saving ? "Saving..." : "Save Profile"}
             </Button>
@@ -280,7 +294,7 @@ export default function SettingsPage() {
                   required
                 />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 min-w-0">
                 <Label htmlFor="collectiveSlug">URL slug</Label>
                 <Input
                   id="collectiveSlug"
@@ -288,7 +302,7 @@ export default function SettingsPage() {
                   onChange={(e) => setSlug(e.target.value)}
                   required
                 />
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground truncate">
                   nocturn.app/{slug}
                 </p>
               </div>
@@ -332,7 +346,11 @@ export default function SettingsPage() {
                 />
               </div>
             </div>
-            <Button type="submit" className="bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={saving}>
+            <Button
+              type="submit"
+              className="bg-nocturn hover:bg-nocturn-light min-h-[44px] transition-all duration-200 active:scale-[0.98] disabled:active:scale-100"
+              disabled={saving}
+            >
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {saving ? "Saving..." : "Save Collective"}
             </Button>
