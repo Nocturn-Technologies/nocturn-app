@@ -55,7 +55,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
         <CardContent className="p-4">
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                 Current Revenue
               </p>
               <p className="text-lg font-bold tabular-nums">
@@ -63,7 +63,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
               </p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                 Projected Revenue
               </p>
               <p className="text-lg font-bold tabular-nums text-nocturn-light">
@@ -71,7 +71,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
               </p>
             </div>
             <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                 Projected Profit
               </p>
               <p
@@ -119,7 +119,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
                       </div>
                     </div>
                     <Badge
-                      className={`text-[10px] ${
+                      className={`text-[11px] ${
                         isProfitable
                           ? "border-nocturn-teal/20 bg-nocturn-teal/10 text-nocturn-teal"
                           : "border-red-400/20 bg-red-400/10 text-red-400"
@@ -153,7 +153,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
                         style={{ width: `${utilizationPercent}%` }}
                       />
                     </div>
-                    <div className="flex justify-between text-[10px] text-muted-foreground/70">
+                    <div className="flex justify-between text-[11px] text-muted-foreground/70">
                       <span className="flex items-center gap-1">
                         <span className="inline-block h-1.5 w-1.5 rounded-full bg-nocturn" />
                         Current
@@ -175,7 +175,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
                           {forecast.dailySalesVelocity.toFixed(1)}
                         </p>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground">
                         tickets/day
                       </p>
                     </div>
@@ -186,7 +186,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
                           {forecast.projectedTickets}
                         </p>
                       </div>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground">
                         proj. tickets
                       </p>
                     </div>
@@ -194,7 +194,7 @@ export function RevenueForecast({ forecasts }: RevenueForecastProps) {
                       <p className="text-xs font-semibold tabular-nums text-nocturn-light">
                         {formatMoney(forecast.projectedRevenue)}
                       </p>
-                      <p className="text-[10px] text-muted-foreground">
+                      <p className="text-[11px] text-muted-foreground">
                         proj. revenue
                       </p>
                     </div>

@@ -45,7 +45,7 @@ export function EventUpdatesFeed({ updates, accentColor, collectiveName }: Event
             Updates from {collectiveName}
           </h3>
         </div>
-        <span className="text-[10px] text-white/30">{sorted.length}</span>
+        <span className="text-[11px] text-white/50">{sorted.length}</span>
       </div>
 
       <ol className="space-y-3">
@@ -63,13 +63,13 @@ export function EventUpdatesFeed({ updates, accentColor, collectiveName }: Event
                 <span className="text-xs font-medium text-white/70 truncate">
                   {u.author_name ?? collectiveName}
                 </span>
-                <span className="text-[10px] text-white/30 shrink-0">
+                <span className="text-[11px] text-white/50 shrink-0">
                   {formatRelative(u.created_at)}
                 </span>
               </div>
               {u.email_sent && u.recipient_count > 0 && (
                 <span
-                  className="flex items-center gap-1 text-[10px] text-white/40 shrink-0"
+                  className="flex items-center gap-1 text-[11px] text-white/50 shrink-0"
                   title={`Emailed to ${u.recipient_count} ${u.recipient_count === 1 ? "person" : "people"}`}
                 >
                   <Mail className="h-3 w-3" />

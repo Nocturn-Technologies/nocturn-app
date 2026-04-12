@@ -241,12 +241,12 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
                     {r.full_name || <span className="text-muted-foreground italic">Anonymous</span>}
                   </p>
                   {r.plus_ones > 0 && (
-                    <span className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[10px] font-semibold text-nocturn">
+                    <span className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[11px] font-semibold text-nocturn">
                       +{r.plus_ones}
                     </span>
                   )}
                   <span className={`text-[11px] font-medium ${meta.color}`}>{meta.label}</span>
-                  <span className="ml-auto text-[10px] text-muted-foreground/70">
+                  <span className="ml-auto text-[11px] text-muted-foreground/70">
                     {timeAgo(r.created_at)}
                   </span>
                 </div>

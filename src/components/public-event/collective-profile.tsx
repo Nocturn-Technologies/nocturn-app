@@ -25,7 +25,7 @@ export function CollectiveProfile({
 
   return (
     <div className="space-y-2">
-      <h2 className="font-heading text-[10px] font-semibold uppercase tracking-[0.2em] text-white/20">
+      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">
         About the collective
       </h2>
       <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-4">

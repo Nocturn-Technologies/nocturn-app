@@ -117,7 +117,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
           <Link href="/" className="text-nocturn font-heading font-bold text-lg">
             nocturn.
           </Link>
-          <span className="text-[10px] text-white/30 uppercase tracking-[0.15em] font-semibold">
+          <span className="text-[11px] text-white/50 uppercase tracking-[0.15em] font-semibold">
             Digital Ticket
           </span>
         </div>
@@ -166,7 +166,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
 
       {/* Footer */}
       <footer className="relative z-10 text-center py-6">
-        <Link href="/" className="text-[11px] text-white/20 hover:text-white/40 transition-colors">
+        <Link href="/" className="text-[11px] text-white/40 hover:text-white/60 transition-colors">
           Powered by Nocturn
         </Link>
       </footer>

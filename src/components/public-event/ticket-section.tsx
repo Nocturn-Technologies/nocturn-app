@@ -155,7 +155,7 @@ export function TicketSection({
   if (showCheckout && selectedTier && selected) {
     return (
       <div className="space-y-4">
-        <h2 className="font-heading text-[10px] font-semibold uppercase tracking-[0.25em] text-white/15">
+        <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.25em] text-white/40">
           Complete Payment
         </h2>
         <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
@@ -174,7 +174,7 @@ export function TicketSection({
                 {resolvedAmount ?? `$${total.toFixed(2)}`}
               </p>
               {!resolvedAmount && (
-                <p className="text-[10px] text-white/30 mt-0.5">
+                <p className="text-[11px] text-white/50 mt-0.5">
                   Final amount in local currency
                 </p>
               )}
@@ -621,7 +621,7 @@ export function TicketSection({
               </p>
             )}
             {totalFees > 0 && (
-              <p className="mt-2.5 text-center text-[11px] text-white/20 tracking-wide">
+              <p className="mt-2.5 text-center text-[11px] text-white/40 tracking-wide">
                 ${subtotal.toFixed(2)} + ${totalFees.toFixed(2)} service fee
               </p>
             )}

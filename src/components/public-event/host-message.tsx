@@ -35,7 +35,7 @@ export function HostMessage({ message, hostName, hostAvatarUrl, accentColor }: H
             />
           ) : (
             <div
-              className="flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold text-white ring-1 ring-white/10"
+              className="flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold text-white ring-1 ring-white/10"
               style={{ backgroundColor: accentColor }}
             >
               {hostName.charAt(0).toUpperCase()}

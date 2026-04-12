@@ -333,7 +333,7 @@ export function TicketTierEditor({
                     className="h-9 bg-background"
                   />
                   {tier.sold > 0 && (
-                    <p className="mt-1 text-[10px] text-muted-foreground">
+                    <p className="mt-1 text-[11px] text-muted-foreground">
                       Min {tier.sold} (already sold)
                     </p>
                   )}
@@ -395,7 +395,7 @@ export function TicketTierEditor({
                   {tier.sold >= (tier.capacity ?? 0) && (tier.capacity ?? 0) > 0 && (
                     <Badge
                       variant="secondary"
-                      className="bg-red-500/10 text-red-400 border-red-500/20 text-[10px] px-1.5 py-0"
+                      className="bg-red-500/10 text-red-400 border-red-500/20 text-[11px] px-1.5 py-0"
                     >
                       Sold Out
                     </Badge>

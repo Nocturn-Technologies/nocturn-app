@@ -155,7 +155,7 @@ export function EventUpdatesComposer({ eventId, initialUpdates }: EventUpdatesCo
               className="rounded-xl border border-border bg-background p-3"
             >
               <div className="flex items-start justify-between gap-2 mb-1.5">
-                <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                   <span>{formatRelative(u.created_at)}</span>
                   {u.email_sent && (
                     <span

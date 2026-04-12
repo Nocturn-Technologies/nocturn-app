@@ -402,13 +402,13 @@ export function RsvpWidget({
               </span>
               {isActive && isChanging ? (
                 <span
-                  className="text-[9px] font-bold uppercase tracking-wider"
+                  className="text-[11px] font-bold uppercase tracking-wider"
                   style={{ color: accentColor }}
                 >
                   Current
                 </span>
               ) : counts[opt.key] > 0 ? (
-                <span className="text-[10px] text-white/30">
+                <span className="text-[11px] text-white/50">
                   {counts[opt.key]}
                 </span>
               ) : null}

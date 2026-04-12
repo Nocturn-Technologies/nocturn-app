@@ -89,7 +89,7 @@ export function EventFinancialsDashboard({ financials, forecast }: Props) {
               <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                 Profit &amp; Loss
               </h2>
-              <span className="text-[10px] text-muted-foreground">at a glance</span>
+              <span className="text-[11px] text-muted-foreground">at a glance</span>
             </div>
 
             {/* Big number: profit/loss */}
@@ -194,7 +194,7 @@ export function EventFinancialsDashboard({ financials, forecast }: Props) {
                 Forecast
               </h2>
               {forecast && (
-                <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Calendar className="h-3 w-3" />
                   {forecast.daysUntilEvent > 0
                     ? `${forecast.daysUntilEvent} days out`
@@ -233,7 +233,7 @@ export function EventFinancialsDashboard({ financials, forecast }: Props) {
                       />
                     )}
                   </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                  <div className="flex justify-between text-[11px] text-muted-foreground mt-1">
                     <span>0</span>
                     {forecast.breakEvenTickets > 0 && (
                       <span className="text-amber-400">
@@ -246,7 +246,7 @@ export function EventFinancialsDashboard({ financials, forecast }: Props) {
 
                 {/* Scenario table */}
                 <div className="space-y-1.5">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                     What if you sell…
                   </p>
                   <div className="rounded-lg border border-border overflow-hidden">
@@ -267,7 +267,7 @@ export function EventFinancialsDashboard({ financials, forecast }: Props) {
                               >
                                 {s.label}
                               </span>
-                              <span className="text-[10px] text-muted-foreground ml-1">
+                              <span className="text-[11px] text-muted-foreground ml-1">
                                 ({s.tickets})
                               </span>
                             </td>
