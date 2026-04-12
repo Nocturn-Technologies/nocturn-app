@@ -518,7 +518,7 @@ export default function EventDesignPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
@@ -824,7 +824,7 @@ export default function EventDesignPage() {
                         onKeyDown={(e) => e.key === "Enter" && searchUnsplash()}
                         className="flex-1 bg-background"
                       />
-                      <Button size="sm" variant="outline" onClick={() => searchUnsplash()}>
+                      <Button size="sm" variant="outline" className="min-h-[44px]" onClick={() => searchUnsplash()}>
                         Search
                       </Button>
                     </div>

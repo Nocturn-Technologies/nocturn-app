@@ -222,7 +222,7 @@ export function MarketplaceConnect({
       <div className="flex gap-1 rounded-lg bg-accent p-1">
         <button
           onClick={() => setMode("search")}
-          className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
+          className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors min-h-[44px] ${
             mode === "search"
               ? "bg-card text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"
@@ -233,7 +233,7 @@ export function MarketplaceConnect({
         </button>
         <button
           onClick={() => setMode("invite")}
-          className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
+          className={`flex-1 rounded-md py-2 text-xs font-medium transition-colors min-h-[44px] ${
             mode === "invite"
               ? "bg-card text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground"

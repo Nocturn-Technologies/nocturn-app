@@ -292,7 +292,7 @@ export default async function EventDetailPage({ params }: Props) {
     : "Free";
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 animate-in fade-in duration-500">
+    <div className="mx-auto max-w-2xl space-y-6 animate-in fade-in duration-500 overflow-x-hidden">
       <EventCreatedToast />
       {/* Header */}
       <div className="flex items-center gap-4">

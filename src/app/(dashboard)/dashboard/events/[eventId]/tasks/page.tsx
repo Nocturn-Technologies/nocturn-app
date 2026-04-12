@@ -447,7 +447,7 @@ function EventTasksPageInner() {
   const hasActiveFilters = !!filterCategory || !!filterOwner || !!searchQuery;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       {/* Completion animation */}
       <CompletionCelebration show={showCelebration} is100={is100Celebration} />
 
@@ -693,7 +693,7 @@ function EventTasksPageInner() {
                       <p className="text-sm font-medium">{s.title}</p>
                       <p className="text-xs text-muted-foreground">{s.description}</p>
                     </div>
-                    <Button size="sm" variant="ghost" className="text-nocturn hover:bg-nocturn/10 shrink-0" onClick={() => handleAddSuggestion(s, i)} disabled={addingSuggestionIdx !== null}>
+                    <Button size="sm" variant="ghost" className="text-nocturn hover:bg-nocturn/10 shrink-0 min-h-[44px]" onClick={() => handleAddSuggestion(s, i)} disabled={addingSuggestionIdx !== null}>
                       {addingSuggestionIdx === i ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Plus className="h-3 w-3 mr-1" />}
                       {addingSuggestionIdx === i ? "Adding..." : "Add"}
                     </Button>
@@ -1248,7 +1248,7 @@ function ContentTaskCard({
         <div>
           <button
             onClick={() => setExpanded(!expanded)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors min-h-[36px]"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors min-h-[44px]"
           >
             {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             Caption
@@ -1256,7 +1256,7 @@ function ContentTaskCard({
           {expanded && (
             <div className="mt-1 space-y-2">
               <p className="text-sm text-foreground whitespace-pre-wrap">{caption}</p>
-              <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-foreground min-h-[36px]" onClick={handleCopyCaption}>
+              <Button size="sm" variant="ghost" className="text-xs text-muted-foreground hover:text-foreground min-h-[44px]" onClick={handleCopyCaption}>
                 <Copy className="h-3 w-3 mr-1" />
                 {copied ? "Copied!" : "Copy caption"}
               </Button>

@@ -117,7 +117,7 @@ export function ExternalEventsSection({
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-1 text-xs"
+                      className="gap-1 text-xs min-h-[44px]"
                       onClick={() => handleCopy(event.token!, event.id)}
                     >
                       {copiedId === event.id ? (

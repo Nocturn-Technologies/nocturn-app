@@ -1531,7 +1531,7 @@ export default function NewEventPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg flex flex-col h-[calc(100dvh-8rem)] animate-fade-in">
+    <div className="mx-auto max-w-lg flex flex-col h-[calc(100dvh-8rem)] animate-fade-in overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 pb-2 shrink-0 px-1">
         <Link href="/dashboard/events">

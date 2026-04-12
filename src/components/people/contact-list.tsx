@@ -862,7 +862,7 @@ export function ContactList({
                       </span>
                     )}
                     {contact.source && (
-                      <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[8px] text-muted-foreground/60">
+                      <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[11px] text-muted-foreground/60">
                         {SOURCE_LABELS[contact.source] ?? contact.source}
                       </span>
                     )}
@@ -983,7 +983,7 @@ export function ContactList({
                             </span>
                           )}
                         {contact.source && (
-                          <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[8px] text-muted-foreground/60">
+                          <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[11px] text-muted-foreground/60">
                             {SOURCE_LABELS[contact.source] ?? contact.source}
                           </span>
                         )}

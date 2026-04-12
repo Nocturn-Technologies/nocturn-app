@@ -365,7 +365,7 @@ export default function MarketplaceOnboardingPage() {
 
               <button
                 onClick={handleSkipImport}
-                className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+                className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-2 min-h-[44px]"
               >
                 Fill in manually →
               </button>
@@ -378,7 +378,7 @@ export default function MarketplaceOnboardingPage() {
               <div className="flex items-center justify-between mb-4">
                 <button
                   onClick={() => setStep("import")}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground min-h-[44px]"
                 >
                   <ArrowLeft className="h-3 w-3" />
                   Back
@@ -388,7 +388,7 @@ export default function MarketplaceOnboardingPage() {
                 </h2>
                 <button
                   onClick={() => setEditing(!editing)}
-                  className="flex items-center gap-1 text-xs text-nocturn hover:underline"
+                  className="flex items-center gap-1 text-xs text-nocturn hover:underline min-h-[44px]"
                 >
                   <Edit3 className="h-3 w-3" />
                   {editing ? "Preview" : "Edit"}
@@ -495,7 +495,7 @@ export default function MarketplaceOnboardingPage() {
                         <button
                           key={tag}
                           onClick={() => toggleTag(tag)}
-                          className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[36px] ${
+                          className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[44px] ${
                             selectedTags.includes(tag)
                               ? "bg-nocturn text-white"
                               : "bg-accent text-muted-foreground hover:text-foreground"
@@ -577,7 +577,7 @@ export default function MarketplaceOnboardingPage() {
                         {portfolioUrls.length > 1 && (
                           <button
                             onClick={() => removePortfolioSlot(i)}
-                            className="flex h-10 w-10 items-center justify-center rounded-md hover:bg-accent shrink-0"
+                            className="flex h-10 w-10 min-h-[44px] min-w-[44px] items-center justify-center rounded-md hover:bg-accent shrink-0"
                           >
                             <X className="h-4 w-4 text-muted-foreground" />
                           </button>
@@ -587,7 +587,7 @@ export default function MarketplaceOnboardingPage() {
                     {portfolioUrls.length < 5 && (
                       <button
                         onClick={addPortfolioSlot}
-                        className="flex items-center gap-1 text-xs text-nocturn hover:underline"
+                        className="flex items-center gap-1 text-xs text-nocturn hover:underline min-h-[44px]"
                       >
                         <Plus className="h-3 w-3" /> Add another link
                       </button>

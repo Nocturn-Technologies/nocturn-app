@@ -270,7 +270,7 @@ export default function LiveEventPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-5 pb-8">
+    <div className="mx-auto max-w-lg space-y-5 pb-8 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>

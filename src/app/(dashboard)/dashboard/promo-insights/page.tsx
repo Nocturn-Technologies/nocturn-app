@@ -102,7 +102,7 @@ export default async function PromoInsightsPage() {
   const schedule = scheduleResult.data;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold font-heading">Promo Insights</h1>
@@ -217,7 +217,7 @@ export default async function PromoInsightsPage() {
                           }}
                         />
                         {h % 6 === 0 && (
-                          <span className="text-[8px] text-muted-foreground">
+                          <span className="text-[11px] text-muted-foreground">
                             {formatHour(h).replace(":00 ", "")}
                           </span>
                         )}
@@ -331,7 +331,7 @@ export default async function PromoInsightsPage() {
                             }}
                           />
                           <span
-                            className="text-[8px] text-muted-foreground truncate max-w-full"
+                            className="text-[11px] text-muted-foreground truncate max-w-full"
                             title={point.eventTitle}
                           >
                             {new Date(point.date).toLocaleDateString("en-US", {

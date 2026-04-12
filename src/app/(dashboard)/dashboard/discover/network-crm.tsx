@@ -342,7 +342,7 @@ function ContactCard({
         {contact.profileId ? (
           <Button
             size="sm"
-            className="flex-1 bg-nocturn hover:bg-nocturn-light text-white h-9 text-xs"
+            className="flex-1 bg-nocturn hover:bg-nocturn-light text-white h-9 min-h-[44px] text-xs"
             onClick={(e) => {
               e.stopPropagation();
               haptic("light");
@@ -362,7 +362,7 @@ function ContactCard({
             variant="ghost"
             aria-label={isSaved ? "Unsave contact" : "Save contact"}
             aria-pressed={isSaved}
-            className={`shrink-0 h-9 w-9 ${
+            className={`shrink-0 h-9 w-9 min-h-[44px] min-w-[44px] ${
               isSaved
                 ? "text-rose-400 hover:text-rose-300"
                 : "text-muted-foreground hover:text-foreground"

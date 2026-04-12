@@ -140,7 +140,7 @@ export default function PromosPage() {
   const activeCodes = codes.filter((c) => c.is_active).length;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>

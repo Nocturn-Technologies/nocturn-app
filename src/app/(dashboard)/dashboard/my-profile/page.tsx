@@ -260,7 +260,7 @@ export default function MyProfilePage() {
   const isMediaType = ["photographer", "videographer"].includes(profile.user_type);
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 max-w-2xl overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-bold font-heading">My Profile</h1>
         <p className="text-sm text-muted-foreground">

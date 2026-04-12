@@ -108,7 +108,7 @@ export function EventUpdatesComposer({ eventId, initialUpdates }: EventUpdatesCo
           placeholder="Heads up — doors moved to 10pm, see you soon 🔥"
           rows={4}
           maxLength={MAX_LEN + 100}
-          className="w-full resize-none rounded-xl border border-border bg-background px-3 py-3 text-sm placeholder:text-muted-foreground/60 outline-none focus:border-nocturn/40 transition-all min-h-[100px]"
+          className="w-full resize-none rounded-xl border border-border bg-background px-3 py-3 text-base md:text-sm placeholder:text-muted-foreground/60 outline-none focus:border-nocturn/40 transition-all min-h-[100px]"
         />
         <div className="flex items-center justify-between text-[11px]">
           <label className="flex items-center gap-2 cursor-pointer select-none">

@@ -353,7 +353,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090B] antialiased selection:bg-purple-500/20" style={{ scrollBehavior: "smooth" }}>
+    <div className="min-h-screen bg-[#09090B] antialiased selection:bg-purple-500/20 overflow-x-hidden" style={{ scrollBehavior: "smooth" }}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
@@ -536,7 +536,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                   {collective.logo_url ? (
                     <Image src={collective.logo_url} alt={collective.name || "Collective logo"} width={20} height={20} className="h-5 w-5 rounded-full" />
                   ) : (
-                    <div className="h-5 w-5 rounded-full text-[8px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: accentColor }}>
+                    <div className="h-5 w-5 rounded-full text-[11px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: accentColor }}>
                       {collective.name.charAt(0)}
                     </div>
                   )}

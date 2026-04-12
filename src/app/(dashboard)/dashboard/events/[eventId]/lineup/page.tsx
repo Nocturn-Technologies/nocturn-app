@@ -235,7 +235,7 @@ export default function LineupPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 overflow-x-hidden">
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
           <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Back to event">

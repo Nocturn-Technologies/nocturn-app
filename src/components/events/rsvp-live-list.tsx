@@ -149,7 +149,7 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
       <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => setFilter("all")}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[32px] ${
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[44px] ${
             filter === "all"
               ? "bg-nocturn text-white"
               : "bg-muted text-muted-foreground hover:bg-accent"
@@ -159,7 +159,7 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
         </button>
         <button
           onClick={() => setFilter("yes")}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[32px] ${
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[44px] ${
             filter === "yes"
               ? "bg-green-500/20 text-green-300 ring-1 ring-green-500/40"
               : "bg-muted text-muted-foreground hover:bg-accent"
@@ -169,7 +169,7 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
         </button>
         <button
           onClick={() => setFilter("maybe")}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[32px] ${
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[44px] ${
             filter === "maybe"
               ? "bg-yellow-500/20 text-yellow-300 ring-1 ring-yellow-500/40"
               : "bg-muted text-muted-foreground hover:bg-accent"
@@ -179,7 +179,7 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
         </button>
         <button
           onClick={() => setFilter("no")}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[32px] ${
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[44px] ${
             filter === "no"
               ? "bg-zinc-500/20 text-zinc-300 ring-1 ring-zinc-500/40"
               : "bg-muted text-muted-foreground hover:bg-accent"
@@ -191,7 +191,7 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
         <div className="ml-auto flex items-center gap-2">
           <button
             onClick={copyAllEmails}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-nocturn/30 transition-all min-h-[32px]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-nocturn/30 transition-all min-h-[44px]"
             title="Copy all Going + Maybe emails"
           >
             {copiedAll ? (
@@ -206,7 +206,7 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
           </button>
           <button
             onClick={downloadCsv}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-nocturn/30 transition-all min-h-[32px]"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:border-nocturn/30 transition-all min-h-[44px]"
             title="Download CSV"
           >
             <Download className="h-3 w-3" /> CSV

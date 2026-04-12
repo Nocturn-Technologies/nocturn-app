@@ -125,7 +125,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors min-h-[44px] ${
                 filter === f
                   ? "bg-[#7B2FF7] text-white"
                   : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
@@ -209,7 +209,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
       <div className="border-t border-white/5 px-3 py-2.5">
         <button
           onClick={onCustom}
-          className="text-xs text-[#7B2FF7] hover:text-[#9D5CFF] font-medium transition-colors"
+          className="text-xs text-[#7B2FF7] hover:text-[#9D5CFF] font-medium transition-colors min-h-[44px]"
         >
           Or type a custom venue
         </button>

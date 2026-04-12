@@ -205,7 +205,7 @@ export default function GuestListPage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
@@ -487,7 +487,7 @@ export default function GuestListPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-green-500 hover:bg-green-500/10 h-9 min-h-[36px] px-2"
+                        className="text-green-500 hover:bg-green-500/10 h-9 min-h-[44px] px-2"
                         onClick={() => handleCheckIn(guest.id)}
                         title="Check in"
                       >
@@ -498,7 +498,7 @@ export default function GuestListPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-blue-500 hover:bg-blue-500/10 h-9 min-h-[36px] px-2"
+                        className="text-blue-500 hover:bg-blue-500/10 h-9 min-h-[44px] px-2"
                         onClick={() =>
                           handleStatusChange(guest.id, "confirmed")
                         }
@@ -512,7 +512,7 @@ export default function GuestListPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="text-red-500 hover:bg-red-500/10 h-9 min-h-[36px] px-2"
+                          className="text-red-500 hover:bg-red-500/10 h-9 min-h-[44px] px-2"
                           onClick={() =>
                             handleStatusChange(guest.id, "no_show")
                           }
@@ -524,7 +524,7 @@ export default function GuestListPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 h-9 min-h-[36px] px-2"
+                      className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 h-9 min-h-[44px] px-2"
                       onClick={() => handleRemove(guest.id)}
                       disabled={removingGuestId === guest.id}
                       title="Remove"

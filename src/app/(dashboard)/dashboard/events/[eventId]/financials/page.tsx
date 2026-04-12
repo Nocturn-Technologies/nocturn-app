@@ -37,7 +37,7 @@ export default async function EventFinancialsPage({ params }: Props) {
   const forecast = forecastResult.error ? null : forecastResult.forecast ?? null;
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6 animate-in fade-in duration-500">
+    <div className="mx-auto max-w-5xl space-y-6 animate-in fade-in duration-500 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Link href={`/dashboard/events/${eventId}`}>
