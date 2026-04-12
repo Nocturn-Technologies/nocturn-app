@@ -469,7 +469,7 @@ function EventTasksPageInner() {
         {daysUntilEvent !== null && daysUntilEvent >= 0 && (
           <div className="text-right">
             <p className="text-lg font-bold text-nocturn">{daysUntilEvent}d</p>
-            <p className="text-[10px] text-muted-foreground">until event</p>
+            <p className="text-[11px] text-muted-foreground">until event</p>
           </div>
         )}
       </div>
@@ -591,10 +591,10 @@ function EventTasksPageInner() {
                   </button>
                 );
               })}
-              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-400 px-2 py-0.5 text-[10px] font-medium">
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-400 px-2 py-0.5 text-[11px] font-medium">
                 ⚡ High priority
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-400 px-2 py-0.5 text-[10px] font-medium">
+              <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 text-red-400 px-2 py-0.5 text-[11px] font-medium">
                 🔴 Overdue
               </span>
             </div>
@@ -759,13 +759,13 @@ function EventTasksPageInner() {
 
           <div className="flex items-center gap-2 flex-wrap">
             {/* Legend for content platforms */}
-            <span className="inline-flex items-center gap-1 rounded-full border border-pink-500/20 bg-pink-500/10 text-pink-400 px-2 py-0.5 text-[10px] font-medium">
+            <span className="inline-flex items-center gap-1 rounded-full border border-pink-500/20 bg-pink-500/10 text-pink-400 px-2 py-0.5 text-[11px] font-medium">
               📸 Instagram Feed
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-400 px-2 py-0.5 text-[10px] font-medium">
+            <span className="inline-flex items-center gap-1 rounded-full border border-violet-500/20 bg-violet-500/10 text-violet-400 px-2 py-0.5 text-[11px] font-medium">
               📱 IG Story
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-400 px-2 py-0.5 text-[10px] font-medium">
+            <span className="inline-flex items-center gap-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-400 px-2 py-0.5 text-[11px] font-medium">
               📧 Email
             </span>
             <div className="ml-auto flex items-center gap-2">
@@ -1007,17 +1007,17 @@ function TaskCard({
           </p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
             {dueLabel && (
-              <span className={`text-[10px] font-medium ${overdue ? "text-red-400" : "text-muted-foreground"}`}>
+              <span className={`text-[11px] font-medium ${overdue ? "text-red-400" : "text-muted-foreground"}`}>
                 {overdue ? "🔴 " : ""}{dueLabel}
               </span>
             )}
             {assignee && (
-              <span className="text-[10px] text-muted-foreground">
+              <span className="text-[11px] text-muted-foreground">
                 → {assignee.full_name ?? assignee.email}
               </span>
             )}
             {hasNote && !editingNote && (
-              <span className="text-[10px] text-muted-foreground truncate max-w-[200px] inline-flex items-center gap-0.5">
+              <span className="text-[11px] text-muted-foreground truncate max-w-[200px] inline-flex items-center gap-0.5">
                 <StickyNote className="h-2.5 w-2.5 inline" /> {String(task.description)}
               </span>
             )}
@@ -1072,8 +1072,8 @@ function TaskCard({
                 className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-nocturn/50 resize-none"
               />
               <div className="flex gap-2">
-                <button onClick={saveNote} className="text-[10px] text-nocturn hover:text-nocturn-light font-medium">Save</button>
-                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[10px] text-muted-foreground hover:text-foreground">Cancel</button>
+                <button onClick={saveNote} className="text-[11px] text-nocturn hover:text-nocturn-light font-medium min-h-[36px]">Save</button>
+                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[11px] text-muted-foreground hover:text-foreground min-h-[36px]">Cancel</button>
               </div>
             </div>
           ) : (
@@ -1159,16 +1159,16 @@ function ContentTaskCard({
             {String(task.title)}
           </p>
           <div className="flex items-center gap-2 mt-1 flex-wrap">
-            <span className="rounded-full bg-white/5 border border-white/10 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="rounded-full bg-white/5 border border-white/10 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
               {phase}
             </span>
             {dueLabel && (
-              <span className={`text-[10px] font-medium ${overdue ? "text-red-400" : "text-muted-foreground"}`}>
+              <span className={`text-[11px] font-medium ${overdue ? "text-red-400" : "text-muted-foreground"}`}>
                 {overdue ? "🔴 " : ""}{dueLabel}
               </span>
             )}
             {assignee && (
-              <span className="text-[10px] text-muted-foreground">→ {assignee.full_name ?? assignee.email}</span>
+              <span className="text-[11px] text-muted-foreground">→ {assignee.full_name ?? assignee.email}</span>
             )}
           </div>
         </div>
@@ -1227,8 +1227,8 @@ function ContentTaskCard({
                 className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-nocturn/50 resize-none"
               />
               <div className="flex gap-2">
-                <button onClick={saveNote} className="text-[10px] text-nocturn hover:text-nocturn-light font-medium">Save</button>
-                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[10px] text-muted-foreground hover:text-foreground">Cancel</button>
+                <button onClick={saveNote} className="text-[11px] text-nocturn hover:text-nocturn-light font-medium min-h-[36px]">Save</button>
+                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[11px] text-muted-foreground hover:text-foreground min-h-[36px]">Cancel</button>
               </div>
             </div>
           ) : (

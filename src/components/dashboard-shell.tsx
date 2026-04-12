@@ -300,7 +300,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
           </a>
           <button
             onClick={dismissBeta}
-            className="absolute right-3 text-nocturn/50 hover:text-nocturn"
+            className="absolute right-3 text-nocturn/50 hover:text-nocturn min-h-[44px] min-w-[44px] flex items-center justify-center"
             aria-label="Dismiss beta banner"
           >
             <X className="h-3.5 w-3.5" />

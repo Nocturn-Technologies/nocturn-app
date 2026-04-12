@@ -389,28 +389,28 @@ export default function PromosPage() {
                       </button>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                      <span className="rounded-full bg-nocturn/10 text-nocturn px-2 py-0.5 text-[10px] font-medium">
+                      <span className="rounded-full bg-nocturn/10 text-nocturn px-2 py-0.5 text-[11px] font-medium">
                         {promo.discount_type === "percentage"
                           ? `${promo.discount_value ?? 0}% off`
                           : `$${(promo.discount_value ?? 0).toFixed(2)} off`}
                       </span>
                       {isExpired && (
-                        <span className="rounded-full bg-red-500/10 text-red-500 px-2 py-0.5 text-[10px] font-medium">
+                        <span className="rounded-full bg-red-500/10 text-red-500 px-2 py-0.5 text-[11px] font-medium">
                           Expired
                         </span>
                       )}
                       {isMaxedOut && (
-                        <span className="rounded-full bg-yellow-500/10 text-yellow-500 px-2 py-0.5 text-[10px] font-medium">
+                        <span className="rounded-full bg-yellow-500/10 text-yellow-500 px-2 py-0.5 text-[11px] font-medium">
                           Maxed Out
                         </span>
                       )}
                       {promo.promoter_id && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground">
                           Promoter linked
                         </span>
                       )}
                       {promo.expires_at && !isExpired && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground">
                           Expires{" "}
                           {new Date(promo.expires_at).toLocaleDateString("en", {
                             month: "short",
@@ -432,7 +432,7 @@ export default function PromosPage() {
                         </span>
                       )}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">uses</p>
+                    <p className="text-[11px] text-muted-foreground">uses</p>
                   </div>
                 </CardContent>
               </Card>

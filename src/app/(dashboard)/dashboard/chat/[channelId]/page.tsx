@@ -553,7 +553,7 @@ export default function ChatRoomPage() {
                   onClick={() => {
                     setInput(prompt);
                   }}
-                  className="rounded-full border border-nocturn/20 bg-nocturn/5 px-3 py-1.5 text-xs font-medium text-nocturn hover:bg-nocturn/10 hover:border-nocturn/30 active:bg-nocturn/15 active:scale-[0.97] transition-all duration-200"
+                  className="rounded-full border border-nocturn/20 bg-nocturn/5 px-3 py-1.5 text-xs font-medium text-nocturn hover:bg-nocturn/10 hover:border-nocturn/30 active:bg-nocturn/15 active:scale-[0.97] transition-all duration-200 min-h-[36px]"
                 >
                   {prompt}
                 </button>
@@ -852,7 +852,7 @@ const MessageBubble = memo(function MessageBubble({
                 <button
                   key={q}
                   onClick={() => onFollowUp?.(q)}
-                  className="text-[11px] rounded-full border border-nocturn/20 bg-nocturn/5 px-2.5 py-1 text-nocturn hover:bg-nocturn/10 hover:border-nocturn/30 active:bg-nocturn/15 active:scale-[0.97] transition-all duration-200"
+                  className="text-[11px] rounded-full border border-nocturn/20 bg-nocturn/5 px-2.5 py-2 text-nocturn hover:bg-nocturn/10 hover:border-nocturn/30 active:bg-nocturn/15 active:scale-[0.97] transition-all duration-200 min-h-[36px]"
                 >
                   {q}
                 </button>

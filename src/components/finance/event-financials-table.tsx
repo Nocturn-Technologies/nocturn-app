@@ -294,7 +294,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
           <button
             key={field}
             onClick={() => toggleSort(field)}
-            className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200 active:scale-95 min-h-[36px] ${
+            className={`flex shrink-0 items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200 active:scale-95 min-h-[44px] ${
               sortField === field
                 ? "bg-nocturn/15 text-nocturn-light"
                 : "bg-white/[0.04] text-muted-foreground hover:bg-white/[0.08]"

@@ -44,7 +44,7 @@ export default async function EventFinancialsPage({ params }: Props) {
           <Button
             variant="ghost"
             size="icon"
-            className="shrink-0 hover:bg-accent active:scale-95 transition-all duration-200"
+            className="shrink-0 hover:bg-accent active:scale-95 transition-all duration-200 min-h-[44px] min-w-[44px]"
             aria-label="Back to event"
           >
             <ArrowLeft className="h-4 w-4" />

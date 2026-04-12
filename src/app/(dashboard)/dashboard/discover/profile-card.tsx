@@ -151,7 +151,7 @@ export function ProfileCard({
       <div className="flex items-center gap-1.5 px-3 pb-3">
         <Button
           size="sm"
-          className="flex-1 bg-nocturn hover:bg-nocturn-light text-white h-9 text-xs"
+          className="flex-1 bg-nocturn hover:bg-nocturn-light text-white h-9 min-h-[44px] text-xs"
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();

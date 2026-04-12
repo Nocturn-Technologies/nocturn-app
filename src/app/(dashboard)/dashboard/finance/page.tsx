@@ -400,7 +400,7 @@ export default async function FinancePage() {
                                   )}
                                 </div>
                                 <span
-                                  className={`text-[9px] text-center leading-tight ${
+                                  className={`text-[11px] text-center leading-tight ${
                                     isComplete
                                       ? "text-foreground"
                                       : "text-muted-foreground/50"

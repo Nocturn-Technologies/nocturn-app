@@ -104,7 +104,7 @@ export function EventReactions({ eventId, initialCounts }: EventReactionsProps) 
               onClick={() => handleReaction(emoji)}
               disabled={isReacted}
               className={`
-                flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm
+                flex items-center gap-1.5 rounded-full border px-3.5 py-2.5 text-sm min-h-[44px]
                 transition-all duration-200
                 ${
                   isReacted

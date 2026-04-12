@@ -374,8 +374,8 @@ function DiscoverContent() {
 
       {/* Category chips — horizontal scroll (discover tab only) */}
       {activeTab === "discover" && (
-        <div className="-mx-4 px-4 md:mx-0 md:px-0">
-          <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        <div className="-mx-4 md:mx-0 md:px-0">
+          <div className="flex gap-1.5 overflow-x-auto px-4 pb-1 scrollbar-none md:px-0">
             {CATEGORY_TABS.map((tab) => (
               <button
                 key={tab.value}
@@ -696,7 +696,7 @@ function DiscoverVenueCard({
             isSaved ? onRemove() : onSave();
           }}
           disabled={isSaving}
-          className={`absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full backdrop-blur-sm transition-all duration-200 active:scale-90 ${
+          className={`absolute right-3 top-3 z-10 flex h-9 w-9 min-h-[44px] min-w-[44px] items-center justify-center rounded-full backdrop-blur-sm transition-all duration-200 active:scale-90 ${
             isSaved
               ? "bg-red-500/30 text-red-400"
               : "bg-black/40 text-white/70 hover:text-white"

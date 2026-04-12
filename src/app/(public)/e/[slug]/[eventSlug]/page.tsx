@@ -400,13 +400,13 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
           {/* Collective pill */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 border border-white/[0.08] rounded-full backdrop-blur-sm mb-6">
             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
-            <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-white/40">
+            <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-white/55">
               {collective.name}
             </span>
           </div>
 
           {/* Title — massive, poster-scale */}
-          <h1 className="font-heading text-[clamp(3.5rem,12vw,8rem)] font-black tracking-[-0.05em] text-white leading-[0.85] max-w-[85%] mb-8">
+          <h1 className="font-heading text-[clamp(2.5rem,12vw,8rem)] font-black tracking-[-0.05em] text-white leading-[0.85] max-w-[85%] mb-8 break-words">
             {event.title.split(" ").map((word: string, i: number, arr: string[]) => {
               // Color the last word/number with accent
               const isLast = i === arr.length - 1;
@@ -427,22 +427,22 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
           {/* Info bar — utilitarian, separated by borders */}
           <div className="flex flex-wrap gap-0 mb-6">
             <div className="pr-5 sm:pr-6 border-r border-white/[0.06] py-1">
-              <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/20 mb-1">Date</div>
+              <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Date</div>
               <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{dayName} {monthName} {dayNum}</div>
             </div>
             {doorsTime && (
               <div className="px-5 sm:px-6 border-r border-white/[0.06] py-1">
-                <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/20 mb-1">Doors</div>
+                <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Doors</div>
                 <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{doorsTime}</div>
               </div>
             )}
             <div className="px-5 sm:px-6 border-r border-white/[0.06] py-1">
-              <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/20 mb-1">Show</div>
+              <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Show</div>
               <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{startTime}{endTime ? ` — ${endTime}` : ""}</div>
             </div>
             {venue && (
               <div className="pl-5 sm:pl-6 py-1">
-                <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/20 mb-1">Venue</div>
+                <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Venue</div>
                 <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{venue.name}{venue.city ? `, ${venue.city}` : ""}</div>
               </div>
             )}
@@ -452,7 +452,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
           {vibeTags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-8">
               {vibeTags.map((tag) => (
-                <span key={tag} className="text-[10px] font-semibold tracking-[0.15em] uppercase px-3.5 py-1.5 border border-white/[0.06] rounded-full text-white/30">
+                <span key={tag} className="text-[10px] font-semibold tracking-[0.15em] uppercase px-3.5 py-1.5 border border-white/[0.06] rounded-full text-white/50">
                   {tag}
                 </span>
               ))}
@@ -475,7 +475,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
       {/* Floating "going" badge */}
       {(ticketsSold ?? 0) > 0 && (
-        <div className="fixed bottom-20 right-4 z-40 flex items-center gap-2 px-4 py-2.5 bg-[#09090B]/85 backdrop-blur-xl border border-white/[0.08] rounded-full text-[13px] text-white/50">
+        <div className="fixed bottom-20 right-4 z-45 flex items-center gap-2 px-4 py-2.5 bg-[#09090B]/85 backdrop-blur-xl border border-white/[0.08] rounded-full text-[13px] text-white/50">
           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           <span><span className="text-white font-semibold">{ticketsSold}</span> going</span>
         </div>
@@ -507,7 +507,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                 </p>
                 {mapsUrl && (
                   <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 mt-4 text-[13px] font-semibold transition-colors hover:text-white"
+                    className="inline-flex items-center gap-1.5 mt-4 text-[13px] font-semibold transition-colors hover:text-white min-h-[44px] py-2"
                     style={{ color: accentColor }}>
                     <Navigation className="h-3.5 w-3.5" />
                     Get directions &rarr;
@@ -577,7 +577,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                       </p>
                       {artist.genre && (
                         <span
-                          className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-medium tracking-wide"
+                          className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-medium tracking-wide truncate"
                           style={{
                             backgroundColor: `${accentColor}12`,
                             color: `${accentColor}cc`,
@@ -747,9 +747,9 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             <span className="text-xs font-semibold tracking-wide">nocturn.</span>
           </div>
           <div className="flex gap-4 text-[11px] text-white/25">
-            <Link href="/legal/terms" className="hover:text-white/40 transition-colors">Terms</Link>
-            <Link href="/legal/privacy" className="hover:text-white/40 transition-colors">Privacy</Link>
-            <a href="https://trynocturn.com" target="_blank" rel="noopener" className="hover:text-white/40 transition-colors">About</a>
+            <Link href="/legal/terms" className="hover:text-white/40 transition-colors inline-flex items-center min-h-[44px] py-3">Terms</Link>
+            <Link href="/legal/privacy" className="hover:text-white/40 transition-colors inline-flex items-center min-h-[44px] py-3">Privacy</Link>
+            <a href="https://trynocturn.com" target="_blank" rel="noopener" className="hover:text-white/40 transition-colors inline-flex items-center min-h-[44px] py-3">About</a>
           </div>
         </div>
       </footer>

@@ -123,7 +123,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
             </div>
             <button
               onClick={() => setOpen(false)}
-              className="h-10 w-10 rounded-full flex items-center justify-center hover:bg-white/[0.06] transition-colors"
+              className="h-10 w-10 min-h-[44px] min-w-[44px] rounded-full flex items-center justify-center hover:bg-white/[0.06] transition-colors"
               aria-label="Close"
             >
               <X className="h-4 w-4 text-muted-foreground" />
@@ -159,7 +159,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
                         setInput(suggestion);
                         setTimeout(() => inputRef.current?.focus(), 0);
                       }}
-                      className="rounded-full border border-nocturn/20 bg-nocturn/5 px-3 py-1.5 text-xs font-medium text-nocturn hover:bg-nocturn/10 transition-colors"
+                      className="rounded-full border border-nocturn/20 bg-nocturn/5 px-3 py-1.5 text-xs font-medium text-nocturn hover:bg-nocturn/10 transition-colors min-h-[36px]"
                     >
                       {suggestion}
                     </button>
@@ -215,13 +215,13 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask anything..."
-                className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-nocturn/40 focus:ring-1 focus:ring-nocturn/20 transition-colors"
+                className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3.5 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-nocturn/40 focus:ring-1 focus:ring-nocturn/20 transition-colors"
                 disabled={loading}
               />
               <button
                 onClick={handleSend}
                 disabled={!input.trim() || loading}
-                className={`h-10 w-10 rounded-xl flex items-center justify-center transition-all shrink-0 ${
+                className={`h-10 w-10 min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center transition-all shrink-0 ${
                   input.trim() && !loading
                     ? "bg-nocturn hover:bg-nocturn/90 text-white"
                     : "bg-white/[0.04] text-muted-foreground"

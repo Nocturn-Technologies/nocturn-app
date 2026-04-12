@@ -779,7 +779,7 @@ function SavedVenueCard({
           className={`h-14 w-14 shrink-0 rounded-lg bg-gradient-to-br ${gradientForIndex(index)} flex items-end justify-center`}
         >
           {distance != null && (
-            <span className="mb-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
+            <span className="mb-1 rounded-full bg-black/60 px-1.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
               {formatDistance(distance)}
             </span>
           )}

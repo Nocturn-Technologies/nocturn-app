@@ -582,7 +582,7 @@ export default function ChatPage() {
             setInviteSent(false);
           }}
           size="sm"
-          className="bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full min-h-[44px] h-11 px-4 text-sm font-semibold transition-all duration-200"
+          className="shrink-0 whitespace-nowrap bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full min-h-[44px] h-11 px-4 text-sm font-semibold transition-all duration-200"
         >
           <Plus className="h-4 w-4 mr-1" />
           New Chat
@@ -624,7 +624,7 @@ export default function ChatPage() {
           placeholder="Search conversations..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9 bg-white/[0.04] border-white/[0.06] rounded-xl h-10 text-sm placeholder:text-muted-foreground/40"
+          className="pl-9 bg-white/[0.04] border-white/[0.06] rounded-xl h-10 placeholder:text-muted-foreground/40"
         />
         {searchQuery && (
           <button
@@ -953,7 +953,7 @@ export default function ChatPage() {
                 placeholder="Search collectives or type an email..."
                 value={collabQuery}
                 onChange={(e) => handleCollabSearch(e.target.value)}
-                className="pl-9 bg-white/[0.04] border-white/[0.06] rounded-xl h-10 text-sm"
+                className="pl-9 bg-white/[0.04] border-white/[0.06] rounded-xl h-10"
                 autoFocus
               />
             </div>
@@ -1076,7 +1076,7 @@ export default function ChatPage() {
       {/* ── Record Call FAB ───────────────────────────────────────────────── */}
       <Link
         href="/dashboard/record"
-        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full bg-[#7B2FF7] text-white shadow-lg shadow-[#7B2FF7]/30 px-5 py-3.5 hover:bg-[#6B1FE7] active:scale-95 transition-all duration-200 md:bottom-6"
+        className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2 rounded-full bg-[#7B2FF7] text-white shadow-lg shadow-[#7B2FF7]/30 px-5 py-3.5 hover:bg-[#6B1FE7] active:scale-95 transition-all duration-200 md:bottom-6"
       >
         <Mic className="h-5 w-5" />
         <span className="text-sm font-semibold">Record Call</span>
