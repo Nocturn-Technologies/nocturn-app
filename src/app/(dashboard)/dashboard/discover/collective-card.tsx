@@ -122,7 +122,7 @@ export function CollectiveCard({
       <div className="flex items-center gap-1.5 px-3 pb-2.5">
         <Button
           size="sm"
-          className={`flex-1 h-9 text-xs ${
+          className={`flex-1 h-9 min-h-[44px] text-xs ${
             isConnected
               ? "bg-emerald-600 hover:bg-emerald-500 text-white"
               : "bg-nocturn hover:bg-nocturn-light text-white"

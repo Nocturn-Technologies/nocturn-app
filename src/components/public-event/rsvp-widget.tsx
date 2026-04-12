@@ -455,7 +455,7 @@ export function RsvpWidget({
             enterKeyHint="next"
             maxLength={200}
             /* text-base (16px) prevents iOS Safari auto-zoom on focus. */
-            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[48px]"
+            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
           />
           <div className="relative">
             <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
@@ -472,7 +472,7 @@ export function RsvpWidget({
               onChange={(e) => setGuestEmail(e.target.value)}
               required
               maxLength={320}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[48px]"
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
             />
           </div>
           <div className="relative">
@@ -487,7 +487,7 @@ export function RsvpWidget({
               onChange={(e) => setGuestPhone(e.target.value)}
               required
               maxLength={32}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[48px]"
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
             />
           </div>
           {error && (
@@ -548,7 +548,7 @@ export function RsvpWidget({
               autoFocus={!memberPhone}
               maxLength={32}
               /* text-base (16px) prevents iOS Safari zoom on focus */
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/30 outline-none focus:border-white/30 min-h-[48px]"
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
             />
           </div>
           {error && (

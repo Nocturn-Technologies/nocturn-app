@@ -289,7 +289,7 @@ function EditableRow({
               onSave(editValue);
               setEditing(false);
             }}
-            className="flex-1 min-w-0 bg-zinc-800 border border-white/10 rounded-md px-2 py-1 text-sm text-white outline-none focus:border-[#7B2FF7]/50"
+            className="flex-1 min-w-0 bg-zinc-800 border border-white/10 rounded-md px-2 py-1 text-base md:text-sm text-white outline-none focus:border-[#7B2FF7]/50"
           />
         </div>
       ) : (
@@ -340,7 +340,7 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
           setEditing(false);
         }}
         rows={3}
-        className="w-full text-sm text-zinc-300 bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-[#7B2FF7]/50 resize-none"
+        className="w-full text-base md:text-sm text-zinc-300 bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-[#7B2FF7]/50 resize-none"
       />
     );
   }
@@ -405,7 +405,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
             onBlur={commitEdit}
-            className="w-24 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-sm text-white outline-none focus:border-[#7B2FF7]/50"
+            className="w-24 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-base md:text-sm text-white outline-none focus:border-[#7B2FF7]/50"
           />
         ) : (
           <button
@@ -423,7 +423,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
             onBlur={commitEdit}
-            className="w-20 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-xs text-white outline-none focus:border-[#7B2FF7]/50"
+            className="w-20 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-base md:text-xs text-white outline-none focus:border-[#7B2FF7]/50"
           />
         ) : (
           <button
@@ -442,7 +442,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
           onBlur={commitEdit}
-          className="w-16 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-sm text-right text-white outline-none focus:border-[#7B2FF7]/50"
+          className="w-16 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-base md:text-sm text-right text-white outline-none focus:border-[#7B2FF7]/50"
         />
       ) : (
         <button

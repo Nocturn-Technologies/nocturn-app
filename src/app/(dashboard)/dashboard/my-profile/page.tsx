@@ -329,7 +329,7 @@ export default function MyProfilePage() {
         <div className="space-y-2">
           <Label>Bio</Label>
           <textarea
-            className="flex w-full rounded-xl border border-input bg-background px-3 py-2.5 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[100px] resize-none"
+            className="flex w-full rounded-xl border border-input bg-background px-3 py-2.5 text-base md:text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[100px] resize-none"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             placeholder="Tell collectives about yourself and what you do..."

@@ -136,7 +136,7 @@ export function ExternalEventsSection({
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-muted-foreground hover:text-destructive h-8 w-8 p-0"
+                    className="text-muted-foreground hover:text-destructive h-8 w-8 min-h-[44px] min-w-[44px] p-0"
                     onClick={() => handleDelete(event.id)}
                     disabled={deletingId === event.id}
                   >

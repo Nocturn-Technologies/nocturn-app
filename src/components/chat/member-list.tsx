@@ -172,7 +172,7 @@ function MemberRow({
       {(canRemove || !isCurrentUser) && (
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+            className="flex h-7 w-7 min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100 focus:opacity-100"
           >
             <MoreHorizontal className="h-4 w-4" />
           </DropdownMenuTrigger>

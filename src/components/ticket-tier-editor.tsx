@@ -345,7 +345,7 @@ export function TicketTierEditor({
                   size="sm"
                   onClick={cancelEditing}
                   disabled={isPending}
-                  className="h-8 px-3 text-xs"
+                  className="h-8 min-h-[44px] px-3 text-xs"
                 >
                   <X className="mr-1 h-3 w-3" />
                   Cancel
@@ -354,7 +354,7 @@ export function TicketTierEditor({
                   size="sm"
                   onClick={() => saveEditing(tier.id)}
                   disabled={isPending}
-                  className="h-8 bg-nocturn px-3 text-xs hover:bg-nocturn-light"
+                  className="h-8 min-h-[44px] bg-nocturn px-3 text-xs hover:bg-nocturn-light"
                 >
                   {isPending ? (
                     <Loader2 className="mr-1 h-3 w-3 animate-spin" />
@@ -559,7 +559,7 @@ export function TicketTierEditor({
                 setNewTier({ name: "", price: "", capacity: "" });
               }}
               disabled={isPending}
-              className="h-8 px-3 text-xs"
+              className="h-8 min-h-[44px] px-3 text-xs"
             >
               Cancel
             </Button>
@@ -567,7 +567,7 @@ export function TicketTierEditor({
               size="sm"
               onClick={handleAddTier}
               disabled={isPending}
-              className="h-8 bg-nocturn px-3 text-xs hover:bg-nocturn-light"
+              className="h-8 min-h-[44px] bg-nocturn px-3 text-xs hover:bg-nocturn-light"
             >
               {isPending ? (
                 <Loader2 className="mr-1 h-3 w-3 animate-spin" />

@@ -206,7 +206,7 @@ export function TicketSection({
 
   return (
     <div className="space-y-3">
-      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/30">
+      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/40">
         Tickets
       </h2>
 
@@ -297,7 +297,7 @@ export function TicketSection({
                         Waitlist
                       </span>
                     ) : isLocked ? (
-                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/30">
+                      <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/50">
                         ${price.toFixed(0)}
                       </span>
                     ) : (
@@ -328,7 +328,7 @@ export function TicketSection({
                             placeholder="your@email.com"
                             value={waitlistEmail}
                             onChange={(e) => { setWaitlistEmail(e.target.value); setWaitlistError(null); }}
-                            className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white placeholder:text-white/30 outline-none focus:border-amber-500/50"
+                            className="flex-1 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-amber-500/50"
                           />
                           <button
                             onClick={async () => {

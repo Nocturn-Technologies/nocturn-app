@@ -240,7 +240,7 @@ export function FlippableTicket(props: FlippableTicketProps) {
               }).catch(() => {});
             }
           }}
-          className="inline-flex items-center gap-2 px-5 py-2.5 border border-white/[0.08] rounded-full text-[13px] text-white/40 font-medium hover:text-white/60 hover:border-white/15 transition-all"
+          className="inline-flex items-center gap-2 px-5 py-2.5 border border-white/[0.08] rounded-full text-[13px] text-white/40 font-medium hover:text-white/60 hover:border-white/15 transition-all min-h-[44px]"
         >
           Share to IG Story
         </button>

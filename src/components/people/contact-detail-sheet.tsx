@@ -369,7 +369,7 @@ export function ContactDetailSheet({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 w-8 p-0 shrink-0 text-muted-foreground hover:text-foreground"
+                        className="h-8 w-8 min-h-[44px] min-w-[44px] p-0 shrink-0 text-muted-foreground hover:text-foreground"
                         onClick={() => setEditing(true)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -379,7 +379,7 @@ export function ContactDetailSheet({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                          className="h-8 w-8 min-h-[44px] min-w-[44px] p-0 text-muted-foreground hover:text-foreground"
                           onClick={handleCancelEdit}
                           disabled={savingIdentity}
                         >
@@ -388,7 +388,7 @@ export function ContactDetailSheet({
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-8 w-8 p-0 text-nocturn hover:text-nocturn-light"
+                          className="h-8 w-8 min-h-[44px] min-w-[44px] p-0 text-nocturn hover:text-nocturn-light"
                           onClick={handleSaveIdentity}
                           disabled={savingIdentity}
                         >
@@ -499,7 +499,7 @@ export function ContactDetailSheet({
                     <select
                       value={editRole}
                       onChange={(e) => setEditRole(e.target.value)}
-                      className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                      className="w-full h-9 rounded-lg border border-input bg-transparent px-3 text-base md:text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
                     >
                       <option value="">Select role...</option>
                       {ROLE_OPTIONS.map((opt) => (
@@ -614,7 +614,7 @@ export function ContactDetailSheet({
                   onBlur={handleNotesBlur}
                   placeholder="Add notes about this contact..."
                   rows={3}
-                  className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30"
+                  className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-base md:text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30"
                 />
               </div>
 

@@ -483,7 +483,7 @@ export default function MarketplaceOnboardingPage() {
                       value={bio}
                       onChange={(e) => setBio(e.target.value)}
                       placeholder="What do you do? What makes you stand out?"
-                      className="w-full rounded-xl border bg-card px-4 py-3 text-sm leading-relaxed resize-none focus:border-nocturn focus:ring-1 focus:ring-nocturn"
+                      className="w-full rounded-xl border bg-card px-4 py-3 text-base md:text-sm leading-relaxed resize-none focus:border-nocturn focus:ring-1 focus:ring-nocturn"
                       rows={3}
                     />
                   </div>

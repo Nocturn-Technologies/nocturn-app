@@ -88,7 +88,7 @@ export function EventUpdatesFeed({ updates, accentColor, collectiveName }: Event
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="w-full rounded-xl border border-white/10 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:border-white/20 transition-all min-h-[40px] flex items-center justify-center gap-1.5"
+          className="w-full rounded-xl border border-white/10 px-4 py-2.5 text-xs text-white/60 hover:text-white hover:border-white/20 transition-all min-h-[44px] flex items-center justify-center gap-1.5"
         >
           {expanded ? "Show less" : `Show ${sorted.length - 3} more`}
           <ChevronDown
