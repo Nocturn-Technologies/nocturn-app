@@ -292,47 +292,42 @@ export async function POST(request: NextRequest) {
     const email = userData?.user?.email;
     const name = userData?.user?.user_metadata?.full_name ?? "there";
 
-    // Send approval email
+    // Send approval-confirmation email via the shared helper.
+    // Previously this was a raw fetch() with FROM
+    // `nocturn@trynocturn.com` wrapped in an empty catch — so every
+    // approval email silently failed against our verified
+    // `noreply@trynocturn.com` identity, and the "your account is
+    // approved" message never reached users waiting on manual review.
     if (email) {
-      const apiKey = process.env.RESEND_API_KEY;
-      if (apiKey) {
-        const safeName = escapeHtml(name.split(" ")[0]);
-        try {
-          await fetch("https://api.resend.com/emails", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              from: "Nocturn <nocturn@trynocturn.com>",
-              to: email,
-              subject: "You're approved! Welcome to Nocturn",
-              html: `
-                <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
-                  <div style="margin-bottom: 32px;">
-                    <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
-                  </div>
-                  <h1 style="font-size: 28px; font-weight: 800; margin: 0 0 16px; line-height: 1.2;">
-                    You're in, ${safeName}!
-                  </h1>
-                  <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
-                    Your account has been approved. You now have full access to Nocturn — create events, sell tickets, manage your crew, and grow your collective.
-                  </p>
-                  <a href="https://app.trynocturn.com/dashboard" style="display: inline-block; background: #7B2FF7; color: white; padding: 12px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 14px;">
-                    Open Nocturn
-                  </a>
-                  <p style="color: #71717A; font-size: 12px; margin-top: 40px; line-height: 1.5;">
-                    You run the night. Nocturn runs the business.<br>
-                    <a href="https://trynocturn.com" style="color: #7B2FF7; text-decoration: none;">trynocturn.com</a>
-                  </p>
-                </div>
-              `,
-            }),
-          });
-        } catch {
-          // Non-critical
-        }
+      const safeName = escapeHtml(name.split(" ")[0]);
+      const { sendEmail } = await import("@/lib/email/send");
+      const html = `
+        <div style="font-family: -apple-system, sans-serif; max-width: 480px; margin: 0 auto; padding: 40px 24px; background: #09090B; color: #FAFAFA;">
+          <div style="margin-bottom: 32px;">
+            <span style="color: #7B2FF7; font-weight: 700; font-size: 20px;">nocturn.</span>
+          </div>
+          <h1 style="font-size: 28px; font-weight: 800; margin: 0 0 16px; line-height: 1.2;">
+            You're in, ${safeName}!
+          </h1>
+          <p style="color: #A1A1AA; font-size: 15px; line-height: 1.6; margin: 0 0 24px;">
+            Your account has been approved. You now have full access to Nocturn — create events, sell tickets, manage your crew, and grow your collective.
+          </p>
+          <a href="https://app.trynocturn.com/dashboard" style="display: inline-block; background: #7B2FF7; color: white; padding: 12px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 14px;">
+            Open Nocturn
+          </a>
+          <p style="color: #71717A; font-size: 12px; margin-top: 40px; line-height: 1.5;">
+            You run the night. Nocturn runs the business.<br>
+            <a href="https://trynocturn.com" style="color: #7B2FF7; text-decoration: none;">trynocturn.com</a>
+          </p>
+        </div>
+      `;
+      const result = await sendEmail({
+        to: email,
+        subject: "You're approved! Welcome to Nocturn",
+        html,
+      });
+      if (result.error) {
+        console.error("[approve-user] approval notification email failed:", result.error);
       }
     }
 

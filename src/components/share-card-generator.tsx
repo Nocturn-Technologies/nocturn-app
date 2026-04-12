@@ -8,7 +8,7 @@ import { generateShareCard, type ShareCardEvent } from "@/lib/generate-share-car
 interface ShareCardGeneratorProps {
   event: ShareCardEvent;
   /** Variant: "button" shows a simple icon button, "full" shows a labeled button */
-  variant?: "button" | "full";
+  variant?: "button" | "full" | "tile";
   /** Accent color for public page styling */
   accentColor?: string;
 }
@@ -26,7 +26,14 @@ export function ShareCardGenerator({
     setGenerating(true);
 
     try {
-      const blob = await generateShareCard(event);
+      let blob: Blob;
+      try {
+        blob = await generateShareCard(event);
+      } catch (genErr) {
+        console.error("Share card generation failed or timed out:", genErr);
+        setGenerating(false);
+        return;
+      }
       const file = new File([blob], `${slugify(event.title)}-share.png`, {
         type: "image/png",
       });
@@ -84,6 +91,41 @@ export function ShareCardGenerator({
           )}
           Share Card
         </Button>
+
+        {previewUrl && (
+          <PreviewModal
+            previewUrl={previewUrl}
+            onClose={handleClose}
+            event={event}
+          />
+        )}
+      </>
+    );
+  }
+
+  // Tile variant: matches the grid of action tiles on the event detail page
+  // (icon-on-top, label-below, equal sizing). Identical preview-modal flow
+  // to the button variant.
+  if (variant === "tile") {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={handleGenerate}
+          disabled={generating}
+          className="group flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card/50 p-3 transition-all hover:border-nocturn/40 hover:bg-card active:scale-[0.97] disabled:opacity-60 disabled:cursor-wait"
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-nocturn-glow/10 text-nocturn-glow transition-colors group-hover:bg-nocturn-glow/15">
+            {generating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ImageIcon className="h-4 w-4" />
+            )}
+          </div>
+          <span className="text-xs font-medium text-center leading-tight">
+            Share Card
+          </span>
+        </button>
 
         {previewUrl && (
           <PreviewModal

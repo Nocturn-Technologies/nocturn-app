@@ -57,6 +57,7 @@ export default function MyProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState<"avatar" | "cover" | "media" | null>(null);
   const [mediaFiles, setMediaFiles] = useState<string[]>([]);
   const avatarRef = useRef<HTMLInputElement>(null);
@@ -123,14 +124,18 @@ export default function MyProfilePage() {
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !profile) return;
-    const err = validateFileUpload(file, { allowedTypes: [...ALLOWED_IMAGE_TYPES], maxSizeMB: 5 });
-    if (err) { alert(err); return; }
+    setError(null);
+    const validationErr = validateFileUpload(file, { allowedTypes: [...ALLOWED_IMAGE_TYPES], maxSizeMB: 5 });
+    if (validationErr) { setError(validationErr); return; }
     setUploading("avatar");
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
     const url = await uploadFile(file, `${profile.id}/avatar-${Date.now()}.${ext}`);
     if (url) {
       setAvatarUrl(url);
-      await updateMarketplaceProfile({ avatarUrl: url });
+      const result = await updateMarketplaceProfile({ avatarUrl: url });
+      if (result?.error) setError(result.error);
+    } else {
+      setError("Failed to upload avatar. Please try again.");
     }
     setUploading(null);
   }
@@ -138,14 +143,18 @@ export default function MyProfilePage() {
   async function handleCoverUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !profile) return;
-    const err = validateFileUpload(file, { allowedTypes: [...ALLOWED_IMAGE_TYPES], maxSizeMB: 10 });
-    if (err) { alert(err); return; }
+    setError(null);
+    const validationErr = validateFileUpload(file, { allowedTypes: [...ALLOWED_IMAGE_TYPES], maxSizeMB: 10 });
+    if (validationErr) { setError(validationErr); return; }
     setUploading("cover");
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
     const url = await uploadFile(file, `${profile.id}/cover-${Date.now()}.${ext}`);
     if (url) {
       setCoverPhotoUrl(url);
-      await updateMarketplaceProfile({ coverPhotoUrl: url });
+      const result = await updateMarketplaceProfile({ coverPhotoUrl: url });
+      if (result?.error) setError(result.error);
+    } else {
+      setError("Failed to upload cover photo. Please try again.");
     }
     setUploading(null);
   }
@@ -153,21 +162,29 @@ export default function MyProfilePage() {
   async function handleMediaUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0 || !profile) return;
+    setError(null);
     setUploading("media");
 
     const allowedMedia = [...ALLOWED_IMAGE_TYPES, "video/mp4", "video/webm"] as string[];
     const newUrls: string[] = [];
+    const uploadErrors: string[] = [];
     for (const file of Array.from(files)) {
-      const err = validateFileUpload(file, { allowedTypes: allowedMedia, maxSizeMB: 50 });
-      if (err) { alert(err); continue; }
+      const validationErr = validateFileUpload(file, { allowedTypes: allowedMedia, maxSizeMB: 50 });
+      if (validationErr) { uploadErrors.push(`${file.name}: ${validationErr}`); continue; }
       const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
       const url = await uploadFile(file, `${profile.id}/media-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`);
       if (url) newUrls.push(url);
+      else uploadErrors.push(`${file.name}: upload failed`);
     }
 
-    const updated = [...mediaFiles, ...newUrls];
-    setMediaFiles(updated);
-    await updateMarketplaceProfile({ portfolioUrls: updated });
+    if (uploadErrors.length > 0) setError(uploadErrors.join(" · "));
+
+    if (newUrls.length > 0) {
+      const updated = [...mediaFiles, ...newUrls];
+      setMediaFiles(updated);
+      const result = await updateMarketplaceProfile({ portfolioUrls: updated });
+      if (result?.error) setError(result.error);
+    }
     setUploading(null);
     // Reset input so same file can be re-selected
     if (mediaRef.current) mediaRef.current.value = "";
@@ -181,7 +198,8 @@ export default function MyProfilePage() {
 
   async function handleSave() {
     setSaving(true);
-    const { error } = await updateMarketplaceProfile({
+    setError(null);
+    const { error: saveError } = await updateMarketplaceProfile({
       displayName: displayName || undefined,
       bio: bio || null,
       city: city || null,
@@ -193,10 +211,12 @@ export default function MyProfilePage() {
       availability: availability || null,
     });
     setSaving(false);
-    if (!error) {
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+    if (saveError) {
+      setError(saveError);
+      return;
     }
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
   }
 
   if (loading) {
@@ -477,11 +497,18 @@ export default function MyProfilePage() {
         View public profile
       </a>
 
+      {/* ── Error message ── */}
+      {error && (
+        <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
+      )}
+
       {/* ── Save Button ── */}
       <div className="flex justify-end pt-2">
         <Button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !displayName.trim()}
           className="bg-nocturn hover:bg-nocturn-light min-w-[120px] min-h-[44px]"
         >
           {saving ? (

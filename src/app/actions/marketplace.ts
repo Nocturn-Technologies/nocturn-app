@@ -7,6 +7,40 @@ import { rateLimitStrict } from "@/lib/rate-limit";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
+// Per-field length caps for marketplace profile input. A rogue client sending
+// a 10KB "city" would otherwise sail straight into the DB and blow up every
+// downstream ilike() and Claude prompt that interpolates the field.
+const MAX_DISPLAY_NAME = 100;
+const MAX_BIO = 500;
+const MAX_CITY = 80;
+const MAX_INSTAGRAM_HANDLE = 60;
+const MAX_RATE_RANGE = 100;
+const MAX_AVAILABILITY = 200;
+const MAX_GENRE_OR_SERVICE = 50;
+const MAX_GENRE_OR_SERVICE_ARRAY = 15;
+const MAX_PORTFOLIO_URL = 500;
+const MAX_PORTFOLIO_ARRAY = 10;
+const MAX_PAST_VENUE = 120;
+const MAX_PAST_VENUES_ARRAY = 20;
+
+function capString(v: unknown, max: number): string | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== "string") return null;
+  const trimmed = v.trim();
+  return trimmed ? trimmed.slice(0, max) : null;
+}
+
+function capStringArray(v: unknown, maxLen: number, maxItems: number): string[] | null {
+  if (v === null || v === undefined) return null;
+  if (!Array.isArray(v)) return null;
+  const cleaned = v
+    .filter((s): s is string => typeof s === "string")
+    .map((s) => s.trim().slice(0, maxLen))
+    .filter((s) => s.length > 0)
+    .slice(0, maxItems);
+  return cleaned;
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -25,7 +59,6 @@ function sanitizeUrl(url: string | null | undefined): string | null {
 
 // ── Actions ──────────────────────────────────────────────────────────
 
-// TODO(audit): add length caps on displayName/city/rateRange/availability, sanitize URL fields, UUID-validate profileId in saveProfile/unsaveProfile
 export async function createMarketplaceProfile(data: {
   displayName: string;
   city?: string | null;
@@ -79,23 +112,28 @@ export async function createMarketplaceProfile(data: {
     "-" +
     Math.random().toString(36).slice(2, 8);
 
+  // Length-cap every field before the insert. Previously only bio/displayName
+  // were checked; city/instagram/rateRange/availability/genres/services could
+  // all pass through 10KB garbage from a rogue client straight into the row.
   const { error } = await admin.from("marketplace_profiles").insert({
     user_id: user.id,
     user_type: userType,
-    display_name: data.displayName,
+    display_name: data.displayName.trim().slice(0, MAX_DISPLAY_NAME),
     slug,
-    bio: data.bio ?? null,
-    city: data.city ?? null,
-    instagram_handle: data.instagramHandle ?? null,
+    bio: capString(data.bio, MAX_BIO),
+    city: capString(data.city, MAX_CITY),
+    instagram_handle: capString(data.instagramHandle, MAX_INSTAGRAM_HANDLE),
     website_url: sanitizeUrl(data.websiteUrl),
     soundcloud_url: sanitizeUrl(data.soundcloudUrl),
     spotify_url: sanitizeUrl(data.spotifyUrl),
-    genres: data.genres ?? null,
-    services: data.services ?? null,
-    rate_range: data.rateRange ?? null,
-    availability: data.availability ?? null,
-    portfolio_urls: data.portfolioUrls ?? null,
-    past_venues: data.pastVenues ?? null,
+    genres: capStringArray(data.genres, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY),
+    services: capStringArray(data.services, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY),
+    rate_range: capString(data.rateRange, MAX_RATE_RANGE),
+    availability: capString(data.availability, MAX_AVAILABILITY),
+    portfolio_urls: (capStringArray(data.portfolioUrls, MAX_PORTFOLIO_URL, MAX_PORTFOLIO_ARRAY) ?? [])
+      .map((u) => sanitizeUrl(u))
+      .filter((u): u is string => !!u),
+    past_venues: capStringArray(data.pastVenues, MAX_PAST_VENUE, MAX_PAST_VENUES_ARRAY),
   });
 
   if (error) {
@@ -111,7 +149,6 @@ export async function createMarketplaceProfile(data: {
   }
 }
 
-// TODO(audit): add length caps on displayName/city/rateRange/availability, sanitize URL fields, UUID-validate profileId in saveProfile/unsaveProfile
 export async function updateMarketplaceProfile(data: {
   displayName?: string;
   city?: string | null;
@@ -146,21 +183,25 @@ export async function updateMarketplaceProfile(data: {
     updated_at: new Date().toISOString(),
   };
 
-  if (data.displayName !== undefined) updates.display_name = data.displayName;
-  if (data.city !== undefined) updates.city = data.city;
-  if (data.bio !== undefined) updates.bio = data.bio;
-  if (data.instagramHandle !== undefined) updates.instagram_handle = data.instagramHandle;
+  // Length-cap every field — same rationale as createMarketplaceProfile.
+  if (data.displayName !== undefined) updates.display_name = capString(data.displayName, MAX_DISPLAY_NAME);
+  if (data.city !== undefined) updates.city = capString(data.city, MAX_CITY);
+  if (data.bio !== undefined) updates.bio = capString(data.bio, MAX_BIO);
+  if (data.instagramHandle !== undefined) updates.instagram_handle = capString(data.instagramHandle, MAX_INSTAGRAM_HANDLE);
   if (data.websiteUrl !== undefined) updates.website_url = sanitizeUrl(data.websiteUrl);
   if (data.soundcloudUrl !== undefined) updates.soundcloud_url = sanitizeUrl(data.soundcloudUrl);
   if (data.spotifyUrl !== undefined) updates.spotify_url = sanitizeUrl(data.spotifyUrl);
-  if (data.genres !== undefined) updates.genres = data.genres;
-  if (data.services !== undefined) updates.services = data.services;
-  if (data.rateRange !== undefined) updates.rate_range = data.rateRange;
-  if (data.availability !== undefined) updates.availability = data.availability;
-  if (data.portfolioUrls !== undefined) updates.portfolio_urls = data.portfolioUrls;
-  if (data.pastVenues !== undefined) updates.past_venues = data.pastVenues;
-  if (data.avatarUrl !== undefined) updates.avatar_url = data.avatarUrl;
-  if (data.coverPhotoUrl !== undefined) updates.cover_photo_url = data.coverPhotoUrl;
+  if (data.genres !== undefined) updates.genres = capStringArray(data.genres, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY);
+  if (data.services !== undefined) updates.services = capStringArray(data.services, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY);
+  if (data.rateRange !== undefined) updates.rate_range = capString(data.rateRange, MAX_RATE_RANGE);
+  if (data.availability !== undefined) updates.availability = capString(data.availability, MAX_AVAILABILITY);
+  if (data.portfolioUrls !== undefined)
+    updates.portfolio_urls = (capStringArray(data.portfolioUrls, MAX_PORTFOLIO_URL, MAX_PORTFOLIO_ARRAY) ?? [])
+      .map((u) => sanitizeUrl(u))
+      .filter((u): u is string => !!u);
+  if (data.pastVenues !== undefined) updates.past_venues = capStringArray(data.pastVenues, MAX_PAST_VENUE, MAX_PAST_VENUES_ARRAY);
+  if (data.avatarUrl !== undefined) updates.avatar_url = sanitizeUrl(data.avatarUrl);
+  if (data.coverPhotoUrl !== undefined) updates.cover_photo_url = sanitizeUrl(data.coverPhotoUrl);
 
   const { error } = await admin.from("marketplace_profiles")
     .update(updates)
@@ -472,7 +513,6 @@ export async function getSavedProfiles(): Promise<{
   }
 }
 
-// TODO(audit): add length caps on displayName/city/rateRange/availability, sanitize URL fields, UUID-validate profileId in saveProfile/unsaveProfile
 export async function sendInquiry(data: {
   toProfileId: string;
   eventId?: string | null;
@@ -545,27 +585,40 @@ export async function sendInquiry(data: {
   }
 
   if (profile?.users?.email && internalSecretOk) {
+    // Must `await` the email fetch — on Vercel the lambda freezes after the
+    // server action returns, which silently kills any in-flight requests.
+    // Pattern previously caused inquiry emails to fail ~100% of the time in
+    // production (same bug fixed in actions/rsvps.ts during MVP audit).
+    // Wrapped in try/catch so email failure never blocks inquiry success.
     try {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.trynocturn.com";
-      fetch(`${appUrl}/api/marketplace-inquiry-email`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${internalSecret}`,
-        },
-        body: JSON.stringify({
-          toEmail: profile.users.email,
-          toName: profile.display_name,
-          fromUserId: user.id,
-          senderName: user.user_metadata?.full_name ?? user.email ?? "Someone",
-          message: data.message,
-          inquiryType: data.inquiryType ?? "general",
-        }),
-      }).catch(() => {
-        // fire-and-forget — ignore email failures
-      });
-    } catch {
-      // fire-and-forget — ignore email failures
+      const emailController = new AbortController();
+      const emailTimeout = setTimeout(() => emailController.abort(), 5_000);
+      try {
+        await fetch(`${appUrl}/api/marketplace-inquiry-email`, {
+          method: "POST",
+          signal: emailController.signal,
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${internalSecret}`,
+          },
+          body: JSON.stringify({
+            toEmail: profile.users.email,
+            toName: profile.display_name,
+            fromUserId: user.id,
+            senderName: user.user_metadata?.full_name ?? user.email ?? "Someone",
+            message: data.message,
+            inquiryType: data.inquiryType ?? "general",
+          }),
+        });
+      } finally {
+        clearTimeout(emailTimeout);
+      }
+    } catch (emailErr) {
+      // Inquiry row is already inserted — surface the failure in logs but
+      // don't turn it into a user-visible error. The recipient can still see
+      // the inquiry in-app; only the notification email failed.
+      console.error("[sendInquiry] notification email failed (non-blocking):", emailErr);
     }
   }
 

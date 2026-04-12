@@ -86,8 +86,29 @@ function DiscoverContent() {
     }
   }, [searchParams]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [profiles, setProfiles] = useState<any[]>([]);
+  // Shape of marketplace_profiles rows returned by searchProfiles() — see
+  // app/actions/marketplace.ts for the select list. Keeping this local (and
+  // indexable by string) matches the `Record<string, unknown>[]` return type
+  // without forcing an `any` cast here.
+  type DiscoverProfileRow = {
+    id: string;
+    slug: string;
+    display_name: string;
+    user_type?: string | null;
+    type?: string | null;
+    city?: string | null;
+    bio?: string | null;
+    genres?: string[] | null;
+    services?: string[] | null;
+    rate_range?: string | null;
+    avatar_url?: string | null;
+    cover_photo_url?: string | null;
+    instagram_handle?: string | null;
+    website_url?: string | null;
+    soundcloud_url?: string | null;
+    spotify_url?: string | null;
+  };
+  const [profiles, setProfiles] = useState<DiscoverProfileRow[]>([]);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
 
   const [loadingDiscover, setLoadingDiscover] = useState(true);
@@ -112,7 +133,12 @@ function DiscoverContent() {
     city: string;
   } | null>(null);
 
-  const isCollectivesCategory = category === "collective" || category === "promoter";
+  // Only the "collective" chip should hit the collectives table. The
+  // "promoter" chip used to share this branch, which queried the wrong table
+  // entirely — promoters live in marketplace_profiles with user_type =
+  // "promoter", not in the `collectives` table. Route them through
+  // searchProfiles instead so the chip actually returns promoter profiles.
+  const isCollectivesCategory = category === "collective";
   const isVenuesCategory = category === "venue";
 
   // Fetch collectiveId for the current user
@@ -157,7 +183,7 @@ function DiscoverContent() {
       city: cityFilter.trim() || null,
       page,
     });
-    setProfiles(result.profiles);
+    setProfiles(result.profiles as unknown as DiscoverProfileRow[]);
     setTotalCount(result.total);
     setLoadingDiscover(false);
   }, [category, query, cityFilter, page, isCollectivesCategory, isVenuesCategory]);
@@ -379,7 +405,13 @@ function DiscoverContent() {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder={isCollectivesCategory ? (category === "promoter" ? "Search promoters..." : "Search collectives...") : "Search profiles..."}
+              placeholder={
+                isCollectivesCategory
+                  ? "Search collectives..."
+                  : category === "promoter"
+                    ? "Search promoters..."
+                    : "Search profiles..."
+              }
               className="w-full pl-10"
             />
           </div>
@@ -452,13 +484,11 @@ function DiscoverContent() {
                     <Users2 className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <div className="text-center max-w-xs">
-                    <p className="font-semibold">{category === "promoter" ? "No promoters found" : "No collectives found"}</p>
+                    <p className="font-semibold">No collectives found</p>
                     <p className="mt-1 text-sm text-muted-foreground">
                       {query || cityFilter
                         ? "Try a different search or city"
-                        : category === "promoter"
-                          ? "No promoters on Nocturn yet"
-                          : "No other collectives on Nocturn yet"}
+                        : "No other collectives on Nocturn yet"}
                     </p>
                   </div>
                 </CardContent>
@@ -478,7 +508,7 @@ function DiscoverContent() {
                 </div>
 
                 <p className="text-xs text-muted-foreground text-center pt-2">
-                  {`${collectivesTotal} ${category === "promoter" ? (collectivesTotal === 1 ? "promoter" : "promoters") : (collectivesTotal === 1 ? "collective" : "collectives")} on Nocturn${
+                  {`${collectivesTotal} ${collectivesTotal === 1 ? "collective" : "collectives"} on Nocturn${
                     totalPages > 1 ? ` · Page ${page} of ${totalPages}` : ""
                   }`}
                 </p>

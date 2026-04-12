@@ -6,10 +6,41 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Explicit timeouts — the OpenAI SDK defaults to 10 minutes, which is
+// longer than any Vercel lambda will live. Without these, a hung
+// OpenAI request returns a cryptic "lambda timeout" instead of a
+// friendly error the UI can surface and retry.
+const WHISPER_TIMEOUT_MS = 60_000;   // 1 minute for ~25MB of audio
+const GPT_TIMEOUT_MS = 30_000;       // 30 seconds for summarization
+// Whisper's hard limit is 25MB. We cap slightly below to leave headroom
+// for multipart/form overhead.
+const WHISPER_MAX_BYTES = 24 * 1024 * 1024;
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+  timeout: WHISPER_TIMEOUT_MS,
+});
 
 function stripHtmlTags(str: string): string {
   return str.replace(/<[^>]*>/g, "").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+}
+
+/**
+ * Pick a plausible filename extension for a given MIME so Whisper's
+ * content sniffing works. Hardcoding `recording.webm` for an mp3 file
+ * causes Whisper to fall back to slower paths.
+ */
+function filenameForMime(mime: string): string {
+  switch (mime) {
+    case "audio/webm": return "recording.webm";
+    case "audio/ogg": return "recording.ogg";
+    case "audio/mp4":
+    case "audio/x-m4a": return "recording.m4a";
+    case "audio/mpeg":
+    case "audio/mp3": return "recording.mp3";
+    case "audio/wav": return "recording.wav";
+    default: return "recording.webm";
+  }
 }
 
 /**
@@ -62,26 +93,45 @@ export async function transcribeFromStorage(storagePath: string) {
     }
 
     const buffer = Buffer.from(await fileData.arrayBuffer());
-    const fileSizeMB = buffer.length / (1024 * 1024);
 
-    // Whisper has a 25MB limit. If file is larger, we need to handle it.
-    // For now, if under 25MB, send directly. If over, compress or chunk.
-    if (fileSizeMB > 24) {
-      // For very large files, try sending anyway — Whisper may handle compressed webm well
-      // If this fails, we'll need FFmpeg chunking (future enhancement)
-      console.warn(`Large audio file: ${fileSizeMB.toFixed(1)}MB — attempting transcription`);
+    // Hard fail if the file is over Whisper's limit. Previously this was
+    // a warn-and-try, which always ended in a 413 from OpenAI AND burned
+    // a rate-limit slot (5/hour). Friendly error instead.
+    if (buffer.length > WHISPER_MAX_BYTES) {
+      const mb = (buffer.length / (1024 * 1024)).toFixed(1);
+      return {
+        error: `Recording is ${mb}MB — too large for transcription (max 24MB). Try splitting it up.`,
+        transcript: "",
+        summary: "",
+        action_items: [],
+        key_decisions: [],
+      };
     }
 
+    // Assume webm because that's what the recorder always emits.
+    // transcribeFromStorage is called for recordings we wrote ourselves.
     const file = new File([buffer], "recording.webm", { type: "audio/webm" });
 
-    // Step 1: Transcribe with Whisper
-    const transcription = await openai.audio.transcriptions.create({
-      file,
-      model: "whisper-1",
-      language: "en",
-    });
-
-    const transcript = transcription.text;
+    // Step 1: Transcribe with Whisper (granular error so callers can
+    // distinguish transcription failure from analysis failure).
+    let transcript: string;
+    try {
+      const transcription = await openai.audio.transcriptions.create({
+        file,
+        model: "whisper-1",
+        language: "en",
+      });
+      transcript = transcription.text;
+    } catch (whisperErr) {
+      console.error("[transcribeFromStorage] Whisper failed:", whisperErr);
+      return {
+        error: "Transcription failed. Please try again.",
+        transcript: "",
+        summary: "",
+        action_items: [],
+        key_decisions: [],
+      };
+    }
 
     if (!transcript || transcript.trim().length < 10) {
       return {
@@ -101,12 +151,17 @@ export async function transcribeFromStorage(storagePath: string) {
         ? transcript.slice(0, maxChars) + "\n\n[... transcript truncated for analysis ...]"
         : transcript;
 
-    const analysis = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
+    // Step 2: Analysis via GPT — wrap in its own try so we can still
+    // return the transcript even if summarization fails.
+    let parsed: Record<string, unknown> = {};
+    try {
+      const analysis = await openai.chat.completions.create(
         {
-          role: "system",
-          content: `You are an AI assistant for music promoters and event collectives. Analyze the following call transcript and extract:
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: `You are an AI assistant for music promoters and event collectives. Analyze the following call transcript and extract:
 1. A concise summary (2-3 sentences)
 2. Action items (format: "Task — Person — Deadline")
 3. Key decisions made
@@ -119,33 +174,46 @@ Return valid JSON with this exact structure:
 }
 
 If the transcript is casual conversation with no clear action items or decisions, still provide a summary but return empty arrays for action_items and key_decisions.`,
+            },
+            {
+              role: "user",
+              content: truncatedTranscript,
+            },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.3,
         },
-        {
-          role: "user",
-          content: truncatedTranscript,
-        },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.3,
-    });
+        { timeout: GPT_TIMEOUT_MS }
+      );
 
-    const choiceContent = analysis.choices?.[0]?.message?.content;
-    if (!choiceContent) {
+      const choiceContent = analysis.choices?.[0]?.message?.content;
+      if (!choiceContent) {
+        return {
+          error: null,
+          transcript,
+          summary: "Analysis could not be generated.",
+          action_items: [],
+          key_decisions: [],
+        };
+      }
+
+      try {
+        parsed = JSON.parse(choiceContent);
+      } catch {
+        console.error("[transcribeFromStorage] Failed to parse analysis JSON");
+        parsed = {};
+      }
+    } catch (gptErr) {
+      console.error("[transcribeFromStorage] GPT analysis failed:", gptErr);
+      // Transcript is still usable on its own — return it with an
+      // explanatory summary so the user isn't left empty-handed.
       return {
         error: null,
         transcript,
-        summary: "Analysis could not be generated.",
+        summary: "Transcript captured, but AI summary failed. You can still read the transcript.",
         action_items: [],
         key_decisions: [],
       };
-    }
-
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(choiceContent);
-    } catch {
-      console.error("[transcribeFromStorage] Failed to parse analysis JSON");
-      parsed = {};
     }
 
     revalidatePath("/dashboard/record");
@@ -189,19 +257,46 @@ export async function transcribeAudio(audioBase64: string, mimeType: string) {
       return { error: "Unsupported audio format", transcript: "", summary: "", action_items: [], key_decisions: [] };
     }
 
+    // Cap on the raw base64 string length. Base64 is ~1.33× the decoded
+    // byte size, so 35MB of base64 ≈ 26MB of audio — slightly over
+    // Whisper's 25MB limit, so we also check the decoded length below.
     if (!audioBase64 || audioBase64.length > 35_000_000) {
       return { error: "Audio file too large", transcript: "", summary: "", action_items: [], key_decisions: [] };
     }
     const buffer = Buffer.from(audioBase64, "base64");
-    const file = new File([buffer], "recording.webm", { type: mimeType });
+    if (buffer.length > WHISPER_MAX_BYTES) {
+      const mb = (buffer.length / (1024 * 1024)).toFixed(1);
+      return {
+        error: `Recording is ${mb}MB — too large for transcription (max 24MB).`,
+        transcript: "",
+        summary: "",
+        action_items: [],
+        key_decisions: [],
+      };
+    }
+    // Filename extension matches mimeType so Whisper's content sniffing
+    // doesn't guess wrong for mp3 / m4a / wav uploads.
+    const file = new File([buffer], filenameForMime(mimeType), { type: mimeType });
 
-    const transcription = await openai.audio.transcriptions.create({
-      file,
-      model: "whisper-1",
-      language: "en",
-    });
-
-    const transcript = transcription.text;
+    // Step 1: Whisper — distinguish this failure from the GPT step below.
+    let transcript: string;
+    try {
+      const transcription = await openai.audio.transcriptions.create({
+        file,
+        model: "whisper-1",
+        language: "en",
+      });
+      transcript = transcription.text;
+    } catch (whisperErr) {
+      console.error("[transcribeAudio] Whisper failed:", whisperErr);
+      return {
+        error: "Transcription failed. Please try again.",
+        transcript: "",
+        summary: "",
+        action_items: [],
+        key_decisions: [],
+      };
+    }
 
     if (!transcript || transcript.trim().length < 10) {
       return {
@@ -213,12 +308,17 @@ export async function transcribeAudio(audioBase64: string, mimeType: string) {
       };
     }
 
-    const analysis = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
+    // Step 2: GPT analysis — isolated try so we return the raw transcript
+    // even if summarization fails.
+    let parsed: Record<string, unknown> = {};
+    try {
+      const analysis = await openai.chat.completions.create(
         {
-          role: "system",
-          content: `You are an AI assistant for music promoters and event collectives. Analyze the following call transcript and extract:
+          model: "gpt-4o-mini",
+          messages: [
+            {
+              role: "system",
+              content: `You are an AI assistant for music promoters and event collectives. Analyze the following call transcript and extract:
 1. A concise summary (2-3 sentences)
 2. Action items (format: "Task — Person — Deadline")
 3. Key decisions made
@@ -231,33 +331,44 @@ Return valid JSON with this exact structure:
 }
 
 If the transcript is casual conversation with no clear action items or decisions, still provide a summary but return empty arrays for action_items and key_decisions.`,
+            },
+            {
+              role: "user",
+              content: transcript,
+            },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.3,
         },
-        {
-          role: "user",
-          content: transcript,
-        },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.3,
-    });
+        { timeout: GPT_TIMEOUT_MS }
+      );
 
-    const choiceContent = analysis.choices?.[0]?.message?.content;
-    if (!choiceContent) {
+      const choiceContent = analysis.choices?.[0]?.message?.content;
+      if (!choiceContent) {
+        return {
+          error: null,
+          transcript,
+          summary: "Analysis could not be generated.",
+          action_items: [],
+          key_decisions: [],
+        };
+      }
+
+      try {
+        parsed = JSON.parse(choiceContent);
+      } catch {
+        console.error("[transcribeAudio] Failed to parse analysis JSON");
+        parsed = {};
+      }
+    } catch (gptErr) {
+      console.error("[transcribeAudio] GPT analysis failed:", gptErr);
       return {
         error: null,
         transcript,
-        summary: "Analysis could not be generated.",
+        summary: "Transcript captured, but AI summary failed. You can still read the transcript.",
         action_items: [],
         key_decisions: [],
       };
-    }
-
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(choiceContent);
-    } catch {
-      console.error("[transcribeAudio] Failed to parse analysis JSON");
-      parsed = {};
     }
 
     revalidatePath("/dashboard/record");

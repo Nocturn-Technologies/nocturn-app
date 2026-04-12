@@ -138,8 +138,8 @@ export async function POST(req: NextRequest) {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${appUrl}/dashboard/chat" style="display:inline-block;background-color:#7B2FF7;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 32px;border-radius:10px;">
-                      View on Dashboard
+                    <a href="${appUrl}/dashboard/inquiries" style="display:inline-block;background-color:#7B2FF7;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;padding:12px 32px;border-radius:10px;">
+                      View Inquiry
                     </a>
                   </td>
                 </tr>

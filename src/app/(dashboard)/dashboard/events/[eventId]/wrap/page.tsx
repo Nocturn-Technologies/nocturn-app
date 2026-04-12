@@ -402,7 +402,7 @@ export default function WrapPage() {
       {/* Header */}
       <div className="flex items-center gap-3 animate-fade-in-up">
         <Link href={`/dashboard/events/${eventId}`}>
-          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Back to event">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>

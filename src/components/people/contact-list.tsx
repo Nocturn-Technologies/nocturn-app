@@ -60,6 +60,7 @@ interface ContactListProps {
   collectiveId: string;
   contactType: "industry" | "fan";
   onContactClick?: (contactId: string) => void;
+  onImportClick?: () => void;
 }
 
 // ── Sort types ──────────────────────────────────────────────────────────────
@@ -156,6 +157,7 @@ export function ContactList({
   collectiveId,
   contactType,
   onContactClick,
+  onImportClick,
 }: ContactListProps) {
   const [contacts, setContacts] = useState<PeopleContact[]>([]);
   const [stats, setStats] = useState<PeopleStats>({ total: 0 });
@@ -565,12 +567,52 @@ export function ContactList({
       {/* Contact list */}
       {sorted.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center">
-            <p className="text-sm text-muted-foreground">
-              {contacts.length === 0
-                ? `No ${contactType === "fan" ? "fans" : "contacts"} yet. Import some to get started.`
-                : "No contacts match your filters."}
-            </p>
+          <CardContent className="flex flex-col items-center gap-4 py-12">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
+              {contactType === "fan" ? (
+                <Users className="h-8 w-8 text-nocturn" />
+              ) : (
+                <User className="h-8 w-8 text-nocturn" />
+              )}
+            </div>
+            <div className="text-center">
+              <p className="font-medium">
+                {contacts.length === 0
+                  ? `No ${contactType === "fan" ? "fans" : "contacts"} yet`
+                  : "No matches found"}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-[260px]">
+                {contacts.length === 0
+                  ? contactType === "fan"
+                    ? "Your attendee list will appear here once you start selling tickets. You can also import existing contacts."
+                    : "Build your industry network — import DJs, venue managers, and promoters you work with."
+                  : "Try a different search or clear your filters to see more contacts."}
+              </p>
+            </div>
+            {contacts.length === 0 ? (
+              onImportClick ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-h-[44px]"
+                  onClick={onImportClick}
+                >
+                  Import contacts
+                </Button>
+              ) : null
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-[44px]"
+                onClick={() => {
+                  setSearch("");
+                  setActiveFilter("all");
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
           </CardContent>
         </Card>
       ) : (

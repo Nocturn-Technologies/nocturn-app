@@ -987,6 +987,161 @@ export async function completeEvent(eventId: string) {
   }
 }
 
+/**
+ * Duplicate an existing event into a fresh draft. Copies title (with " (Copy)"
+ * suffix), description, venue, budget fields, ticket tiers, and expense rows.
+ * Defaults the new starts_at to 7 days from today at the source event's
+ * time-of-day; doors_at and ends_at are shifted by the same delta so the
+ * relative timing is preserved. Skips bookings, tickets, attendees,
+ * settlements, and anything that's specific to the original run.
+ */
+export async function duplicateEvent(sourceEventId: string) {
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { error: "You must be logged in.", eventId: null };
+
+    if (!sourceEventId?.trim()) return { error: "Event ID is required", eventId: null };
+
+    const ownership = await verifyEventOwnership(user.id, sourceEventId);
+    if (ownership.error) return { error: ownership.error, eventId: null };
+    if (!ownership.event) return { error: "Event not found.", eventId: null };
+
+    const admin = createAdminClient();
+
+    // Pull the full source event row + tiers + expenses in parallel.
+    const [sourceEventRes, sourceTiersRes, sourceExpensesRes] = await Promise.all([
+      admin
+        .from("events")
+        .select(
+          "title, description, starts_at, ends_at, doors_at, venue_id, collective_id, event_mode, is_free, vibe_tags, min_age, venue_cost, venue_deposit, bar_minimum, estimated_bar_revenue, flyer_url, metadata"
+        )
+        .eq("id", sourceEventId)
+        .maybeSingle(),
+      admin
+        .from("ticket_tiers")
+        .select("name, price, capacity, sort_order")
+        .eq("event_id", sourceEventId)
+        .order("sort_order", { ascending: true }),
+      admin
+        .from("expenses")
+        .select("description, category, amount")
+        .eq("event_id", sourceEventId),
+    ]);
+
+    if (sourceEventRes.error || !sourceEventRes.data) {
+      console.error("[duplicateEvent] source fetch failed:", sourceEventRes.error?.message);
+      return { error: "Failed to load source event", eventId: null };
+    }
+    const source = sourceEventRes.data;
+
+    // Shift dates: new starts_at = today + 7 days at original time-of-day.
+    // Preserve doors_at and ends_at offsets relative to starts_at.
+    const sourceStart = new Date(source.starts_at);
+    const newStart = new Date();
+    newStart.setDate(newStart.getDate() + 7);
+    newStart.setHours(
+      sourceStart.getHours(),
+      sourceStart.getMinutes(),
+      sourceStart.getSeconds(),
+      0
+    );
+    const deltaMs = newStart.getTime() - sourceStart.getTime();
+    const newDoors = source.doors_at
+      ? new Date(new Date(source.doors_at).getTime() + deltaMs).toISOString()
+      : null;
+    const newEnds = source.ends_at
+      ? new Date(new Date(source.ends_at).getTime() + deltaMs).toISOString()
+      : null;
+
+    // Generate a new unique slug.
+    const baseTitle = `${source.title} (Copy)`;
+    const baseSlug = slugify(baseTitle);
+    let newSlug = baseSlug || `event-${Math.random().toString(36).slice(2, 8)}`;
+    const { data: slugCollision } = await admin
+      .from("events")
+      .select("id")
+      .eq("slug", newSlug)
+      .maybeSingle();
+    if (slugCollision) {
+      newSlug = `${newSlug}-${Math.random().toString(36).slice(2, 6)}`;
+    }
+
+    // Create the new draft event.
+    const { data: newEvent, error: insertErr } = await admin
+      .from("events")
+      .insert({
+        collective_id: source.collective_id,
+        venue_id: source.venue_id,
+        title: baseTitle,
+        slug: newSlug,
+        description: source.description,
+        starts_at: newStart.toISOString(),
+        ends_at: newEnds,
+        doors_at: newDoors,
+        status: "draft",
+        event_mode: source.event_mode,
+        is_free: source.is_free,
+        vibe_tags: source.vibe_tags ?? undefined,
+        min_age: source.min_age,
+        venue_cost: source.venue_cost,
+        venue_deposit: source.venue_deposit,
+        bar_minimum: source.bar_minimum,
+        estimated_bar_revenue: source.estimated_bar_revenue,
+        flyer_url: source.flyer_url,
+        metadata: source.metadata ?? undefined,
+      })
+      .select("id")
+      .maybeSingle();
+
+    if (insertErr || !newEvent) {
+      console.error("[duplicateEvent] insert error:", insertErr?.message);
+      return { error: "Failed to duplicate event", eventId: null };
+    }
+
+    // Clone ticket tiers (best-effort — non-fatal if missing).
+    if (sourceTiersRes.data && sourceTiersRes.data.length > 0) {
+      const { error: tierErr } = await admin.from("ticket_tiers").insert(
+        sourceTiersRes.data.map((t) => ({
+          event_id: newEvent.id,
+          name: t.name,
+          price: t.price,
+          capacity: t.capacity,
+          sort_order: t.sort_order,
+        }))
+      );
+      if (tierErr) {
+        console.error("[duplicateEvent] tier clone failed (non-fatal):", tierErr.message);
+      }
+    }
+
+    // Clone expense rows (best-effort — non-fatal).
+    if (sourceExpensesRes.data && sourceExpensesRes.data.length > 0) {
+      const { error: expErr } = await admin.from("expenses").insert(
+        sourceExpensesRes.data.map((e) => ({
+          event_id: newEvent.id,
+          collective_id: source.collective_id,
+          description: e.description,
+          category: e.category,
+          amount: e.amount,
+        }))
+      );
+      if (expErr) {
+        console.error("[duplicateEvent] expense clone failed (non-fatal):", expErr.message);
+      }
+    }
+
+    revalidatePath("/dashboard/events");
+    revalidatePath("/dashboard");
+    return { error: null, eventId: newEvent.id };
+  } catch (err) {
+    console.error("[duplicateEvent] Unexpected error:", err);
+    return { error: "Something went wrong", eventId: null };
+  }
+}
+
 interface EventDesignInput {
   flyerUrl?: string | null;
   description?: string | null;

@@ -2,16 +2,18 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
-import { getResendClient } from "@/lib/resend";
+import { sendEmail } from "@/lib/email/send";
 import { isValidUUID } from "@/lib/utils";
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+// Strip characters that would break a plain-text email rendering. This is
+// NOT html escaping — the settlement report is sent as plain text (no HTML
+// alternative), so encoding `&` as `&amp;` would render literal `&amp;` in
+// Gmail. We only drop control characters and newlines that could header-
+// inject or mangle the body layout.
+function sanitizePlainText(str: string): string {
+  // Remove control chars except tab/newline (we want newlines inside body)
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "");
 }
 
 // Generate a settlement report email and return it (for now, no Resend — just generates the content)
@@ -95,10 +97,11 @@ export async function generateSettlementReport(settlementId: string) {
     .map((l) => `  • ${l.description}: -$${Number(l.amount).toFixed(2)}`)
     .join("\n");
 
-  const collectiveName = escapeHtml(collective?.name ?? "Your Collective");
-  const safeEventTitle = escapeHtml(event.title);
-  const safeVenueName = venue ? escapeHtml(venue.name) : null;
-  const subject = `Settlement Report: ${safeEventTitle} — ${collectiveName}`;
+  const collectiveName = sanitizePlainText(collective?.name ?? "Your Collective");
+  const safeEventTitle = sanitizePlainText(event.title);
+  const safeVenueName = venue ? sanitizePlainText(venue.name) : null;
+  // Strip newlines from subject to prevent header injection.
+  const subject = `Settlement Report: ${safeEventTitle} — ${collectiveName}`.replace(/[\r\n]/g, " ");
 
   const body = `Hi ${collectiveName},
 
@@ -128,21 +131,37 @@ View full details: ${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.
 
 — Nocturn`;
 
-  // Actually send the email via Resend singleton if configured
+  // Route through the shared sendEmail helper so we get retries, a
+  // consistent verified FROM, and dev-mode skip behavior. Previously this
+  // called `getResendClient()` directly and bypassed all of that, and on a
+  // transient 5xx would fail the settlement report with no retry.
+  //
+  // sendEmail() only accepts HTML, so wrap the plain-text body in a <pre>
+  // block that preserves whitespace. The `&/</>` escape here is real HTML
+  // escaping (appropriate for an HTML container), unlike the body variable
+  // escaping we removed above.
   let sent = false;
-  const resend = getResendClient();
-  if (resend && recipientEmails.length > 0) {
-    try {
-      await resend.emails.send({
-        from: process.env.RESEND_FROM_EMAIL || "Nocturn <noreply@trynocturn.com>",
-        to: recipientEmails,
-        subject,
-        text: body,
-      });
-      sent = true;
-    } catch (emailError) {
-      console.error("[settlement-email] Failed to send:", emailError);
-      // Non-blocking — return the report even if email fails
+  if (recipientEmails.length > 0) {
+    const htmlBody = `<pre style="font-family:-apple-system,Menlo,monospace;white-space:pre-wrap;color:#FAFAFA;background:#09090B;padding:24px;font-size:13px;line-height:1.6;">${body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</pre>`;
+    // Deduplicate recipients — multiple collective_members rows can point
+    // to the same email if someone was added twice.
+    const uniqueRecipients = Array.from(new Set(recipientEmails.map((e) => e.toLowerCase().trim())));
+    const results = await Promise.allSettled(
+      uniqueRecipients.map((to) =>
+        sendEmail({
+          to,
+          subject,
+          html: htmlBody,
+        })
+      )
+    );
+    sent = results.some((r) => r.status === "fulfilled" && !r.value.error);
+    for (const r of results) {
+      if (r.status === "rejected") {
+        console.error("[settlement-email] send rejected:", r.reason);
+      } else if (r.value.error) {
+        console.error("[settlement-email] send failed:", r.value.error);
+      }
     }
   }
 

@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
 import {
   ArrowUpDown,
   ArrowUp,
@@ -105,9 +104,13 @@ interface EventFinancialsTableProps {
 }
 
 export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
+  const router = useRouter();
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  function goToEventFinancials(eventId: string) {
+    router.push(`/dashboard/events/${eventId}/financials`);
+  }
 
   const sorted = useMemo(() => {
     return [...events].sort((a, b) => {
@@ -228,7 +231,8 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
                   return (
                     <tr
                       key={event.id}
-                      className="group transition-colors hover:bg-white/[0.02]"
+                      onClick={() => goToEventFinancials(event.eventId)}
+                      className="group cursor-pointer transition-colors hover:bg-white/[0.02]"
                     >
                       <td className="px-4 py-3">
                         <p className="font-medium text-sm line-clamp-1 max-w-[200px]">
@@ -266,9 +270,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
                         {getStatusBadge(event.status, event.eventStatus)}
                       </td>
                       <td className="px-4 py-3">
-                        <Link href={`/dashboard/finance/${event.eventId}`}>
-                          <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-nocturn-light transition-colors" />
-                        </Link>
+                        <ChevronRight className="h-4 w-4 text-muted-foreground/40 group-hover:text-nocturn-light transition-colors" />
                       </td>
                     </tr>
                   );
@@ -308,7 +310,6 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
         {sorted.map((event) => {
           const isProfitable = event.profit >= 0;
           const hasFinancials = event.grossRevenue > 0;
-          const isExpanded = expandedId === event.id;
 
           return (
             <Card
@@ -317,9 +318,7 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
             >
               <CardContent className="p-0">
                 <button
-                  onClick={() =>
-                    setExpandedId(isExpanded ? null : event.id)
-                  }
+                  onClick={() => goToEventFinancials(event.eventId)}
                   className="flex w-full items-center gap-3 p-4 text-left min-h-[44px] active:bg-white/[0.02] transition-colors duration-200"
                 >
                   <div className="min-w-0 flex-1">
@@ -357,74 +356,8 @@ export function EventFinancialsTable({ events }: EventFinancialsTableProps) {
                       <p className="text-sm text-muted-foreground">--</p>
                     )}
                   </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/40" />
                 </button>
-
-                {/* Expanded detail */}
-                {isExpanded && hasFinancials && (
-                  <div className="border-t border-white/[0.06] px-4 py-3 space-y-2">
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          Revenue
-                        </p>
-                        <p className="text-sm font-semibold tabular-nums">
-                          {formatMoney(event.grossRevenue)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          Expenses
-                        </p>
-                        <p className="text-sm font-semibold tabular-nums text-muted-foreground">
-                          {formatMoney(event.totalExpenses)}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                          Margin
-                        </p>
-                        <p
-                          className={`text-sm font-semibold tabular-nums ${
-                            isProfitable
-                              ? "text-nocturn-teal"
-                              : "text-red-400"
-                          }`}
-                        >
-                          {Math.round(event.margin)}%
-                        </p>
-                      </div>
-                    </div>
-                    <Link href={`/dashboard/finance/${event.eventId}`}>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="w-full mt-1 text-xs min-h-[44px] hover:border-nocturn/30 active:scale-95 transition-all duration-200"
-                      >
-                        View Full P&L
-                      </Button>
-                    </Link>
-                  </div>
-                )}
-
-                {isExpanded && !hasFinancials && (
-                  <div className="border-t border-white/[0.06] px-4 py-3">
-                    <p className="text-xs text-muted-foreground">
-                      Financial data available after event is settled.
-                    </p>
-                    {event.eventStatus === "completed" && (
-                      <Link
-                        href={`/dashboard/finance/${event.eventId}`}
-                      >
-                        <Button
-                          size="sm"
-                          className="mt-2 w-full bg-nocturn hover:bg-nocturn-light active:scale-95 text-xs min-h-[44px] transition-all duration-200"
-                        >
-                          Settle Now
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                )}
               </CardContent>
             </Card>
           );

@@ -120,7 +120,25 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
     .maybeSingle();
 
   if (slugCheck) {
-    eventSlug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
+    // Retry up to 5 times with random suffixes to avoid slug collisions
+    let resolved = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
+      const { data: recheck } = await admin
+        .from("events")
+        .select("id")
+        .eq("slug", candidate)
+        .maybeSingle();
+      if (!recheck) {
+        eventSlug = candidate;
+        resolved = true;
+        break;
+      }
+    }
+    if (!resolved) {
+      // Final fallback: append timestamp for guaranteed uniqueness
+      eventSlug = `${baseSlug}-${Date.now().toString(36)}`;
+    }
   }
 
   // Parse the starts_at time and set doors 1hr before, ends 5hrs after

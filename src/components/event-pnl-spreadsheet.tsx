@@ -19,6 +19,10 @@ import {
   addExpense,
   updateExpense,
   deleteExpense,
+  addRevenueLine,
+  updateRevenueLine,
+  deleteRevenueLine,
+  updateEventBarSettings,
 } from "@/app/actions/event-financials";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -44,8 +48,19 @@ const EXPENSE_CATEGORIES = [
   "other",
 ] as const;
 
+const REVENUE_CATEGORIES = [
+  "bar",
+  "sponsorship",
+  "merch",
+  "coat_check",
+  "donation",
+  "other",
+] as const;
+
 function categoryLabel(cat: string): string {
-  return cat.charAt(0).toUpperCase() + cat.slice(1);
+  // Replace underscores so "coat_check" → "Coat check"
+  const spaced = cat.replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
 // ── Editable Cell ────────────────────────────────────────────────────
@@ -361,6 +376,137 @@ function AddExpenseRow({ eventId }: { eventId: string }) {
   );
 }
 
+// ── Add Revenue Row ──────────────────────────────────────────────────
+// Mirror of AddExpenseRow but for the event_revenue table. Categories are
+// drawn from REVENUE_CATEGORIES (bar / sponsorship / merch / etc.).
+
+function AddRevenueRow({ eventId }: { eventId: string }) {
+  const [open, setOpen] = useState(false);
+  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState<string>("bar");
+  const [amount, setAmount] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const descRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (open && descRef.current) {
+      descRef.current.focus();
+    }
+  }, [open]);
+
+  const handleSubmit = () => {
+    const parsed = parseFloat(amount);
+    if (!description.trim() || isNaN(parsed) || parsed <= 0) return;
+
+    startTransition(async () => {
+      const result = await addRevenueLine(eventId, {
+        description: description.trim(),
+        category,
+        amount: Math.round(parsed * 100) / 100,
+      });
+      if (!result.error) {
+        setDescription("");
+        setCategory("bar");
+        setAmount("");
+        setOpen(false);
+      }
+    });
+  };
+
+  if (!open) {
+    return (
+      <tr>
+        <td colSpan={4} className="px-4 py-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-green-400 hover:bg-green-400/5 transition-all"
+            onClick={() => setOpen(true)}
+          >
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Add Revenue Line
+          </Button>
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr className="border-b border-border/50 bg-green-500/5">
+      <td className="px-4 py-2">
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="h-7 rounded-md bg-background border border-border text-xs px-2 text-foreground focus:ring-1 focus:ring-green-400/30"
+        >
+          {REVENUE_CATEGORIES.map((cat) => (
+            <option key={cat} value={cat}>
+              {categoryLabel(cat)}
+            </option>
+          ))}
+        </select>
+      </td>
+      <td className="px-4 py-2">
+        <Input
+          ref={descRef}
+          placeholder="e.g. Bar sales, Sponsor fee"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleSubmit();
+            if (e.key === "Escape") setOpen(false);
+          }}
+          className="h-7 text-sm bg-background border-green-400/40 focus-visible:ring-green-400/30"
+          disabled={isPending}
+        />
+      </td>
+      <td className="px-4 py-2">
+        <div className="flex items-center gap-1 justify-end">
+          <span className="text-muted-foreground text-sm">$</span>
+          <Input
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSubmit();
+              if (e.key === "Escape") setOpen(false);
+            }}
+            className="h-7 w-24 text-sm bg-background border-green-400/40 focus-visible:ring-green-400/30"
+            disabled={isPending}
+          />
+        </div>
+      </td>
+      <td className="px-4 py-2">
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Save revenue line"
+            className="h-7 w-7 text-green-400 hover:text-green-300 hover:bg-green-400/10"
+            onClick={handleSubmit}
+            disabled={isPending}
+          >
+            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Cancel add revenue line"
+            className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted"
+            onClick={() => setOpen(false)}
+            disabled={isPending}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
 // ── Main Component ───────────────────────────────────────────────────
 
 interface Props {
@@ -391,6 +537,31 @@ export function EventPnlSpreadsheet({ financials }: Props) {
       if (result.error) setError(result.error);
     });
   };
+
+  const handleUpdateRevenue = async (revenueId: string, field: string, value: string | number) => {
+    startTransition(async () => {
+      const result = await updateRevenueLine(revenueId, { [field]: value });
+      if (result.error) setError(result.error);
+    });
+  };
+
+  const handleDeleteRevenue = (revenueId: string) => {
+    startTransition(async () => {
+      const result = await deleteRevenueLine(revenueId);
+      if (result.error) setError(result.error);
+    });
+  };
+
+  const handleUpdateBarSettings = async (
+    field: "barMinimum" | "actualBarRevenue",
+    value: number
+  ) => {
+    startTransition(async () => {
+      const result = await updateEventBarSettings(financials.eventId, { [field]: value });
+      if (result.error) setError(result.error);
+    });
+  };
+
   const isProfitable = financials.profitLoss >= 0;
 
   return (
@@ -448,6 +619,15 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                 <span className="text-sm font-mono tabular-nums text-green-400 shrink-0 ml-3">{formatCurrency(tier.revenue)}</span>
               </div>
             ))}
+            {financials.revenueLines.map((line) => (
+              <div key={line.id} className="px-4 py-3 flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{line.description || "Revenue"}</p>
+                  <p className="text-xs text-muted-foreground">{categoryLabel(line.category)}</p>
+                </div>
+                <span className="text-sm font-mono tabular-nums text-green-400 shrink-0 ml-3">{formatCurrency(line.amount)}</span>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -460,10 +640,19 @@ export function EventPnlSpreadsheet({ financials }: Props) {
           <div className="divide-y divide-border/50">
             {financials.expenses.map((exp) => (
               <div key={exp.id} className="px-4 py-3 flex items-center justify-between">
-                <div className="min-w-0"><p className="text-sm truncate">{exp.description || "Expense"}</p><p className="text-xs text-muted-foreground">{exp.category}</p></div>
+                <div className="min-w-0"><p className="text-sm truncate">{exp.description || "Expense"}</p><p className="text-xs text-muted-foreground">{categoryLabel(exp.category)}</p></div>
                 <span className="text-sm font-mono tabular-nums text-red-400 shrink-0 ml-3">-{formatCurrency(exp.amount)}</span>
               </div>
             ))}
+            {financials.barShortfall > 0 && (
+              <div className="px-4 py-3 flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm truncate">Bar Minimum Shortfall</p>
+                  <p className="text-xs text-muted-foreground">Owed to venue</p>
+                </div>
+                <span className="text-sm font-mono tabular-nums text-amber-400 shrink-0 ml-3">-{formatCurrency(financials.barShortfall)}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -556,15 +745,62 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                 </tr>
               )}
 
-              {/* Estimated Bar Revenue */}
-              {financials.estimatedBarRevenue != null && financials.estimatedBarRevenue > 0 && (
-                <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">Bar</td>
-                  <td className="px-4 py-2.5 text-sm">
-                    Estimated Bar Revenue
+              {/* Custom Revenue Lines (editable) — bar revenue, sponsorship,
+                  merch, etc. Same edit-in-place + delete pattern as expenses. */}
+              {financials.revenueLines.map((line) => (
+                <tr
+                  key={line.id}
+                  className="border-b border-border/50 hover:bg-muted/20 transition-colors group"
+                >
+                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                    {categoryLabel(line.category)}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <EditableTextCell
+                      value={line.description}
+                      onSave={async (v) => {
+                        await handleUpdateRevenue(line.id, "description", v);
+                      }}
+                    />
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <span className="text-sm font-mono tabular-nums text-green-400/70">
+                    <div className="flex items-center justify-end">
+                      <EditableAmountCell
+                        value={line.amount}
+                        onSave={async (v) => {
+                          await handleUpdateRevenue(line.id, "amount", v);
+                        }}
+                      />
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5 text-center">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Delete revenue line"
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all"
+                      onClick={() => handleDeleteRevenue(line.id)}
+                      disabled={isPending}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+
+              {/* Add Revenue Line */}
+              <AddRevenueRow eventId={financials.eventId} />
+
+              {/* Estimated Bar Revenue (read-only forecast hint — does NOT count
+                  toward gross. Actual bar revenue is tracked as a revenue line.) */}
+              {financials.estimatedBarRevenue != null && financials.estimatedBarRevenue > 0 && (
+                <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                  <td className="px-4 py-2.5 text-muted-foreground text-xs">Bar (est)</td>
+                  <td className="px-4 py-2.5 text-sm text-muted-foreground italic">
+                    Estimated Bar Revenue (forecast only)
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <span className="text-sm font-mono tabular-nums text-muted-foreground">
                       {formatCurrency(financials.estimatedBarRevenue)}
                     </span>
                   </td>
@@ -677,6 +913,30 @@ export function EventPnlSpreadsheet({ financials }: Props) {
               {/* Add Expense Row */}
               <AddExpenseRow eventId={financials.eventId} />
 
+              {/* Bar Minimum Shortfall (auto-computed). Only renders when the
+                  organizer has both filled in a minimum AND a real actual,
+                  AND actual fell short. This is the dollars they owe the
+                  venue out of pocket. */}
+              {financials.barShortfall > 0 && (
+                <tr className="border-b border-border/50 bg-amber-500/5">
+                  <td className="px-4 py-2.5 text-muted-foreground text-xs">Bar</td>
+                  <td className="px-4 py-2.5 text-sm">
+                    <div className="flex flex-col">
+                      <span>Bar Minimum Shortfall</span>
+                      <span className="text-xs text-muted-foreground">
+                        Owed to venue ({formatCurrency(financials.barMinimum ?? 0)} min &minus; {formatCurrency(financials.actualBarRevenue ?? 0)} actual)
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <span className="text-sm font-mono tabular-nums text-amber-400">
+                      ({formatCurrency(financials.barShortfall)})
+                    </span>
+                  </td>
+                  <td />
+                </tr>
+              )}
+
               {/* Expenses Subtotal */}
               <tr className="border-b border-border bg-red-500/5">
                 <td className="px-4 py-2.5" />
@@ -685,7 +945,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                 </td>
                 <td className="px-4 py-2.5 text-right">
                   <span className="text-sm font-bold font-mono tabular-nums text-red-400">
-                    ({formatCurrency(financials.totalExpenses + (financials.venueCost ?? 0))})
+                    ({formatCurrency(financials.totalExpenses + (financials.venueCost ?? 0) + financials.barShortfall)})
                   </span>
                 </td>
                 <td />
@@ -766,35 +1026,60 @@ export function EventPnlSpreadsheet({ financials }: Props) {
         </div>
       </div>
 
-      {/* Bar Minimum Indicator */}
-      {financials.barMinimum != null && financials.barMinimum > 0 && (
-        <div className="rounded-xl border border-border p-4 bg-card">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Bar Minimum</p>
-              <p className="text-xs text-muted-foreground">
-                Required minimum bar spend for the venue
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-sm font-bold font-mono tabular-nums">
-                {formatCurrency(financials.barMinimum)}
-              </p>
-              {financials.estimatedBarRevenue != null && (
-                <p className={`text-xs ${
-                  financials.estimatedBarRevenue >= financials.barMinimum
-                    ? "text-green-400"
-                    : "text-amber-400"
-                }`}>
-                  {financials.estimatedBarRevenue >= financials.barMinimum
-                    ? "On track to meet"
-                    : `${formatCurrency(financials.barMinimum - financials.estimatedBarRevenue)} short`}
-                </p>
-              )}
-            </div>
+      {/* Bar Settings — editable minimum and actual.
+          The shortfall is computed server-side from these two and rendered
+          as an expense line above. Click either number to edit it inline. */}
+      <div className="rounded-xl border border-border p-4 bg-card space-y-3">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm font-medium">Bar Minimum &amp; Actuals</p>
+            <p className="text-xs text-muted-foreground">
+              Track venue bar minimums. If actuals fall short, the difference shows up as an expense automatically.
+            </p>
           </div>
         </div>
-      )}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="rounded-lg border border-border bg-background/50 p-3">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+              Bar Minimum
+            </p>
+            <EditableAmountCell
+              value={financials.barMinimum ?? 0}
+              onSave={async (v) => {
+                await handleUpdateBarSettings("barMinimum", v);
+              }}
+            />
+          </div>
+          <div className="rounded-lg border border-border bg-background/50 p-3">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
+              Actual Bar Revenue
+            </p>
+            <EditableAmountCell
+              value={financials.actualBarRevenue ?? 0}
+              onSave={async (v) => {
+                await handleUpdateBarSettings("actualBarRevenue", v);
+              }}
+            />
+          </div>
+        </div>
+        {financials.barMinimum != null && financials.barMinimum > 0 && (
+          <p
+            className={`text-xs ${
+              financials.barShortfall > 0
+                ? "text-amber-400"
+                : financials.actualBarRevenue != null
+                  ? "text-green-400"
+                  : "text-muted-foreground"
+            }`}
+          >
+            {financials.barShortfall > 0
+              ? `${formatCurrency(financials.barShortfall)} short — added to expenses`
+              : financials.actualBarRevenue != null
+                ? "Minimum met"
+                : "Enter actual bar revenue to track shortfall"}
+          </p>
+        )}
+      </div>
     </div>
   );
 }

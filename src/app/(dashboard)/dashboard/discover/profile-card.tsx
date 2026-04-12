@@ -121,7 +121,13 @@ export function ProfileCard({
           {/* Rate range */}
           {hasRate && (
             <p className="mt-1.5 text-xs font-medium text-nocturn">
-              ${profile.rate_range}
+              {/* rate_range comes in as free text that usually already starts
+                  with "$" (see import-profile.ts prompt example "$500-1500").
+                  Only prefix "$" ourselves if the string doesn't already have
+                  one — otherwise we render "$$500-1500". */}
+              {typeof profile.rate_range === "string" && profile.rate_range.trim().startsWith("$")
+                ? profile.rate_range
+                : `$${profile.rate_range}`}
             </p>
           )}
 
@@ -158,6 +164,8 @@ export function ProfileCard({
         <Button
           size="icon"
           variant="ghost"
+          aria-label={isSaved ? "Unsave profile" : "Save profile"}
+          aria-pressed={isSaved}
           className={`shrink-0 h-9 w-9 ${
             isSaved
               ? "text-red-400 hover:text-red-300"

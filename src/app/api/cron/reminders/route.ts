@@ -19,6 +19,7 @@ import {
 } from "@/lib/email/templates";
 import { createAdminClient } from "@/lib/supabase/config";
 import { sendEventReminders } from "@/app/actions/event-reminders";
+import { DEFAULT_TIMEZONE } from "@/lib/utils";
 
 export async function GET(request: Request) {
   // Verify cron secret (Vercel sets this automatically)
@@ -65,11 +66,19 @@ export async function GET(request: Request) {
       .limit(500);
 
     for (const event of todayEvents ?? []) {
-      // Check if we already sent day-of hype for this event
+      // Check if we already sent day-of hype for this event.
+      //
+      // CRITICAL: audit_logs has no `event_id` column — the correct FK is
+      // `record_id` (with `table_name = 'events'`). The old query filtered
+      // on a non-existent column, which PostgREST errored out on, leaving
+      // `count` as `null`. `(count ?? 0) > 0` then evaluated `false`, so
+      // the dedup check was completely bypassed and every cron run
+      // re-spammed every ticket holder "Tonight 🔥" until the event passed.
       const { count } = await sb
         .from("audit_logs")
         .select("*", { count: "exact", head: true })
-        .eq("event_id", event.id)
+        .eq("record_id", event.id)
+        .eq("table_name", "events")
         .eq("action", "day_of_hype_sent");
 
       if ((count ?? 0) > 0) continue;
@@ -77,10 +86,14 @@ export async function GET(request: Request) {
       const venue = event.venues as unknown as { name: string; city: string } | null;
       const collective = event.collectives as unknown as { slug: string } | null;
       const meta = (event.metadata ?? {}) as Record<string, string>;
+      // Format times in the event's local timezone (not the cron host's).
+      // Without an explicit `timeZone`, Vercel's cron container renders
+      // UTC → attendees see "Doors: 12:00 AM" for a 7pm local show.
+      const eventTz = meta.timezone || DEFAULT_TIMEZONE;
       const doorsTime = event.doors_at
-        ? new Date(event.doors_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })
+        ? new Date(event.doors_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: eventTz })
         : "";
-      const showTime = new Date(event.starts_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" });
+      const showTime = new Date(event.starts_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: eventTz });
 
       // Get all ticket holders
       const { data: tickets } = await sb
@@ -157,11 +170,12 @@ export async function GET(request: Request) {
       .limit(500);
 
     for (const event of soonEvents ?? []) {
-      // Check if already sent
+      // Check if already sent — same FK fix as day-of hype above.
       const { count } = await sb
         .from("audit_logs")
         .select("*", { count: "exact", head: true })
-        .eq("event_id", event.id)
+        .eq("record_id", event.id)
+        .eq("table_name", "events")
         .eq("action", "countdown_48hr_sent");
 
       if ((count ?? 0) > 0) continue;
@@ -245,14 +259,20 @@ export async function GET(request: Request) {
 
         if (lastEvent && new Date(lastEvent.created_at) > thirtyDaysAgo) continue;
 
-        // Check if we already nudged this month
+        // Check if we already nudged this month. Old query filtered on
+        // `metadata->>collective_id` but audit_logs has no `metadata` column
+        // — the payload lives in `new_data`, and the collective id is
+        // stored as `record_id`. Same bug as day-of hype above → the dedup
+        // was bypassed, so inactive collectives received the nudge every
+        // Monday of the month instead of once.
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         const { count: nudgeCount } = await sb
           .from("audit_logs")
           .select("*", { count: "exact", head: true })
           .eq("action", "inactive_nudge_sent")
-          .gte("created_at", monthStart.toISOString())
-          .eq("metadata->>collective_id", col.id);
+          .eq("table_name", "collectives")
+          .eq("record_id", col.id)
+          .gte("created_at", monthStart.toISOString());
 
         if ((nudgeCount ?? 0) > 0) continue;
 

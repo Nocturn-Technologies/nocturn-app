@@ -189,7 +189,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   ]);
 
   const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number; sort_order: number }[] | null;
-  const artists = artistsRaw as { artist_id: string; set_time: string | null; artists: { name: string; genre: string | null } | null }[] | null;
+  const artists = artistsRaw as { artist_id: string; set_time: string | null; artists: { name: string; genre: string[] | null } | null }[] | null;
   const reactionRows = reactionRowsRaw as { emoji: string }[] | null;
   const pastEvents = pastEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string }[] | null;
   const nearbyEvents = nearbyEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string; collective_id: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string } | null }[] | null;
@@ -583,11 +583,11 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                             color: `${accentColor}cc`,
                           }}
                         >
-                          {artist.genre}
+                          {Array.isArray(artist.genre) ? artist.genre.join(" · ") : artist.genre}
                         </span>
                       )}
                       {a.set_time && (
-                        <p className="text-[11px] text-white/30 font-medium">{a.set_time}</p>
+                        <p className="text-[11px] text-white/30 font-medium">{new Date(a.set_time).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Toronto" })}</p>
                       )}
                     </div>
                   );

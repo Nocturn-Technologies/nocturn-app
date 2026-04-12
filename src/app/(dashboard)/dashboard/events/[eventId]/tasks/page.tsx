@@ -180,6 +180,7 @@ function EventTasksPageInner() {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [addingSuggestionIdx, setAddingSuggestionIdx] = useState<number | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Completion animation
   const [showCelebration, setShowCelebration] = useState(false);
@@ -210,13 +211,23 @@ function EventTasksPageInner() {
 
   async function handleCreateTask(e: React.FormEvent) {
     e.preventDefault();
+    if (!newTitle.trim()) {
+      setFormError("Task title is required");
+      return;
+    }
     setAdding(true);
-    await createEventTask({
+    setFormError(null);
+    const result = await createEventTask({
       eventId,
       title: newTitle,
       category: newCategory,
       dueDate: newDueDate || undefined,
     });
+    if (result?.error) {
+      setFormError(result.error);
+      setAdding(false);
+      return;
+    }
     setNewTitle("");
     setNewDueDate("");
     setShowNewTask(false);
@@ -288,7 +299,13 @@ function EventTasksPageInner() {
     e.preventDefault();
     if (!message.trim()) return;
     setSending(true);
-    await postEventMessage(eventId, message);
+    setFormError(null);
+    const result = await postEventMessage(eventId, message);
+    if (result?.error) {
+      setFormError(result.error);
+      setSending(false);
+      return;
+    }
     setMessage("");
     const a = await getEventActivity(eventId);
     setActivity(a);
@@ -337,6 +354,35 @@ function EventTasksPageInner() {
     });
   }
 
+  /**
+   * Pure chronological sort for category-grouped views.
+   *
+   * Inside a category card, users expect tasks to read top-down by date —
+   * "what's next, what's after that". The general `sortTasks()` ladder
+   * (done → overdue → priority → date) reorders by priority *before* date,
+   * which produces visually scrambled lists like May 21 → May 19 → May 23
+   * when priorities differ. Here we keep done at the bottom (so the live
+   * checklist isn't cluttered) but otherwise sort purely by due date.
+   */
+  function sortByDate(list: Task[]): Task[] {
+    return [...list].sort((a, b) => {
+      const aDone = a.status === "done" ? 1 : 0;
+      const bDone = b.status === "done" ? 1 : 0;
+      if (aDone !== bDone) return aDone - bDone;
+
+      const da = getDueAt(a);
+      const db = getDueAt(b);
+      if (da && db) {
+        const diff = new Date(da).getTime() - new Date(db).getTime();
+        return sortDir === "asc" ? diff : -diff;
+      }
+      // Tasks with no date sort to the end so the dated list reads cleanly.
+      if (!da && !db) return 0;
+      if (!da) return 1;
+      return -1;
+    });
+  }
+
   // Split tasks
   const opsTasks = tasks.filter(
     (t) => ((t.metadata as Record<string, unknown>)?.task_type as string) !== "content"
@@ -375,12 +421,14 @@ function EventTasksPageInner() {
 
   const filteredOps = applyFilters(opsTasks);
   const opsCategories = Object.keys(categoryConfig);
+  // Inside a category card, sort purely by date — see sortByDate() above
+  // for why the priority-aware sort produces scrambled output here.
   const opsByCategory = filterCategory
-    ? [{ category: filterCategory, tasks: sortTasks(filteredOps) }].filter((g) => g.tasks.length > 0)
+    ? [{ category: filterCategory, tasks: sortByDate(filteredOps) }].filter((g) => g.tasks.length > 0)
     : opsCategories
         .map((cat) => ({
           category: cat,
-          tasks: sortTasks(filteredOps.filter((t) => getCategory(t) === cat)),
+          tasks: sortByDate(filteredOps.filter((t) => getCategory(t) === cat)),
         }))
         .filter((g) => g.tasks.length > 0);
 
@@ -599,11 +647,17 @@ function EventTasksPageInner() {
 
           {showNewTask && (
             <form onSubmit={handleCreateTask} className="animate-scale-in rounded-lg border p-3 space-y-3">
+              {formError && (
+                <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+                  {formError}
+                </div>
+              )}
               <Input
                 placeholder="Task title..."
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 required
+                maxLength={200}
                 autoFocus
               />
               <div className="flex gap-2">
@@ -617,7 +671,7 @@ function EventTasksPageInner() {
                   ))}
                 </select>
                 <Input type="date" value={newDueDate} onChange={(e) => setNewDueDate(e.target.value)} className="flex-1" />
-                <Button type="submit" size="sm" className="min-h-[44px] bg-nocturn hover:bg-nocturn-light" disabled={adding}>
+                <Button type="submit" size="sm" className="min-h-[44px] bg-nocturn hover:bg-nocturn-light" disabled={adding || !newTitle.trim()}>
                   {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
                 </Button>
               </div>
@@ -760,12 +814,19 @@ function EventTasksPageInner() {
       {/* ═══ ACTIVITY TAB ═══ */}
       {activeTab === "feed" && (
         <div className="space-y-4">
-          <form onSubmit={handleSendMessage} className="flex gap-2">
-            <Input placeholder="Post an update..." value={message} onChange={(e) => setMessage(e.target.value)} className="flex-1" />
-            <Button type="submit" size="icon" className="bg-nocturn hover:bg-nocturn-light shrink-0" disabled={sending || !message.trim()}>
-              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            </Button>
-          </form>
+          <div className="space-y-2">
+            {formError && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+                {formError}
+              </div>
+            )}
+            <form onSubmit={handleSendMessage} className="flex gap-2">
+              <Input placeholder="Post an update..." value={message} onChange={(e) => setMessage(e.target.value)} className="flex-1" maxLength={5000} />
+              <Button type="submit" size="icon" aria-label="Send message" className="bg-nocturn hover:bg-nocturn-light shrink-0" disabled={sending || !message.trim()}>
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              </Button>
+            </form>
+          </div>
 
           {activity.length === 0 ? (
             <Card>

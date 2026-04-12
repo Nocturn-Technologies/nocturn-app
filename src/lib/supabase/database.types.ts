@@ -26,6 +26,7 @@ export type Database = {
           instagram: string | null
           metadata: Json | null
           name: string
+          phone: string | null
           photo_url: string | null
           slug: string
           soundcloud: string | null
@@ -44,6 +45,7 @@ export type Database = {
           instagram?: string | null
           metadata?: Json | null
           name: string
+          phone?: string | null
           photo_url?: string | null
           slug: string
           soundcloud?: string | null
@@ -62,6 +64,7 @@ export type Database = {
           instagram?: string | null
           metadata?: Json | null
           name?: string
+          phone?: string | null
           photo_url?: string | null
           slug?: string
           soundcloud?: string | null
@@ -1090,6 +1093,61 @@ export type Database = {
           },
         ]
       }
+      event_revenue: {
+        Row: {
+          amount: number
+          category: string
+          collective_id: string
+          created_at: string
+          description: string
+          event_id: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          category?: string
+          collective_id: string
+          created_at?: string
+          description: string
+          event_id: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category?: string
+          collective_id?: string
+          created_at?: string
+          description?: string
+          event_id?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_revenue_collective_id_fkey"
+            columns: ["collective_id"]
+            isOneToOne: false
+            referencedRelation: "collectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_revenue_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "event_dashboard"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "event_revenue_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_tasks: {
         Row: {
           assigned_to: string | null
@@ -1210,6 +1268,7 @@ export type Database = {
       }
       events: {
         Row: {
+          actual_bar_revenue: number | null
           bar_minimum: number | null
           collective_id: string
           created_at: string
@@ -1237,6 +1296,7 @@ export type Database = {
           vibe_tags: string[] | null
         }
         Insert: {
+          actual_bar_revenue?: number | null
           bar_minimum?: number | null
           collective_id: string
           created_at?: string
@@ -1264,6 +1324,7 @@ export type Database = {
           vibe_tags?: string[] | null
         }
         Update: {
+          actual_bar_revenue?: number | null
           bar_minimum?: number | null
           collective_id?: string
           created_at?: string
@@ -2293,6 +2354,7 @@ export type Database = {
       }
       rsvps: {
         Row: {
+          access_token: string
           created_at: string
           email: string | null
           event_id: string
@@ -2306,6 +2368,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          access_token?: string
           created_at?: string
           email?: string | null
           event_id: string
@@ -2319,6 +2382,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          access_token?: string
           created_at?: string
           email?: string | null
           event_id?: string
@@ -3562,3 +3626,4 @@ export const Constants = {
     },
   },
 } as const
+

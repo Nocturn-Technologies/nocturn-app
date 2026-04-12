@@ -63,7 +63,7 @@ export default function RecapPage() {
       <div className="space-y-6">
         <div className="flex items-center gap-3">
           <Link href={`/dashboard/events/${eventId}`}>
-            <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]"><ArrowLeft className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Back to event"><ArrowLeft className="h-4 w-4" /></Button>
           </Link>
           <h1 className="text-2xl font-bold font-heading">Post-Event Recap</h1>
         </div>
@@ -83,7 +83,7 @@ export default function RecapPage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
-          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]"><ArrowLeft className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Back to event"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
         <div className="flex-1">
           <h1 className="text-2xl font-bold font-heading truncate">{r.event.title}</h1>

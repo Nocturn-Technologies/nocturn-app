@@ -166,8 +166,12 @@ export async function inviteMember(
       return { error: "Failed to send invitation" };
     }
 
-    // Send invitation email (non-blocking)
-    sendInvitationEmail(collectiveId, email.toLowerCase().trim(), role, user.id);
+    // Await the invitation email — Vercel freezes the lambda the moment
+    // this action returns, so an un-awaited fetch() to Resend is a
+    // coin-flip on whether the email actually ships. `sendInvitationEmail`
+    // swallows its own errors internally, so awaiting it here is safe and
+    // guarantees delivery attempt completes before we respond.
+    await sendInvitationEmail(collectiveId, email.toLowerCase().trim(), role, user.id);
 
     return { error: null, status: "invited" as const };
   }
@@ -184,8 +188,8 @@ export async function inviteMember(
     return { error: "Failed to send invitation" };
   }
 
-  // Send invitation email (non-blocking)
-  sendInvitationEmail(collectiveId, email.toLowerCase().trim(), role, user.id);
+  // Await invitation email — see note above on lambda freeze behavior.
+  await sendInvitationEmail(collectiveId, email.toLowerCase().trim(), role, user.id);
 
   return { error: null, status: "invited" as const };
   } catch (err) {

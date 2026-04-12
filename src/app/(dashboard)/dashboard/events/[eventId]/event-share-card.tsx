@@ -3,6 +3,12 @@
 import { ShareCardGenerator } from "@/components/share-card-generator";
 import type { ShareCardEvent } from "@/lib/generate-share-card";
 
-export function EventShareCard({ event }: { event: ShareCardEvent }) {
-  return <ShareCardGenerator event={event} variant="button" />;
+export function EventShareCard({
+  event,
+  variant = "button",
+}: {
+  event: ShareCardEvent;
+  variant?: "button" | "tile";
+}) {
+  return <ShareCardGenerator event={event} variant={variant} />;
 }

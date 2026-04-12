@@ -237,6 +237,7 @@ export default function ChatPage() {
   const [receivedInquiries, setReceivedInquiries] = useState<InquiryItem[]>([]);
   const [inquiriesLoaded, setInquiriesLoaded] = useState(false);
   const [processingInquiryId, setProcessingInquiryId] = useState<string | null>(null);
+  const [inquiryError, setInquiryError] = useState<string | null>(null);
 
   // Search
   const [searchQuery, setSearchQuery] = useState("");
@@ -434,10 +435,11 @@ export default function ChatPage() {
 
   async function handleAcceptInquiry(inquiryId: string) {
     setProcessingInquiryId(inquiryId);
+    setInquiryError(null);
     const result = await acceptInquiry(inquiryId);
     setProcessingInquiryId(null);
     if (result.error) {
-      alert(result.error);
+      setInquiryError(result.error);
       return;
     }
     setReceivedInquiries((prev) =>
@@ -450,10 +452,11 @@ export default function ChatPage() {
 
   async function handleRejectInquiry(inquiryId: string) {
     setProcessingInquiryId(inquiryId);
+    setInquiryError(null);
     const result = await rejectInquiry(inquiryId);
     setProcessingInquiryId(null);
     if (result.error) {
-      alert(result.error);
+      setInquiryError(result.error);
       return;
     }
     setReceivedInquiries((prev) =>
@@ -732,6 +735,18 @@ export default function ChatPage() {
       {/* ── REQUESTS TAB ─────────────────────────────────────────────── */}
       {activeTab === "requests" && (
         <div className="space-y-3">
+          {inquiryError && (
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex items-start justify-between gap-2">
+              <span>{inquiryError}</span>
+              <button
+                onClick={() => setInquiryError(null)}
+                className="text-destructive/70 hover:text-destructive shrink-0"
+                aria-label="Dismiss error"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           {!inquiriesLoaded ? (
             <div className="flex justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-nocturn" />

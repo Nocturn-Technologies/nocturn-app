@@ -77,9 +77,18 @@ export function ExternalEventsSection({
           </div>
         )}
         {initialEvents.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-6 text-center">
-            Promote events from any platform. Paste a link to get started.
-          </p>
+          <div className="flex flex-col items-center gap-3 py-8">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10">
+              <ExternalLink className="h-6 w-6 text-nocturn" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium">No external events yet</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-[280px]">
+                Promote events hosted on Eventbrite, Posh, RA, or any other platform. Paste a link to track clicks and share with your audience.
+              </p>
+            </div>
+            <AddExternalEventDialog onAdded={() => router.refresh()} />
+          </div>
         ) : (
           <div className="space-y-2">
             {initialEvents.map((event) => (

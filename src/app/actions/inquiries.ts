@@ -36,30 +36,49 @@ export async function getSentInquiries(): Promise<InquiryItem[]> {
     }
     if (!data || data.length === 0) return [];
 
-    // Enrich with profile display names
-    const enriched: InquiryItem[] = [];
-    for (const inq of data) {
-      const { data: profile } = await sb.from("marketplace_profiles")
-        .select("display_name, user_id")
-        .eq("id", inq.to_profile_id)
-        .maybeSingle();
+    // Batch-enrich instead of N+1. Previously this ran 2*N sequential queries
+    // per page load — for the 50-row cap that's up to 100 round-trips (~2-5s
+    // on a cold lambda). Two indexed .in() lookups is ~2 round-trips.
+    const profileIds = Array.from(new Set(data.map((r) => r.to_profile_id).filter(Boolean)));
 
-      let contactName = profile?.display_name || "Unknown";
-      let contactEmail: string | null = null;
+    type ProfileRow = { id: string; display_name: string | null; user_id: string | null };
+    type UserRow = { id: string; full_name: string | null; email: string | null };
 
-      if (profile?.user_id) {
-        const { data: u } = await sb
-          .from("users")
-          .select("full_name, email")
-          .eq("id", profile.user_id)
-          .maybeSingle();
-        if (u) {
-          contactName = u.full_name || contactName;
-          contactEmail = u.email;
-        }
+    const profileMap = new Map<string, ProfileRow>();
+    if (profileIds.length > 0) {
+      const { data: profiles } = await sb.from("marketplace_profiles")
+        .select("id, display_name, user_id")
+        .in("id", profileIds);
+      for (const p of (profiles ?? []) as ProfileRow[]) {
+        profileMap.set(p.id, p);
       }
+    }
 
-      enriched.push({
+    const userIds = Array.from(
+      new Set(
+        Array.from(profileMap.values())
+          .map((p) => p.user_id)
+          .filter((v): v is string => !!v)
+      )
+    );
+
+    const userMap = new Map<string, UserRow>();
+    if (userIds.length > 0) {
+      const { data: users } = await sb
+        .from("users")
+        .select("id, full_name, email")
+        .in("id", userIds);
+      for (const u of (users ?? []) as UserRow[]) {
+        userMap.set(u.id, u);
+      }
+    }
+
+    const enriched: InquiryItem[] = data.map((inq) => {
+      const profile = profileMap.get(inq.to_profile_id);
+      const profileUser = profile?.user_id ? userMap.get(profile.user_id) : null;
+      const contactName = profileUser?.full_name || profile?.display_name || "Unknown";
+      const contactEmail = profileUser?.email ?? null;
+      return {
         id: inq.id,
         message: inq.message,
         inquiry_type: inq.inquiry_type,
@@ -68,8 +87,8 @@ export async function getSentInquiries(): Promise<InquiryItem[]> {
         contact_name: contactName,
         contact_email: contactEmail,
         profile_display_name: profile?.display_name || null,
-      });
-    }
+      };
+    });
 
     return enriched;
   } catch (err) {
@@ -107,15 +126,24 @@ export async function getReceivedInquiries(): Promise<InquiryItem[]> {
     }
     if (!data || data.length === 0) return [];
 
-    const enriched: InquiryItem[] = [];
-    for (const inq of data) {
-      const { data: sender } = await sb
-        .from("users")
-        .select("full_name, email")
-        .eq("id", inq.from_user_id)
-        .maybeSingle();
+    // Batch-enrich instead of N+1 (same fix as getSentInquiries).
+    const senderIds = Array.from(new Set(data.map((r) => r.from_user_id).filter(Boolean)));
 
-      enriched.push({
+    type UserRow = { id: string; full_name: string | null; email: string | null };
+    const senderMap = new Map<string, UserRow>();
+    if (senderIds.length > 0) {
+      const { data: senders } = await sb
+        .from("users")
+        .select("id, full_name, email")
+        .in("id", senderIds);
+      for (const u of (senders ?? []) as UserRow[]) {
+        senderMap.set(u.id, u);
+      }
+    }
+
+    const enriched: InquiryItem[] = data.map((inq) => {
+      const sender = senderMap.get(inq.from_user_id);
+      return {
         id: inq.id,
         message: inq.message,
         inquiry_type: inq.inquiry_type,
@@ -124,8 +152,8 @@ export async function getReceivedInquiries(): Promise<InquiryItem[]> {
         contact_name: sender?.full_name || "Unknown",
         contact_email: sender?.email || null,
         profile_display_name: null,
-      });
-    }
+      };
+    });
 
     return enriched;
   } catch (err) {

@@ -278,6 +278,7 @@ export default function LiveEventPage() {
             variant="ghost"
             size="icon"
             className="min-h-[44px] min-w-[44px]"
+            aria-label="Back to event"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>

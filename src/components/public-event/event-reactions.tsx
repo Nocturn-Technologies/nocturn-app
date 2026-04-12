@@ -54,28 +54,32 @@ export function EventReactions({ eventId, initialCounts }: EventReactionsProps) 
     async (emoji: string) => {
       if (reacted.has(emoji)) return; // already reacted
 
-      const fp = getFingerprint();
+      try {
+        const fp = getFingerprint();
 
-      // Optimistic update
-      setCounts((prev) => ({ ...prev, [emoji]: (prev[emoji] || 0) + 1 }));
-      setReacted((prev) => new Set(prev).add(emoji));
-      setAnimating(emoji);
-      setTimeout(() => setAnimating(null), 600);
+        // Optimistic update
+        setCounts((prev) => ({ ...prev, [emoji]: (prev[emoji] || 0) + 1 }));
+        setReacted((prev) => new Set(prev).add(emoji));
+        setAnimating(emoji);
+        setTimeout(() => setAnimating(null), 600);
 
-      const { error } = await addReaction({
-        eventId,
-        emoji,
-        fingerprint: fp,
-      });
-
-      if (error) {
-        // Revert on failure
-        setCounts((prev) => ({ ...prev, [emoji]: Math.max(0, (prev[emoji] || 0) - 1) }));
-        setReacted((prev) => {
-          const next = new Set(prev);
-          next.delete(emoji);
-          return next;
+        const { error } = await addReaction({
+          eventId,
+          emoji,
+          fingerprint: fp,
         });
+
+        if (error) {
+          // Revert on failure
+          setCounts((prev) => ({ ...prev, [emoji]: Math.max(0, (prev[emoji] || 0) - 1) }));
+          setReacted((prev) => {
+            const next = new Set(prev);
+            next.delete(emoji);
+            return next;
+          });
+        }
+      } catch (err) {
+        console.error("[EventReactions] handleReaction failed:", err);
       }
     },
     [eventId, reacted]

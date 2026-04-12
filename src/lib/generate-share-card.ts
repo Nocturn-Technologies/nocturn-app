@@ -68,6 +68,18 @@ function roundRect(
 }
 
 export async function generateShareCard(event: ShareCardEvent): Promise<Blob> {
+  // Wrap entire generation in a timeout to prevent infinite hangs
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    return await _generateShareCardInner(event, controller.signal);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function _generateShareCardInner(event: ShareCardEvent, signal: AbortSignal): Promise<Blob> {
   const canvas = new OffscreenCanvas(CARD_W, CARD_H);
   const ctx = canvas.getContext("2d")!;
 
@@ -91,7 +103,7 @@ export async function generateShareCard(event: ShareCardEvent): Promise<Blob> {
 
   if (event.flyerUrl && event.flyerUrl.startsWith("https://")) {
     try {
-      const resp = await fetch(event.flyerUrl);
+      const resp = await fetch(event.flyerUrl, { signal });
       if (!resp.ok) throw new Error(`Flyer fetch failed: ${resp.status}`);
       const blob = await resp.blob();
       const bitmap = await createImageBitmap(blob);

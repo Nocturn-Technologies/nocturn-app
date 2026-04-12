@@ -49,23 +49,45 @@ export async function sendEventReminders() {
       continue;
     }
 
-    // Get all ticket holder emails
-    const { data: tickets, error: ticketsError } = await sb
-      .from("tickets")
-      .select("metadata")
-      .eq("event_id", event.id)
-      .in("status", ["paid", "checked_in"]);
+    // Get all ticket holder emails AND confirmed RSVP emails.
+    // Previously this only pulled from `tickets` — free RSVP-only events
+    // (hosts create these via the quick-event onboarding flow) would never
+    // trigger reminders because their attendees live in the `rsvps` table.
+    // Now we union both sources so "tomorrow night" reminders reach
+    // everyone who signaled they'd show up.
+    const [{ data: tickets, error: ticketsError }, { data: rsvps, error: rsvpsError }] = await Promise.all([
+      sb
+        .from("tickets")
+        .select("metadata")
+        .eq("event_id", event.id)
+        .in("status", ["paid", "checked_in"]),
+      sb
+        .from("rsvps")
+        .select("email")
+        .eq("event_id", event.id)
+        .in("status", ["going", "confirmed", "attending"]),
+    ]);
 
     if (ticketsError) {
       console.error(`[sendEventReminders] tickets query error for event ${event.id}:`, ticketsError.message);
       continue;
     }
+    if (rsvpsError) {
+      // Non-fatal — log and continue with ticket-holder emails only.
+      console.error(`[sendEventReminders] rsvps query error for event ${event.id}:`, rsvpsError.message);
+    }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const emails = new Set<string>();
     for (const ticket of tickets ?? []) {
       const ticketMeta = ticket.metadata as Record<string, unknown>;
       const email = (ticketMeta?.email as string) || (ticketMeta?.customer_email as string) || (ticketMeta?.buyer_email as string);
-      if (email) emails.add(email.toLowerCase().trim());
+      if (email && emailRegex.test(email)) emails.add(email.toLowerCase().trim());
+    }
+    for (const rsvp of rsvps ?? []) {
+      if (rsvp.email && emailRegex.test(rsvp.email)) {
+        emails.add(rsvp.email.toLowerCase().trim());
+      }
     }
 
     if (emails.size === 0) continue;

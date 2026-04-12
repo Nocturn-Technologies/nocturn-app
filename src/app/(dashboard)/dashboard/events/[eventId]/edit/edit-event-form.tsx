@@ -144,7 +144,7 @@ export function EditEventForm({ event }: { event: EventData }) {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${event.id}`}>
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Back to event">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -386,6 +386,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                   size="icon"
                   className="h-7 w-7 text-destructive hover:text-destructive"
                   onClick={() => removeTier(index)}
+                  aria-label={`Remove tier ${index + 1}`}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>

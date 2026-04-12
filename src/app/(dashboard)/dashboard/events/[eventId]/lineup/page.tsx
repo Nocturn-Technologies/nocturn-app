@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { addArtistToEvent, updateBookingStatus } from "@/app/actions/artists";
+import {
+  addArtistToEvent,
+  createArtistAndAddToEvent,
+  updateBookingStatus,
+} from "@/app/actions/artists";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,12 +63,21 @@ export default function LineupPage() {
   const [changingStatusId, setChangingStatusId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Tab: pick existing vs create new artist on the fly
+  const [mode, setMode] = useState<"existing" | "new">("existing");
+
   // Add to lineup form
   const [selectedArtistId, setSelectedArtistId] = useState("");
   const [fee, setFee] = useState("");
   const [setTime, setSetTime] = useState("");
   const [setDuration, setSetDuration] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Inline create-artist fields
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [sendInvite, setSendInvite] = useState(true);
 
   useEffect(() => {
     loadData();
@@ -119,14 +132,50 @@ export default function LineupPage() {
       return;
     }
 
+    resetAddForm();
+    loadData();
+  }
+
+  async function handleCreateAndBook(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError(null);
+
+    const result = await createArtistAndAddToEvent({
+      eventId,
+      name: newName,
+      email: newEmail || null,
+      phone: newPhone || null,
+      fee: fee ? parseFloat(fee) : null,
+      setTime: setTime || null,
+      setDuration: setDuration ? parseInt(setDuration) : null,
+      notes: notes || null,
+      sendInvite: sendInvite && !!newEmail,
+    });
+
+    if (result.error) {
+      setError(result.error);
+      setSaving(false);
+      return;
+    }
+
+    resetAddForm();
+    loadData();
+  }
+
+  function resetAddForm() {
     setSelectedArtistId("");
     setFee("");
     setSetTime("");
     setSetDuration("");
     setNotes("");
+    setNewName("");
+    setNewEmail("");
+    setNewPhone("");
+    setSendInvite(true);
+    setMode("existing");
     setShowAdd(false);
     setSaving(false);
-    loadData();
   }
 
   async function handleStatusChange(eventArtistId: string, status: "pending" | "confirmed" | "declined" | "cancelled") {
@@ -189,7 +238,7 @@ export default function LineupPage() {
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
-          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Back to event">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -220,39 +269,162 @@ export default function LineupPage() {
           <CardHeader>
             <CardTitle className="text-base">Book an Artist</CardTitle>
             <CardDescription>
-              {availableArtists.length === 0
-                ? "No artists available. Add artists to your database first."
-                : "Select an artist and set their booking details"}
+              {mode === "existing"
+                ? "Pick from your roster, or create a new artist on the fly."
+                : "Create a new artist and book them in one step."}
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            {availableArtists.length === 0 ? (
-              <Link href="/dashboard/artists">
-                <Button variant="outline" className="w-full">
-                  Go to Artist Database
-                </Button>
-              </Link>
+          <CardContent className="space-y-4">
+            {/* Mode toggle */}
+            <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted/50 p-1 text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => setMode("existing")}
+                className={`rounded-md py-2 transition-colors ${
+                  mode === "existing"
+                    ? "bg-nocturn text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                From roster
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode("new")}
+                className={`rounded-md py-2 transition-colors ${
+                  mode === "new"
+                    ? "bg-nocturn text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Create new
+              </button>
+            </div>
+
+            {mode === "existing" ? (
+              availableArtists.length === 0 ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    No artists in your roster yet. Create one below or visit the artist database.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="flex-1"
+                      onClick={() => setMode("new")}
+                    >
+                      Create new artist
+                    </Button>
+                    <Link href="/dashboard/artists" className="flex-1">
+                      <Button variant="ghost" className="w-full">
+                        Open database
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <form onSubmit={handleAddToLineup} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Artist</Label>
+                    <select
+                      value={selectedArtistId}
+                      onChange={(e) => {
+                        setSelectedArtistId(e.target.value);
+                        const a = allArtists.find((x) => x.id === e.target.value);
+                        if (a?.default_fee) setFee(a.default_fee.toString());
+                      }}
+                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      required
+                    >
+                      <option value="">Select artist...</option>
+                      {availableArtists.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.name} {a.genre?.length ? `(${a.genre.join(", ")})` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-2">
+                      <Label>Fee ($)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="500"
+                        value={fee}
+                        onChange={(e) => setFee(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Set time</Label>
+                      <Input
+                        type="time"
+                        value={setTime}
+                        onChange={(e) => setSetTime(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Duration (min)</Label>
+                      <Input
+                        type="number"
+                        min="15"
+                        step="15"
+                        placeholder="60"
+                        value={setDuration}
+                        onChange={(e) => setSetDuration(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Notes (optional)</Label>
+                    <Input
+                      placeholder="Special requests, equipment needs, etc."
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="submit" className="bg-nocturn hover:bg-nocturn-light" disabled={saving || !selectedArtistId}>
+                      {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Booking...</> : "Book Artist"}
+                    </Button>
+                    <Button type="button" variant="ghost" onClick={resetAddForm}>
+                      Cancel
+                    </Button>
+                  </div>
+                </form>
+              )
             ) : (
-              <form onSubmit={handleAddToLineup} className="space-y-4">
+              <form onSubmit={handleCreateAndBook} className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Artist</Label>
-                  <select
-                    value={selectedArtistId}
-                    onChange={(e) => {
-                      setSelectedArtistId(e.target.value);
-                      const a = allArtists.find((x) => x.id === e.target.value);
-                      if (a?.default_fee) setFee(a.default_fee.toString());
-                    }}
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  <Label>Artist name *</Label>
+                  <Input
+                    placeholder="Floorplan"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
                     required
-                  >
-                    <option value="">Select artist...</option>
-                    {availableArtists.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} {a.genre?.length ? `(${a.genre.join(", ")})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      placeholder="artist@example.com"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Phone</Label>
+                    <Input
+                      type="tel"
+                      placeholder="+1 555 555 5555"
+                      value={newPhone}
+                      onChange={(e) => setNewPhone(e.target.value)}
+                    />
+                  </div>
                 </div>
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div className="space-y-2">
@@ -294,11 +466,31 @@ export default function LineupPage() {
                     onChange={(e) => setNotes(e.target.value)}
                   />
                 </div>
+                {newEmail && (
+                  <label className="flex items-start gap-2 rounded-md border border-border bg-card/50 p-3 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={sendInvite}
+                      onChange={(e) => setSendInvite(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 accent-nocturn"
+                    />
+                    <span>
+                      <span className="font-medium text-foreground">Send magic-link invite</span>
+                      <span className="block text-muted-foreground">
+                        Email the artist a sign-in link so they can claim their profile.
+                      </span>
+                    </span>
+                  </label>
+                )}
                 <div className="flex gap-2">
-                  <Button type="submit" className="bg-nocturn hover:bg-nocturn-light" disabled={saving || !selectedArtistId}>
-                    {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Booking...</> : "Book Artist"}
+                  <Button
+                    type="submit"
+                    className="bg-nocturn hover:bg-nocturn-light"
+                    disabled={saving || !newName.trim()}
+                  >
+                    {saving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Creating...</> : "Create & book"}
                   </Button>
-                  <Button type="button" variant="ghost" onClick={() => setShowAdd(false)}>
+                  <Button type="button" variant="ghost" onClick={resetAddForm}>
                     Cancel
                   </Button>
                 </div>

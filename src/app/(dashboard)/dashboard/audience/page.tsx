@@ -114,6 +114,7 @@ export default function AudiencePage() {
         collectiveId={collectiveId}
         contactType="fan"
         onContactClick={(id) => setSelectedContactId(id)}
+        onImportClick={() => setImportOpen(true)}
       />
 
       {/* Import sheet */}

@@ -14,6 +14,7 @@ export default function VenueMePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [venueId, setVenueId] = useState<string | null>(null);
 
   // Form fields
@@ -77,11 +78,23 @@ export default function VenueMePage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+
+    // Client-side validation: name is required
+    if (!name.trim()) {
+      setError("Venue name is required");
+      return;
+    }
+
     setSaving(true);
     setSaved(false);
+    setError(null);
 
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    if (!user) {
+      setError("You must be logged in to save a venue");
+      setSaving(false);
+      return;
+    }
 
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
     const metadata = {
@@ -94,7 +107,7 @@ export default function VenueMePage() {
     };
 
     if (venueId) {
-      await supabase
+      const { error: updateError } = await supabase
         .from("venues")
         .update({
           name,
@@ -105,6 +118,13 @@ export default function VenueMePage() {
           metadata,
         })
         .eq("id", venueId);
+
+      if (updateError) {
+        console.error("[venue] Update failed:", updateError.message);
+        setError(updateError.message || "Failed to update venue. Please try again.");
+        setSaving(false);
+        return;
+      }
     } else {
       const { data: newVenue, error: insertError } = await supabase
         .from("venues")
@@ -122,6 +142,7 @@ export default function VenueMePage() {
 
       if (insertError) {
         console.error("[venue] Insert failed:", insertError.message);
+        setError(insertError.message || "Failed to list venue. Please try again.");
         setSaving(false);
         return;
       }
@@ -129,10 +150,17 @@ export default function VenueMePage() {
       if (newVenue) {
         setVenueId(newVenue.id);
         // Link venue to user profile
-        await supabase
+        const { error: linkError } = await supabase
           .from("users")
           .update({ metadata: { venue_id: newVenue.id } })
           .eq("id", user.id);
+        if (linkError) {
+          console.error("[venue] Link failed:", linkError.message);
+          // Non-fatal — venue was created successfully, just warn.
+          setError("Venue created, but failed to link to your account. Please refresh.");
+          setSaving(false);
+          return;
+        }
       }
     }
 
@@ -180,6 +208,11 @@ export default function VenueMePage() {
       <Card>
         <CardContent className="p-6">
           <form onSubmit={handleSave} className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Venue Name *</Label>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CODA Toronto" required maxLength={200} />
@@ -239,7 +272,7 @@ export default function VenueMePage() {
               </div>
             </div>
 
-            <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light" disabled={saving}>
+            <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light" disabled={saving || !name.trim()}>
               {saving ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
               ) : saved ? (

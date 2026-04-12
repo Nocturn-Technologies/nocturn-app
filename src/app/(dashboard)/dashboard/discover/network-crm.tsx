@@ -360,6 +360,8 @@ function ContactCard({
           <Button
             size="icon"
             variant="ghost"
+            aria-label={isSaved ? "Unsave contact" : "Save contact"}
+            aria-pressed={isSaved}
             className={`shrink-0 h-9 w-9 ${
               isSaved
                 ? "text-rose-400 hover:text-rose-300"
@@ -448,25 +450,39 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
   // ── Merge & dedupe contacts from both sources ─────────────────────────────
 
   const contacts = useMemo(() => {
-    const emailMap = new Map<string, IndustryContact>();
-    const idSet = new Set<string>();
+    // Dedupe across two sources (marketplace network + imported contacts
+    // table). Prefer EMAIL as the dedup key — two DJs can share a stage name
+    // ("Sam"), but they can't share an email. Fall back to a normalized name
+    // key only when no email is available on either side.
+    const emailKey = (c: IndustryContact): string | null =>
+      c.email ? c.email.toLowerCase().trim() : null;
+    const nameKey = (c: IndustryContact): string =>
+      c.name.toLowerCase().replace(/\s+/g, " ").trim();
+
+    const seenEmails = new Set<string>();
+    const seenNames = new Set<string>();
+    const seenIds = new Set<string>();
     const result: IndustryContact[] = [];
 
-    // Network contacts first (higher priority — they have richer data)
-    for (const c of networkContacts) {
-      result.push(c);
-      idSet.add(c.id);
-      // Track emails for deduplication (use name as proxy since IndustryContact lacks email)
-      const key = c.name.toLowerCase().trim();
-      if (key) emailMap.set(key, c);
-    }
+    const tryAdd = (c: IndustryContact) => {
+      if (seenIds.has(c.id)) return;
+      const ek = emailKey(c);
+      if (ek && seenEmails.has(ek)) return;
+      // Only fall back to name dedup when BOTH sides lack an email —
+      // otherwise we'd drop distinct people who happen to share a first name.
+      const nk = nameKey(c);
+      if (!ek && nk && seenNames.has(nk)) return;
 
-    // Then imported contacts — skip duplicates by name match
-    for (const c of importedContacts) {
-      const key = c.name.toLowerCase().trim();
-      if (emailMap.has(key) || idSet.has(c.id)) continue;
+      seenIds.add(c.id);
+      if (ek) seenEmails.add(ek);
+      if (!ek && nk) seenNames.add(nk);
       result.push(c);
-    }
+    };
+
+    // Network contacts first (richer data).
+    for (const c of networkContacts) tryAdd(c);
+    // Then imported contacts — will be skipped if duplicate.
+    for (const c of importedContacts) tryAdd(c);
 
     return result;
   }, [networkContacts, importedContacts]);
@@ -515,18 +531,15 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
         setSavedIds(saved);
       }
 
-      // Merge in imported contacts (non-error)
+      // Merge in imported contacts (non-error). We intentionally do NOT bump
+      // stats.totalContacts from here — the merged `contacts` memo below
+      // deduplicates across sources, and the stats strip is rewritten from
+      // that memo in a separate effect. Previously this added the raw
+      // imported count, overstating total when the same person showed up in
+      // both lists.
       if (!contactsResult.error && contactsResult.contacts.length > 0) {
         const converted = contactsResult.contacts.map(contactToIndustry);
         setImportedContacts(converted);
-
-        // Update stats to include imported contacts
-        if (!networkResult.error) {
-          setStats((prev) => ({
-            ...prev,
-            totalContacts: prev.totalContacts + contactsResult.contacts.length,
-          }));
-        }
       }
     } catch {
       setError("Failed to load your network. Please try again.");
@@ -538,6 +551,14 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Keep stats.totalContacts in sync with the deduplicated merge (otherwise
+  // the "Total Contacts" card over-counts people who are in both sources).
+  useEffect(() => {
+    setStats((prev) =>
+      prev.totalContacts === contacts.length ? prev : { ...prev, totalContacts: contacts.length }
+    );
+  }, [contacts.length]);
 
   // ── Save / unsave ──────────────────────────────────────────────────────────
 
@@ -799,6 +820,7 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
             className="min-h-[44px] min-w-[44px]"
             onClick={openQuickAdd}
             title="Quick add contact"
+            aria-label="Quick add contact"
           >
             <Plus className="h-4 w-4" />
           </Button>

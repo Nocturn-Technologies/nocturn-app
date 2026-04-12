@@ -23,6 +23,7 @@ export async function createArtist(formData: {
   defaultFee: number | null;
   location?: string | null;
   website?: string | null;
+  phone?: string | null;
 }) {
   try {
   // Name: trim, cap 200, require non-empty
@@ -70,7 +71,17 @@ export async function createArtist(formData: {
     if (typeof formData.bookingEmail !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.bookingEmail)) {
       return { error: "Invalid booking email", artist: null };
     }
-    sanitizedEmail = formData.bookingEmail;
+    sanitizedEmail = formData.bookingEmail.toLowerCase().trim();
+  }
+
+  // Phone: cap 30 chars, allow digits/spaces/+/-/()
+  let sanitizedPhone: string | null = null;
+  if (formData.phone != null && formData.phone !== "") {
+    if (typeof formData.phone !== "string") return { error: "Invalid phone", artist: null };
+    const trimmedPhone = formData.phone.trim();
+    if (trimmedPhone.length > 30) return { error: "Phone must be under 30 characters", artist: null };
+    if (!/^[\d\s+\-()]+$/.test(trimmedPhone)) return { error: "Phone can only contain digits, spaces, +, -, ()", artist: null };
+    sanitizedPhone = trimmedPhone;
   }
 
   // Default fee: finite, 0 to 1_000_000
@@ -115,6 +126,7 @@ export async function createArtist(formData: {
       soundcloud: sc.value,
       spotify: sp.value,
       booking_email: sanitizedEmail,
+      phone: sanitizedPhone,
       default_fee: sanitizedFee,
       metadata: metadata as unknown as Json,
     })
@@ -166,12 +178,18 @@ export async function addArtistToEvent(formData: {
     sanitizedNotes = formData.notes;
   }
 
-  // Validate setTime: HH:MM (24h) or ISO date string
+  // Validate setTime: HH:MM (24h) or ISO date string. We accept both forms
+  // and resolve to a real timestamptz before insert (the column is timestamp
+  // with time zone, not a clock time — so a bare "22:00" would otherwise
+  // fail at insert time).
+  const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
+  let setTimeIsHhmm = false;
   if (formData.setTime != null && formData.setTime !== "") {
     if (typeof formData.setTime !== "string") return { error: "Invalid set time" };
-    const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
     const isoOk = !Number.isNaN(Date.parse(formData.setTime));
-    if (!hhmm.test(formData.setTime) && !isoOk) {
+    if (hhmm.test(formData.setTime)) {
+      setTimeIsHhmm = true;
+    } else if (!isoOk) {
       return { error: "Invalid set time" };
     }
   }
@@ -184,10 +202,11 @@ export async function addArtistToEvent(formData: {
 
   const admin = createAdminClient();
 
-  // Verify user owns this event via collective membership
+  // Verify user owns this event via collective membership. Also pull
+  // starts_at so we can resolve an HH:MM set time against the event date.
   const { data: event, error: eventError } = await admin
     .from("events")
-    .select("collective_id")
+    .select("collective_id, starts_at")
     .eq("id", formData.eventId)
     .maybeSingle();
   if (eventError) {
@@ -195,6 +214,25 @@ export async function addArtistToEvent(formData: {
     return { error: "Something went wrong" };
   }
   if (!event) return { error: "Event not found" };
+
+  // Resolve HH:MM into a full ISO timestamp anchored to the event's date.
+  // If the set time is earlier than the event start (e.g. event starts 22:00,
+  // artist plays at 02:00), assume it rolls over to the next day.
+  let resolvedSetTime: string | null = null;
+  if (formData.setTime != null && formData.setTime !== "") {
+    if (setTimeIsHhmm && event.starts_at) {
+      const [hh, mm] = formData.setTime.split(":").map(Number);
+      const eventStart = new Date(event.starts_at);
+      const candidate = new Date(eventStart);
+      candidate.setHours(hh, mm, 0, 0);
+      if (candidate.getTime() < eventStart.getTime() - 60 * 60 * 1000) {
+        candidate.setDate(candidate.getDate() + 1);
+      }
+      resolvedSetTime = candidate.toISOString();
+    } else {
+      resolvedSetTime = formData.setTime;
+    }
+  }
 
   const { count: memberCount } = await admin
     .from("collective_members")
@@ -208,7 +246,7 @@ export async function addArtistToEvent(formData: {
     event_id: formData.eventId,
     artist_id: formData.artistId,
     fee: formData.fee,
-    set_time: formData.setTime,
+    set_time: resolvedSetTime,
     set_duration: formData.setDuration,
     status: "pending",
     booked_by: user.id,
@@ -313,5 +351,81 @@ export async function updateBookingStatus(formData: {
   } catch (err) {
     console.error("[updateBookingStatus] Unexpected error:", err);
     return { error: "Something went wrong" };
+  }
+}
+
+/**
+ * Creates a brand-new artist and immediately books them onto an event in a
+ * single round-trip. If an email is supplied and `sendInvite` is true, also
+ * fires off a Supabase magic-link invite (non-blocking — the booking succeeds
+ * even if the invite email fails).
+ */
+export async function createArtistAndAddToEvent(formData: {
+  eventId: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  fee: number | null;
+  setTime: string | null;
+  setDuration: number | null;
+  notes: string | null;
+  sendInvite: boolean;
+}) {
+  try {
+    if (!formData?.eventId?.trim()) return { error: "Event ID is required", artistId: null };
+
+    // Reuse createArtist's validation by calling it directly. It also handles
+    // collective ownership / auth via createServerClient under the hood.
+    const created = await createArtist({
+      name: formData.name,
+      bio: null,
+      genre: [],
+      instagram: null,
+      soundcloud: null,
+      spotify: null,
+      bookingEmail: formData.email,
+      defaultFee: formData.fee,
+      phone: formData.phone,
+    });
+
+    if (created.error || !created.artist) {
+      return { error: created.error ?? "Failed to create artist", artistId: null };
+    }
+
+    // Book onto the event using the existing pathway (which handles auth,
+    // ownership, set-time resolution, chat sync, contact upsert, etc).
+    const booked = await addArtistToEvent({
+      eventId: formData.eventId,
+      artistId: created.artist.id,
+      fee: formData.fee,
+      setTime: formData.setTime,
+      setDuration: formData.setDuration,
+      notes: formData.notes,
+    });
+
+    if (booked.error) {
+      return { error: booked.error, artistId: created.artist.id };
+    }
+
+    // Optional magic-link invite. Best-effort — never block the booking on
+    // an invite email failure (the artist still exists in the DB and is
+    // booked on the event).
+    if (formData.sendInvite && formData.email) {
+      try {
+        const admin = createAdminClient();
+        const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.trynocturn.com";
+        await admin.auth.admin.inviteUserByEmail(formData.email.toLowerCase().trim(), {
+          redirectTo: `${appUrl}/dashboard/artists/me`,
+          data: { full_name: formData.name, user_type: "artist", artist_id: created.artist.id },
+        });
+      } catch (inviteErr) {
+        console.error("[createArtistAndAddToEvent] invite failed (non-blocking):", inviteErr);
+      }
+    }
+
+    return { error: null, artistId: created.artist.id };
+  } catch (err) {
+    console.error("[createArtistAndAddToEvent] Unexpected error:", err);
+    return { error: "Something went wrong", artistId: null };
   }
 }

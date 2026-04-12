@@ -243,7 +243,7 @@ export default async function FinancePage() {
             message: `${event.title} settlement hasn\u2019t been completed yet.`,
             cta: {
               label: "Settle Now",
-              href: `/dashboard/finance/${event.id}`,
+              href: `/dashboard/events/${event.id}/financials`,
             },
           });
         });
@@ -261,7 +261,7 @@ export default async function FinancePage() {
               message: `${event?.title ?? "An event"} settlement is in draft \u2014 review and approve it.`,
               cta: {
                 label: "Review",
-                href: `/dashboard/finance/${s.event_id}`,
+                href: `/dashboard/events/${s.event_id}/financials`,
               },
             });
           });
@@ -332,7 +332,7 @@ export default async function FinancePage() {
               return (
                 <Link
                   key={s.id}
-                  href={`/dashboard/finance/${s.event_id}`}
+                  href={`/dashboard/events/${s.event_id}/financials`}
                 >
                   <Card className="rounded-2xl transition-all duration-200 hover:border-nocturn/30 active:scale-[0.98]">
                     <CardContent className="p-4">
@@ -468,7 +468,7 @@ export default async function FinancePage() {
                   </p>
                 </div>
                 <Link
-                  href={`/dashboard/finance/${event.id}`}
+                  href={`/dashboard/events/${event.id}/financials`}
                   className="shrink-0"
                 >
                   <Button

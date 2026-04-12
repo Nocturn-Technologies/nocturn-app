@@ -385,6 +385,8 @@ export async function getRevenueForecast(): Promise<{
     );
 
     const eventDate = new Date(event.starts_at);
+    // TODO: Add published_at column to events table for accurate forecasting.
+    // Using created_at as proxy — inaccurate for events that sit in draft.
     const publishDate = new Date(event.created_at);
     const daysUntilEvent = Math.max(
       1,
@@ -404,17 +406,22 @@ export async function getRevenueForecast(): Promise<{
     const projectedAdditionalTickets = Math.round(
       dailySalesVelocity * daysUntilEvent
     );
-    const projectedTickets = Math.min(
-      totalCapacity,
-      ticketsSold + projectedAdditionalTickets
-    );
+    // If totalCapacity is 0 (unlimited/unset), don't cap the projection
+    const projectedTickets = totalCapacity > 0
+      ? Math.min(totalCapacity, ticketsSold + projectedAdditionalTickets)
+      : ticketsSold + projectedAdditionalTickets;
     const projectedRevenue = projectedTickets * avgTicketPrice;
 
     // Projected profit (revenue - estimated stripe fees - artist costs)
     // Only apply per-transaction fee ($0.30) to additional projected tickets, not already-sold ones
     const additionalTickets = projectedTickets - ticketsSold;
-    const existingStripeFees = currentRevenue > 0 ? currentRevenue * 0.029 + 0.3 * ticketsSold : 0;
-    const additionalStripeFees = additionalTickets > 0 ? (projectedRevenue - currentRevenue) * 0.029 + 0.3 * additionalTickets : 0;
+    // Stripe charges 2.9% + $0.30 per TRANSACTION (checkout), not per ticket.
+    // Approximate: assume ~1.5 tickets per checkout on average for group purchases.
+    const avgTicketsPerCheckout = 1.5;
+    const existingCheckouts = Math.ceil(ticketsSold / avgTicketsPerCheckout);
+    const existingStripeFees = currentRevenue > 0 ? currentRevenue * 0.029 + 0.3 * existingCheckouts : 0;
+    const additionalCheckouts = Math.ceil(additionalTickets / avgTicketsPerCheckout);
+    const additionalStripeFees = additionalTickets > 0 ? (projectedRevenue - currentRevenue) * 0.029 + 0.3 * additionalCheckouts : 0;
     const projectedStripe = existingStripeFees + additionalStripeFees;
     const projectedProfit = projectedRevenue - projectedStripe - artistCosts;
 

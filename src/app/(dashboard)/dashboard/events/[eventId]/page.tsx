@@ -33,6 +33,7 @@ import Link from "next/link";
 import { EventStatusActions } from "./event-status-actions";
 import { LiveModeBanner } from "./live-mode-banner";
 import { EventShareCard } from "./event-share-card";
+import { DuplicateEventTile } from "./duplicate-event-tile";
 // EventCreatedToast imported from shared components
 import { ExternalTicketsForm } from "./external-tickets";
 import { getExternalTicketData } from "@/app/actions/external-tickets";
@@ -82,6 +83,69 @@ const statusConfig: Record<
     dotColor: "bg-nocturn",
   },
 };
+
+// ── Action grid helpers ─────────────────────────────────────────────────
+// Tone classes are pre-mapped (rather than interpolated) so Tailwind's JIT
+// can statically detect them. Each tone owns its icon-bubble bg + text.
+const actionTones = {
+  nocturn: "bg-nocturn/10 text-nocturn group-hover:bg-nocturn/15",
+  glow: "bg-nocturn-glow/10 text-nocturn-glow group-hover:bg-nocturn-glow/15",
+  green: "bg-green-400/10 text-green-400 group-hover:bg-green-400/15",
+  amber: "bg-nocturn-amber/10 text-nocturn-amber group-hover:bg-nocturn-amber/15",
+  muted: "bg-muted text-muted-foreground group-hover:bg-muted/80",
+} as const;
+
+type Tone = keyof typeof actionTones;
+
+function ActionSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="space-y-2">
+      <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-1">
+        {title}
+      </h3>
+      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ActionTile({
+  href,
+  icon: Icon,
+  label,
+  tone,
+  external = false,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  tone: Tone;
+  external?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      target={external ? "_blank" : undefined}
+      className="group flex aspect-square w-full flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card/50 p-3 transition-all hover:border-nocturn/40 hover:bg-card active:scale-[0.97]"
+    >
+      <div
+        className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors ${actionTones[tone]}`}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+      <span className="text-xs font-medium text-center leading-tight">
+        {label}
+      </span>
+    </Link>
+  );
+}
 
 export default async function EventDetailPage({ params }: Props) {
   const { eventId } = await params;
@@ -282,108 +346,130 @@ export default async function EventDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* Quick Links */}
-      <div className="flex flex-wrap gap-2">
+      {/* Quick Actions — grouped tile grid.
+          Each section gathers related work so promoters can find what they
+          need by intent ("plan it" / "run it" / "money" / "after") rather
+          than scanning a wall of buttons. */}
+      <div className="space-y-5">
         {event.status === "draft" && (
-          <Link href={`/dashboard/events/${event.id}/edit`}>
-            <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
-              <Pencil className="mr-2 h-3 w-3" />
-              Edit Event
-            </Button>
-          </Link>
+          <ActionSection title="Draft">
+            <ActionTile
+              href={`/dashboard/events/${event.id}/edit`}
+              icon={Pencil}
+              label="Edit Event"
+              tone="nocturn"
+            />
+          </ActionSection>
         )}
-        <Link href={`/dashboard/events/${event.id}/design`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn-glow/30 text-nocturn-glow hover:bg-nocturn-glow/10 active:scale-95 transition-all duration-200">
-            <Palette className="mr-2 h-3 w-3" />
-            Design
-          </Button>
-        </Link>
-        <Link href={`/dashboard/events/${event.id}/tasks`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
-            <ListChecks className="mr-2 h-3 w-3" />
-            Playbook
-          </Button>
-        </Link>
-        <Link href={`/dashboard/events/${event.id}/lineup`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
-            <Music className="mr-2 h-3 w-3" />
-            Manage Lineup
-          </Button>
-        </Link>
-        {(event.status === "published" || event.status === "upcoming") && (
-          <Link href={`/dashboard/events/${event.id}/check-in`}>
-            <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
-              <ScanLine className="mr-2 h-3 w-3" />
-              Check-in Scanner
-            </Button>
-          </Link>
-        )}
-        <Link href={`/dashboard/events/${event.id}/promos`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
-            <Tag className="mr-2 h-3 w-3" />
-            Promos
-          </Button>
-        </Link>
-        <Link href={`/dashboard/events/${event.id}/guests`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
-            <ClipboardList className="mr-2 h-3 w-3" />
-            Guest List
-          </Button>
-        </Link>
-        <Link href={`/dashboard/events/${event.id}/chat`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
-            <MessageSquare className="mr-2 h-3 w-3" />
-            Chat
-          </Button>
-        </Link>
-        <Link href={`/dashboard/events/${event.id}/refunds`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
-            <RotateCcw className="mr-2 h-3 w-3" />
-            Refunds
-          </Button>
-        </Link>
-{/* Referrals — gated for MVP, restore post-launch */}
-        <Link href={`/dashboard/events/${event.id}/financials`}>
-          <Button variant="outline" size="sm" className="min-h-[44px] border-green-400/30 text-green-400 hover:bg-green-400/10 active:scale-95 transition-all duration-200">
-            <Sheet className="mr-2 h-3 w-3" />
-            Financials
-          </Button>
-        </Link>
-        {(event.status === "completed" || event.status === "settled") && (
-          <>
-            <Link href={`/dashboard/events/${event.id}/recap`}>
-              <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn-amber/30 text-nocturn-amber hover:bg-nocturn-amber/10 active:scale-95 transition-all duration-200">
-                <FileText className="mr-2 h-3 w-3" />
-                Recap
-              </Button>
-            </Link>
-            <Link href={`/dashboard/events/${event.id}/wrap`}>
-              <Button variant="outline" size="sm" className="min-h-[44px] border-nocturn/30 text-nocturn hover:bg-nocturn/10 active:scale-95 transition-all duration-200">
-                <Coffee className="mr-2 h-3 w-3" />
-                View Wrap
-              </Button>
-            </Link>
-          </>
-        )}
-        {publicUrl && (
-          <Link href={publicUrl} target="_blank">
-            <Button variant="outline" size="sm" className="min-h-[44px] hover:bg-accent active:scale-95 transition-all duration-200">
-              <ExternalLink className="mr-2 h-3 w-3" />
-              View Public Page
-            </Button>
-          </Link>
-        )}
-        {fullPublicUrl && (
-          <EventShareCard
-            event={{
-              title: event.title,
-              date: shareCardDate,
-              venue: shareCardVenue,
-              price: lowestPrice,
-              flyerUrl: event.flyer_url,
-              publicUrl: fullPublicUrl,
-            }}
+
+        <ActionSection title="Plan & Promote">
+          <ActionTile
+            href={`/dashboard/events/${event.id}/design`}
+            icon={Palette}
+            label="Design"
+            tone="glow"
           />
+          <ActionTile
+            href={`/dashboard/events/${event.id}/tasks`}
+            icon={ListChecks}
+            label="Playbook"
+            tone="nocturn"
+          />
+          <ActionTile
+            href={`/dashboard/events/${event.id}/lineup`}
+            icon={Music}
+            label="Lineup"
+            tone="nocturn"
+          />
+          <ActionTile
+            href={`/dashboard/events/${event.id}/promos`}
+            icon={Tag}
+            label="Promos"
+            tone="nocturn"
+          />
+          <ActionTile
+            href={`/dashboard/events/${event.id}/guests`}
+            icon={ClipboardList}
+            label="Guests"
+            tone="nocturn"
+          />
+        </ActionSection>
+
+        <ActionSection title="Run the Night">
+          <ActionTile
+            href={`/dashboard/events/${event.id}/chat`}
+            icon={MessageSquare}
+            label="Team Chat"
+            tone="nocturn"
+          />
+          {(event.status === "published" || event.status === "upcoming") && (
+            <ActionTile
+              href={`/dashboard/events/${event.id}/check-in`}
+              icon={ScanLine}
+              label="Check-in"
+              tone="nocturn"
+            />
+          )}
+        </ActionSection>
+
+        <ActionSection title="Money">
+          <ActionTile
+            href={`/dashboard/events/${event.id}/financials`}
+            icon={Sheet}
+            label="Financials"
+            tone="green"
+          />
+          <ActionTile
+            href={`/dashboard/events/${event.id}/refunds`}
+            icon={RotateCcw}
+            label="Refunds"
+            tone="green"
+          />
+        </ActionSection>
+
+        {(event.status === "completed" || event.status === "settled") && (
+          <ActionSection title="Wrap Up">
+            <ActionTile
+              href={`/dashboard/events/${event.id}/recap`}
+              icon={FileText}
+              label="Recap"
+              tone="amber"
+            />
+            <ActionTile
+              href={`/dashboard/events/${event.id}/wrap`}
+              icon={Coffee}
+              label="View Wrap"
+              tone="amber"
+            />
+            <DuplicateEventTile eventId={event.id} />
+          </ActionSection>
+        )}
+
+        {(publicUrl || fullPublicUrl) && (
+          <ActionSection title="Share">
+            {publicUrl && (
+              <ActionTile
+                href={publicUrl}
+                icon={ExternalLink}
+                label="Public Page"
+                tone="muted"
+                external
+              />
+            )}
+            {fullPublicUrl && (
+              <EventShareCard
+                event={{
+                  title: event.title,
+                  date: shareCardDate,
+                  venue: shareCardVenue,
+                  price: lowestPrice,
+                  flyerUrl: event.flyer_url,
+                  publicUrl: fullPublicUrl,
+                }}
+                variant="tile"
+              />
+            )}
+          </ActionSection>
         )}
       </div>
 

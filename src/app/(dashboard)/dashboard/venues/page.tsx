@@ -806,6 +806,7 @@ function SavedVenueCard({
             }}
             className="shrink-0 text-nocturn hover:bg-nocturn/10 hover:text-nocturn min-h-[44px] min-w-[44px]"
             title="Scout this venue"
+            aria-label="Scout this venue"
           >
             <ClipboardList className="h-4 w-4" />
           </Button>
@@ -821,6 +822,7 @@ function SavedVenueCard({
           }}
           disabled={isSaving}
           className="shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive min-h-[44px] min-w-[44px]"
+          aria-label="Remove from saved venues"
         >
           <Trash2 className="h-4 w-4" />
         </Button>
@@ -842,7 +844,9 @@ function HeartButton({
     <button
       onClick={onClick}
       disabled={loading}
-      className={`flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full backdrop-blur-sm transition-all duration-200 active:scale-90 ${
+      aria-label={filled ? "Remove from saved venues" : "Save venue"}
+      aria-pressed={filled}
+      className={`flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-full backdrop-blur-sm transition-all duration-200 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nocturn focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
         filled
           ? "bg-red-500/30 text-red-400"
           : "bg-black/40 text-white/70 hover:text-white"

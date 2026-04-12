@@ -216,7 +216,19 @@ export default function RefundsPage() {
       <div className="space-y-2 pt-4 border-t border-border">
         <h2 className="text-sm font-semibold text-foreground">Refund History</h2>
         {refundHistory.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-3 text-center">No refunds yet</p>
+          <Card>
+            <CardContent className="flex flex-col items-center gap-3 py-8">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-nocturn/10">
+                <RotateCcw className="h-6 w-6 text-nocturn" />
+              </div>
+              <div className="text-center">
+                <p className="text-sm font-medium">No refunds yet</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
+                  Refunds you process will appear here with buyer details and amounts.
+                </p>
+              </div>
+            </CardContent>
+          </Card>
         ) : (
           refundHistory.map((ticket) => (
             <div

@@ -30,6 +30,7 @@ export default function ArtistMePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Form fields
   const [name, setName] = useState("");
@@ -86,14 +87,22 @@ export default function ArtistMePage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+
+    // Client-side validation: name is required
+    if (!name.trim()) {
+      setError("Artist name is required");
+      return;
+    }
+
     setSaving(true);
     setSaved(false);
+    setError(null);
 
     const genres = genre.split(",").map((g) => g.trim()).filter(Boolean);
 
     if (profile) {
       // Update existing
-      await supabase
+      const { error: updateError } = await supabase
         .from("artists")
         .update({
           name,
@@ -107,9 +116,16 @@ export default function ArtistMePage() {
           metadata: { location: location || null },
         })
         .eq("id", profile.id);
+
+      if (updateError) {
+        console.error("[artists/me] update error:", updateError.message);
+        setError(updateError.message || "Failed to update profile. Please try again.");
+        setSaving(false);
+        return;
+      }
     } else {
       // Create new
-      await createArtist({
+      const result = await createArtist({
         name,
         bio: bio || null,
         genre: genres,
@@ -120,6 +136,12 @@ export default function ArtistMePage() {
         defaultFee: defaultFee ? parseFloat(defaultFee) : null,
         location: location || null,
       });
+
+      if (result?.error) {
+        setError(result.error);
+        setSaving(false);
+        return;
+      }
     }
 
     setSaving(false);
@@ -168,9 +190,14 @@ export default function ArtistMePage() {
       <Card>
         <CardContent className="p-6">
           <form onSubmit={handleSave} className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+                {error}
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Artist / DJ Name *</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. DJ Shadow" required />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. DJ Shadow" required maxLength={200} />
             </div>
 
             <div className="space-y-2">
@@ -221,7 +248,7 @@ export default function ArtistMePage() {
               <p className="text-xs text-muted-foreground">Your standard booking rate. Collectives will see this when browsing.</p>
             </div>
 
-            <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light" disabled={saving}>
+            <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light" disabled={saving || !name.trim()}>
               {saving ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
               ) : saved ? (
