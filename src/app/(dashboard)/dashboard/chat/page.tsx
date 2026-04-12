@@ -809,7 +809,7 @@ export default function ChatPage() {
                     <div className="flex items-center gap-2 pt-1">
                       <Button
                         size="sm"
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-10 text-xs font-semibold"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-10 min-h-[44px] text-xs font-semibold"
                         disabled={isProcessing}
                         onClick={() => handleAcceptInquiry(inq.id)}
                       >
@@ -823,7 +823,7 @@ export default function ChatPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-10 text-xs text-muted-foreground hover:text-foreground"
+                        className="h-10 min-h-[44px] text-xs text-muted-foreground hover:text-foreground"
                         disabled={isProcessing}
                         onClick={() => handleRejectInquiry(inq.id)}
                       >

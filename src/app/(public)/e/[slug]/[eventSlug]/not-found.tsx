@@ -19,7 +19,7 @@ export default function EventNotFound() {
 
       <Link
         href="/"
-        className="inline-flex items-center justify-center rounded-xl bg-[#7B2FF7] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#9D5CFF] active:scale-95"
+        className="inline-flex items-center justify-center rounded-xl bg-[#7B2FF7] px-6 py-3 min-h-[44px] text-sm font-semibold text-white transition-colors hover:bg-[#9D5CFF] active:scale-95"
       >
         Back to Nocturn
       </Link>

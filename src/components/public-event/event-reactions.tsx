@@ -89,7 +89,7 @@ export function EventReactions({ eventId, initialCounts }: EventReactionsProps) 
 
   return (
     <div className="space-y-3">
-      <h2 className="font-heading text-[10px] font-semibold uppercase tracking-[0.25em] text-white/15">
+      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.25em] text-white/40">
         Vibes
       </h2>
       <div className="flex flex-wrap gap-2">
@@ -127,7 +127,7 @@ export function EventReactions({ eventId, initialCounts }: EventReactionsProps) 
         })}
       </div>
       {totalReactions > 0 && (
-        <p className="text-xs text-white/30">
+        <p className="text-xs text-white/50">
           {totalReactions} {totalReactions === 1 ? "reaction" : "reactions"}
         </p>
       )}

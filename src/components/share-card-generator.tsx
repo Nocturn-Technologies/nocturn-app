@@ -141,8 +141,8 @@ export function ShareCardGenerator({
   return (
     <div className="space-y-2">
       <h2
-        className={`font-heading text-[10px] font-semibold uppercase tracking-[0.2em] ${
-          accentColor ? "text-white/20" : "text-muted-foreground"
+        className={`font-heading text-[11px] font-semibold uppercase tracking-[0.2em] ${
+          accentColor ? "text-white/50" : "text-muted-foreground"
         }`}
       >
         Share as Story
@@ -150,7 +150,7 @@ export function ShareCardGenerator({
       <button
         onClick={handleGenerate}
         disabled={generating}
-        className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
+        className={`flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 min-h-[44px] text-sm font-medium transition-colors ${
           accentColor
             ? "border-white/10 bg-white/5 text-white hover:bg-white/10"
             : "border-border bg-card text-foreground hover:bg-muted"
@@ -213,14 +213,14 @@ function PreviewModal({
         <div className="flex gap-2 p-3">
           <button
             onClick={handleDownload}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-white/20"
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 min-h-[44px] text-sm font-medium text-white transition-colors hover:bg-white/20"
           >
             <Download className="h-4 w-4" />
             Save Image
           </button>
           <button
             onClick={onClose}
-            className="rounded-xl bg-white/5 px-4 py-2.5 text-sm font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            className="rounded-xl bg-white/5 px-4 py-2.5 min-h-[44px] text-sm font-medium text-white/60 transition-colors hover:bg-white/10 hover:text-white"
           >
             Close
           </button>

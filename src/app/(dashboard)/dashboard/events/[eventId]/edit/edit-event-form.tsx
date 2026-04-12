@@ -144,7 +144,7 @@ export function EditEventForm({ event }: { event: EventData }) {
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${event.id}`}>
-          <Button variant="ghost" size="icon" aria-label="Back to event">
+          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px]" aria-label="Back to event">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -322,7 +322,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                 onChange={(e) => setVenueDeposit(e.target.value ? Number(e.target.value) : "")}
                 placeholder="e.g. 1000"
               />
-              <p className="text-[10px] text-muted-foreground">Amount at risk if bar minimum not met</p>
+              <p className="text-[11px] text-muted-foreground">Amount at risk if bar minimum not met</p>
             </div>
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -338,7 +338,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                 onChange={(e) => setBarMinimum(e.target.value ? Number(e.target.value) : "")}
                 placeholder="e.g. 3000"
               />
-              <p className="text-[10px] text-muted-foreground">Minimum bar sales required by venue</p>
+              <p className="text-[11px] text-muted-foreground">Minimum bar sales required by venue</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="estimatedBarRevenue">Estimated Bar Revenue ($)</Label>
@@ -352,7 +352,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                 onChange={(e) => setEstimatedBarRevenue(e.target.value ? Number(e.target.value) : "")}
                 placeholder="e.g. 4000"
               />
-              <p className="text-[10px] text-muted-foreground">Your estimate of total bar sales for the night</p>
+              <p className="text-[11px] text-muted-foreground">Your estimate of total bar sales for the night</p>
             </div>
           </div>
           {barMinimum && estimatedBarRevenue && Number(estimatedBarRevenue) < Number(barMinimum) && (
@@ -384,7 +384,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-destructive hover:text-destructive"
+                  className="h-7 w-7 min-h-[44px] min-w-[44px] text-destructive hover:text-destructive"
                   onClick={() => removeTier(index)}
                   aria-label={`Remove tier ${index + 1}`}
                 >
@@ -435,7 +435,7 @@ export function EditEventForm({ event }: { event: EventData }) {
             variant="outline"
             size="sm"
             onClick={addTier}
-            className="w-full border-dashed"
+            className="w-full border-dashed min-h-[44px]"
           >
             <Plus className="mr-2 h-3.5 w-3.5" />
             Add Tier
@@ -448,10 +448,10 @@ export function EditEventForm({ event }: { event: EventData }) {
       {/* Save Button */}
       <div className="flex justify-end gap-3 pb-8">
         <Link href={`/dashboard/events/${event.id}`}>
-          <Button variant="outline">Cancel</Button>
+          <Button variant="outline" className="min-h-[44px]">Cancel</Button>
         </Link>
         <Button
-          className="bg-nocturn hover:bg-nocturn-light"
+          className="bg-nocturn hover:bg-nocturn-light min-h-[44px]"
           onClick={handleSave}
           disabled={saving}
         >

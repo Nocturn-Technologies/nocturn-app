@@ -106,7 +106,7 @@ function ActionSection({
 }) {
   return (
     <div className="space-y-2">
-      <h3 className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 px-1">
+      <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/70 px-1">
         {title}
       </h3>
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">

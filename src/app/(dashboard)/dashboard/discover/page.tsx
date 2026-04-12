@@ -685,7 +685,7 @@ function DiscoverVenueCard({
           />
         )}
         <div className="absolute left-3 top-3 z-10">
-          <span className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${typeCls}`}>
+          <span className={`rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${typeCls}`}>
             {venue.venue_type}
           </span>
         </div>

@@ -675,7 +675,7 @@ function TypeBadge({ type }: { type: string }) {
   const cls = TYPE_COLORS[type] ?? "bg-muted text-muted-foreground";
   return (
     <span
-      className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${cls}`}
+      className={`rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${cls}`}
     >
       {type}
     </span>
@@ -724,7 +724,7 @@ function VenueCard({
           />
         </div>
         {distance != null && (
-          <div className="absolute right-3 bottom-3 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-sm">
+          <div className="absolute right-3 bottom-3 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
             {formatDistance(distance)}
           </div>
         )}

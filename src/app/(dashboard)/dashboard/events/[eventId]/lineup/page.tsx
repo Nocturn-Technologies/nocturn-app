@@ -334,7 +334,7 @@ export default function LineupPage() {
                         const a = allArtists.find((x) => x.id === e.target.value);
                         if (a?.default_fee) setFee(a.default_fee.toString());
                       }}
-                      className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      className="flex h-11 w-full rounded-md border border-input bg-transparent px-3 py-1 text-base md:text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       required
                     >
                       <option value="">Select artist...</option>
@@ -547,7 +547,7 @@ export default function LineupPage() {
                     {item.status}
                   </span>
                   <DropdownMenu>
-                    <DropdownMenuTrigger className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent" disabled={changingStatusId === item.id}>
+                    <DropdownMenuTrigger className="flex h-9 w-9 min-h-[44px] min-w-[44px] items-center justify-center rounded-md hover:bg-accent" disabled={changingStatusId === item.id}>
                       {changingStatusId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">

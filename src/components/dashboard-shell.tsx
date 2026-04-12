@@ -501,7 +501,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
               }`}
             >
               <Menu className="h-5 w-5 shrink-0" />
-              <span className="text-[10px]">More</span>
+              <span className="text-[11px]">More</span>
             </button>
           )}
         </nav>

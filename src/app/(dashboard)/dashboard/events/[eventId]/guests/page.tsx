@@ -285,6 +285,7 @@ export default function GuestListPage() {
         <Button
           size="sm"
           variant="outline"
+          className="min-h-[44px]"
           onClick={() => {
             setShowForm(!showForm);
             if (showForm) resetForm();
@@ -301,7 +302,7 @@ export default function GuestListPage() {
               placeholder="Search by name or email..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-8 h-8 text-sm"
+              className="pl-8 h-10 min-h-[44px]"
             />
           </div>
         )}
@@ -486,7 +487,7 @@ export default function GuestListPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-green-500 hover:bg-green-500/10 h-7 px-2"
+                        className="text-green-500 hover:bg-green-500/10 h-9 min-h-[36px] px-2"
                         onClick={() => handleCheckIn(guest.id)}
                         title="Check in"
                       >
@@ -497,7 +498,7 @@ export default function GuestListPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-blue-500 hover:bg-blue-500/10 h-7 px-2"
+                        className="text-blue-500 hover:bg-blue-500/10 h-9 min-h-[36px] px-2"
                         onClick={() =>
                           handleStatusChange(guest.id, "confirmed")
                         }
@@ -511,7 +512,7 @@ export default function GuestListPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="text-red-500 hover:bg-red-500/10 h-7 px-2"
+                          className="text-red-500 hover:bg-red-500/10 h-9 min-h-[36px] px-2"
                           onClick={() =>
                             handleStatusChange(guest.id, "no_show")
                           }
@@ -523,7 +524,7 @@ export default function GuestListPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 h-7 px-2"
+                      className="text-muted-foreground hover:text-red-500 hover:bg-red-500/10 h-9 min-h-[36px] px-2"
                       onClick={() => handleRemove(guest.id)}
                       disabled={removingGuestId === guest.id}
                       title="Remove"

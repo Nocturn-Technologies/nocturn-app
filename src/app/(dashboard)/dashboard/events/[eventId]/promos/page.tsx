@@ -183,6 +183,7 @@ export default function PromosPage() {
         <Button
           size="sm"
           variant="outline"
+          className="min-h-[44px]"
           onClick={() => {
             setShowForm(!showForm);
             if (showForm) resetForm();
@@ -229,7 +230,7 @@ export default function PromosPage() {
                     <button
                       type="button"
                       onClick={() => setDiscountType("percentage")}
-                      className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      className={`flex-1 rounded-md px-3 py-1.5 min-h-[44px] text-sm font-medium transition-colors ${
                         discountType === "percentage"
                           ? "bg-background shadow-sm"
                           : "text-muted-foreground"
@@ -241,7 +242,7 @@ export default function PromosPage() {
                     <button
                       type="button"
                       onClick={() => setDiscountType("fixed")}
-                      className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      className={`flex-1 rounded-md px-3 py-1.5 min-h-[44px] text-sm font-medium transition-colors ${
                         discountType === "fixed"
                           ? "bg-background shadow-sm"
                           : "text-muted-foreground"
@@ -357,7 +358,7 @@ export default function PromosPage() {
                   {/* Toggle */}
                   <button
                     onClick={() => handleToggle(promo.id, promo.is_active)}
-                    className="shrink-0"
+                    className="shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center"
                     title={promo.is_active ? "Deactivate" : "Activate"}
                     disabled={togglingId === promo.id}
                   >
@@ -378,7 +379,7 @@ export default function PromosPage() {
                       </span>
                       <button
                         onClick={() => handleCopy(promo.code, promo.id)}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
                         title="Copy code"
                       >
                         {copiedId === promo.id ? (

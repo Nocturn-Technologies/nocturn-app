@@ -44,28 +44,28 @@ function getStatusBadge(status: string, eventStatus: string) {
   // Settlement status takes priority
   if (status === "paid") {
     return (
-      <Badge className="border-nocturn-teal/20 bg-nocturn-teal/10 text-nocturn-teal text-[10px]">
+      <Badge className="border-nocturn-teal/20 bg-nocturn-teal/10 text-nocturn-teal text-[11px]">
         Paid
       </Badge>
     );
   }
   if (status === "approved") {
     return (
-      <Badge className="border-blue-500/20 bg-blue-500/10 text-blue-500 text-[10px]">
+      <Badge className="border-blue-500/20 bg-blue-500/10 text-blue-500 text-[11px]">
         Approved
       </Badge>
     );
   }
   if (status === "draft" && eventStatus === "completed") {
     return (
-      <Badge className="border-yellow-500/20 bg-yellow-500/10 text-yellow-500 text-[10px]">
+      <Badge className="border-yellow-500/20 bg-yellow-500/10 text-yellow-500 text-[11px]">
         Settled
       </Badge>
     );
   }
   if (status === "unsettled" && eventStatus === "completed") {
     return (
-      <Badge className="border-orange-500/20 bg-orange-500/10 text-orange-500 text-[10px]">
+      <Badge className="border-orange-500/20 bg-orange-500/10 text-orange-500 text-[11px]">
         Unsettled
       </Badge>
     );
@@ -96,7 +96,7 @@ function getStatusBadge(status: string, eventStatus: string) {
     className: "border-zinc-500/20 bg-zinc-500/10 text-zinc-400",
   };
 
-  return <Badge className={`${s.className} text-[10px]`}>{s.label}</Badge>;
+  return <Badge className={`${s.className} text-[11px]`}>{s.label}</Badge>;
 }
 
 interface EventFinancialsTableProps {

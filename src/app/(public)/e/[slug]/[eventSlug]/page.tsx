@@ -427,22 +427,22 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
           {/* Info bar — utilitarian, separated by borders */}
           <div className="flex flex-wrap gap-0 mb-6">
             <div className="pr-5 sm:pr-6 border-r border-white/[0.06] py-1">
-              <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Date</div>
+              <div className="text-[11px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Date</div>
               <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{dayName} {monthName} {dayNum}</div>
             </div>
             {doorsTime && (
               <div className="px-5 sm:px-6 border-r border-white/[0.06] py-1">
-                <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Doors</div>
+                <div className="text-[11px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Doors</div>
                 <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{doorsTime}</div>
               </div>
             )}
             <div className="px-5 sm:px-6 border-r border-white/[0.06] py-1">
-              <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Show</div>
+              <div className="text-[11px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Show</div>
               <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{startTime}{endTime ? ` — ${endTime}` : ""}</div>
             </div>
             {venue && (
               <div className="pl-5 sm:pl-6 py-1">
-                <div className="text-[9px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Venue</div>
+                <div className="text-[11px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Venue</div>
                 <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{venue.name}{venue.city ? `, ${venue.city}` : ""}</div>
               </div>
             )}
@@ -452,7 +452,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
           {vibeTags.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-8">
               {vibeTags.map((tag) => (
-                <span key={tag} className="text-[10px] font-semibold tracking-[0.15em] uppercase px-3.5 py-1.5 border border-white/[0.06] rounded-full text-white/50">
+                <span key={tag} className="text-[11px] font-semibold tracking-[0.15em] uppercase px-3.5 py-1.5 border border-white/[0.06] rounded-full text-white/50">
                   {tag}
                 </span>
               ))}
@@ -498,11 +498,11 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
               <div className="relative h-40 w-full bg-gradient-to-br from-[#1a1a2e] via-[#16162a] to-[#0e0e12] flex items-center justify-center">
                 <MapPin className="h-10 w-10 text-white/10" />
                 <div className="absolute inset-0 bg-gradient-to-t from-[#0e0e12] via-transparent to-[#09090B]/40 pointer-events-none" />
-                <div className="absolute bottom-3 left-4 text-[10px] font-semibold tracking-[0.2em] uppercase text-white/20 px-2.5 py-1 border border-white/[0.08] rounded">VENUE</div>
+                <div className="absolute bottom-3 left-4 text-[11px] font-semibold tracking-[0.2em] uppercase text-white/50 px-2.5 py-1 border border-white/[0.08] rounded">VENUE</div>
               </div>
               <div className="px-6 py-5">
                 <p className="font-heading text-[24px] font-bold text-white">{venue.name}</p>
-                <p className="text-[14px] text-white/30 mt-1">
+                <p className="text-[14px] text-white/50 mt-1">
                   {[venue.address, venue.city].filter((part) => typeof part === "string" && part.trim().length > 0).join(", ")}
                 </p>
                 {mapsUrl && (
@@ -540,7 +540,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                       {collective.name.charAt(0)}
                     </div>
                   )}
-                  <span className="text-[12px] text-white/30 font-medium">{collective.name}</span>
+                  <span className="text-[12px] text-white/50 font-medium">{collective.name}</span>
                 </div>
               </div>
             </div>
@@ -549,7 +549,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
         {dressCode && (
           <div className="py-4 border-t border-white/[0.04]">
-            <p className="text-[13px] text-white/25"><span className="text-white/40">Dress code</span> — {dressCode}</p>
+            <p className="text-[13px] text-white/40"><span className="text-white/40">Dress code</span> — {dressCode}</p>
           </div>
         )}
 
@@ -577,7 +577,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                       </p>
                       {artist.genre && (
                         <span
-                          className="inline-block rounded-full px-2.5 py-0.5 text-[10px] font-medium tracking-wide truncate"
+                          className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium tracking-wide truncate"
                           style={{
                             backgroundColor: `${accentColor}12`,
                             color: `${accentColor}cc`,
@@ -587,7 +587,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                         </span>
                       )}
                       {a.set_time && (
-                        <p className="text-[11px] text-white/30 font-medium">{new Date(a.set_time).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Toronto" })}</p>
+                        <p className="text-[11px] text-white/50 font-medium">{new Date(a.set_time).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Toronto" })}</p>
                       )}
                     </div>
                   );
@@ -742,11 +742,11 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       {/* Footer */}
       <footer className="border-t border-white/5 bg-[#09090B] px-6 py-8">
         <div className="mx-auto max-w-[640px] flex flex-col items-center gap-3">
-          <div className="flex items-center gap-2 text-white/30">
+          <div className="flex items-center gap-2 text-white/50">
             <span className="text-sm">🌙</span>
             <span className="text-xs font-semibold tracking-wide">nocturn.</span>
           </div>
-          <div className="flex gap-4 text-[11px] text-white/25">
+          <div className="flex gap-4 text-[11px] text-white/50">
             <Link href="/legal/terms" className="hover:text-white/40 transition-colors inline-flex items-center min-h-[44px] py-3">Terms</Link>
             <Link href="/legal/privacy" className="hover:text-white/40 transition-colors inline-flex items-center min-h-[44px] py-3">Privacy</Link>
             <a href="https://trynocturn.com" target="_blank" rel="noopener" className="hover:text-white/40 transition-colors inline-flex items-center min-h-[44px] py-3">About</a>

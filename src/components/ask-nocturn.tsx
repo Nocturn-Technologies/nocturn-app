@@ -215,7 +215,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask anything..."
-                className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3.5 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-nocturn/40 focus:ring-1 focus:ring-nocturn/20 transition-colors"
+                className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3.5 py-2.5 text-base text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-nocturn/40 focus:ring-1 focus:ring-nocturn/20 transition-colors"
                 disabled={loading}
               />
               <button

@@ -60,7 +60,7 @@ export function ProfileCard({
         >
           {/* Type badge overlaid on cover */}
           <span
-            className={`absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badgeColor}`}
+            className={`absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${badgeColor}`}
           >
             {typeLabel}
           </span>
@@ -105,13 +105,13 @@ export function ProfileCard({
               {shownTags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                  className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-muted-foreground"
                 >
                   {tag.replace(/-/g, " ")}
                 </span>
               ))}
               {extraCount > 0 && (
-                <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-muted-foreground">
                   +{extraCount}
                 </span>
               )}
@@ -137,7 +137,7 @@ export function ProfileCard({
               {connectionTags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[10px] font-medium text-nocturn capitalize"
+                  className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[11px] font-medium text-nocturn capitalize"
                 >
                   {tag}
                 </span>
@@ -166,7 +166,7 @@ export function ProfileCard({
           variant="ghost"
           aria-label={isSaved ? "Unsave profile" : "Save profile"}
           aria-pressed={isSaved}
-          className={`shrink-0 h-9 w-9 ${
+          className={`shrink-0 h-9 w-9 min-h-[44px] min-w-[44px] ${
             isSaved
               ? "text-red-400 hover:text-red-300"
               : "text-muted-foreground hover:text-foreground"

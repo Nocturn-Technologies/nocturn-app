@@ -274,12 +274,12 @@ export default function AttendeesPage() {
                         {attendee.name || attendee.email}
                       </p>
                       {attendee.source === "rsvp" && (
-                        <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
+                        <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
                           RSVP
                         </span>
                       )}
                       {attendee.source === "both" && (
-                        <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
+                        <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
                           VIP
                         </span>
                       )}
@@ -324,12 +324,12 @@ export default function AttendeesPage() {
                           {attendee.name || attendee.email}
                         </p>
                         {attendee.source === "rsvp" && (
-                          <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
+                          <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
                             RSVP
                           </span>
                         )}
                         {attendee.source === "both" && (
-                          <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
+                          <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
                             VIP
                           </span>
                         )}
@@ -367,13 +367,13 @@ export default function AttendeesPage() {
                       {attendee.eventTitles.slice(0, 3).map((title) => (
                         <span
                           key={title}
-                          className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[10px] font-medium text-nocturn truncate max-w-[120px]"
+                          className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[11px] font-medium text-nocturn truncate max-w-[120px]"
                         >
                           {title}
                         </span>
                       ))}
                       {attendee.eventTitles.length > 3 && (
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground">
                           +{attendee.eventTitles.length - 3} more
                         </span>
                       )}

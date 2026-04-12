@@ -587,7 +587,7 @@ function EventTasksPageInner() {
                     }`}
                   >
                     {cfg.emoji} {cfg.label}
-                    <span className="text-[9px] opacity-70">{count}</span>
+                    <span className="text-[11px] opacity-70">{count}</span>
                   </button>
                 );
               })}
@@ -997,7 +997,7 @@ function TaskCard({
       <div className="flex items-start gap-3">
         <button
           onClick={() => onStatusChange(task.id as string, nextStatus)}
-          className="shrink-0 mt-0.5 min-w-[20px] min-h-[20px]"
+          className="shrink-0 mt-0.5 min-w-[36px] min-h-[36px]"
         >
           {statusIcons[task.status as string]}
         </button>

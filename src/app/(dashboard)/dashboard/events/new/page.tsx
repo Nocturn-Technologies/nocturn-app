@@ -180,7 +180,7 @@ function StepProgress({ current, steps }: { current: WizardStep; steps: WizardSt
               >
                 {isDone ? <Check className="h-3.5 w-3.5" /> : i + 1}
               </div>
-              <span className={`text-[10px] font-medium transition-colors ${
+              <span className={`text-[11px] font-medium transition-colors ${
                 isActive ? "text-white" : isDone ? "text-[#7B2FF7]" : "text-zinc-600"
               }`}>
                 {STEP_LABELS[s]}
@@ -531,7 +531,7 @@ function QuickDatePicker({ value, onChange }: { value: string; onChange: (ymd: s
               <span className={`text-xs font-semibold ${active ? "text-white" : "text-zinc-200"}`}>
                 {q.label}
               </span>
-              <span className={`text-[10px] mt-0.5 ${active ? "text-[#9D5CFF]" : "text-zinc-500"}`}>
+              <span className={`text-[11px] mt-0.5 ${active ? "text-[#9D5CFF]" : "text-zinc-500"}`}>
                 {q.sub}
               </span>
             </button>
@@ -539,7 +539,7 @@ function QuickDatePicker({ value, onChange }: { value: string; onChange: (ymd: s
         })}
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-[10px] text-zinc-500 uppercase tracking-wider shrink-0">Or pick a date</span>
+        <span className="text-[11px] text-zinc-500 uppercase tracking-wider shrink-0">Or pick a date</span>
         <div className="h-px flex-1 bg-white/5" />
       </div>
       <Input
@@ -617,7 +617,7 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
       <div className="flex items-center gap-1.5">
         <Target className="h-3.5 w-3.5 text-[#7B2FF7]" />
         <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Market Pricing</span>
-        <span className={`ml-auto text-[10px] px-1.5 py-0.5 rounded-full ${
+        <span className={`ml-auto text-[11px] px-1.5 py-0.5 rounded-full ${
           pricing.confidence === "high" ? "bg-green-500/10 text-green-400" :
           pricing.confidence === "medium" ? "bg-yellow-500/10 text-yellow-400" :
           "bg-zinc-500/10 text-zinc-400"
@@ -629,11 +629,11 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
       <div className="grid grid-cols-2 gap-1.5">
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${pricing.avgGA}</p>
-          <p className="text-[9px] text-zinc-500">avg GA in {city}</p>
+          <p className="text-[11px] text-zinc-500">avg GA in {city}</p>
         </div>
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${pricing.avgVIP}</p>
-          <p className="text-[9px] text-zinc-500">avg VIP in {city}</p>
+          <p className="text-[11px] text-zinc-500">avg VIP in {city}</p>
         </div>
       </div>
 
@@ -646,12 +646,12 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
       )}
 
       {pricing.competingEvents > 0 && (
-        <p className="text-[10px] text-zinc-500">
+        <p className="text-[11px] text-zinc-500">
           {pricing.competingEvents} other event{pricing.competingEvents > 1 ? "s" : ""} this weekend in {city}
         </p>
       )}
 
-      <p className="text-[10px] text-zinc-600 italic">{pricing.suggestion}</p>
+      <p className="text-[11px] text-zinc-600 italic">{pricing.suggestion}</p>
     </div>
   );
 }
@@ -715,7 +715,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
             Revenue Forecast
           </span>
         </div>
-        <span className="text-[10px] text-zinc-600 bg-zinc-800 rounded-full px-2 py-0.5">
+        <span className="text-[11px] text-zinc-600 bg-zinc-800 rounded-full px-2 py-0.5">
           {priceLabels[priceIndex]} pricing
         </span>
       </div>
@@ -731,7 +731,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
           {totalExpenses > 0 ? "estimated profit at sell-out" : "max net revenue at sell-out"}
         </p>
         {totalExpenses > 0 && (
-          <p className="text-[10px] text-zinc-600 mt-0.5">
+          <p className="text-[11px] text-zinc-600 mt-0.5">
             ${projections[2].net.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue − ${totalExpenses.toLocaleString()} expenses
           </p>
         )}
@@ -754,7 +754,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
           onChange={(e) => handleSliderChange(parseFloat(e.target.value))}
           className="w-full h-1.5 rounded-full appearance-none bg-zinc-800 accent-[#7B2FF7] cursor-pointer"
         />
-        <div className="flex justify-between text-[10px] text-zinc-600">
+        <div className="flex justify-between text-[11px] text-zinc-600">
           <span>${Math.round(baseTier0Price * 0.5)}</span>
           <span>${baseTier0Price} (base)</span>
           <span>${Math.round(baseTier0Price * 2)}</span>
@@ -788,7 +788,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
                   <span className="text-[11px] text-zinc-500">{p.label}</span>
                   <span className={`text-xs font-bold ${totalExpenses > 0 ? (isLoss ? "text-red-400" : "text-green-400") : "text-white"}`}>
                     {isLoss ? "-" : ""}${Math.abs(displayValue).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    {totalExpenses > 0 && <span className="text-[9px] text-zinc-600 ml-1">{isLoss ? "loss" : "profit"}</span>}
+                    {totalExpenses > 0 && <span className="text-[11px] text-zinc-600 ml-1">{isLoss ? "loss" : "profit"}</span>}
                   </span>
                 </div>
                 <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
@@ -812,11 +812,11 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
       <div className="grid grid-cols-3 gap-1.5">
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${avgPrice.toFixed(0)}</p>
-          <p className="text-[9px] text-zinc-500">avg ticket</p>
+          <p className="text-[11px] text-zinc-500">avg ticket</p>
         </div>
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">{totalCapacity}</p>
-          <p className="text-[9px] text-zinc-500">capacity</p>
+          <p className="text-[11px] text-zinc-500">capacity</p>
         </div>
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           {(() => {
@@ -826,14 +826,14 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
                 <p className={`text-xs font-bold ${totalExpenses > 0 ? (at75 >= 0 ? "text-green-400" : "text-red-400") : "text-green-400"}`}>
                   {at75 < 0 ? "-" : ""}${Math.abs(at75).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </p>
-                <p className="text-[9px] text-zinc-500">@ 75%</p>
+                <p className="text-[11px] text-zinc-500">@ 75%</p>
               </>
             );
           })()}
         </div>
       </div>
 
-      <p className="text-[9px] text-zinc-600 text-center">
+      <p className="text-[11px] text-zinc-600 text-center">
         {totalExpenses > 0
           ? `Profit = revenue \u2212 $${totalExpenses.toLocaleString()} expenses \u2212 Stripe fees (2.9% + $0.30)`
           : "Net after Stripe fees (2.9% + $0.30) \u2022 You keep 100% of ticket price"}
@@ -912,13 +912,13 @@ function PlaybookSelector({
               <div className="flex items-center gap-2">
                 <p className="text-sm font-semibold text-white">{opt.name}</p>
                 {opt.recommended && (
-                  <span className="px-1.5 py-0.5 rounded-full bg-nocturn/20 text-nocturn text-[10px] font-semibold">
+                  <span className="px-1.5 py-0.5 rounded-full bg-nocturn/20 text-nocturn text-[11px] font-semibold">
                     Recommended
                   </span>
                 )}
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">{opt.description}</p>
-              <p className="text-[10px] text-zinc-500 mt-1">{opt.taskCount} tasks with auto-assigned due dates</p>
+              <p className="text-[11px] text-zinc-500 mt-1">{opt.taskCount} tasks with auto-assigned due dates</p>
             </div>
           </button>
         ))}
@@ -1525,7 +1525,7 @@ export default function NewEventPage() {
       <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-fade-in">
         <Loader2 className="h-10 w-10 animate-spin text-[#7B2FF7]" />
         <p className="text-sm text-zinc-400">Creating your event...</p>
-        <p className="text-[10px] text-zinc-600">This may take a moment while we enrich your event page with AI</p>
+        <p className="text-[11px] text-zinc-600">This may take a moment while we enrich your event page with AI</p>
       </div>
     );
   }
@@ -1627,7 +1627,7 @@ export default function NewEventPage() {
                   autoFocus
                 />
                 {formData.title.length > 150 && (
-                  <p className={`text-[10px] text-right ${formData.title.length > 190 ? "text-yellow-400" : "text-zinc-600"}`}>
+                  <p className={`text-[11px] text-right ${formData.title.length > 190 ? "text-yellow-400" : "text-zinc-600"}`}>
                     {formData.title.length}/200
                   </p>
                 )}
@@ -1654,7 +1654,7 @@ export default function NewEventPage() {
                   className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
                 />
                 {formData.startTime === "22:00" && (
-                  <p className="text-[10px] text-zinc-500 mt-0.5">Default: 10 PM — adjust if needed</p>
+                  <p className="text-[11px] text-zinc-500 mt-0.5">Default: 10 PM — adjust if needed</p>
                 )}
               </FormField>
 
@@ -1678,7 +1678,7 @@ export default function NewEventPage() {
                       className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
                     />
                     {formData.endTime && formData.startTime && formData.endTime < formData.startTime && (
-                      <p className="text-[10px] text-zinc-500 mt-0.5">Ends after midnight (next day)</p>
+                      <p className="text-[11px] text-zinc-500 mt-0.5">Ends after midnight (next day)</p>
                     )}
                   </FormField>
 
@@ -1689,7 +1689,7 @@ export default function NewEventPage() {
                       onChange={(e) => { updateForm({ description: e.target.value }); setShowOptionalDetails(true); }}
                       maxLength={5000}
                       rows={3}
-                      className="flex w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-[#7B2FF7]/50 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 resize-none min-h-[44px] transition-colors"
+                      className="flex w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-base md:text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-[#7B2FF7]/50 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 resize-none min-h-[44px] transition-colors"
                     />
                   </FormField>
                 </div>
@@ -1825,7 +1825,7 @@ export default function NewEventPage() {
                         }}
                         className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
                       />
-                      <p className="text-[10px] text-zinc-600">
+                      <p className="text-[11px] text-zinc-600">
                         {tiers.length > 0 ? "Re-enter a price to regenerate tiers" : "Enter a price to auto-generate tiers, or add them manually below"}
                       </p>
                     </div>
@@ -1909,7 +1909,7 @@ export default function NewEventPage() {
                     </button>
                   )}
                   {tiers.length >= 10 && (
-                    <p className="text-[10px] text-zinc-500">Maximum 10 tiers</p>
+                    <p className="text-[11px] text-zinc-500">Maximum 10 tiers</p>
                   )}
                 </div>
               )}

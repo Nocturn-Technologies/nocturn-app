@@ -411,7 +411,7 @@ export default function CheckInScannerPage() {
             setMuted(next);
             localStorage.setItem("nocturn_checkin_muted", String(next));
           }}
-          className="flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+          className="flex h-10 w-10 min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
           aria-label={muted ? "Unmute scan sounds" : "Mute scan sounds"}
         >
           {muted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
@@ -482,7 +482,7 @@ export default function CheckInScannerPage() {
                 placeholder="e.g. a1b2c3d4-e5f6-..."
                 value={manualToken}
                 onChange={(e) => setManualToken(e.target.value)}
-                className="flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-nocturn"
+                className="flex-1 rounded-md border border-border bg-background px-3 py-2 font-mono text-base md:text-sm min-h-[44px] placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-nocturn"
                 autoFocus
               />
               <Button type="submit" disabled={!manualToken.trim() || processing} size="sm" className="min-h-[44px]">
@@ -497,7 +497,7 @@ export default function CheckInScannerPage() {
       <div className="flex justify-center">
         <button
           onClick={() => setShowManualEntry((v) => !v)}
-          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="flex items-center gap-1.5 text-sm min-h-[44px] text-muted-foreground hover:text-foreground transition-colors"
         >
           <Keyboard className="h-3.5 w-3.5" />
           {showManualEntry ? "Hide manual entry" : "Enter code manually"}
@@ -609,7 +609,7 @@ export default function CheckInScannerPage() {
                 <div className="flex items-center gap-2 min-w-0">
                   <span className={`h-2 w-2 rounded-full shrink-0 ${g.status === "checked_in" ? "bg-green-500" : g.status === "confirmed" || g.status === "paid" ? "bg-blue-500" : "bg-zinc-600"}`} />
                   <span className="truncate text-foreground">{g.name}</span>
-                  <span className="text-[10px] text-zinc-600 shrink-0">{g.type === "guest" ? "GUEST" : "TICKET"}</span>
+                  <span className="text-[11px] text-zinc-600 shrink-0">{g.type === "guest" ? "GUEST" : "TICKET"}</span>
                 </div>
                 <span className={`text-xs shrink-0 ${g.status === "checked_in" ? "text-green-400" : "text-zinc-500"}`}>
                   {g.status === "checked_in" ? "\u2713 In" : g.status}

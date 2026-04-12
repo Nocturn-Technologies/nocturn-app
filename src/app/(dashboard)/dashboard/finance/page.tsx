@@ -353,7 +353,7 @@ export default async function FinancePage() {
                           </p>
                         </div>
                         <Badge
-                          className={`capitalize text-[10px] ${
+                          className={`capitalize text-[11px] ${
                             s.status === "paid"
                               ? "bg-nocturn-teal/10 text-nocturn-teal border-nocturn-teal/20"
                               : s.status === "approved"
