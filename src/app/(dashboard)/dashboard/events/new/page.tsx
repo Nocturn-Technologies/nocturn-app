@@ -522,7 +522,7 @@ function QuickDatePicker({ value, onChange }: { value: string; onChange: (ymd: s
                 onChange(q.ymd);
                 haptic("light");
               }}
-              className={`rounded-xl border px-2 py-2.5 text-center transition-all min-h-[56px] flex flex-col items-center justify-center ${
+              className={`rounded-xl border px-2 py-2.5 text-center transition-all duration-200 min-h-[56px] flex flex-col items-center justify-center active:scale-[0.97] ${
                 active
                   ? "border-[#7B2FF7] bg-[#7B2FF7]/15 shadow-sm shadow-[#7B2FF7]/20"
                   : "border-white/10 bg-zinc-900 hover:border-[#7B2FF7]/40 hover:bg-[#7B2FF7]/5"
@@ -591,11 +591,16 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-white/5 bg-zinc-900/50 p-4">
+      <div className="rounded-2xl border border-white/5 bg-zinc-900/50 p-4 space-y-3">
         <div className="flex items-center gap-1.5">
-          <Target className="h-3.5 w-3.5 text-[#7B2FF7] animate-pulse" />
-          <span className="text-xs text-zinc-500">Checking market prices...</span>
+          <Target className="h-3.5 w-3.5 text-[#7B2FF7]" />
+          <div className="h-3 w-32 rounded bg-zinc-800 animate-pulse" />
         </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="h-10 rounded-xl bg-zinc-800/80 animate-pulse" />
+          <div className="h-10 rounded-xl bg-zinc-800/80 animate-pulse" />
+        </div>
+        <div className="h-3 w-4/5 rounded bg-zinc-800 animate-pulse" />
       </div>
     );
   }
@@ -1437,9 +1442,43 @@ export default function NewEventPage() {
   // Wait for both auth preflight AND draft restoration before rendering form (#3 — prevents empty flash)
   if (preflight === "loading" || !draftLoaded) {
     return (
-      <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-fade-in">
-        <Loader2 className="h-10 w-10 animate-spin text-[#7B2FF7]" />
-        <p className="text-sm text-zinc-400">Loading...</p>
+      <div className="mx-auto max-w-lg flex flex-col h-[calc(100dvh-8rem)] animate-fade-in px-1 overflow-hidden">
+        {/* Header skeleton */}
+        <div className="flex items-center gap-3 pb-2 shrink-0">
+          <div className="h-11 w-11 rounded-xl bg-zinc-900 animate-pulse" />
+          <div className="h-6 w-32 rounded-md bg-zinc-900 animate-pulse" />
+        </div>
+        {/* Step progress skeleton */}
+        <div className="flex items-center justify-center gap-0 w-full max-w-xs mx-auto py-4">
+          {[0, 1, 2, 3, 4].map((i) => (
+            <div key={i} className="flex items-center flex-1 last:flex-initial">
+              <div className="flex flex-col items-center gap-1">
+                <div className="h-8 w-8 rounded-full bg-zinc-900 animate-pulse" />
+                <div className="h-2 w-10 rounded bg-zinc-900 animate-pulse" />
+              </div>
+              {i < 4 && <div className="h-0.5 flex-1 mx-1 rounded-full bg-zinc-900" />}
+            </div>
+          ))}
+        </div>
+        {/* Card skeleton */}
+        <div className="flex-1 overflow-hidden space-y-5 pt-2">
+          <div className="space-y-2 text-center">
+            <div className="h-6 w-40 rounded-md bg-zinc-900 animate-pulse mx-auto" />
+            <div className="h-4 w-28 rounded-md bg-zinc-900 animate-pulse mx-auto" />
+          </div>
+          <div className="rounded-2xl border border-white/[0.06] bg-card p-4 space-y-3">
+            <div className="h-3 w-20 rounded bg-zinc-900 animate-pulse" />
+            <div className="grid grid-cols-2 gap-2">
+              <div className="h-[72px] rounded-xl bg-zinc-900 animate-pulse" />
+              <div className="h-[72px] rounded-xl bg-zinc-900 animate-pulse" />
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-4">
+            <div className="h-11 rounded-xl bg-zinc-900 animate-pulse" />
+            <div className="h-11 rounded-xl bg-zinc-900 animate-pulse" />
+            <div className="h-11 rounded-xl bg-zinc-900 animate-pulse" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -1514,7 +1553,7 @@ export default function NewEventPage() {
               setError(null);
               setVenueMode("picker");
             }}
-            className="ml-auto text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="ml-auto shrink-0 text-xs text-zinc-500 hover:text-zinc-300 transition-colors duration-200 px-2 py-1 rounded-md hover:bg-white/[0.04]"
           >
             Start over
           </button>
@@ -1547,10 +1586,10 @@ export default function NewEventPage() {
                     updateForm({ isFree: true });
                     setTiers([]);
                   }}
-                  className={`rounded-xl border p-3 text-left transition-all active:scale-[0.98] min-h-[72px] ${
+                  className={`rounded-xl border p-3 text-left transition-all duration-200 active:scale-[0.98] min-h-[72px] ${
                     formData.isFree
                       ? "border-[#7B2FF7] bg-[#7B2FF7]/10"
-                      : "border-white/10 hover:border-white/20"
+                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -1562,10 +1601,10 @@ export default function NewEventPage() {
                 <button
                   type="button"
                   onClick={() => updateForm({ isFree: false })}
-                  className={`rounded-xl border p-3 text-left transition-all active:scale-[0.98] min-h-[72px] ${
+                  className={`rounded-xl border p-3 text-left transition-all duration-200 active:scale-[0.98] min-h-[72px] ${
                     !formData.isFree
                       ? "border-[#7B2FF7] bg-[#7B2FF7]/10"
-                      : "border-white/10 hover:border-white/20"
+                      : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -1901,7 +1940,7 @@ export default function NewEventPage() {
             {/* Skip button */}
             <button
               onClick={goNext}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-white/[0.06] bg-card p-4 text-sm text-zinc-400 hover:text-zinc-200 hover:border-white/[0.12] transition-all active:scale-[0.98]"
+              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-white/[0.06] bg-card p-4 text-sm text-zinc-400 hover:text-zinc-200 hover:border-nocturn/30 transition-all duration-200 active:scale-[0.98]"
             >
               <SkipForward className="h-4 w-4" />
               Skip — I&apos;ll figure out costs later
@@ -1925,10 +1964,10 @@ export default function NewEventPage() {
                       role="radio"
                       aria-checked={budgetInput.headlinerType === opt.value}
                       onClick={() => setBudgetInput(prev => ({ ...prev, headlinerType: opt.value }))}
-                      className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all active:scale-[0.98] ${
+                      className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all duration-200 active:scale-[0.98] min-h-[72px] ${
                         budgetInput.headlinerType === opt.value
                           ? "border-[#7B2FF7]/40 bg-[#7B2FF7]/5 text-white"
-                          : "border-white/[0.06] bg-zinc-900 text-zinc-400 hover:border-white/[0.12]"
+                          : "border-white/[0.06] bg-zinc-900 text-zinc-400 hover:border-nocturn/30 hover:text-zinc-200"
                       }`}
                     >
                       <opt.icon className="h-4 w-4" />
@@ -2040,7 +2079,7 @@ export default function NewEventPage() {
               <Button
                 onClick={handleCalculateBudget}
                 disabled={calculatingBudget || totalExpenses === 0}
-                className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px] transition-all active:scale-[0.98]"
+                className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px] transition-all duration-200 active:scale-[0.98]"
               >
                 {calculatingBudget ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -2242,7 +2281,7 @@ export default function NewEventPage() {
                 handleCreate();
               }}
               disabled={isSubmitting}
-              className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[48px] text-base font-semibold transition-all active:scale-[0.98] shadow-lg shadow-[#7B2FF7]/20 disabled:opacity-50"
+              className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[48px] text-base font-semibold transition-all duration-200 active:scale-[0.98] shadow-lg shadow-[#7B2FF7]/20 disabled:opacity-50"
             >
               {isSubmitting ? (
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
@@ -2267,7 +2306,7 @@ export default function NewEventPage() {
                 <Button
                   variant="ghost"
                   onClick={goBack}
-                  className="flex-1 min-h-[44px] text-zinc-400 hover:text-white rounded-xl"
+                  className="flex-1 min-h-[44px] text-zinc-400 hover:text-white hover:bg-accent rounded-xl transition-all duration-200 active:scale-[0.98]"
                 >
                   <ArrowLeft className="h-4 w-4 mr-1.5" />
                   Back
@@ -2278,7 +2317,7 @@ export default function NewEventPage() {
               <Button
                 onClick={goNext}
                 disabled={!canAdvance()}
-                className="flex-1 bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white min-h-[44px] rounded-xl transition-all active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white min-h-[44px] rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {step === "budget" ? "Review" : "Next"}
               </Button>
