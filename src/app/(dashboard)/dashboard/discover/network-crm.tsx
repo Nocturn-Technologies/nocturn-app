@@ -87,7 +87,7 @@ function RelBadge({ tag }: { tag: RelationshipTag }) {
 
   return (
     <span
-      className={`rounded-full px-2 py-0.5 text-[9px] font-semibold tracking-wide uppercase ${styles[tag]}`}
+      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold tracking-wide uppercase ${styles[tag]}`}
     >
       {tag}
     </span>
@@ -200,7 +200,7 @@ function ContactCard({
               }}
             />
           ) : (
-            <span className="text-[10px] font-bold text-nocturn/60 select-none">
+            <span className="text-[11px] font-bold text-nocturn/60 select-none">
               {initials || <User className="h-3.5 w-3.5 text-nocturn/50" />}
             </span>
           )}
@@ -217,7 +217,7 @@ function ContactCard({
           )}
         </div>
         <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${badgeColor}`}
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${badgeColor}`}
         >
           {typeLabel}
         </span>
@@ -255,13 +255,13 @@ function ContactCard({
         {(contact.email || contact.phone) && (
           <div className="space-y-0.5">
             {contact.email && (
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground truncate">
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground truncate">
                 <Mail className="h-2.5 w-2.5 shrink-0" />
                 <span className="truncate">{contact.email}</span>
               </div>
             )}
             {contact.phone && (
-              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                 <Phone className="h-2.5 w-2.5 shrink-0" />
                 <a
                   href={`tel:${contact.phone}`}
@@ -283,7 +283,7 @@ function ContactCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-pink-400 transition-colors"
+              className="flex items-center gap-1 text-[11px] text-muted-foreground hover:text-pink-400 transition-colors"
               title="Instagram"
             >
               <Instagram className="h-3 w-3" />
@@ -864,7 +864,7 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
             >
               {label}
               <span
-                className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold ${
                   isActive ? "bg-white/20" : "bg-muted"
                 }`}
               >
@@ -893,7 +893,7 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
               >
                 {label}
                 <span
-                  className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${
+                  className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold ${
                     isActive ? "bg-white/15" : "bg-muted/80"
                   }`}
                 >

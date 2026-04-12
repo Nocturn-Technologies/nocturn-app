@@ -372,11 +372,11 @@ export default function LiveEventPage() {
                 Bar Minimum
               </span>
               {atRisk ? (
-                <span className="text-[10px] font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
+                <span className="text-[11px] font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
                   ⚠️ ${deposit.toLocaleString()} deposit at risk
                 </span>
               ) : (
-                <span className="text-[10px] font-medium text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
+                <span className="text-[11px] font-medium text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
                   ✅ On track
                 </span>
               )}

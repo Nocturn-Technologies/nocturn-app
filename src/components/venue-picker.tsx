@@ -168,7 +168,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
                       {venue.name}
                     </span>
                     <span
-                      className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                      className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider ${
                         TYPE_COLORS[venue.venue_type] ?? "bg-zinc-700 text-zinc-300"
                       }`}
                     >

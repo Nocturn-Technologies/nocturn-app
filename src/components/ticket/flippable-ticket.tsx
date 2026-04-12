@@ -39,7 +39,7 @@ export function FlippableTicket(props: FlippableTicketProps) {
     <div className="w-full max-w-[380px] mx-auto">
       {/* Flip hint */}
       <div className="text-center mb-4">
-        <span className="text-[11px] text-white/25 font-medium tracking-wide uppercase">
+        <span className="text-[11px] text-white/50 font-medium tracking-wide uppercase">
           {isFlipped ? "Tap to see details" : "Tap to show QR"}
         </span>
       </div>
@@ -98,11 +98,11 @@ export function FlippableTicket(props: FlippableTicketProps) {
               <div className="flex items-center justify-between mb-6 relative z-10">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-[#7B2FF7]" />
-                  <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-white/30">Nocturn</span>
+                  <span className="text-[11px] font-bold tracking-[0.25em] uppercase text-white/50">Nocturn</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <Ticket className="h-3 w-3 text-white/20" />
-                  <span className="text-[10px] font-semibold text-white/20 uppercase tracking-wider">
+                  <Ticket className="h-3 w-3 text-white/40" />
+                  <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">
                     {props.tierName}
                   </span>
                 </div>
@@ -126,7 +126,7 @@ export function FlippableTicket(props: FlippableTicketProps) {
                     <Clock className="h-4 w-4 text-[#7B2FF7] shrink-0" />
                     <span className="text-[14px] text-white/50">
                       {props.eventTime}
-                      {props.doorsTime && <span className="text-white/25"> · Doors {props.doorsTime}</span>}
+                      {props.doorsTime && <span className="text-white/50"> · Doors {props.doorsTime}</span>}
                     </span>
                   </div>
                 )}
@@ -135,7 +135,7 @@ export function FlippableTicket(props: FlippableTicketProps) {
                     <MapPin className="h-4 w-4 text-[#7B2FF7] shrink-0" />
                     <span className="text-[14px] text-white/50">
                       {props.venueName}
-                      {props.venueCity && <span className="text-white/25"> · {props.venueCity}</span>}
+                      {props.venueCity && <span className="text-white/50"> · {props.venueCity}</span>}
                     </span>
                   </div>
                 )}
@@ -147,11 +147,11 @@ export function FlippableTicket(props: FlippableTicketProps) {
               {/* Bottom info */}
               <div className="flex items-center justify-between relative z-10">
                 <div>
-                  <p className="text-[11px] text-white/20 uppercase tracking-wider font-semibold mb-0.5">Attendee</p>
+                  <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-0.5">Attendee</p>
                   <p className="text-[13px] text-white/50 font-medium">{props.attendeeName || props.attendeeEmail}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[11px] text-white/20 uppercase tracking-wider font-semibold mb-0.5">Paid</p>
+                  <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-0.5">Paid</p>
                   <p className="text-[13px] text-white/50 font-medium">
                     {props.pricePaid === 0 ? "Free" : `$${props.pricePaid.toFixed(2)}`}
                   </p>
@@ -168,8 +168,8 @@ export function FlippableTicket(props: FlippableTicketProps) {
 
               {/* Flip hint */}
               <div className="mt-4 flex items-center justify-center gap-1.5 relative z-10">
-                <QrCode className="h-3 w-3 text-white/15" />
-                <span className="text-[10px] text-white/15 font-medium">Tap to show QR code</span>
+                <QrCode className="h-3 w-3 text-white/40" />
+                <span className="text-[11px] text-white/40 font-medium">Tap to show QR code</span>
               </div>
             </div>
           </div>
@@ -190,7 +190,7 @@ export function FlippableTicket(props: FlippableTicketProps) {
               {/* Header */}
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-2 h-2 rounded-full bg-[#7B2FF7]" />
-                <span className="text-[10px] font-bold tracking-[0.25em] uppercase text-white/30">Scan at the door</span>
+                <span className="text-[11px] font-bold tracking-[0.25em] uppercase text-white/50">Scan at the door</span>
               </div>
 
               {/* QR Code */}
@@ -207,19 +207,19 @@ export function FlippableTicket(props: FlippableTicketProps) {
                 </div>
               ) : (
                 <div className="w-[240px] h-[240px] sm:w-[280px] sm:h-[280px] rounded-xl bg-white/5 flex items-center justify-center mb-4">
-                  <QrCode className="h-12 w-12 text-white/20" />
+                  <QrCode className="h-12 w-12 text-white/40" />
                 </div>
               )}
 
               {/* Ticket ID */}
-              <p className="text-[10px] text-white/15 font-mono tracking-wider">
+              <p className="text-[11px] text-white/40 font-mono tracking-wider">
                 {props.ticketToken.slice(0, 8)}...{props.ticketToken.slice(-4)}
               </p>
 
               {/* Flip hint */}
               <div className="mt-4 flex items-center justify-center gap-1.5">
-                <Ticket className="h-3 w-3 text-white/15" />
-                <span className="text-[10px] text-white/15 font-medium">Tap to see details</span>
+                <Ticket className="h-3 w-3 text-white/40" />
+                <span className="text-[11px] text-white/40 font-medium">Tap to see details</span>
               </div>
             </div>
           </div>

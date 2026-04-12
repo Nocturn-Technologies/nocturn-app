@@ -57,7 +57,7 @@ export function AlsoThisWeek({ events, city }: { events: NearbyEvent[]; city?: s
                   <p className="text-sm font-semibold text-white line-clamp-2 leading-tight">
                     {event.title}
                   </p>
-                  <p className="text-[11px] text-white/25">
+                  <p className="text-[11px] text-white/50">
                     by {event.collectiveName}
                   </p>
                 </div>

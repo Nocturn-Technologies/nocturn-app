@@ -113,7 +113,7 @@ export default function RecapPage() {
             <Ticket className="h-5 w-5 mx-auto mb-1 text-nocturn" />
             <p className="text-2xl font-bold font-heading">{r.financial.ticketsSold}</p>
             <p className="text-xs text-muted-foreground">Tickets Sold</p>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               {Math.round(r.financial.sellThrough * 100)}% of {r.financial.capacity}
             </p>
           </CardContent>
@@ -123,7 +123,7 @@ export default function RecapPage() {
             <DollarSign className="h-5 w-5 mx-auto mb-1 text-green-500" />
             <p className="text-2xl font-bold font-heading">${r.financial.grossRevenue.toFixed(0)}</p>
             <p className="text-xs text-muted-foreground">Gross Revenue</p>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               Avg ${r.financial.avgTicketPrice.toFixed(0)}/ticket
             </p>
           </CardContent>
@@ -133,7 +133,7 @@ export default function RecapPage() {
             <Users className="h-5 w-5 mx-auto mb-1 text-blue-500" />
             <p className="text-2xl font-bold font-heading">{r.attendance.checkedIn}</p>
             <p className="text-xs text-muted-foreground">Checked In</p>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               {Math.round(r.attendance.checkInRate * 100)}% show rate · {r.attendance.noShows} no-shows
             </p>
           </CardContent>
@@ -170,7 +170,7 @@ export default function RecapPage() {
                 <p className="text-sm font-medium">{item.title}</p>
                 <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
               </div>
-              <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium capitalize shrink-0 ${
+              <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize shrink-0 ${
                 item.priority === "high" ? "bg-red-500/10 text-red-500" :
                 item.priority === "medium" ? "bg-nocturn-amber/10 text-nocturn-amber" :
                 "bg-nocturn-teal/10 text-nocturn-teal"

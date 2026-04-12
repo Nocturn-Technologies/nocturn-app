@@ -97,7 +97,7 @@ export function ExternalEventsSection({
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-sm truncate">{event.title}</p>
                     {event.platform && event.platform !== "other" && (
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${platformColors[event.platform] || platformColors.other}`}>
+                      <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full shrink-0 ${platformColors[event.platform] || platformColors.other}`}>
                         {event.platform}
                       </span>
                     )}

@@ -113,7 +113,7 @@ function SwipeableEventCard({ event }: { event: EventItem }) {
             className="relative flex h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-border bg-cover bg-center ring-1 ring-nocturn/10 transition-colors duration-200 group-hover:ring-nocturn/30"
             style={{ backgroundImage: `url(${event.flyer_url})` }}
           >
-            <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/60 py-0.5 text-[9px] font-semibold uppercase text-white/80 backdrop-blur-sm">
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/60 py-0.5 text-[11px] font-semibold uppercase text-white/80 backdrop-blur-sm">
               {date.toLocaleDateString("en", { month: "short" })} {date.getDate()}
             </div>
           </div>

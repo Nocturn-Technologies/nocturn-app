@@ -405,7 +405,7 @@ export default function MyProfilePage() {
               ) : (
                 <>
                   <Plus className="h-5 w-5" />
-                  <span className="text-[10px]">Add</span>
+                  <span className="text-[11px]">Add</span>
                 </>
               )}
             </button>

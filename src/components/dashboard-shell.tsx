@@ -358,7 +358,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
             >
               <Lock className="h-4 w-4" />
               <span>Promo</span>
-              <span className="ml-auto text-[10px] font-medium text-nocturn/60">Soon</span>
+              <span className="ml-auto text-[11px] font-medium text-nocturn/60">Soon</span>
             </Link>
           )}
         </nav>

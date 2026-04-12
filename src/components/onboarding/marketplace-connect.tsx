@@ -165,7 +165,7 @@ export function MarketplaceConnect({
                 {selectedProfile.display_name as string}
               </p>
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${TYPE_BADGE_COLORS[selectedProfile.user_type as string] ?? "bg-accent text-muted-foreground"}`}>
+                <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-medium ${TYPE_BADGE_COLORS[selectedProfile.user_type as string] ?? "bg-accent text-muted-foreground"}`}>
                   {TYPE_LABELS_SHORT[selectedProfile.user_type as string] ?? selectedProfile.user_type}
                 </span>
                 {selectedProfile.city ? <span>{String(selectedProfile.city)}</span> : null}
@@ -287,7 +287,7 @@ export function MarketplaceConnect({
                       {profile.display_name as string}
                     </p>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium ${TYPE_BADGE_COLORS[profile.user_type as string] ?? "bg-accent text-muted-foreground"}`}>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-medium ${TYPE_BADGE_COLORS[profile.user_type as string] ?? "bg-accent text-muted-foreground"}`}>
                         {TYPE_LABELS_SHORT[profile.user_type as string] ?? profile.user_type}
                       </span>
                       {profile.city ? <span>{String(profile.city)}</span> : null}

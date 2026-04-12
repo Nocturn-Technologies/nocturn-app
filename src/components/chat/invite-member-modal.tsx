@@ -215,7 +215,7 @@ export function InviteMemberModal({
                       {user.name ?? "Unnamed"}
                     </span>
                     {user.role && (
-                      <span className="text-[10px] text-muted-foreground capitalize shrink-0">
+                      <span className="text-[11px] text-muted-foreground capitalize shrink-0">
                         {user.role}
                       </span>
                     )}
@@ -227,7 +227,7 @@ export function InviteMemberModal({
                       </span>
                     )}
                     <span
-                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-medium shrink-0 ${SOURCE_COLORS[user.source]}`}
+                      className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-medium shrink-0 ${SOURCE_COLORS[user.source]}`}
                     >
                       {SOURCE_LABELS[user.source]}
                     </span>

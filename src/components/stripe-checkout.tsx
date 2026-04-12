@@ -73,10 +73,10 @@ function TicketSuccess({
           {/* Top section */}
           <div className="px-6 pt-6 pb-4">
             <div className="flex items-center justify-between mb-4">
-              <span className="text-[10px] font-bold uppercase tracking-[3px] text-white/50">
+              <span className="text-[11px] font-bold uppercase tracking-[3px] text-white/50">
                 🌙 nocturn.
               </span>
-              <span className="text-[10px] font-bold uppercase tracking-[3px] text-white/50">
+              <span className="text-[11px] font-bold uppercase tracking-[3px] text-white/50">
                 {ticketCount > 1 ? `${ticketCount} tickets` : "admit one"}
               </span>
             </div>
@@ -89,7 +89,7 @@ function TicketSuccess({
               {eventDate && (
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
-                    <span className="text-[10px]">📅</span>
+                    <span className="text-[11px]">📅</span>
                   </div>
                   <span className="text-sm text-white/80 font-medium">{eventDate}</span>
                 </div>
@@ -97,14 +97,14 @@ function TicketSuccess({
               {eventVenue && (
                 <div className="flex items-center gap-2">
                   <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
-                    <span className="text-[10px]">📍</span>
+                    <span className="text-[11px]">📍</span>
                   </div>
                   <span className="text-sm text-white/80 font-medium">{eventVenue}</span>
                 </div>
               )}
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
-                  <span className="text-[10px]">🎟️</span>
+                  <span className="text-[11px]">🎟️</span>
                 </div>
                 <span className="text-sm text-white/80 font-medium">
                   {tierName || "General Admission"}
@@ -123,14 +123,14 @@ function TicketSuccess({
           {/* Bottom section */}
           <div className="px-6 pb-6 pt-2 flex items-center justify-between">
             <div>
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium">Status</p>
+              <p className="text-[11px] text-white/50 uppercase tracking-wider font-medium">Status</p>
               <p className="text-sm font-bold text-green-300 flex items-center gap-1">
                 <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                 Confirmed
               </p>
             </div>
             <div className="text-right">
-              <p className="text-[10px] text-white/40 uppercase tracking-wider font-medium">Check email for</p>
+              <p className="text-[11px] text-white/50 uppercase tracking-wider font-medium">Check email for</p>
               <p className="text-sm font-bold text-white/80">QR Code</p>
             </div>
           </div>

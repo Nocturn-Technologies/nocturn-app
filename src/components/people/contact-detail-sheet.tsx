@@ -412,7 +412,7 @@ export function ContactDetailSheet({
                         contact.role && (
                           <Badge
                             variant="outline"
-                            className={`text-[9px] uppercase tracking-wide ${
+                            className={`text-[11px] uppercase tracking-wide ${
                               ROLE_BADGE_STYLES[contact.role] ??
                               "bg-muted/60 text-muted-foreground"
                             }`}
@@ -425,7 +425,7 @@ export function ContactDetailSheet({
                           ?.segment && (
                           <Badge
                             variant="outline"
-                            className={`text-[9px] ${SEGMENT_BADGE_STYLES[(contact.metadata as Record<string, unknown>).segment as string] ?? ""}`}
+                            className={`text-[11px] ${SEGMENT_BADGE_STYLES[(contact.metadata as Record<string, unknown>).segment as string] ?? ""}`}
                           >
                             {
                               (contact.metadata as Record<string, unknown>)
@@ -664,7 +664,7 @@ export function ContactDetailSheet({
                               </p>
                             )}
                           </div>
-                          <span className="text-[10px] text-muted-foreground/60 shrink-0 mt-0.5">
+                          <span className="text-[11px] text-muted-foreground/60 shrink-0 mt-0.5">
                             {relativeDate(entry.date)}
                           </span>
                         </div>

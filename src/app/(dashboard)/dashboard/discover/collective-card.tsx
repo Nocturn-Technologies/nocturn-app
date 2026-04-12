@@ -49,7 +49,7 @@ export function CollectiveCard({
               }}
             />
           ) : (
-            <span className="text-[10px] font-bold text-blue-400">{initials}</span>
+            <span className="text-[11px] font-bold text-blue-400">{initials}</span>
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -63,7 +63,7 @@ export function CollectiveCard({
             </div>
           )}
         </div>
-        <span className="shrink-0 rounded-full bg-blue-500/10 text-blue-400 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider">
+        <span className="shrink-0 rounded-full bg-blue-500/10 text-blue-400 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider">
           Collective
         </span>
       </div>

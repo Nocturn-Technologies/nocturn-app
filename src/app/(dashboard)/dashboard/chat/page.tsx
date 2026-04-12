@@ -166,7 +166,7 @@ function ChannelRow({
             {ch.name}
           </p>
           {ch.event_date && (
-            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[#7B2FF7]/10 text-[#7B2FF7] shrink-0">
+            <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-[#7B2FF7]/10 text-[#7B2FF7] shrink-0">
               {formatEventBadge(ch.event_date)}
             </span>
           )}
@@ -213,7 +213,7 @@ function SectionHeader({
       <h2 className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-widest">
         {label}
       </h2>
-      <span className="text-[10px] font-medium text-muted-foreground/40 bg-white/[0.04] rounded-full px-1.5 py-0.5">
+      <span className="text-[11px] font-medium text-muted-foreground/40 bg-white/[0.04] rounded-full px-1.5 py-0.5">
         {count}
       </span>
     </div>
@@ -608,7 +608,7 @@ export default function ChatPage() {
             <tab.icon className="h-4 w-4" />
             {tab.label}
             {tab.badge ? (
-              <span className="min-w-[18px] h-[18px] rounded-full bg-nocturn text-white text-[10px] font-bold flex items-center justify-center px-1">
+              <span className="min-w-[18px] h-[18px] rounded-full bg-nocturn text-white text-[11px] font-bold flex items-center justify-center px-1">
                 {tab.badge}
               </span>
             ) : null}
@@ -784,7 +784,7 @@ export default function ChatPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                         inq.status === "pending"
                           ? "bg-amber-500/10 text-amber-400"
                           : inq.status === "accepted"
@@ -894,7 +894,7 @@ export default function ChatPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
                       inq.status === "pending"
                         ? "bg-amber-500/10 text-amber-400"
                         : inq.status === "accepted"

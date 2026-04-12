@@ -167,7 +167,7 @@ export default async function PromoInsightsPage() {
                         key={day}
                         className="flex-1 flex flex-col items-center gap-0.5"
                       >
-                        <span className="text-[9px] text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground">
                           {count}
                         </span>
                         <div
@@ -180,7 +180,7 @@ export default async function PromoInsightsPage() {
                             height: `${Math.max((count / max) * 100, 4)}%`,
                           }}
                         />
-                        <span className="text-[9px] text-muted-foreground">
+                        <span className="text-[11px] text-muted-foreground">
                           {day.slice(0, 3)}
                         </span>
                       </div>
@@ -255,14 +255,14 @@ export default async function PromoInsightsPage() {
                   <p className="text-xl font-bold">
                     {audience.totalUniqueAttendees}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[11px] text-muted-foreground">
                     Unique Attendees
                   </p>
                 </div>
                 <div className="rounded-lg bg-muted/50 p-3 text-center">
                   <Repeat className="h-4 w-4 mx-auto text-muted-foreground mb-1" />
                   <p className="text-xl font-bold">{audience.repeatRate}%</p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[11px] text-muted-foreground">
                     Repeat Rate
                   </p>
                 </div>
@@ -271,7 +271,7 @@ export default async function PromoInsightsPage() {
                   <p className="text-xl font-bold">
                     {fmtCurrency(audience.avgTicketPrice)}
                   </p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-[11px] text-muted-foreground">
                     Avg Ticket
                   </p>
                 </div>
@@ -318,7 +318,7 @@ export default async function PromoInsightsPage() {
                           key={point.date}
                           className="flex-1 flex flex-col items-center gap-0.5"
                         >
-                          <span className="text-[9px] text-muted-foreground">
+                          <span className="text-[11px] text-muted-foreground">
                             {point.attendees}
                           </span>
                           <div
@@ -396,7 +396,7 @@ export default async function PromoInsightsPage() {
                         {item.label}
                       </p>
                       {isToday && (
-                        <span className="text-[10px] bg-nocturn/20 text-nocturn px-1.5 py-0.5 rounded-full font-medium">
+                        <span className="text-[11px] bg-nocturn/20 text-nocturn px-1.5 py-0.5 rounded-full font-medium">
                           TODAY
                         </span>
                       )}

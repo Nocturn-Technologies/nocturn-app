@@ -466,7 +466,7 @@ export default function ChatRoomPage() {
           <Users size={18} />
           {memberCount > 0 && (
             <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-nocturn flex items-center justify-center px-1">
-              <span className="text-[10px] font-bold text-white">{memberCount}</span>
+              <span className="text-[11px] font-bold text-white">{memberCount}</span>
             </span>
           )}
         </button>

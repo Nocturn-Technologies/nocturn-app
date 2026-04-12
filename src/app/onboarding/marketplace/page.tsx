@@ -307,7 +307,7 @@ export default function MarketplaceOnboardingPage() {
             <>
               <div className="text-center space-y-2 mb-6">
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-nocturn/10 text-nocturn">
-                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${badgeColor}`}>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[11px] font-semibold ${badgeColor}`}>
                     {typeLabel}
                   </span>
                 </div>
@@ -409,7 +409,7 @@ export default function MarketplaceOnboardingPage() {
                           {displayName || "Your Name"}
                         </h3>
                         <div className="flex items-center gap-2 mt-0.5">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${badgeColor}`}>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${badgeColor}`}>
                             {typeLabel}
                           </span>
                           {city && (
@@ -431,7 +431,7 @@ export default function MarketplaceOnboardingPage() {
                         {selectedTags.map((tag) => (
                           <span
                             key={tag}
-                            className="px-2 py-1 rounded-full text-[10px] font-medium bg-accent text-muted-foreground"
+                            className="px-2 py-1 rounded-full text-[11px] font-medium bg-accent text-muted-foreground"
                           >
                             {tag.replace(/-/g, " ")}
                           </span>

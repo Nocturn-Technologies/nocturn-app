@@ -568,7 +568,7 @@ export default function EventDesignPage() {
                         AI-extracted theme
                       </span>
                       {extractedTheme.mood && (
-                        <span className="text-[10px] text-muted-foreground/60 italic">
+                        <span className="text-[11px] text-muted-foreground/60 italic">
                           {extractedTheme.mood}
                         </span>
                       )}
@@ -589,7 +589,7 @@ export default function EventDesignPage() {
                             }`}
                             style={{ backgroundColor: extractedTheme[key] }}
                           />
-                          <span className="block text-[9px] uppercase text-muted-foreground/60">
+                          <span className="block text-[11px] uppercase text-muted-foreground/60">
                             {key}
                           </span>
                         </button>
@@ -671,7 +671,7 @@ export default function EventDesignPage() {
                     alt="AI Generated Poster"
                     className="mx-auto h-64 w-full max-w-sm rounded-xl object-cover border-2 border-nocturn"
                   />
-                  <div className="absolute top-2 right-2 rounded-full bg-nocturn px-2 py-1 text-[10px] font-bold text-white">
+                  <div className="absolute top-2 right-2 rounded-full bg-nocturn px-2 py-1 text-[11px] font-bold text-white">
                     AI Generated
                   </div>
                 </div>
@@ -841,7 +841,7 @@ export default function EventDesignPage() {
                             className="h-full w-full object-cover transition-transform group-hover:scale-105"
                           />
                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-end justify-center pb-1">
-                            <span className="text-[9px] text-white/0 group-hover:text-white/70 transition-colors truncate px-1">
+                            <span className="text-[11px] text-white/0 group-hover:text-white/70 transition-colors truncate px-1">
                               {photo.photographer}
                             </span>
                           </div>
@@ -849,7 +849,7 @@ export default function EventDesignPage() {
                       ))}
                     </div>
                     {unsplashResults.length > 0 && (
-                      <p className="text-[10px] text-muted-foreground/50 text-center">
+                      <p className="text-[11px] text-muted-foreground/50 text-center">
                         Photos by Unsplash
                       </p>
                     )}
@@ -1075,7 +1075,7 @@ export default function EventDesignPage() {
                       {vibeTags.map((tag) => (
                         <span
                           key={tag}
-                          className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-white/60"
+                          className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-white/60"
                         >
                           {tag}
                         </span>
@@ -1087,9 +1087,9 @@ export default function EventDesignPage() {
                   <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col items-center rounded-lg bg-white/5 px-2.5 py-1.5">
-                        <span className="text-[9px] font-semibold uppercase text-white/40">SAT</span>
+                        <span className="text-[11px] font-semibold uppercase text-white/40">SAT</span>
                         <span className="text-sm font-bold text-white">25</span>
-                        <span className="text-[9px] font-semibold uppercase text-white/40">APR</span>
+                        <span className="text-[11px] font-semibold uppercase text-white/40">APR</span>
                       </div>
                       <div className="text-xs text-white/60">
                         10:00 PM — 2:00 AM
@@ -1104,7 +1104,7 @@ export default function EventDesignPage() {
                   )}
 
                   {dressCode && (
-                    <p className="text-[10px] text-white/40">
+                    <p className="text-[11px] text-white/40">
                       Dress code: {dressCode}
                     </p>
                   )}
@@ -1117,7 +1117,7 @@ export default function EventDesignPage() {
                     Get Tickets
                   </div>
 
-                  <p className="text-center text-[10px] text-white/20">
+                  <p className="text-center text-[11px] text-white/40">
                     Powered by <span style={{ color: themeColor }}>nocturn.</span>
                   </p>
                 </div>

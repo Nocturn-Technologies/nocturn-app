@@ -81,7 +81,7 @@ export default function ArtistAnalyticsPage() {
       >
         {label}
         <ArrowUpDown className="h-3 w-3" />
-        {active && <span className="text-[10px]">{sortDir === "asc" ? "↑" : "↓"}</span>}
+        {active && <span className="text-[11px]">{sortDir === "asc" ? "↑" : "↓"}</span>}
       </button>
     );
   }
@@ -276,7 +276,7 @@ export default function ArtistAnalyticsPage() {
                         <div className="flex items-center gap-2">
                           <p className="font-medium truncate">{artist.artistName}</p>
                           {artist.suggestForNext && (
-                            <span className="inline-flex items-center gap-0.5 rounded-full bg-nocturn/10 border border-nocturn/20 px-2 py-0.5 text-[10px] font-medium text-nocturn shrink-0">
+                            <span className="inline-flex items-center gap-0.5 rounded-full bg-nocturn/10 border border-nocturn/20 px-2 py-0.5 text-[11px] font-medium text-nocturn shrink-0">
                               <TrendingUp className="h-2.5 w-2.5" />
                               Rebook
                             </span>

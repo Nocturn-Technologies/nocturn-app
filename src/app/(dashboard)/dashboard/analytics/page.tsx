@@ -174,12 +174,12 @@ export default async function AnalyticsPage() {
           <div className="flex items-end gap-1.5 h-32">
             {Object.entries(dailyVolume).map(([day, count]) => (
               <div key={day} className="flex-1 flex flex-col items-center gap-1">
-                <span className="text-[10px] text-muted-foreground font-medium">{count}</span>
+                <span className="text-[11px] text-muted-foreground font-medium">{count}</span>
                 <div
                   className="w-full rounded-t bg-nocturn/80 transition-all"
                   style={{ height: `${Math.max((count / maxDaily) * 100, 4)}%` }}
                 />
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-[11px] text-muted-foreground">
                   {new Date(day).toLocaleDateString("en-US", { weekday: "short" })}
                 </span>
               </div>

@@ -410,7 +410,7 @@ export function TicketSection({
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={`w-full rounded-xl border bg-white/[0.03] px-4 py-3.5 pr-10 text-[16px] text-white placeholder:text-white/25 outline-none focus:ring-1 transition-all duration-200 ${
+                className={`w-full rounded-xl border bg-white/[0.03] px-4 py-3.5 pr-10 text-[16px] text-white placeholder:text-white/40 outline-none focus:ring-1 transition-all duration-200 ${
                   emailValid === true
                     ? "border-green-500/40 focus:border-green-500/60 focus:ring-green-500/10"
                     : emailValid === false
@@ -443,7 +443,7 @@ export function TicketSection({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 maxLength={32}
-                className={`w-full rounded-xl border bg-white/[0.03] pl-10 pr-10 py-3.5 text-[16px] text-white placeholder:text-white/25 outline-none focus:ring-1 transition-all duration-200 ${
+                className={`w-full rounded-xl border bg-white/[0.03] pl-10 pr-10 py-3.5 text-[16px] text-white placeholder:text-white/40 outline-none focus:ring-1 transition-all duration-200 ${
                   phoneValid === true
                     ? "border-green-500/40 focus:border-green-500/60 focus:ring-green-500/10"
                     : phoneValid === false
@@ -498,7 +498,7 @@ export function TicketSection({
                     setPromoCode(e.target.value.toUpperCase());
                     setPromoError(null);
                   }}
-                  className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-[16px] text-white placeholder:text-white/25 outline-none focus:border-white/20 focus:ring-1 focus:ring-white/5 transition-all duration-200"
+                  className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-[16px] text-white placeholder:text-white/40 outline-none focus:border-white/20 focus:ring-1 focus:ring-white/5 transition-all duration-200"
                 />
                 <button
                   onClick={async () => {

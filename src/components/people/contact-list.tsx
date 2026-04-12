@@ -709,7 +709,7 @@ export function ContactList({
                             ) && (
                             <span className="flex items-center gap-0.5 text-amber-400">
                               <Clock className="h-2.5 w-2.5" />
-                              <span className="text-[9px] font-medium">
+                              <span className="text-[11px] font-medium">
                                 {formatFollowUp(contact.follow_up_at)}
                               </span>
                             </span>
@@ -809,7 +809,7 @@ export function ContactList({
                         {contact.segment && (
                           <Badge
                             variant="outline"
-                            className={`text-[9px] ${SEGMENT_BADGE_STYLES[contact.segment] ?? ""}`}
+                            className={`text-[11px] ${SEGMENT_BADGE_STYLES[contact.segment] ?? ""}`}
                           >
                             {contact.segment}
                           </Badge>
@@ -827,7 +827,7 @@ export function ContactList({
                         {contact.role && (
                           <Badge
                             variant="outline"
-                            className={`text-[9px] uppercase tracking-wide ${
+                            className={`text-[11px] uppercase tracking-wide ${
                               ROLE_BADGE_STYLES[contact.role] ??
                               "bg-muted/60 text-muted-foreground"
                             }`}
@@ -851,13 +851,13 @@ export function ContactList({
                     {contact.tags.slice(0, 3).map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-white/70"
+                        className="rounded-full bg-white/10 px-1.5 py-0.5 text-[11px] text-white/70"
                       >
                         {tag}
                       </span>
                     ))}
                     {contact.tags.length > 3 && (
-                      <span className="text-[9px] text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground">
                         +{contact.tags.length - 3}
                       </span>
                     )}
@@ -943,7 +943,7 @@ export function ContactList({
                         {contactType === "fan" && contact.segment && (
                           <Badge
                             variant="outline"
-                            className={`text-[9px] ${SEGMENT_BADGE_STYLES[contact.segment] ?? ""}`}
+                            className={`text-[11px] ${SEGMENT_BADGE_STYLES[contact.segment] ?? ""}`}
                           >
                             {contact.segment}
                           </Badge>
@@ -951,7 +951,7 @@ export function ContactList({
                         {contactType === "industry" && contact.role && (
                           <Badge
                             variant="outline"
-                            className={`text-[9px] uppercase tracking-wide ${
+                            className={`text-[11px] uppercase tracking-wide ${
                               ROLE_BADGE_STYLES[contact.role] ??
                               "bg-muted/60 text-muted-foreground"
                             }`}
@@ -960,14 +960,14 @@ export function ContactList({
                           </Badge>
                         )}
                         {contactType === "fan" && (
-                          <span className="text-[10px] text-muted-foreground">
+                          <span className="text-[11px] text-muted-foreground">
                             {contact.total_events ?? 0} event
                             {(contact.total_events ?? 0) !== 1 ? "s" : ""}
                           </span>
                         )}
                         {/* Last seen */}
                         {contactType === "fan" && getLastSeenDate(contact) && (
-                          <span className="text-[10px] text-muted-foreground/60">
+                          <span className="text-[11px] text-muted-foreground/60">
                             · {getLastSeenDate(contact)}
                           </span>
                         )}
@@ -977,7 +977,7 @@ export function ContactList({
                             new Date(new Date().setHours(0, 0, 0, 0)) && (
                             <span className="flex items-center gap-0.5 text-amber-400">
                               <Clock className="h-2.5 w-2.5" />
-                              <span className="text-[9px] font-medium">
+                              <span className="text-[11px] font-medium">
                                 {formatFollowUp(contact.follow_up_at)}
                               </span>
                             </span>
@@ -995,13 +995,13 @@ export function ContactList({
                           {contact.tags.slice(0, 4).map((tag) => (
                             <span
                               key={tag}
-                              className="rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] text-white/70"
+                              className="rounded-full bg-white/10 px-1.5 py-0.5 text-[11px] text-white/70"
                             >
                               {tag}
                             </span>
                           ))}
                           {contact.tags.length > 4 && (
-                            <span className="text-[9px] text-muted-foreground">
+                            <span className="text-[11px] text-muted-foreground">
                               +{contact.tags.length - 4}
                             </span>
                           )}
@@ -1010,7 +1010,7 @@ export function ContactList({
 
                       {/* Notes preview */}
                       {contact.notes && (
-                        <p className="mt-1 text-[10px] text-muted-foreground/60 truncate">
+                        <p className="mt-1 text-[11px] text-muted-foreground/60 truncate">
                           {contact.notes}
                         </p>
                       )}
