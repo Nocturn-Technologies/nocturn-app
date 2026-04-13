@@ -1564,7 +1564,7 @@ export default function NewEventPage() {
       <StepProgress current={step} steps={activeSteps} />
 
       {/* Step content */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-1 pb-32 min-h-0">
+      <div className="flex-1 overflow-y-auto overscroll-contain px-1 pb-44 md:pb-32 min-h-0">
         {/* ── STEP 1: Event Details ── */}
         {step === "details" && (
           <div className="space-y-5 animate-fade-in">
@@ -2275,11 +2275,9 @@ export default function NewEventPage() {
             )}
 
             {/* Create button */}
+            <p className="text-[11px] text-zinc-500 text-center">Creates a draft — you can edit everything afterwards.</p>
             <Button
-              onClick={() => {
-                if (!window.confirm("Create this event as a draft? You can edit everything afterwards.")) return;
-                handleCreate();
-              }}
+              onClick={() => handleCreate()}
               disabled={isSubmitting}
               className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[48px] text-base font-semibold transition-all duration-200 active:scale-[0.98] shadow-lg shadow-[#7B2FF7]/20 disabled:opacity-50"
             >
@@ -2294,10 +2292,10 @@ export default function NewEventPage() {
         )}
       </div>
 
-      {/* Bottom nav bar — Back / Next */}
+      {/* Bottom nav bar — Back / Next — positioned above mobile tab bar */}
       {step !== "review" && (
         <div
-          className="fixed bottom-0 left-0 right-0 border-t border-white/5 bg-background/95 backdrop-blur-sm z-10"
+          className="fixed bottom-0 left-0 right-0 border-t border-white/5 bg-background/95 backdrop-blur-sm z-40 mb-[60px] md:mb-0"
           style={{ paddingBottom: "max(env(safe-area-inset-bottom, 0px), 8px)" }}
         >
           <div className="mx-auto max-w-lg flex flex-col gap-2 px-4 py-3">

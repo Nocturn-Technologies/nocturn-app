@@ -565,7 +565,7 @@ export default function ChatPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-2xl mx-auto pb-24 md:pb-0 animate-in fade-in duration-300 overflow-x-hidden">
+    <div className="max-w-2xl mx-auto pb-4 md:pb-0 animate-in fade-in duration-300 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">

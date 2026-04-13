@@ -434,7 +434,7 @@ export default function ChatRoomPage() {
   const isOwnMessage = (msg: Message) => msg.user_id === userId;
 
   return (
-    <div className="flex h-[calc(100vh-3.5rem)] md:h-[calc(100vh-1.5rem)] -m-4 md:-m-6 animate-in fade-in duration-300">
+    <div className="flex h-[calc(100vh-3.5rem-60px)] md:h-[calc(100vh-1.5rem)] -m-4 md:-m-6 animate-in fade-in duration-300 overflow-x-hidden">
     <div className="flex flex-col flex-1 min-w-0">
       {/* Header */}
       <header className="flex items-center gap-3 px-4 h-14 bg-card/95 backdrop-blur-lg border-b border-border shrink-0 z-10">

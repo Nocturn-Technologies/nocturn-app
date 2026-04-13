@@ -119,7 +119,7 @@ export function EventCard({ collectiveName, vibe, data, onChange }: EventCardPro
                 onBlur={() => setEditingField(null)}
                 onKeyDown={(e) => e.key === "Enter" && setEditingField(null)}
                 autoFocus
-                className="flex-1 rounded-md border border-border bg-card px-3 py-1 text-sm text-foreground focus:border-nocturn focus:ring-1 focus:ring-nocturn outline-none"
+                className="flex-1 rounded-md border border-border bg-card px-3 py-1 text-base md:text-sm text-foreground focus:border-nocturn focus:ring-1 focus:ring-nocturn outline-none"
               />
             </div>
           ) : (
@@ -146,7 +146,7 @@ export function EventCard({ collectiveName, vibe, data, onChange }: EventCardPro
                 onKeyDown={(e) => e.key === "Enter" && setEditingField(null)}
                 placeholder="Enter venue name"
                 autoFocus
-                className="text-sm h-8"
+                className="text-base md:text-sm h-8"
               />
             </div>
           ) : (
@@ -177,7 +177,7 @@ export function EventCard({ collectiveName, vibe, data, onChange }: EventCardPro
                 onBlur={() => setEditingField(null)}
                 onKeyDown={(e) => e.key === "Enter" && setEditingField(null)}
                 autoFocus
-                className="text-sm h-8 w-20"
+                className="text-base md:text-sm h-8 w-20"
                 min={0}
               />
               <span className="text-sm text-muted-foreground">· {data.tierName}</span>

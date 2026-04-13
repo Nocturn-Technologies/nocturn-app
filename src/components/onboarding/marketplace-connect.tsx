@@ -180,7 +180,7 @@ export function MarketplaceConnect({
             placeholder={`Hey ${(selectedProfile.display_name as string)?.split(" ")[0] ?? ""}! Just set up my profile on Nocturn — let's connect.`}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            className="w-full rounded-xl border bg-card px-4 py-3 text-sm leading-relaxed resize-none focus:border-nocturn focus:ring-1 focus:ring-nocturn min-h-[80px]"
+            className="w-full rounded-xl border bg-card px-4 py-3 text-base md:text-sm leading-relaxed resize-none focus:border-nocturn focus:ring-1 focus:ring-nocturn min-h-[80px]"
             rows={3}
             autoFocus
           />
