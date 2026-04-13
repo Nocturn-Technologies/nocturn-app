@@ -6,8 +6,14 @@ import { ContactList } from "@/components/people/contact-list";
 import { ImportSheet } from "@/components/people/import-sheet";
 import { ContactDetailSheet } from "@/components/people/contact-detail-sheet";
 import { Button } from "@/components/ui/button";
-import { Upload, MessageSquare } from "lucide-react";
+import { Upload, MessageSquare, ChevronDown, Calendar } from "lucide-react";
 import Link from "next/link";
+
+interface EventOption {
+  id: string;
+  title: string;
+  starts_at: string;
+}
 
 export default function AudiencePage() {
   const [collectiveId, setCollectiveId] = useState<string | null>(null);
@@ -18,7 +24,13 @@ export default function AudiencePage() {
   );
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Fetch user's active collective
+  // Per-event filter
+  const [events, setEvents] = useState<EventOption[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [eventAttendeeEmails, setEventAttendeeEmails] = useState<Set<string>>(new Set());
+  const [loadingEventEmails, setLoadingEventEmails] = useState(false);
+
+  // Fetch user's active collective + events
   useEffect(() => {
     async function fetchCollective() {
       const supabase = createClient();
@@ -41,10 +53,52 @@ export default function AudiencePage() {
           memberships as { collective_id: string }[] | null
         )?.[0]?.collective_id ?? null;
       setCollectiveId(id);
+
+      // Fetch events for per-event filter dropdown
+      if (id) {
+        const { data: eventsRaw } = await supabase
+          .from("events")
+          .select("id, title, starts_at")
+          .eq("collective_id", id)
+          .is("deleted_at", null)
+          .order("starts_at", { ascending: false })
+          .limit(50);
+        setEvents((eventsRaw ?? []) as EventOption[]);
+      }
+
       setLoading(false);
     }
     fetchCollective();
   }, []);
+
+  // When an event is selected, fetch its attendee emails
+  useEffect(() => {
+    if (!selectedEventId) {
+      setEventAttendeeEmails(new Set());
+      return;
+    }
+    setLoadingEventEmails(true);
+    const supabase = createClient();
+
+    (async () => {
+      // Fetch ticket buyer emails for this event
+      const { data: tickets } = await supabase
+        .from("tickets")
+        .select("metadata")
+        .eq("event_id", selectedEventId)
+        .in("status", ["paid", "checked_in"]);
+
+      const emails = new Set<string>();
+      for (const t of (tickets ?? []) as { metadata: Record<string, unknown> | null }[]) {
+        const email =
+          (t.metadata?.customer_email as string) ||
+          (t.metadata?.buyer_email as string);
+        if (email) emails.add(email.toLowerCase().trim());
+      }
+      setEventAttendeeEmails(emails);
+      setLoadingEventEmails(false);
+    })();
+  }, [selectedEventId]);
 
   const handleImportComplete = useCallback(() => {
     setRefreshKey((k) => k + 1);
@@ -73,8 +127,10 @@ export default function AudiencePage() {
     );
   }
 
+  const selectedEvent = events.find((e) => e.id === selectedEventId);
+
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-6 pb-24 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -108,6 +164,41 @@ export default function AudiencePage() {
         </div>
       </div>
 
+      {/* Per-event filter */}
+      {events.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="relative flex-1 max-w-xs">
+            <select
+              value={selectedEventId ?? ""}
+              onChange={(e) => setSelectedEventId(e.target.value || null)}
+              className="w-full appearance-none rounded-lg border bg-background px-3 py-2 pr-8 text-base md:text-sm min-h-[44px] text-foreground transition-colors focus:border-nocturn/40 focus:outline-none"
+            >
+              <option value="">All Events</option>
+              {events.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.title} — {new Date(e.starts_at).toLocaleDateString("en", { month: "short", day: "numeric" })}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          </div>
+          {selectedEvent && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSelectedEventId(null)}
+              className="h-8 px-2 text-xs text-muted-foreground"
+            >
+              Clear
+            </Button>
+          )}
+          {loadingEventEmails && (
+            <div className="h-4 w-4 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+          )}
+        </div>
+      )}
+
       {/* Contact list */}
       <ContactList
         key={refreshKey}
@@ -115,6 +206,8 @@ export default function AudiencePage() {
         contactType="fan"
         onContactClick={(id) => setSelectedContactId(id)}
         onImportClick={() => setImportOpen(true)}
+        eventFilter={selectedEventId}
+        eventAttendeeEmails={selectedEventId ? eventAttendeeEmails : undefined}
       />
 
       {/* Import sheet */}

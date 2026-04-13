@@ -20,6 +20,9 @@ import {
   DollarSign,
   TrendingUp,
   Repeat2,
+  Download,
+  Copy,
+  Check,
 } from "lucide-react";
 
 
@@ -61,6 +64,10 @@ interface ContactListProps {
   contactType: "industry" | "fan";
   onContactClick?: (contactId: string) => void;
   onImportClick?: () => void;
+  /** Event ID to filter contacts by (only show fans who have tickets for this event) */
+  eventFilter?: string | null;
+  /** Emails of attendees for the selected event (used with eventFilter) */
+  eventAttendeeEmails?: Set<string>;
 }
 
 // ── Sort types ──────────────────────────────────────────────────────────────
@@ -158,6 +165,8 @@ export function ContactList({
   contactType,
   onContactClick,
   onImportClick,
+  eventFilter,
+  eventAttendeeEmails,
 }: ContactListProps) {
   const [contacts, setContacts] = useState<PeopleContact[]>([]);
   const [stats, setStats] = useState<PeopleStats>({ total: 0 });
@@ -171,6 +180,7 @@ export function ContactList({
 
   const [sortBy, setSortBy] = useState<SortBy>("recent");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [copied, setCopied] = useState(false);
 
   // Debounce search
   useEffect(() => {
@@ -227,6 +237,57 @@ export function ContactList({
   useEffect(() => {
     fetchContacts();
   }, [fetchContacts]);
+
+  // ── Export + Copy handlers ──
+
+  function handleExportCSV() {
+    // CSV-safe escaping to prevent formula injection
+    function csvSafe(field: string): string {
+      let safe = field;
+      if (/^[=+\-@\t\r]/.test(safe)) safe = `'${safe}`;
+      return `"${safe.replace(/"/g, '""')}"`;
+    }
+
+    const headers = [
+      "Name", "Email", "Phone", "Instagram", "Events", "Spent",
+      "Segment", "Last Seen", "Tags", "Source",
+    ];
+
+    const rows = sorted.map((c) => [
+      csvSafe(c.name ?? ""),
+      csvSafe(c.email),
+      csvSafe(c.phone ?? ""),
+      csvSafe(c.instagram ? `@${c.instagram.replace(/^@/, "")}` : ""),
+      csvSafe(String(c.total_events ?? 0)),
+      csvSafe(`$${(c.total_spend ?? 0).toFixed(2)}`),
+      csvSafe(c.segment ?? ""),
+      csvSafe(c.last_seen_at ? new Date(c.last_seen_at).toLocaleDateString("en-US") : ""),
+      csvSafe(c.tags.join(", ")),
+      csvSafe(c.source ?? ""),
+    ]);
+
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `nocturn-fans-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleCopyHandles() {
+    const handles = sorted
+      .filter((c) => c.instagram)
+      .map((c) => `@${c.instagram!.replace(/^@/, "")}`)
+      .join("\n");
+
+    if (!handles) return;
+    navigator.clipboard.writeText(handles).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
 
   // ── Stat cards computation ──
   const summaryStats = useMemo(() => {
@@ -294,6 +355,11 @@ export function ContactList({
   // Filter contacts
   const filtered = useMemo(() => {
     return contacts.filter((c) => {
+      // Event filter — only show fans whose email matches an attendee of the selected event
+      if (eventFilter && eventAttendeeEmails) {
+        if (!eventAttendeeEmails.has(c.email.toLowerCase())) return false;
+      }
+
       // Search
       const q = debouncedSearch.toLowerCase();
       if (q) {
@@ -556,13 +622,40 @@ export function ContactList({
         })}
       </div>
 
-      {/* Result count */}
-      <p className="text-xs text-muted-foreground">
-        {sorted.length} result{sorted.length !== 1 ? "s" : ""}
-        {activeFilter !== "all" &&
-          ` · ${filters.find((f) => f.value === activeFilter)?.label ?? activeFilter}`}
-        {debouncedSearch && ` · "${debouncedSearch}"`}
-      </p>
+      {/* Result count + export actions */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          {sorted.length} result{sorted.length !== 1 ? "s" : ""}
+          {activeFilter !== "all" &&
+            ` · ${filters.find((f) => f.value === activeFilter)?.label ?? activeFilter}`}
+          {debouncedSearch && ` · "${debouncedSearch}"`}
+        </p>
+        {sorted.length > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCopyHandles}
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+              disabled={!sorted.some((c) => c.instagram)}
+              title="Copy all IG handles to clipboard"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">{copied ? "Copied!" : "@handles"}</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleExportCSV}
+              className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+              title="Export current view as CSV"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">CSV</span>
+            </Button>
+          </div>
+        )}
+      </div>
 
       {/* Contact list */}
       {sorted.length === 0 ? (
@@ -672,7 +765,7 @@ export function ContactList({
           {paginated.map((contact) => (
             <Card
               key={contact.id}
-              className="cursor-pointer hover:border-border/80 transition-all"
+              className="cursor-pointer hover:border-border/80 transition-colors duration-150"
               onClick={() => onContactClick?.(contact.id)}
             >
               <CardContent className="p-4">
