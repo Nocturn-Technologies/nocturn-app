@@ -18,7 +18,7 @@ interface EventItem {
   venues: { name: string; city: string } | null;
 }
 
-export function SwipeableEventList({ events }: { events: EventItem[] }) {
+export function SwipeableEventList({ events, stagger = false }: { events: EventItem[]; stagger?: boolean }) {
   const router = useRouter();
   const [archiveConfirm, setArchiveConfirm] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
@@ -36,23 +36,28 @@ export function SwipeableEventList({ events }: { events: EventItem[] }) {
 
   return (
     <>
-      {events.map((event) => (
-        <SwipeableCard
+      {events.map((event, index) => (
+        <div
           key={event.id}
-          onSwipeRight={
-            event.status === "draft"
-              ? () => handlePublish(event.id)
-              : undefined
-          }
-          onSwipeLeft={() => handleArchivePrompt(event.id)}
-          rightLabel={event.status === "draft" ? "Publish" : ""}
-          leftLabel="Archive"
-          disabled={event.status === "draft" ? false : true}
+          className={stagger ? "animate-in fade-in slide-in-from-bottom-2 duration-300 fill-mode-both" : ""}
+          style={stagger ? { animationDelay: `${index * 50}ms` } : undefined}
         >
-          <Link href={`/dashboard/events/${event.id}`}>
-            <SwipeableEventCard event={event} />
-          </Link>
-        </SwipeableCard>
+          <SwipeableCard
+            onSwipeRight={
+              event.status === "draft"
+                ? () => handlePublish(event.id)
+                : undefined
+            }
+            onSwipeLeft={() => handleArchivePrompt(event.id)}
+            rightLabel={event.status === "draft" ? "Publish" : ""}
+            leftLabel="Archive"
+            disabled={event.status === "draft" ? false : true}
+          >
+            <Link href={`/dashboard/events/${event.id}`}>
+              <SwipeableEventCard event={event} />
+            </Link>
+          </SwipeableCard>
+        </div>
       ))}
 
       {/* Archive confirmation dialog */}
@@ -118,7 +123,7 @@ function SwipeableEventCard({ event }: { event: EventItem }) {
             </div>
           </div>
         ) : (
-          <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-nocturn/10 text-nocturn transition-colors duration-200 group-hover:bg-nocturn/15">
+          <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-nocturn/10 text-nocturn transition-colors duration-200 group-hover:bg-nocturn/15">
             <span className="text-xs font-medium uppercase leading-tight">
               {date.toLocaleDateString("en", { month: "short" })}
             </span>

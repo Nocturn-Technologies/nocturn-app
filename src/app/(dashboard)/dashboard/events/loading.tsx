@@ -5,10 +5,10 @@ function EventCardSkeleton() {
   return (
     <Card className="rounded-2xl">
       <CardContent className="flex items-center gap-4 p-4 min-h-[72px]">
-        <Skeleton className="h-12 w-12 shrink-0 rounded-xl" />
+        <Skeleton className="h-14 w-14 shrink-0 rounded-xl" />
         <div className="flex-1 min-w-0 space-y-2">
-          <Skeleton className="h-4 w-3/4" />
-          <Skeleton className="h-3 w-1/2" />
+          <Skeleton className="h-4 w-3/4 rounded" />
+          <Skeleton className="h-3 w-1/2 rounded" />
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <Skeleton className="h-5 w-16 rounded-full" />
@@ -45,7 +45,7 @@ export default function EventsLoading() {
           <Skeleton className="h-7 w-24" />
           <Skeleton className="h-4 w-48" />
         </div>
-        <Skeleton className="h-10 w-28 shrink-0 rounded-md" />
+        <Skeleton className="h-10 w-28 shrink-0 rounded-lg" />
       </div>
 
       <SectionSkeleton cards={3} />

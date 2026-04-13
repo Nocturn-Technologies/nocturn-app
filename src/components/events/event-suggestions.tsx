@@ -32,7 +32,7 @@ export function EventSuggestions({
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-nocturn" />
-        <h2 className="text-lg font-bold">What should you throw next?</h2>
+        <h2 className="text-lg font-bold font-heading">What should you throw next?</h2>
       </div>
       <div className="grid gap-3">
         {suggestions.map((suggestion, i) => (

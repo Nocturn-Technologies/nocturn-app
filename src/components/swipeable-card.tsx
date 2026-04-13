@@ -74,11 +74,11 @@ export function SwipeableCard({
   const revealOpacity = Math.min(absOffset / THRESHOLD, 1);
 
   return (
-    <div ref={containerRef} className="relative overflow-hidden rounded-lg">
+    <div ref={containerRef} className="relative overflow-hidden rounded-2xl">
       {/* Reveal background — green on left side (swipe right), red on right side (swipe left) */}
       {offset > 0 && (
         <div
-          className="absolute inset-0 flex items-center px-6 rounded-lg"
+          className="absolute inset-0 flex items-center px-6 rounded-2xl"
           style={{
             backgroundColor: `rgba(34, 197, 94, ${revealOpacity * 0.3})`,
           }}
@@ -93,7 +93,7 @@ export function SwipeableCard({
       )}
       {offset < 0 && (
         <div
-          className="absolute inset-0 flex items-center justify-end px-6 rounded-lg"
+          className="absolute inset-0 flex items-center justify-end px-6 rounded-2xl"
           style={{
             backgroundColor: `rgba(239, 68, 68, ${revealOpacity * 0.3})`,
           }}
