@@ -191,8 +191,8 @@ function EventTasksPageInner() {
     loadAll();
   }, [eventId]);
 
-  async function loadAll() {
-    setLoading(true);
+  async function loadAll(showLoader = true) {
+    if (showLoader) setLoading(true);
     const [t, m, a, s, ed] = await Promise.all([
       getEventTasks(eventId),
       getEventMembers(eventId),
@@ -231,7 +231,7 @@ function EventTasksPageInner() {
     setNewTitle("");
     setNewDueDate("");
     setShowNewTask(false);
-    await loadAll();
+    await loadAll(false);
     setAdding(false);
   }
 
@@ -265,13 +265,21 @@ function EventTasksPageInner() {
   }
 
   async function handleAssign(taskId: string, userId: string | null) {
+    // Optimistic update — no loading screen
+    setTasks((prev) =>
+      prev.map((t) => ((t.id as string) === taskId ? { ...t, assigned_to: userId } : t))
+    );
     await updateTaskDetails(taskId, { assignedTo: userId });
-    await loadAll();
+    await loadAll(false);
   }
 
   async function handleSetDue(taskId: string, dueDate: string | null) {
+    // Optimistic update — no loading screen
+    setTasks((prev) =>
+      prev.map((t) => ((t.id as string) === taskId ? { ...t, due_at: dueDate ? new Date(dueDate).toISOString() : null } : t))
+    );
     await updateTaskDetails(taskId, { dueAt: dueDate ? new Date(dueDate).toISOString() : null });
-    await loadAll();
+    await loadAll(false);
   }
 
   async function handleUpdateNote(taskId: string, note: string) {
@@ -291,7 +299,7 @@ function EventTasksPageInner() {
       category: suggestion.category,
       priority: suggestion.priority,
     });
-    await loadAll();
+    await loadAll(false);
     setAddingSuggestionIdx(null);
   }
 
