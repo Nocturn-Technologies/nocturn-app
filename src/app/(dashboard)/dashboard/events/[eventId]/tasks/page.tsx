@@ -47,10 +47,10 @@ import { haptic } from "@/lib/haptics";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const statusIcons: Record<string, React.ReactNode> = {
-  todo: <Circle className="h-4 w-4 text-muted-foreground" />,
-  in_progress: <Clock className="h-4 w-4 text-blue-500" />,
-  done: <Check className="h-4 w-4 text-green-500" />,
-  blocked: <AlertTriangle className="h-4 w-4 text-red-500" />,
+  todo: <Circle className="h-5 w-5 text-muted-foreground transition-all duration-200" />,
+  in_progress: <Clock className="h-5 w-5 text-blue-500 transition-all duration-200" />,
+  done: <Check className="h-5 w-5 text-green-500 transition-all duration-200" />,
+  blocked: <AlertTriangle className="h-5 w-5 text-red-500 transition-all duration-200" />,
 };
 
 const priorityColors: Record<string, string> = {
@@ -236,21 +236,28 @@ function EventTasksPageInner() {
   }
 
   async function handleStatusChange(taskId: string, newStatus: string) {
-    // Optimistic: find previous done count
     const prevDone = prevDoneCountRef.current;
 
-    await updateTaskStatus(taskId, newStatus);
-    const [t] = await Promise.all([getEventTasks(eventId)]);
-    setTasks(t);
+    // Optimistic update — no server re-fetch to avoid glitchy re-renders
+    setTasks((prev) =>
+      prev.map((t) =>
+        (t.id as string) === taskId ? { ...t, status: newStatus } : t
+      )
+    );
 
-    const newDone = t.filter((x: Task) => x.status === "done").length;
+    // Compute new done count from optimistic state
+    const newDone =
+      tasks.filter((t) =>
+        (t.id as string) === taskId
+          ? newStatus === "done"
+          : t.status === "done"
+      ).length;
 
-    // Task was just completed
+    // Task was just completed — celebration
     if (newStatus === "done" && newDone > prevDone) {
       haptic("success");
 
-      // Check if all tasks are now done
-      if (newDone === t.length) {
+      if (newDone === tasks.length) {
         setIs100Celebration(true);
         setShowCelebration(true);
         setTimeout(() => setShowCelebration(false), 2500);
@@ -262,6 +269,9 @@ function EventTasksPageInner() {
     }
 
     prevDoneCountRef.current = newDone;
+
+    // Persist to server in background
+    await updateTaskStatus(taskId, newStatus);
   }
 
   async function handleAssign(taskId: string, userId: string | null) {
@@ -1003,7 +1013,7 @@ function TaskCard({
       <div className="flex items-start gap-3">
         <button
           onClick={() => onStatusChange(task.id as string, nextStatus)}
-          className="shrink-0 mt-0.5 min-w-[36px] min-h-[36px]"
+          className="shrink-0 mt-0.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full active:scale-90 active:bg-white/10 transition-all duration-150"
         >
           {statusIcons[task.status as string]}
         </button>
