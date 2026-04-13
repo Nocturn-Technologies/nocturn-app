@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import { ArrowLeft, Send, Sparkles, DollarSign, Loader2, Check, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EventCardLive } from "@/components/event-card-live";
-import { MicButton, VoicePlayback } from "@/components/voice-note";
+import { MicButton, VoicePlayback, mimeToExt } from "@/components/voice-note";
 import { ChatMemberList } from "@/components/chat/member-list";
 import { InviteMemberModal } from "@/components/chat/invite-member-modal";
 
@@ -361,11 +361,13 @@ export default function ChatRoomPage() {
   const handleSendVoice = async (blob: Blob, duration: number) => {
     if (!userId || !channelId) return;
 
-    // Upload to Supabase Storage
-    const fileName = `voice/${channelId}/${userId}-${Date.now()}.webm`;
+    // Upload to Supabase Storage — use the blob's actual MIME type (mp4 on iOS, webm on Chrome)
+    const ext = mimeToExt(blob.type);
+    const contentType = blob.type || "audio/webm";
+    const fileName = `voice/${channelId}/${userId}-${Date.now()}.${ext}`;
     const { error: uploadError } = await supabase.storage
       .from("recordings")
-      .upload(fileName, blob, { contentType: "audio/webm", upsert: false });
+      .upload(fileName, blob, { contentType, upsert: false });
 
     if (uploadError) {
       console.error("[voice] Upload failed:", uploadError.message);

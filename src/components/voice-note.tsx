@@ -4,6 +4,33 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Mic, Square, Play, Pause } from "lucide-react";
 
 /* ── Recording Hook ── */
+
+/**
+ * Detect the best supported audio MIME type for MediaRecorder.
+ * iOS Safari only supports audio/mp4; Chrome/Firefox support audio/webm.
+ */
+function getSupportedMimeType(): string {
+  if (typeof MediaRecorder === "undefined") return "audio/webm";
+  const types = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/ogg;codecs=opus",
+    "audio/ogg",
+  ];
+  for (const t of types) {
+    if (MediaRecorder.isTypeSupported(t)) return t;
+  }
+  return ""; // let the browser pick its default
+}
+
+/** Get the file extension for a MIME type */
+export function mimeToExt(mime: string): string {
+  if (mime.startsWith("audio/mp4")) return "m4a";
+  if (mime.startsWith("audio/ogg")) return "ogg";
+  return "webm";
+}
+
 interface RecordingState {
   isRecording: boolean;
   duration: number;
@@ -15,6 +42,7 @@ export function useVoiceRecording(): RecordingState {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const mimeTypeRef = useRef<string>("audio/webm");
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startTimeRef = useRef(0);
@@ -22,7 +50,12 @@ export function useVoiceRecording(): RecordingState {
   const start = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const mimeType = getSupportedMimeType();
+      mimeTypeRef.current = mimeType;
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
       chunksRef.current = [];
       recorderRef.current = recorder;
 
@@ -51,7 +84,9 @@ export function useVoiceRecording(): RecordingState {
       return new Promise((resolve) => {
         const recorder = recorderRef.current!;
         recorder.onstop = () => {
-          const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+          // Use the actual MIME type from the recorder (or our detected type)
+          const actualMime = recorder.mimeType || mimeTypeRef.current || "audio/webm";
+          const blob = new Blob(chunksRef.current, { type: actualMime });
           const dur = Math.floor(
             (Date.now() - startTimeRef.current) / 1000
           );
