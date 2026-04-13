@@ -170,6 +170,9 @@ export function ContactList({
 }: ContactListProps) {
   const [contacts, setContacts] = useState<PeopleContact[]>([]);
   const [stats, setStats] = useState<PeopleStats>({ total: 0 });
+  const [aggStats, setAggStats] = useState<{ totalRevenue: number; avgSpend: number; repeatRate: number; newThisMonth: number }>({
+    totalRevenue: 0, avgSpend: 0, repeatRate: 0, newThisMonth: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -226,6 +229,7 @@ export function ContactList({
           last_seen_at: c.lastSeenAt,
         })));
         setStats({ total: result.totalCount ?? 0, ...result.segmentCounts });
+        if (result.aggregateStats) setAggStats(result.aggregateStats);
       }
     } catch {
       setError("Failed to load contacts. Please try again.");
@@ -236,7 +240,16 @@ export function ContactList({
 
   useEffect(() => {
     fetchContacts();
-  }, [fetchContacts]);
+    // Fire-and-forget: sync contact metrics from ticket data (rate-limited to 1x/hour)
+    if (contactType === "fan") {
+      import("@/app/actions/contacts").then(({ syncContactMetrics }) => {
+        syncContactMetrics(collectiveId).then((result) => {
+          // If metrics were synced, refetch contacts to show updated spend/events
+          if (result.synced > 0) fetchContacts();
+        });
+      });
+    }
+  }, [fetchContacts, collectiveId, contactType]);
 
   // ── Export + Copy handlers ──
 
@@ -289,16 +302,13 @@ export function ContactList({
     });
   }
 
-  // ── Stat cards computation ──
-  const summaryStats = useMemo(() => {
-    const totalFans = stats.total;
-    const totalRevenue = contacts.reduce((sum, c) => sum + (c.total_spend ?? 0), 0);
-    const avgSpend = totalFans > 0 ? totalRevenue / totalFans : 0;
-    const repeatCount = contacts.filter((c) => (c.total_events ?? 0) >= 2).length;
-    const repeatRate = contacts.length > 0 ? (repeatCount / contacts.length) * 100 : 0;
-
-    return { totalFans, totalRevenue, avgSpend, repeatRate };
-  }, [contacts, stats.total]);
+  // ── Stat cards — use server-computed aggregate stats (across ALL fans, not just current page) ──
+  const summaryStats = useMemo(() => ({
+    totalFans: stats.total,
+    totalRevenue: aggStats.totalRevenue,
+    avgSpend: aggStats.avgSpend,
+    repeatRate: aggStats.repeatRate,
+  }), [stats.total, aggStats]);
 
   // Build dynamic filter chips for industry (only roles that have contacts)
   const industryFilters = useMemo(() => {

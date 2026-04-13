@@ -6,7 +6,7 @@ import { ContactList } from "@/components/people/contact-list";
 import { ImportSheet } from "@/components/people/import-sheet";
 import { ContactDetailSheet } from "@/components/people/contact-detail-sheet";
 import { Button } from "@/components/ui/button";
-import { Upload, MessageSquare, ChevronDown, Calendar } from "lucide-react";
+import { Upload, MessageSquare, ChevronDown, Calendar, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 interface EventOption {
@@ -29,6 +29,9 @@ export default function AudiencePage() {
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [eventAttendeeEmails, setEventAttendeeEmails] = useState<Set<string>>(new Set());
   const [loadingEventEmails, setLoadingEventEmails] = useState(false);
+
+  // Reach insight
+  const [reachInsight, setReachInsight] = useState<string | null>(null);
 
   // Fetch user's active collective + events
   useEffect(() => {
@@ -54,7 +57,7 @@ export default function AudiencePage() {
         )?.[0]?.collective_id ?? null;
       setCollectiveId(id);
 
-      // Fetch events for per-event filter dropdown
+      // Fetch events for per-event filter dropdown + compute Reach insight
       if (id) {
         const { data: eventsRaw } = await supabase
           .from("events")
@@ -64,6 +67,21 @@ export default function AudiencePage() {
           .order("starts_at", { ascending: false })
           .limit(50);
         setEvents((eventsRaw ?? []) as EventOption[]);
+
+        // Compute Reach insight from contacts
+        const { getContacts } = await import("@/app/actions/contacts");
+        const result = await getContacts(id, { contactType: "fan" });
+        if (!result.error && result.aggregateStats) {
+          const { newThisMonth, repeatRate } = result.aggregateStats;
+          const core50 = result.segmentCounts.core50 ?? 0;
+          if (core50 > 0) {
+            setReachInsight(`${core50} fan${core50 !== 1 ? "s" : ""} have been to every event — your core crew`);
+          } else if (newThisMonth > 0) {
+            setReachInsight(`${newThisMonth} new fan${newThisMonth !== 1 ? "s" : ""} added this month`);
+          } else if (repeatRate > 0) {
+            setReachInsight(`${repeatRate.toFixed(0)}% of your fans are repeat attendees`);
+          }
+        }
       }
 
       setLoading(false);
@@ -137,9 +155,16 @@ export default function AudiencePage() {
           <h1 className="text-2xl font-bold font-heading tracking-tight text-foreground">
             Your Fans
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage and grow your audience
-          </p>
+          {reachInsight ? (
+            <p className="mt-1 text-sm text-muted-foreground flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-nocturn shrink-0" />
+              {reachInsight}
+            </p>
+          ) : (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Manage and grow your audience
+            </p>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">

@@ -312,6 +312,13 @@ function computeSegment(
 
 // ── 1. getContacts ────────────────────────────────────────────────────────────
 
+export interface AggregateStats {
+  totalRevenue: number;
+  avgSpend: number;
+  repeatRate: number;
+  newThisMonth: number;
+}
+
 export async function getContacts(
   collectiveId: string,
   filters: ContactFilters = {}
@@ -320,8 +327,10 @@ export async function getContacts(
   contacts: Contact[];
   totalCount: number;
   segmentCounts: Record<string, number>;
+  aggregateStats: AggregateStats;
 }> {
-  const empty = { error: null as string | null, contacts: [] as Contact[], totalCount: 0, segmentCounts: {} };
+  const emptyAgg: AggregateStats = { totalRevenue: 0, avgSpend: 0, repeatRate: 0, newThisMonth: 0 };
+  const empty = { error: null as string | null, contacts: [] as Contact[], totalCount: 0, segmentCounts: {}, aggregateStats: emptyAgg };
   try {
   if (!collectiveId?.trim()) return { ...empty, error: "Collective ID is required" };
 
@@ -413,7 +422,7 @@ export async function getContacts(
 
     // Compute segment counts — fetch all fan contacts for counts
     const { data: allFans } = await admin.from("contacts")
-      .select("total_events, total_spend, tags, metadata")
+      .select("total_events, total_spend, tags, metadata, created_at")
       .eq("collective_id", collectiveId)
       .eq("contact_type", "fan")
       .is("deleted_at", null);
@@ -426,10 +435,24 @@ export async function getContacts(
       vip: 0,
     };
 
+    // Compute aggregate stats across ALL fan contacts (not just paginated)
+    let totalRevenue = 0;
+    let repeatCount = 0;
+    let newThisMonth = 0;
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
     for (const fan of (allFans ?? []) as Record<string, unknown>[]) {
+      const spend = Number(fan.total_spend) || 0;
+      const events = (fan.total_events as number) ?? 0;
+      const createdAt = fan.created_at as string | undefined;
+      totalRevenue += spend;
+      if (events >= 2) repeatCount++;
+      if (createdAt && new Date(createdAt) >= thirtyDaysAgo) newThisMonth++;
+
       const tempContact = {
-        totalEvents: (fan.total_events as number) ?? 0,
-        totalSpend: Number(fan.total_spend) || 0,
+        totalEvents: events,
+        totalSpend: spend,
         tags: (fan.tags as string[]) ?? [],
         metadata: (fan.metadata as Record<string, unknown>) ?? {},
       } as Contact;
@@ -437,11 +460,20 @@ export async function getContacts(
       segmentCounts[seg]++;
     }
 
+    const fanCount = (allFans ?? []).length;
+    const aggregateStats: AggregateStats = {
+      totalRevenue,
+      avgSpend: fanCount > 0 ? totalRevenue / fanCount : 0,
+      repeatRate: fanCount > 0 ? (repeatCount / fanCount) * 100 : 0,
+      newThisMonth,
+    };
+
     return {
       error: null,
       contacts,
       totalCount: totalCount ?? 0,
       segmentCounts,
+      aggregateStats,
     };
   }
 
@@ -450,6 +482,7 @@ export async function getContacts(
     contacts,
     totalCount: totalCount ?? 0,
     segmentCounts: {},
+    aggregateStats: emptyAgg,
   };
   } catch (err) {
     console.error("[getContacts] Unexpected error:", err);
@@ -926,6 +959,131 @@ export async function updateContact(
   } catch (err) {
     console.error("[updateContact] Unexpected error:", err);
     return { error: "Something went wrong", contact: null };
+  }
+}
+
+// ── 6. syncContactMetrics ────────────────────────────────────────────────────
+
+/**
+ * Sync total_spend, total_events, and last_seen_at from ticket purchases
+ * into the contacts table. Matches tickets to contacts via email.
+ *
+ * Call this:
+ * - When the audience page loads (debounced, max once per hour)
+ * - After ticket purchase via Stripe webhook (future)
+ * - After CSV import completes
+ */
+export async function syncContactMetrics(
+  collectiveId: string
+): Promise<{ error: string | null; synced: number }> {
+  try {
+    if (!collectiveId?.trim()) return { error: "Collective ID is required", synced: 0 };
+
+    const auth = await verifyCollectiveAccess(collectiveId);
+    if (auth.error) return { error: auth.error, synced: 0 };
+
+    // Rate limit: max once per hour per collective
+    const { success: rlOk } = await rateLimitStrict(`sync-metrics:${collectiveId}`, 2, 3600_000);
+    if (!rlOk) return { error: null, synced: 0 }; // silently skip — not an error
+
+    const admin = createAdminClient();
+
+    // 1. Get all events for this collective
+    const { data: events } = await admin
+      .from("events")
+      .select("id, starts_at")
+      .eq("collective_id", collectiveId)
+      .is("deleted_at", null);
+
+    if (!events || events.length === 0) return { error: null, synced: 0 };
+
+    const eventIds = (events as { id: string; starts_at: string }[]).map((e) => e.id);
+    const eventDateMap = new Map(
+      (events as { id: string; starts_at: string }[]).map((e) => [e.id, e.starts_at])
+    );
+
+    // 2. Fetch all paid/checked-in tickets in batches
+    const allTickets: { event_id: string; price_paid: number | null; metadata: Record<string, unknown> | null }[] = [];
+    const BATCH = 5000;
+    for (let offset = 0; ; offset += BATCH) {
+      const { data: batch, error: batchErr } = await admin
+        .from("tickets")
+        .select("event_id, price_paid, metadata")
+        .in("event_id", eventIds)
+        .in("status", ["paid", "checked_in"])
+        .range(offset, offset + BATCH - 1);
+      if (batchErr || !batch || batch.length === 0) break;
+      allTickets.push(...(batch as typeof allTickets));
+      if (batch.length < BATCH) break;
+    }
+
+    if (allTickets.length === 0) return { error: null, synced: 0 };
+
+    // 3. Aggregate by email: total_spend, event count, last event date
+    const emailMetrics = new Map<string, {
+      totalSpend: number;
+      eventIds: Set<string>;
+      lastEventDate: string;
+    }>();
+
+    for (const ticket of allTickets) {
+      const meta = ticket.metadata;
+      const email =
+        (meta?.customer_email as string) ||
+        (meta?.buyer_email as string);
+      if (!email) continue;
+      const normalized = email.toLowerCase().trim();
+      if (!normalized) continue;
+
+      const existing = emailMetrics.get(normalized);
+      const eventDate = eventDateMap.get(ticket.event_id) ?? "";
+
+      if (existing) {
+        existing.totalSpend += Number(ticket.price_paid) || 0;
+        existing.eventIds.add(ticket.event_id);
+        if (eventDate > existing.lastEventDate) existing.lastEventDate = eventDate;
+      } else {
+        emailMetrics.set(normalized, {
+          totalSpend: Number(ticket.price_paid) || 0,
+          eventIds: new Set([ticket.event_id]),
+          lastEventDate: eventDate,
+        });
+      }
+    }
+
+    // 4. Get all fan contacts for this collective
+    const { data: contacts } = await admin
+      .from("contacts")
+      .select("id, email")
+      .eq("collective_id", collectiveId)
+      .eq("contact_type", "fan")
+      .is("deleted_at", null);
+
+    if (!contacts || contacts.length === 0) return { error: null, synced: 0 };
+
+    // 5. Update each contact that has matching ticket data
+    let synced = 0;
+    for (const contact of contacts as { id: string; email: string | null }[]) {
+      if (!contact.email) continue;
+      const normalized = contact.email.toLowerCase().trim();
+      const metrics = emailMetrics.get(normalized);
+      if (!metrics) continue;
+
+      await admin
+        .from("contacts")
+        .update({
+          total_spend: metrics.totalSpend,
+          total_events: metrics.eventIds.size,
+          last_seen_at: metrics.lastEventDate || undefined,
+        })
+        .eq("id", contact.id);
+      synced++;
+    }
+
+    return { error: null, synced };
+  } catch (err) {
+    console.error("[syncContactMetrics] Unexpected error:", err);
+    return { error: "Something went wrong", synced: 0 };
   }
 }
 
