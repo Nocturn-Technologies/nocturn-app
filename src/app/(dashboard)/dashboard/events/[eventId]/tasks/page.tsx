@@ -265,21 +265,19 @@ function EventTasksPageInner() {
   }
 
   async function handleAssign(taskId: string, userId: string | null) {
-    // Optimistic update — no loading screen
+    // Optimistic update only — no reload to avoid re-render glitches
     setTasks((prev) =>
       prev.map((t) => ((t.id as string) === taskId ? { ...t, assigned_to: userId } : t))
     );
     await updateTaskDetails(taskId, { assignedTo: userId });
-    await loadAll(false);
   }
 
   async function handleSetDue(taskId: string, dueDate: string | null) {
-    // Optimistic update — no loading screen
+    // Optimistic update only — no reload to avoid date picker glitches on mobile
     setTasks((prev) =>
       prev.map((t) => ((t.id as string) === taskId ? { ...t, due_at: dueDate ? new Date(dueDate).toISOString() : null } : t))
     );
     await updateTaskDetails(taskId, { dueAt: dueDate ? new Date(dueDate).toISOString() : null });
-    await loadAll(false);
   }
 
   async function handleUpdateNote(taskId: string, note: string) {
