@@ -125,7 +125,7 @@ export default async function PublicCheckInPage({ params }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-dvh bg-background">
       {/* Header */}
       <header className="border-b border-border px-4 py-4">
         <div className="max-w-lg mx-auto flex items-center justify-between">

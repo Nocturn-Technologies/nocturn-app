@@ -174,7 +174,7 @@ export default function ArtistMePage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-bold font-heading">
           {profile ? "Your Artist Profile" : "Set Up Your Profile"}
@@ -203,7 +203,7 @@ export default function ArtistMePage() {
             <div className="space-y-2">
               <Label>Bio</Label>
               <textarea
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm min-h-[80px] resize-none"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-base md:text-sm min-h-[80px] resize-none"
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="Tell collectives about your sound, your style, and what makes you unique..."
@@ -248,7 +248,7 @@ export default function ArtistMePage() {
               <p className="text-xs text-muted-foreground">Your standard booking rate. Collectives will see this when browsing.</p>
             </div>
 
-            <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light" disabled={saving || !name.trim()}>
+            <Button type="submit" className="w-full bg-nocturn hover:bg-nocturn-light min-h-[44px]" disabled={saving || !name.trim()}>
               {saving ? (
                 <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>
               ) : saved ? (

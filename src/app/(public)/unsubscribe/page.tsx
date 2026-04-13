@@ -9,7 +9,7 @@ function UnsubscribeContent() {
   const email = searchParams.get("email");
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center px-4">
+    <div className="min-h-dvh bg-black flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-8 text-center">
         <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-full bg-[#7B2FF7]/10">
           <svg
@@ -46,7 +46,7 @@ function UnsubscribeContent() {
 
         <Link
           href="/"
-          className="inline-block rounded-lg bg-[#7B2FF7] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#9D5CFF]"
+          className="min-h-[44px] inline-flex items-center rounded-lg bg-[#7B2FF7] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#9D5CFF]"
         >
           Back to Nocturn
         </Link>
@@ -59,7 +59,7 @@ export default function UnsubscribePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-black flex items-center justify-center">
+        <div className="min-h-dvh bg-black flex items-center justify-center">
           <div className="text-zinc-400 text-sm">Loading...</div>
         </div>
       }

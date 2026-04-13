@@ -136,7 +136,7 @@ const stats = [
 
 export default function HomePage() {
   return (
-    <div className="relative min-h-screen bg-background overflow-hidden">
+    <div className="relative min-h-dvh bg-background overflow-hidden">
       {/* ── Ambient background effects ── */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-nocturn/[0.07] rounded-full blur-[120px] animate-mesh-rotate" />

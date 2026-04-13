@@ -269,14 +269,14 @@ export default function MarketplaceOnboardingPage() {
 
   if (!authChecked) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-dvh items-center justify-center bg-background">
         <div className="h-10 w-10 animate-spin rounded-full border-3 border-nocturn border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-lg space-y-6">
         {/* Logo */}
         <div className="flex justify-center">

@@ -74,7 +74,7 @@ export default function PendingApprovalPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#09090B] px-4">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-[#09090B] px-4">
       {/* Subtle background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-nocturn/[0.04] blur-[120px]" />
@@ -152,7 +152,7 @@ export default function PendingApprovalPage() {
 
             <button
               onClick={handleLogout}
-              className="flex items-center justify-center gap-2 w-full py-2.5 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+              className="flex items-center justify-center gap-2 w-full py-2.5 text-sm text-zinc-500 hover:text-zinc-300 transition-colors min-h-[44px]"
             >
               <LogOut className="h-3.5 w-3.5" />
               Sign Out

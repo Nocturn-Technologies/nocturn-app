@@ -119,7 +119,7 @@ function EditableAmountCell({
             if (e.key === "Enter") handleSave();
             if (e.key === "Escape") handleCancel();
           }}
-          className="h-7 w-24 text-sm bg-background border-nocturn/50 focus-visible:ring-nocturn/30"
+          className="h-7 w-24 text-base md:text-sm bg-background border-nocturn/50 focus-visible:ring-nocturn/30"
           disabled={saving}
         />
         <Button

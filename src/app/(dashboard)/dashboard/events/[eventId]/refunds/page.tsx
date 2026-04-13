@@ -104,7 +104,7 @@ export default function RefundsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-4">
+    <div className="mx-auto max-w-lg space-y-4 overflow-x-hidden">
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
           <Button variant="ghost" size="icon" aria-label="Go back" className="min-h-[44px] min-w-[44px]">

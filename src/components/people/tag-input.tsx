@@ -128,7 +128,7 @@ export function TagInput({
             }}
             onKeyDown={handleKeyDown}
             placeholder={tags.length === 0 ? placeholder : ""}
-            className="flex-1 min-w-[80px] bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+            className="flex-1 min-w-[80px] bg-transparent text-base md:text-sm text-foreground placeholder:text-muted-foreground outline-none"
           />
         )}
       </div>

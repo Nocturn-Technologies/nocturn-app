@@ -16,7 +16,7 @@ export default function AccountDeniedPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-6">
       <div className="w-full max-w-md space-y-8 text-center">
         <NocturnLogo size="lg" />
 

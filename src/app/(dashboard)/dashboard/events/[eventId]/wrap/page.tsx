@@ -398,7 +398,7 @@ export default function WrapPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 animate-fade-in-up">
         <Link href={`/dashboard/events/${eventId}`}>

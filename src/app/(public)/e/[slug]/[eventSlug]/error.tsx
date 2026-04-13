@@ -14,7 +14,7 @@ export default function EventPageError({
   }, [error]);
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#09090B] p-6 text-center text-white">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-[#09090B] p-6 text-center text-white">
       <h1 className="text-2xl font-bold text-[#7B2FF7]">nocturn.</h1>
       <h2 className="text-lg font-semibold">Event not found</h2>
       <p className="max-w-sm text-sm text-gray-400">

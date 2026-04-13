@@ -146,7 +146,7 @@ export default function InquiriesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-bold font-heading">Inquiries</h1>
         <p className="text-sm text-muted-foreground">
@@ -230,7 +230,7 @@ export default function InquiriesPage() {
                   <div className="flex items-center gap-2 pt-1">
                     <Button
                       size="sm"
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-9 text-xs"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-9 min-h-[44px] text-xs"
                       disabled={isProcessing}
                       onClick={() => handleAccept(inq.id)}
                     >
@@ -244,7 +244,7 @@ export default function InquiriesPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className="h-9 text-xs text-muted-foreground hover:text-foreground"
+                      className="h-9 min-h-[44px] text-xs text-muted-foreground hover:text-foreground"
                       disabled={isProcessing}
                       onClick={() => handleReject(inq.id)}
                     >
@@ -262,7 +262,7 @@ export default function InquiriesPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-9 text-xs border-nocturn/30 text-nocturn hover:bg-nocturn/10"
+                    className="h-9 min-h-[44px] text-xs border-nocturn/30 text-nocturn hover:bg-nocturn/10"
                     onClick={() => router.push("/dashboard/chat")}
                   >
                     <ExternalLink className="h-3.5 w-3.5 mr-1.5" />

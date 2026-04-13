@@ -1935,7 +1935,7 @@ export default function NewEventPage() {
                                 updated[i] = { ...tier, name: e.target.value };
                                 setTiers(updated);
                               }}
-                              className="bg-zinc-900 border-white/10 rounded-lg text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
+                              className="bg-zinc-900 border-white/10 rounded-lg text-base md:text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
                             />
                             <Input
                               aria-label={`Tier ${i + 1} price`}
@@ -1949,7 +1949,7 @@ export default function NewEventPage() {
                                 setTiers(updated);
                               }}
                               min={0}
-                              className="bg-zinc-900 border-white/10 rounded-lg text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
+                              className="bg-zinc-900 border-white/10 rounded-lg text-base md:text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
                             />
                             <Input
                               aria-label={`Tier ${i + 1} quantity`}
@@ -1962,7 +1962,7 @@ export default function NewEventPage() {
                                 setTiers(updated);
                               }}
                               min={1}
-                              className="bg-zinc-900 border-white/10 rounded-lg text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
+                              className="bg-zinc-900 border-white/10 rounded-lg text-base md:text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
                             />
                           </div>
                           <button

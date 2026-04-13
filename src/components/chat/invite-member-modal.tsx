@@ -180,7 +180,7 @@ export function InviteMemberModal({
               placeholder="Search by name or email..."
               value={query}
               onChange={(e) => handleQueryChange(e.target.value)}
-              className="w-full bg-accent text-foreground placeholder:text-muted-foreground rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none ring-1 ring-transparent focus:ring-nocturn/50 transition-shadow min-h-[44px]"
+              className="w-full bg-accent text-foreground placeholder:text-muted-foreground rounded-xl py-2.5 pl-10 pr-4 text-base md:text-sm outline-none ring-1 ring-transparent focus:ring-nocturn/50 transition-shadow min-h-[44px]"
               autoFocus
             />
             {isSearching && (
@@ -288,7 +288,7 @@ export function InviteMemberModal({
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && isValidEmail) handleInviteByEmail();
                     }}
-                    className="w-full bg-accent text-foreground placeholder:text-muted-foreground rounded-xl py-2.5 pl-10 pr-4 text-sm outline-none ring-1 ring-transparent focus:ring-nocturn/50 transition-shadow min-h-[44px]"
+                    className="w-full bg-accent text-foreground placeholder:text-muted-foreground rounded-xl py-2.5 pl-10 pr-4 text-base md:text-sm outline-none ring-1 ring-transparent focus:ring-nocturn/50 transition-shadow min-h-[44px]"
                     maxLength={254}
                   />
                 </div>

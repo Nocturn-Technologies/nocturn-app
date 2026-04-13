@@ -473,7 +473,7 @@ export default async function AdminPage({ searchParams }: Props) {
   // ══════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="min-h-screen bg-[#09090B] text-zinc-100 px-4 py-8 md:px-8">
+    <div className="min-h-dvh bg-[#09090B] text-zinc-100 px-4 py-8 md:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
         {/* ── Header ──────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">

@@ -353,14 +353,14 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#09090B] antialiased selection:bg-purple-500/20 overflow-x-hidden" style={{ scrollBehavior: "smooth" }}>
+    <div className="min-h-dvh bg-[#09090B] antialiased selection:bg-purple-500/20 overflow-x-hidden" style={{ scrollBehavior: "smooth" }}>
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
 
       {/* ═══ SCENE 1: THE POSTER — raw, asymmetric, bold ═══ */}
-      <div className="relative min-h-screen flex items-end overflow-hidden">
+      <div className="relative min-h-dvh flex items-end overflow-hidden">
         {/* Background layer */}
         {event.flyer_url ? (
           <>

@@ -474,7 +474,7 @@ export function ImportSheet({
                 }}
                 placeholder="Paste emails (one per line) or a full spreadsheet export from Eventbrite, Posh, or Google Sheets"
                 rows={6}
-                className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30"
+                className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-base md:text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30"
               />
 
               <div className="space-y-2">
@@ -492,7 +492,7 @@ export function ImportSheet({
                   <select
                     value={pasteRole}
                     onChange={(e) => setPasteRole(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                    className="h-10 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-base md:text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
                   >
                     <option value="">No role</option>
                     {INDUSTRY_ROLES.map((role) => (
@@ -582,7 +582,7 @@ export function ImportSheet({
                   <select
                     value={csvRole}
                     onChange={(e) => setCsvRole(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                    className="h-10 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-base md:text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
                   >
                     <option value="">No role</option>
                     {INDUSTRY_ROLES.map((role) => (
@@ -689,7 +689,7 @@ export function ImportSheet({
                   <select
                     value={quickRole}
                     onChange={(e) => setQuickRole(e.target.value)}
-                    className="h-10 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                    className="h-10 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-base md:text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
                   >
                     <option value="">No role</option>
                     {INDUSTRY_ROLES.map((role) => (
@@ -721,7 +721,7 @@ export function ImportSheet({
                   onChange={(e) => setQuickNotes(e.target.value)}
                   placeholder="Any notes about this contact..."
                   rows={3}
-                  className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30"
+                  className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-base md:text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30"
                 />
               </div>
 

@@ -105,7 +105,7 @@ export function VenueScout({ venuePlaceId, venueName, onClose }: VenueScoutProps
               value={crowdEstimate}
               onChange={(e) => setCrowdEstimate(e.target.value)}
               placeholder="e.g. 250"
-              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-nocturn"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-base md:text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-nocturn"
             />
           </div>
 
@@ -117,7 +117,7 @@ export function VenueScout({ venuePlaceId, venueName, onClose }: VenueScoutProps
               onChange={(e) => setVibeNotes(e.target.value)}
               placeholder="Sound system hits hard, lighting needs work, great energy from the crowd..."
               rows={3}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-nocturn resize-none"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-base md:text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-nocturn resize-none"
             />
           </div>
 

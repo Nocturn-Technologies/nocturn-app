@@ -145,7 +145,7 @@ function SuccessContent() {
 
   if (!hasValidPurchase) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="min-h-dvh flex items-center justify-center bg-background px-4">
         <div className="max-w-md w-full text-center space-y-6">
           <h1 className="text-2xl font-bold tracking-tight font-heading text-foreground">
             No order found.
@@ -165,7 +165,7 @@ function SuccessContent() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="min-h-dvh flex items-center justify-center bg-background px-4">
       <div className="max-w-md w-full text-center space-y-6">
         {/* Confetti-style decorative element */}
         <div className="text-6xl mb-2">
@@ -315,7 +315,7 @@ export default function SuccessPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="min-h-dvh flex items-center justify-center bg-background">
           <div className="animate-pulse text-muted-foreground">Loading...</div>
         </div>
       }

@@ -224,7 +224,7 @@ export default function OnboardingPage() {
   // Show loading spinner until auth check completes
   if (!authChecked) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-dvh items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="h-10 w-10 animate-spin rounded-full border-3 border-nocturn border-t-transparent" />
           <p className="text-sm text-muted-foreground">Loading...</p>
@@ -234,7 +234,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4 py-8">
       <div className="w-full max-w-lg space-y-8">
         {/* Logo */}
         <div className="flex justify-center animate-fade-in-up">

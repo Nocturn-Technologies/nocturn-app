@@ -939,7 +939,7 @@ export default function EventDesignPage() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Age Restriction</label>
             <select
-              className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-ring"
+              className="w-full rounded-xl border border-border bg-card px-4 py-2.5 text-base md:text-sm outline-none focus:ring-1 focus:ring-ring"
               value={minAge}
               onChange={(e) => setMinAge(e.target.value)}
             >

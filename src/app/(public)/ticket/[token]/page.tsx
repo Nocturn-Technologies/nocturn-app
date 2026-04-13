@@ -104,7 +104,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
   const isCheckedIn = !!typedTicket.checked_in_at;
 
   return (
-    <div className="min-h-screen bg-[#09090B]">
+    <div className="min-h-dvh bg-[#09090B]">
       {/* Ambient gradient */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-nocturn/[0.06] rounded-full blur-[120px]" />

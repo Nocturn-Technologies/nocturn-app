@@ -603,7 +603,7 @@ function EventTasksPageInner() {
             <div className="flex items-center gap-2 flex-wrap">
               {assignedOwners.length > 0 && (
                 <select
-                  className="rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[36px]"
+                  className="rounded-lg border bg-background px-2.5 py-1.5 text-base md:text-xs min-h-[36px]"
                   value={filterOwner ?? ""}
                   onChange={(e) => setFilterOwner(e.target.value || null)}
                 >
@@ -662,7 +662,7 @@ function EventTasksPageInner() {
               />
               <div className="flex gap-2">
                 <select
-                  className="rounded-md border bg-background px-2 py-1.5 text-sm flex-1"
+                  className="rounded-md border bg-background px-2 py-1.5 text-base md:text-sm flex-1"
                   value={newCategory}
                   onChange={(e) => setNewCategory(e.target.value)}
                 >
@@ -1033,7 +1033,7 @@ function TaskCard({
               <div className="flex items-center gap-1.5">
                 <UserPlus className="h-3 w-3 text-muted-foreground" />
                 <select
-                  className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+                  className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[32px]"
                   value={(task.assigned_to as string) ?? ""}
                   onChange={(e) => onAssign(task.id as string, e.target.value || null)}
                 >
@@ -1047,7 +1047,7 @@ function TaskCard({
                 <CalendarClock className="h-3 w-3 text-muted-foreground" />
                 <input
                   type="date"
-                  className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+                  className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[32px]"
                   value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
                   onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
                 />
@@ -1189,7 +1189,7 @@ function ContentTaskCard({
             <div className="flex items-center gap-1.5">
               <UserPlus className="h-3 w-3 text-muted-foreground" />
               <select
-                className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+                className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[32px]"
                 value={(task.assigned_to as string) ?? ""}
                 onChange={(e) => onAssign(task.id as string, e.target.value || null)}
               >
@@ -1203,7 +1203,7 @@ function ContentTaskCard({
               <CalendarClock className="h-3 w-3 text-muted-foreground" />
               <input
                 type="date"
-                className="rounded-md border bg-background px-2 py-1 text-xs min-h-[32px]"
+                className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[32px]"
                 value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
                 onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
               />

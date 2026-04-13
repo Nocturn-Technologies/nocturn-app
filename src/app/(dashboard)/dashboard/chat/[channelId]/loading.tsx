@@ -1,6 +1,6 @@
 export default function Loading() {
   return (
-    <div className="flex flex-col h-[calc(100vh-3.5rem)] md:h-[calc(100vh-1.5rem)] -m-4 md:-m-6 animate-in fade-in duration-300">
+    <div className="flex flex-col h-[calc(100dvh-3.5rem)] md:h-[calc(100dvh-1.5rem)] -m-4 md:-m-6 animate-in fade-in duration-300">
       {/* Header skeleton */}
       <div className="flex items-center gap-3 px-4 h-14 bg-card/95 border-b border-border shrink-0">
         <div className="w-9 h-9 rounded-xl bg-muted-foreground/10 animate-pulse" />
