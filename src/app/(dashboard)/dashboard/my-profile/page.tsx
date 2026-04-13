@@ -288,7 +288,7 @@ export default function MyProfilePage() {
             </div>
           )}
         </div>
-        <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleCoverUpload} />
+        <input ref={coverRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif" className="hidden" onChange={handleCoverUpload} />
 
         {/* Avatar */}
         <div
@@ -308,7 +308,7 @@ export default function MyProfilePage() {
             </div>
           )}
         </div>
-        <input ref={avatarRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={handleAvatarUpload} />
+        <input ref={avatarRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp,image/heic,image/heif" className="hidden" onChange={handleAvatarUpload} />
       </div>
 
       <div className="pt-8" />

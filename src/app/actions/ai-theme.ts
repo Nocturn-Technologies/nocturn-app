@@ -42,6 +42,8 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  "image/heic",
+  "image/heif",
 ]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
@@ -176,6 +178,10 @@ export async function uploadFlyerAndExtractTheme(
           return "webp";
         case "image/gif":
           return "gif";
+        case "image/heic":
+          return "heic";
+        case "image/heif":
+          return "heif";
         default:
           return "jpg";
       }

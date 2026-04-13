@@ -68,6 +68,8 @@ export const ALLOWED_IMAGE_TYPES = [
   "image/png",
   "image/gif",
   "image/webp",
+  "image/heic",
+  "image/heif",
 ] as const;
 
 /** Allowed MIME types for audio uploads */

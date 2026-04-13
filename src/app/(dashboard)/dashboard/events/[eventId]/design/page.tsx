@@ -608,7 +608,7 @@ export default function EventDesignPage() {
                     {uploadingFlyer ? "Extracting theme..." : "Change flyer"}
                     <input
                       type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
                       className="hidden"
                       disabled={uploadingFlyer}
                       onChange={handleFlyerUpload}
@@ -650,7 +650,7 @@ export default function EventDesignPage() {
                   {uploadingFlyer ? "Uploading…" : "Pick a file"}
                   <input
                     type="file"
-                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    accept="image/jpeg,image/png,image/webp,image/gif,image/heic,image/heif"
                     className="hidden"
                     disabled={uploadingFlyer}
                     onChange={handleFlyerUpload}
