@@ -1033,6 +1033,8 @@ export default function NewEventPage() {
   const [venueMode, setVenueMode] = useState<"picker" | "manual">("picker");
   const [calculatingBudget, setCalculatingBudget] = useState(false);
   const [showOptionalDetails, setShowOptionalDetails] = useState(false);
+  const [showExitModal, setShowExitModal] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [preflight, setPreflight] = useState<"loading" | "ok" | "no-auth" | "no-collective">("loading");
   const [draftLoaded, setDraftLoaded] = useState(false);
@@ -1534,31 +1536,114 @@ export default function NewEventPage() {
     <div className="mx-auto max-w-lg flex flex-col h-[calc(100dvh-8rem)] animate-fade-in overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3 pb-2 shrink-0 px-1">
-        <Link href="/dashboard/events">
-          <Button variant="ghost" size="icon" className="min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200" aria-label="Back to events">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="min-h-[44px] min-w-[44px] hover:bg-accent active:scale-95 transition-all duration-200"
+          aria-label="Back to events"
+          onClick={() => {
+            if (formData.title || formData.venueName) {
+              setShowExitModal(true);
+            } else {
+              clearDraft();
+              router.push("/dashboard/events");
+            }
+          }}
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
         <h1 className="text-xl font-bold font-heading truncate">New Event</h1>
         {(formData.title || formData.venueName) && (
           <button
-            onClick={() => {
-              if (!window.confirm("Start over? You'll lose your progress.")) return;
-              clearDraft();
-              setFormData(DEFAULT_FORM);
-              setTiers([]);
-              setBudgetInput({});
-              setBudgetResult(null);
-              setStep("details");
-              setError(null);
-              setVenueMode("picker");
-            }}
+            onClick={() => setShowResetModal(true)}
             className="ml-auto shrink-0 text-xs text-zinc-500 hover:text-zinc-300 transition-colors duration-200 px-2 py-1 rounded-md hover:bg-white/[0.04]"
           >
             Start over
           </button>
         )}
       </div>
+
+      {/* Exit confirmation modal */}
+      {showExitModal && (
+        <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12111a] p-5 space-y-4 animate-in slide-in-from-bottom-4 md:slide-in-from-bottom-0 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-white">Leave event creation?</h3>
+              <p className="text-sm text-zinc-400">You have unsaved progress.</p>
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  // Draft is already auto-saved, just navigate away
+                  setShowExitModal(false);
+                  router.push("/dashboard/events");
+                }}
+                className="w-full rounded-xl bg-[#7B2FF7] px-4 py-3 min-h-[44px] text-sm font-semibold text-white transition-colors hover:bg-[#6B1FE7] active:scale-[0.98]"
+              >
+                Save Draft & Leave
+              </button>
+              <button
+                onClick={() => {
+                  clearDraft();
+                  setShowExitModal(false);
+                  router.push("/dashboard/events");
+                }}
+                className="w-full rounded-xl bg-white/5 px-4 py-3 min-h-[44px] text-sm font-medium text-red-400 transition-colors hover:bg-white/10 active:scale-[0.98]"
+              >
+                Discard & Leave
+              </button>
+              <button
+                onClick={() => setShowExitModal(false)}
+                className="w-full rounded-xl px-4 py-3 min-h-[44px] text-sm font-medium text-zinc-400 transition-colors hover:text-white active:scale-[0.98]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Start over confirmation modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-[60] flex items-end md:items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+          <div
+            className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#12111a] p-5 space-y-4 animate-in slide-in-from-bottom-4 md:slide-in-from-bottom-0 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-white">Start over?</h3>
+              <p className="text-sm text-zinc-400">This will clear all your progress.</p>
+            </div>
+            <div className="space-y-2">
+              <button
+                onClick={() => {
+                  clearDraft();
+                  setFormData(DEFAULT_FORM);
+                  setTiers([]);
+                  setBudgetInput({});
+                  setBudgetResult(null);
+                  setStep("details");
+                  setError(null);
+                  setVenueMode("picker");
+                  setShowResetModal(false);
+                }}
+                className="w-full rounded-xl bg-red-500/20 px-4 py-3 min-h-[44px] text-sm font-semibold text-red-400 transition-colors hover:bg-red-500/30 active:scale-[0.98]"
+              >
+                Yes, Start Over
+              </button>
+              <button
+                onClick={() => setShowResetModal(false)}
+                className="w-full rounded-xl px-4 py-3 min-h-[44px] text-sm font-medium text-zinc-400 transition-colors hover:text-white active:scale-[0.98]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Progress */}
       <StepProgress current={step} steps={activeSteps} />
