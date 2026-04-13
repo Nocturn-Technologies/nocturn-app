@@ -3,7 +3,8 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { TrendingUp, TrendingDown, Sparkles, Target, Calendar, AlertTriangle } from "lucide-react";
 import type { EventFinancials } from "@/app/actions/event-financials";
-import type { ForecastData } from "@/app/actions/ai-finance";
+import type { ForecastData, TrajectoryData } from "@/app/actions/ai-finance";
+import { SalesTrajectoryCard } from "@/components/sales-trajectory-card";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -18,6 +19,7 @@ function formatCurrency(n: number): string {
 interface Props {
   financials: EventFinancials;
   forecast: ForecastData | null;
+  trajectory?: TrajectoryData | null;
 }
 
 /**
@@ -30,7 +32,7 @@ interface Props {
  * requested. The numbers here are derived purely from the props — no
  * client-side data fetching, so it renders instantly with the page.
  */
-export function EventFinancialsDashboard({ financials, forecast }: Props) {
+export function EventFinancialsDashboard({ financials, forecast, trajectory }: Props) {
   // ── P&L glance numbers ────────────────────────────────────────────
   // Total costs are out-of-pocket only. Stripe + Nocturn fees are buyer
   // paid (Nocturn is the merchant of record), so they don't belong here.
@@ -319,6 +321,17 @@ export function EventFinancialsDashboard({ financials, forecast }: Props) {
           </CardContent>
         </Card>
       </div>
+
+      {/* ── Sales Trajectory (full-width below dashboard) ─────── */}
+      {trajectory && (
+        <SalesTrajectoryCard
+          prediction={trajectory.prediction}
+          ticketsSold={trajectory.ticketsSold}
+          totalCapacity={trajectory.totalCapacity}
+          breakEvenTickets={trajectory.breakEvenTickets}
+          insight={trajectory.insight}
+        />
+      )}
 
       {/* ── AI Insights (full-width below) ─────────────────────── */}
       {forecast && forecast.insights.length > 0 && (

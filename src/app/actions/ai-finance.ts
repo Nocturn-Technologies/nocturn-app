@@ -140,17 +140,18 @@ export async function generateEventForecast(
   const currentRevenue = tierData.reduce((s, t) => s + t.revenue, 0);
   const sellThroughRate = totalCapacity > 0 ? ticketsSoldSoFar / totalCapacity : 0;
 
-  // Project remaining sales based on current momentum
-  // Simple model: if X% sold with Y days left, project final sell-through
+  // Project remaining sales using nightlife-specific reference curves.
+  // The old naive multiplier treated 30% sold the same whether it was 3
+  // weeks out (normal dead zone) or 3 days out (actually behind). The
+  // curve-aware version accounts for when nightlife tickets actually sell.
   let projectedSellThrough: number;
   if (daysUntilEvent <= 0) {
     projectedSellThrough = sellThroughRate;
-  } else if (sellThroughRate > 0.7) {
-    projectedSellThrough = Math.min(sellThroughRate * 1.15, 1.0); // likely sells out
-  } else if (sellThroughRate > 0.3) {
-    projectedSellThrough = Math.min(sellThroughRate * 1.3, 0.95);
   } else {
-    projectedSellThrough = Math.min(sellThroughRate * 1.5, 0.8);
+    const eventDate = new Date(event.starts_at);
+    const curve = selectCurveProfile(eventDate.getDay(), totalCapacity, tiers.length);
+    const curvePrediction = predictSales(curve, daysUntilEvent, sellThroughRate);
+    projectedSellThrough = curvePrediction.projected;
   }
 
   // Calculate projected revenue (weighted average price × projected tickets)
@@ -329,6 +330,195 @@ Tier breakdown: ${tierData.map(t => `${t.name}: ${t.sold}/${t.capacity} @ $${t.p
   } catch (err) {
     console.error("[generateEventForecast]", err);
     return { error: "Something went wrong", forecast: null };
+  }
+}
+
+// ── Ticket Sales Trajectory ──────────────────────────────────────────────
+
+import {
+  selectCurveProfile,
+  predictSales,
+  getTrajectoryInsight,
+  getDayOfWeekLabel,
+  type SalesPrediction,
+} from "@/lib/sales-prediction";
+
+export interface TrajectoryData {
+  prediction: SalesPrediction;
+  ticketsSold: number;
+  totalCapacity: number;
+  breakEvenTickets: number;
+  insight: string;
+  dayOfWeekLabel: string;
+}
+
+/**
+ * Compute the ticket sales trajectory for an event.
+ * Returns curve-aware prediction, chart data, and a plain-English insight.
+ * No Claude call — all math + templates for instant rendering.
+ */
+export async function getTicketSalesTrajectory(
+  eventId: string
+): Promise<{ error: string | null; trajectory: TrajectoryData | null }> {
+  try {
+    if (!eventId?.trim()) return { error: "Event ID is required", trajectory: null };
+
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", trajectory: null };
+
+    const admin = createAdminClient();
+
+    // Get event
+    const { data: event } = await admin
+      .from("events")
+      .select("id, starts_at, collective_id, venue_cost, bar_minimum, venue_deposit, estimated_bar_revenue")
+      .eq("id", eventId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (!event) return { error: "Event not found", trajectory: null };
+
+    // Verify membership
+    const { count: memberCount } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", (event as { collective_id: string }).collective_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!memberCount) return { error: "Not authorized", trajectory: null };
+
+    const startsAt = new Date((event as { starts_at: string }).starts_at);
+    const daysOut = Math.max(
+      0,
+      Math.ceil((startsAt.getTime() - Date.now()) / 86400000)
+    );
+    const dayOfWeek = startsAt.getDay();
+
+    // Get ticket tiers
+    const { data: tiers } = await admin
+      .from("ticket_tiers")
+      .select("id, name, price, capacity")
+      .eq("event_id", eventId)
+      .order("sort_order");
+
+    if (!tiers || tiers.length === 0)
+      return { error: "No ticket tiers", trajectory: null };
+
+    const typedTiers = tiers as { id: string; name: string; price: number; capacity: number }[];
+
+    // Count sold tickets per tier + get daily sales data for chart
+    const [tierCounts, dailySales] = await Promise.all([
+      Promise.all(
+        typedTiers.map(async (tier) => {
+          const { count } = await admin
+            .from("tickets")
+            .select("*", { count: "exact", head: true })
+            .eq("ticket_tier_id", tier.id)
+            .in("status", ["paid", "checked_in"]);
+          return { ...tier, sold: count ?? 0 };
+        })
+      ),
+      // Get all ticket purchase dates for the sales curve chart
+      admin
+        .from("tickets")
+        .select("created_at")
+        .eq("event_id", eventId)
+        .in("status", ["paid", "checked_in"])
+        .order("created_at", { ascending: true }),
+    ]);
+
+    const ticketsSold = tierCounts.reduce((s, t) => s + t.sold, 0);
+    const totalCapacity = typedTiers.reduce((s, t) => s + t.capacity, 0);
+    const currentPctSold = totalCapacity > 0 ? ticketsSold / totalCapacity : 0;
+
+    // Build daily cumulative sales history for chart
+    const salesHistory: Array<{ daysOut: number; pct: number }> = [];
+    const ticketDates = (dailySales.data ?? []) as { created_at: string }[];
+    if (ticketDates.length > 0) {
+      // Group by date, compute cumulative
+      const dailyMap = new Map<number, number>();
+      let cumulative = 0;
+      for (const t of ticketDates) {
+        const ticketDate = new Date(t.created_at);
+        const ticketDaysOut = Math.max(
+          0,
+          Math.ceil((startsAt.getTime() - ticketDate.getTime()) / 86400000)
+        );
+        cumulative++;
+        dailyMap.set(ticketDaysOut, cumulative);
+      }
+      // Convert to array — ensure we have at least start and current point
+      const sortedDays = [...dailyMap.entries()].sort((a, b) => b[0] - a[0]);
+      for (const [d, cum] of sortedDays) {
+        salesHistory.push({ daysOut: d, pct: totalCapacity > 0 ? cum / totalCapacity : 0 });
+      }
+    }
+    // Always include current point
+    if (salesHistory.length === 0 || salesHistory[salesHistory.length - 1]?.daysOut !== daysOut) {
+      salesHistory.push({ daysOut, pct: currentPctSold });
+    }
+
+    // Select curve + predict
+    const curve = selectCurveProfile(dayOfWeek, totalCapacity, typedTiers.length);
+    const prediction = predictSales(curve, daysOut, currentPctSold, salesHistory);
+
+    // Break-even calculation (same as generateEventForecast)
+    const { data: bookingsRaw } = await admin
+      .from("event_artists")
+      .select("fee, flight_cost, hotel_cost, transport_cost")
+      .eq("event_id", eventId)
+      .eq("status", "confirmed");
+    const bookings = (bookingsRaw ?? []) as { fee: number | null; flight_cost: number | null; hotel_cost: number | null; transport_cost: number | null }[];
+
+    const artistFees = bookings.reduce((s, b) => s + (Number(b.fee) || 0), 0);
+    const travelCosts = bookings.reduce(
+      (s, b) => s + (Number(b.flight_cost) || 0) + (Number(b.hotel_cost) || 0) + (Number(b.transport_cost) || 0),
+      0
+    );
+    const venueCost = Number((event as Record<string, unknown>).venue_cost) || 0;
+    const estimatedBarRevenue = Number((event as Record<string, unknown>).estimated_bar_revenue) || 0;
+
+    const { data: expensesRaw } = await admin
+      .from("expenses")
+      .select("amount")
+      .eq("event_id", eventId);
+    const estimatedExpenses = ((expensesRaw ?? []) as { amount: number }[]).reduce(
+      (s, e) => s + (Number(e.amount) || 0),
+      0
+    );
+
+    const fixedCosts = artistFees + travelCosts + venueCost + estimatedExpenses;
+    const avgTicketPrice = totalCapacity > 0
+      ? typedTiers.reduce((s, t) => s + Number(t.price) * t.capacity, 0) / totalCapacity
+      : 0;
+    const breakEvenTickets = avgTicketPrice > 0
+      ? Math.ceil(Math.max(0, fixedCosts - estimatedBarRevenue) / avgTicketPrice)
+      : 0;
+
+    const dayOfWeekLabel = getDayOfWeekLabel(dayOfWeek);
+    const insight = getTrajectoryInsight(
+      prediction,
+      ticketsSold,
+      totalCapacity,
+      breakEvenTickets,
+      dayOfWeekLabel
+    );
+
+    return {
+      error: null,
+      trajectory: {
+        prediction,
+        ticketsSold,
+        totalCapacity,
+        breakEvenTickets,
+        insight,
+        dayOfWeekLabel,
+      },
+    };
+  } catch (err) {
+    console.error("[getTicketSalesTrajectory]", err);
+    return { error: "Something went wrong", trajectory: null };
   }
 }
 

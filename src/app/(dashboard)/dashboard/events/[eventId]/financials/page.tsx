@@ -4,7 +4,7 @@ import { ArrowLeft, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { getEventFinancials } from "@/app/actions/event-financials";
-import { generateEventForecast } from "@/app/actions/ai-finance";
+import { generateEventForecast, getTicketSalesTrajectory } from "@/app/actions/ai-finance";
 import { EventPnlSpreadsheet } from "@/components/event-pnl-spreadsheet";
 import { EventFinancialsDashboard } from "@/components/event-financials-dashboard";
 
@@ -24,9 +24,10 @@ export default async function EventFinancialsPage({ params }: Props) {
   // Parallel fetch — financials is the source of truth for the spreadsheet,
   // forecast powers the scenario projections. skipNarrative avoids the slow
   // Claude call on SSR since we only render the rule-based insights.
-  const [financialsResult, forecastResult] = await Promise.all([
+  const [financialsResult, forecastResult, trajectoryResult] = await Promise.all([
     getEventFinancials(eventId),
     generateEventForecast(eventId, { skipNarrative: true }),
+    getTicketSalesTrajectory(eventId),
   ]);
 
   if (financialsResult.error || !financialsResult.data) {
@@ -35,6 +36,7 @@ export default async function EventFinancialsPage({ params }: Props) {
 
   const financials = financialsResult.data;
   const forecast = forecastResult.error ? null : forecastResult.forecast ?? null;
+  const trajectory = trajectoryResult.error ? null : trajectoryResult.trajectory ?? null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 animate-in fade-in duration-500 overflow-x-hidden">
@@ -62,7 +64,7 @@ export default async function EventFinancialsPage({ params }: Props) {
       </div>
 
       {/* At-a-glance dashboard: P&L + forecast + AI insights */}
-      <EventFinancialsDashboard financials={financials} forecast={forecast} />
+      <EventFinancialsDashboard financials={financials} forecast={forecast} trajectory={trajectory} />
 
       {/* Full editable spreadsheet for line-item management */}
       <EventPnlSpreadsheet financials={financials} />
