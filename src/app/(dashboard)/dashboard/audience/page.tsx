@@ -86,14 +86,21 @@ export default function AudiencePage() {
         // Compute Reach insight headline + full insights panel
         const { getContacts, generateReachInsights } = await import("@/app/actions/contacts");
 
-        const [contactResult, insightsResult] = await Promise.all([
-          getContacts(id, { contactType: "fan" }),
-          generateReachInsights(id),
-        ]);
+        let contactResult, insightsResult;
+        try {
+          [contactResult, insightsResult] = await Promise.all([
+            getContacts(id, { contactType: "fan" }),
+            generateReachInsights(id),
+          ]);
+        } catch (err) {
+          console.error("[AudiencePage] Failed to fetch insights:", err);
+          setLoading(false);
+          return;
+        }
 
         if (!contactResult.error && contactResult.aggregateStats) {
           const { newThisMonth, repeatRate } = contactResult.aggregateStats;
-          const core50 = contactResult.segmentCounts.core50 ?? 0;
+          const core50 = contactResult.segmentCounts?.core50 ?? 0;
           if (core50 > 0) {
             setReachInsight(`${core50} fan${core50 !== 1 ? "s" : ""} have been to every event — your core crew`);
           } else if (newThisMonth > 0) {
@@ -103,7 +110,7 @@ export default function AudiencePage() {
           }
         }
 
-        if (!insightsResult.error && insightsResult.insights.length > 0) {
+        if (insightsResult && !insightsResult.error && insightsResult.insights.length > 0) {
           setReachInsights(insightsResult.insights);
         }
       }

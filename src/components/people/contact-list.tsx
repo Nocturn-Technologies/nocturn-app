@@ -23,6 +23,7 @@ import {
   Download,
   Copy,
   Check,
+  Sparkles,
 } from "lucide-react";
 
 
@@ -79,13 +80,15 @@ type SortDirection = "asc" | "desc";
 
 const PER_PAGE = 25;
 
-const FAN_FILTERS = [
-  { label: "All", value: "all" },
-  { label: "Core 50", value: "core50" },
-  { label: "Ambassadors", value: "ambassadors" },
-  { label: "Repeat", value: "repeat" },
-  { label: "New", value: "new" },
-  { label: "VIP", value: "vip" },
+const FAN_FILTERS: { label: string; value: string; icon: string; hint: string }[] = [
+  { label: "All Fans", value: "all", icon: "👥", hint: "Everyone in your audience" },
+  { label: "Regulars", value: "repeat", icon: "🔁", hint: "Came back 2+ times" },
+  { label: "New Faces", value: "new", icon: "✨", hint: "First-timers to convert" },
+  { label: "Core Crew", value: "core50", icon: "💎", hint: "Your day-ones" },
+  { label: "Ambassadors", value: "ambassadors", icon: "🚀", hint: "Your street team" },
+  { label: "Has IG", value: "has_ig", icon: "📱", hint: "Reachable on Instagram" },
+  { label: "Dormant", value: "dormant", icon: "😴", hint: "60+ days since last event" },
+  { label: "VIP", value: "vip", icon: "⭐", hint: "Tagged VIP" },
 ];
 
 const INDUSTRY_ROLE_LABELS: Record<string, string> = {
@@ -109,6 +112,8 @@ const SEGMENT_BADGE_STYLES: Record<string, string> = {
   repeat: "bg-green-400/10 text-green-400 border-green-400/20",
   new: "bg-blue-400/10 text-blue-400 border-blue-400/20",
   vip: "bg-rose-400/10 text-rose-400 border-rose-400/20",
+  dormant: "bg-zinc-400/10 text-zinc-400 border-zinc-400/20",
+  has_ig: "bg-pink-400/10 text-pink-400 border-pink-400/20",
 };
 
 const ROLE_BADGE_STYLES: Record<string, string> = {
@@ -319,12 +324,12 @@ export function ContactList({
         roleCounts.set(c.role, (roleCounts.get(c.role) ?? 0) + 1);
       }
     }
-    const chips: { label: string; value: string }[] = [
-      { label: "All", value: "all" },
+    const chips: { label: string; value: string; icon: string; hint: string }[] = [
+      { label: "All", value: "all", icon: "👥", hint: "All industry contacts" },
     ];
     for (const [role, count] of roleCounts) {
       if (count > 0 && INDUSTRY_ROLE_LABELS[role]) {
-        chips.push({ label: INDUSTRY_ROLE_LABELS[role], value: role });
+        chips.push({ label: INDUSTRY_ROLE_LABELS[role], value: role, icon: "🎵", hint: `${count} ${INDUSTRY_ROLE_LABELS[role].toLowerCase()}` });
       }
     }
     // Also collect custom tags used by multiple contacts
@@ -336,7 +341,7 @@ export function ContactList({
     }
     for (const [tag, count] of tagCounts) {
       if (count >= 2 && !chips.some((ch) => ch.value === tag)) {
-        chips.push({ label: tag, value: `tag:${tag}` });
+        chips.push({ label: tag, value: `tag:${tag}`, icon: "🏷️", hint: `Tagged "${tag}"` });
       }
     }
     return chips;
@@ -354,7 +359,7 @@ export function ContactList({
     }
     for (const [tag, count] of tagCounts) {
       if (count >= 2 && !base.some((f) => f.value === tag)) {
-        base.push({ label: tag, value: `tag:${tag}` });
+        base.push({ label: tag, value: `tag:${tag}`, icon: "🏷️", hint: `Tagged "${tag}"` });
       }
     }
     return base;
@@ -362,19 +367,44 @@ export function ContactList({
 
   const filters = contactType === "fan" ? fanFilters : industryFilters;
 
+  // Compute segment counts for agentic badges
+  const segmentCounts = useMemo(() => {
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+    // Apply event filter first if active
+    const base = eventFilter && eventAttendeeEmails
+      ? contacts.filter((c) => c.email && eventAttendeeEmails.has(c.email.toLowerCase()))
+      : contacts;
+
+    return {
+      all: base.length,
+      repeat: base.filter((c) => (c.total_events ?? 0) >= 2).length,
+      new: base.filter((c) => (c.total_events ?? 0) <= 1).length,
+      core50: base.filter((c) => c.segment === "core50").length,
+      ambassadors: base.filter((c) => c.segment === "ambassadors").length,
+      has_ig: base.filter((c) => !!c.instagram).length,
+      dormant: base.filter((c) => c.last_seen_at && new Date(c.last_seen_at) < sixtyDaysAgo && (c.total_events ?? 0) >= 1).length,
+      vip: base.filter((c) => c.tags.includes("vip")).length,
+    };
+  }, [contacts, eventFilter, eventAttendeeEmails]);
+
   // Filter contacts
   const filtered = useMemo(() => {
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
     return contacts.filter((c) => {
       // Event filter — only show fans whose email matches an attendee of the selected event
       if (eventFilter && eventAttendeeEmails) {
-        if (!eventAttendeeEmails.has(c.email.toLowerCase())) return false;
+        if (!c.email || !eventAttendeeEmails.has(c.email.toLowerCase())) return false;
       }
 
       // Search
       const q = debouncedSearch.toLowerCase();
       if (q) {
         const matchName = c.name?.toLowerCase().includes(q);
-        const matchEmail = c.email.toLowerCase().includes(q);
+        const matchEmail = c.email?.toLowerCase().includes(q);
         const matchTag = c.tags.some((t) => t.includes(q));
         if (!matchName && !matchEmail && !matchTag) return false;
       }
@@ -393,6 +423,8 @@ export function ContactList({
         if (activeFilter === "ambassadors") return c.segment === "ambassadors";
         if (activeFilter === "repeat") return (c.total_events ?? 0) >= 2;
         if (activeFilter === "new") return (c.total_events ?? 0) <= 1;
+        if (activeFilter === "has_ig") return !!c.instagram;
+        if (activeFilter === "dormant") return !!(c.last_seen_at && new Date(c.last_seen_at) < sixtyDaysAgo && (c.total_events ?? 0) >= 1);
         if (activeFilter === "vip") return c.tags.includes("vip");
       }
 
@@ -403,7 +435,7 @@ export function ContactList({
 
       return true;
     });
-  }, [contacts, debouncedSearch, activeFilter, contactType]);
+  }, [contacts, debouncedSearch, activeFilter, contactType, eventFilter, eventAttendeeEmails]);
 
   // Sort filtered contacts
   const sorted = useMemo(() => {
@@ -583,22 +615,33 @@ export function ContactList({
         />
       </div>
 
-      {/* Filter chips */}
+      {/* ── Agentic Segment Filters ─────────────────────── */}
       {filters.length > 1 && (
-        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
-          {filters.map(({ label, value }) => {
-            const isActive = activeFilter === value;
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+          {filters.map((f) => {
+            const count = segmentCounts[f.value as keyof typeof segmentCounts] ?? 0;
+            const isActive = activeFilter === f.value;
+            // Hide empty segments (except All)
+            if (f.value !== "all" && count === 0) return null;
             return (
               <button
-                key={value}
-                onClick={() => setActiveFilter(value)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors min-h-[44px] ${
+                key={f.value}
+                onClick={() => setActiveFilter(f.value)}
+                className={`shrink-0 rounded-xl px-3 py-2 text-left transition-colors min-h-[44px] min-w-[90px] border ${
                   isActive
-                    ? "bg-nocturn text-white"
-                    : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                    ? "bg-nocturn/10 border-nocturn/30 ring-1 ring-nocturn/20"
+                    : "bg-card border-border hover:border-muted-foreground/30"
                 }`}
               >
-                {label}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">{f.icon}</span>
+                  <span className={`text-xs font-semibold ${isActive ? "text-nocturn" : "text-foreground"}`}>
+                    {count}
+                  </span>
+                </div>
+                <p className={`text-[11px] mt-0.5 ${isActive ? "text-nocturn/80" : "text-muted-foreground"}`}>
+                  {f.label}
+                </p>
               </button>
             );
           })}
@@ -634,10 +677,13 @@ export function ContactList({
 
       {/* Result count + export actions */}
       <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">
+        <p className="text-xs text-muted-foreground flex items-center gap-1">
+          {activeFilter !== "all" && (
+            <Sparkles className="h-3 w-3 text-nocturn shrink-0" />
+          )}
           {sorted.length} result{sorted.length !== 1 ? "s" : ""}
           {activeFilter !== "all" &&
-            ` · ${filters.find((f) => f.value === activeFilter)?.label ?? activeFilter}`}
+            ` · ${filters.find((f) => f.value === activeFilter)?.hint ?? filters.find((f) => f.value === activeFilter)?.label ?? activeFilter}`}
           {debouncedSearch && ` · "${debouncedSearch}"`}
         </p>
         {sorted.length > 0 && (
