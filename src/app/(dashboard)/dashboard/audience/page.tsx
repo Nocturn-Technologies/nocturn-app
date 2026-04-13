@@ -6,8 +6,20 @@ import { ContactList } from "@/components/people/contact-list";
 import { ImportSheet } from "@/components/people/import-sheet";
 import { ContactDetailSheet } from "@/components/people/contact-detail-sheet";
 import { Button } from "@/components/ui/button";
-import { Upload, MessageSquare, ChevronDown, Calendar, Sparkles } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Upload,
+  MessageSquare,
+  ChevronDown,
+  Calendar,
+  Sparkles,
+  Copy,
+  Check,
+  ExternalLink,
+  ChevronRight,
+} from "lucide-react";
 import Link from "next/link";
+import type { ReachInsight } from "@/app/actions/contacts";
 
 interface EventOption {
   id: string;
@@ -30,10 +42,13 @@ export default function AudiencePage() {
   const [eventAttendeeEmails, setEventAttendeeEmails] = useState<Set<string>>(new Set());
   const [loadingEventEmails, setLoadingEventEmails] = useState(false);
 
-  // Reach insight
+  // Reach insights
   const [reachInsight, setReachInsight] = useState<string | null>(null);
+  const [reachInsights, setReachInsights] = useState<ReachInsight[]>([]);
+  const [insightsExpanded, setInsightsExpanded] = useState(true);
+  const [copiedInsight, setCopiedInsight] = useState<string | null>(null);
 
-  // Fetch user's active collective + events
+  // Fetch user's active collective + events + insights
   useEffect(() => {
     async function fetchCollective() {
       const supabase = createClient();
@@ -57,8 +72,8 @@ export default function AudiencePage() {
         )?.[0]?.collective_id ?? null;
       setCollectiveId(id);
 
-      // Fetch events for per-event filter dropdown + compute Reach insight
       if (id) {
+        // Fetch events for per-event filter dropdown
         const { data: eventsRaw } = await supabase
           .from("events")
           .select("id, title, starts_at")
@@ -68,12 +83,17 @@ export default function AudiencePage() {
           .limit(50);
         setEvents((eventsRaw ?? []) as EventOption[]);
 
-        // Compute Reach insight from contacts
-        const { getContacts } = await import("@/app/actions/contacts");
-        const result = await getContacts(id, { contactType: "fan" });
-        if (!result.error && result.aggregateStats) {
-          const { newThisMonth, repeatRate } = result.aggregateStats;
-          const core50 = result.segmentCounts.core50 ?? 0;
+        // Compute Reach insight headline + full insights panel
+        const { getContacts, generateReachInsights } = await import("@/app/actions/contacts");
+
+        const [contactResult, insightsResult] = await Promise.all([
+          getContacts(id, { contactType: "fan" }),
+          generateReachInsights(id),
+        ]);
+
+        if (!contactResult.error && contactResult.aggregateStats) {
+          const { newThisMonth, repeatRate } = contactResult.aggregateStats;
+          const core50 = contactResult.segmentCounts.core50 ?? 0;
           if (core50 > 0) {
             setReachInsight(`${core50} fan${core50 !== 1 ? "s" : ""} have been to every event — your core crew`);
           } else if (newThisMonth > 0) {
@@ -82,6 +102,10 @@ export default function AudiencePage() {
             setReachInsight(`${repeatRate.toFixed(0)}% of your fans are repeat attendees`);
           }
         }
+
+        if (!insightsResult.error && insightsResult.insights.length > 0) {
+          setReachInsights(insightsResult.insights);
+        }
       }
 
       setLoading(false);
@@ -89,31 +113,20 @@ export default function AudiencePage() {
     fetchCollective();
   }, []);
 
-  // When an event is selected, fetch its attendee emails
+  // When an event is selected, fetch its attendee emails via server action
   useEffect(() => {
     if (!selectedEventId) {
       setEventAttendeeEmails(new Set());
       return;
     }
     setLoadingEventEmails(true);
-    const supabase = createClient();
 
     (async () => {
-      // Fetch ticket buyer emails for this event
-      const { data: tickets } = await supabase
-        .from("tickets")
-        .select("metadata")
-        .eq("event_id", selectedEventId)
-        .in("status", ["paid", "checked_in"]);
-
-      const emails = new Set<string>();
-      for (const t of (tickets ?? []) as { metadata: Record<string, unknown> | null }[]) {
-        const email =
-          (t.metadata?.customer_email as string) ||
-          (t.metadata?.buyer_email as string);
-        if (email) emails.add(email.toLowerCase().trim());
+      const { getEventFanEmails } = await import("@/app/actions/contacts");
+      const result = await getEventFanEmails(selectedEventId);
+      if (!result.error) {
+        setEventAttendeeEmails(new Set(result.emails));
       }
-      setEventAttendeeEmails(emails);
       setLoadingEventEmails(false);
     })();
   }, [selectedEventId]);
@@ -121,6 +134,61 @@ export default function AudiencePage() {
   const handleImportComplete = useCallback(() => {
     setRefreshKey((k) => k + 1);
   }, []);
+
+  // Handle insight actions
+  async function handleInsightAction(insight: ReachInsight) {
+    if (!collectiveId) return;
+
+    if (insight.actionType === "copy_handles" || insight.actionType === "copy_emails") {
+      const { getContacts } = await import("@/app/actions/contacts");
+      const result = await getContacts(collectiveId, { contactType: "fan" });
+      if (result.error) return;
+
+      let textToCopy = "";
+      if (insight.actionType === "copy_handles") {
+        // Copy IG handles for the relevant segment
+        const fans = result.contacts.filter((c) => c.instagram);
+        if (insight.id === "ambassador_candidates" || insight.id === "potential_ambassadors") {
+          textToCopy = fans
+            .filter((c) => c.totalEvents >= 2)
+            .map((c) => `@${c.instagram!.replace(/^@/, "")}`)
+            .join("\n");
+        } else {
+          textToCopy = fans
+            .map((c) => `@${c.instagram!.replace(/^@/, "")}`)
+            .join("\n");
+        }
+      } else if (insight.actionType === "copy_emails") {
+        const fans = result.contacts.filter((c) => c.email);
+        if (insight.id === "core_crew") {
+          const { count: eventCount } = await (await import("@/lib/supabase/client")).createClient()
+            .from("events")
+            .select("*", { count: "exact", head: true })
+            .eq("collective_id", collectiveId)
+            .is("deleted_at", null);
+          textToCopy = fans
+            .filter((c) => c.totalEvents >= (eventCount ?? 0))
+            .map((c) => c.email!)
+            .join("\n");
+        } else if (insight.id === "dormant_fans") {
+          const sixtyDaysAgo = new Date();
+          sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+          textToCopy = fans
+            .filter((c) => c.lastSeenAt && new Date(c.lastSeenAt) < sixtyDaysAgo)
+            .map((c) => c.email!)
+            .join("\n");
+        } else {
+          textToCopy = fans.map((c) => c.email!).join("\n");
+        }
+      }
+
+      if (textToCopy) {
+        await navigator.clipboard.writeText(textToCopy);
+        setCopiedInsight(insight.id);
+        setTimeout(() => setCopiedInsight(null), 2000);
+      }
+    }
+  }
 
   // Loading state
   if (loading) {
@@ -189,6 +257,87 @@ export default function AudiencePage() {
         </div>
       </div>
 
+      {/* ── Reach Agent Insights Panel ──────────────────────────── */}
+      {reachInsights.length > 0 && (
+        <Card className="border-l-4 border-l-nocturn bg-card">
+          <CardContent className="p-4">
+            <button
+              onClick={() => setInsightsExpanded(!insightsExpanded)}
+              className="flex items-center gap-2 w-full text-left min-h-[36px]"
+            >
+              <Sparkles className="h-4 w-4 text-nocturn shrink-0" />
+              <h2 className="text-sm font-bold flex-1">Reach Insights</h2>
+              <span className="text-[11px] text-muted-foreground mr-1">
+                {reachInsights.length} action{reachInsights.length !== 1 ? "s" : ""}
+              </span>
+              <ChevronDown
+                className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
+                  insightsExpanded ? "rotate-0" : "-rotate-90"
+                }`}
+              />
+            </button>
+
+            {insightsExpanded && (
+              <div className="mt-3 space-y-3">
+                {reachInsights.map((insight) => (
+                  <div
+                    key={insight.id}
+                    className="rounded-lg bg-muted/30 p-3 space-y-2"
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="text-base shrink-0 mt-0.5">{insight.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-foreground">
+                          {insight.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                          {insight.description}
+                        </p>
+                      </div>
+                    </div>
+                    {insight.action && (
+                      <div className="pl-7">
+                        {insight.actionType === "navigate" ? (
+                          <Link href={insight.actionTarget ?? "#"}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-nocturn hover:text-nocturn-light gap-1"
+                            >
+                              {insight.action}
+                              <ExternalLink className="h-3 w-3" />
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-nocturn hover:text-nocturn-light gap-1"
+                            onClick={() => handleInsightAction(insight)}
+                          >
+                            {copiedInsight === insight.id ? (
+                              <>
+                                <Check className="h-3 w-3 text-green-400" />
+                                Copied!
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="h-3 w-3" />
+                                {insight.action}
+                              </>
+                            )}
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Per-event filter */}
       {events.length > 0 && (
         <div className="flex items-center gap-2">
@@ -220,6 +369,11 @@ export default function AudiencePage() {
           )}
           {loadingEventEmails && (
             <div className="h-4 w-4 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
+          )}
+          {selectedEventId && !loadingEventEmails && (
+            <span className="text-xs text-muted-foreground">
+              {eventAttendeeEmails.size} attendee{eventAttendeeEmails.size !== 1 ? "s" : ""}
+            </span>
           )}
         </div>
       )}

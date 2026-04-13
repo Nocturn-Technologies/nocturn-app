@@ -962,7 +962,268 @@ export async function updateContact(
   }
 }
 
-// ── 6. syncContactMetrics ────────────────────────────────────────────────────
+// ── 6. getEventFanEmails ─────────────────────────────────────────────────────
+
+/**
+ * Get all emails associated with a specific event — from tickets, RSVPs,
+ * and guest list. Uses admin client to bypass RLS.
+ */
+export async function getEventFanEmails(
+  eventId: string
+): Promise<{ error: string | null; emails: string[] }> {
+  try {
+    if (!eventId?.trim()) return { error: "Event ID required", emails: [] };
+
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", emails: [] };
+
+    const admin = createAdminClient();
+
+    // Verify user has access to this event's collective
+    const { data: event } = await admin
+      .from("events")
+      .select("collective_id")
+      .eq("id", eventId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!event) return { error: "Event not found", emails: [] };
+
+    const { count: memberCount } = await admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", (event as { collective_id: string }).collective_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null);
+    if (!memberCount) return { error: "Not authorized", emails: [] };
+
+    const emailSet = new Set<string>();
+
+    // 1. Ticket buyer emails (from metadata)
+    const { data: tickets } = await admin
+      .from("tickets")
+      .select("metadata")
+      .eq("event_id", eventId)
+      .in("status", ["paid", "checked_in"]);
+
+    for (const t of (tickets ?? []) as { metadata: Record<string, unknown> | null }[]) {
+      const email =
+        (t.metadata?.customer_email as string) ||
+        (t.metadata?.buyer_email as string);
+      if (email) emailSet.add(email.toLowerCase().trim());
+    }
+
+    // 2. RSVP emails
+    const { data: rsvps } = await admin
+      .from("rsvps")
+      .select("email")
+      .eq("event_id", eventId)
+      .in("status", ["yes", "maybe"])
+      .not("email", "is", null);
+
+    for (const r of (rsvps ?? []) as { email: string | null }[]) {
+      if (r.email) emailSet.add(r.email.toLowerCase().trim());
+    }
+
+    // 3. Guest list emails
+    const { data: guests } = await admin
+      .from("guest_list")
+      .select("email")
+      .eq("event_id", eventId)
+      .not("email", "is", null);
+
+    for (const g of (guests ?? []) as { email: string | null }[]) {
+      if (g.email) emailSet.add(g.email.toLowerCase().trim());
+    }
+
+    return { error: null, emails: Array.from(emailSet) };
+  } catch (err) {
+    console.error("[getEventFanEmails]", err);
+    return { error: "Something went wrong", emails: [] };
+  }
+}
+
+// ── 7. generateReachInsights ─────────────────────────────────────────────────
+
+export interface ReachInsight {
+  id: string;
+  icon: string;
+  title: string;
+  description: string;
+  action?: string;
+  actionType?: "copy_emails" | "copy_handles" | "navigate";
+  actionTarget?: string;
+}
+
+/**
+ * Generate actionable Reach agent insights for the audience page.
+ * Pure computation — no AI call. Returns insights sorted by impact.
+ */
+export async function generateReachInsights(
+  collectiveId: string
+): Promise<{ error: string | null; insights: ReachInsight[] }> {
+  try {
+    if (!collectiveId?.trim()) return { error: "Collective ID required", insights: [] };
+
+    const auth = await verifyCollectiveAccess(collectiveId);
+    if (auth.error) return { error: auth.error, insights: [] };
+
+    const admin = createAdminClient();
+
+    // Fetch all fan contacts
+    const { data: fans } = await admin
+      .from("contacts")
+      .select("id, email, full_name, instagram, total_events, total_spend, tags, last_seen_at, created_at, metadata")
+      .eq("collective_id", collectiveId)
+      .eq("contact_type", "fan")
+      .is("deleted_at", null);
+
+    if (!fans || fans.length === 0) return { error: null, insights: [] };
+
+    const allFans = fans as {
+      id: string; email: string | null; full_name: string | null;
+      instagram: string | null; total_events: number; total_spend: number;
+      tags: string[]; last_seen_at: string | null; created_at: string;
+      metadata: Record<string, unknown> | null;
+    }[];
+
+    // Get event count for context
+    const { count: eventCount } = await admin
+      .from("events")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", collectiveId)
+      .is("deleted_at", null);
+
+    const totalEvents = eventCount ?? 0;
+    const insights: ReachInsight[] = [];
+
+    // ── Insight: Fans with IG handles (ambassador potential) ──
+    const withIG = allFans.filter((f) => f.instagram);
+    const withoutIG = allFans.filter((f) => !f.instagram);
+    if (withIG.length > 0) {
+      const repeatWithIG = withIG.filter((f) => f.total_events >= 2);
+      if (repeatWithIG.length >= 3) {
+        insights.push({
+          id: "ambassador_candidates",
+          icon: "🚀",
+          title: `${repeatWithIG.length} repeat fans have IG handles`,
+          description: `These fans came back 2+ times and are reachable on Instagram. Arm them with promo codes to share — each one could bring 3-5 new people.`,
+          action: "Copy their @handles",
+          actionType: "copy_handles",
+        });
+      }
+    }
+
+    if (withoutIG.length > allFans.length * 0.5 && allFans.length >= 10) {
+      insights.push({
+        id: "missing_ig",
+        icon: "📱",
+        title: `${withoutIG.length} fans have no IG handle`,
+        description: `You're missing the main nightlife communication channel for ${Math.round((withoutIG.length / allFans.length) * 100)}% of your audience. Ask at the door or add a field to your checkout.`,
+      });
+    }
+
+    // ── Insight: Ambassador arming strategy ──
+    const ambassadors = allFans.filter(
+      (f) => f.tags?.includes("ambassador") || (f.metadata?.referrals_count as number) >= 3
+    );
+    const potentialAmbassadors = allFans.filter(
+      (f) => f.total_events >= 2 && f.instagram && !f.tags?.includes("ambassador")
+    );
+
+    if (potentialAmbassadors.length > 0) {
+      insights.push({
+        id: "potential_ambassadors",
+        icon: "⭐",
+        title: `${potentialAmbassadors.length} fans ready to become ambassadors`,
+        description: `They've come to multiple events and have IG handles. Give them a unique promo code, early access to tickets, and ask them to post your flyer on their story.`,
+        action: "Copy their @handles",
+        actionType: "copy_handles",
+      });
+    }
+
+    if (ambassadors.length > 0) {
+      insights.push({
+        id: "arm_ambassadors",
+        icon: "🎯",
+        title: `Arm your ${ambassadors.length} ambassador${ambassadors.length !== 1 ? "s" : ""} for the next event`,
+        description: `Send them the flyer early, give them a "friends of [collective]" promo code (10-15% off), and ask them to post to their story 3 days before. Each ambassador typically brings 3-5 ticket sales.`,
+        action: "Go to Promo Codes",
+        actionType: "navigate",
+        actionTarget: "/dashboard/events",
+      });
+    }
+
+    // ── Insight: New fans this month ──
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const newFans = allFans.filter((f) => new Date(f.created_at) >= thirtyDaysAgo);
+    if (newFans.length > 0 && allFans.length > newFans.length) {
+      const growthPct = Math.round((newFans.length / (allFans.length - newFans.length)) * 100);
+      insights.push({
+        id: "new_fans",
+        icon: "📈",
+        title: `${newFans.length} new fan${newFans.length !== 1 ? "s" : ""} in the last 30 days`,
+        description: growthPct > 20
+          ? `Your audience grew ${growthPct}% this month — strong momentum. Keep pushing the social loop.`
+          : `Steady growth. Tip: post a recap reel from your last event — past event content is the #1 driver of new followers.`,
+      });
+    }
+
+    // ── Insight: Core crew identification ──
+    if (totalEvents >= 2) {
+      const coreCrew = allFans.filter((f) => f.total_events >= totalEvents);
+      if (coreCrew.length > 0) {
+        insights.push({
+          id: "core_crew",
+          icon: "💎",
+          title: `${coreCrew.length} fan${coreCrew.length !== 1 ? "s" : ""} came to every event`,
+          description: `Your day-ones. They deserve VIP treatment — early ticket access, guest list +1, or a shoutout in your next event description. Loyalty breeds loyalty.`,
+          action: "Copy their emails",
+          actionType: "copy_emails",
+        });
+      }
+    }
+
+    // ── Insight: Dormant fans (haven't been seen in 60+ days) ──
+    const sixtyDaysAgo = new Date();
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    const dormant = allFans.filter(
+      (f) => f.last_seen_at && new Date(f.last_seen_at) < sixtyDaysAgo && f.total_events >= 1
+    );
+    if (dormant.length >= 3) {
+      insights.push({
+        id: "dormant_fans",
+        icon: "😴",
+        title: `${dormant.length} fan${dormant.length !== 1 ? "s" : ""} haven't come in 60+ days`,
+        description: `Win them back. Send a "we miss you" DM with an exclusive early access link. Re-engagement campaigns convert at 15-25% for nightlife.`,
+        action: "Copy their emails",
+        actionType: "copy_emails",
+      });
+    }
+
+    // ── Insight: Email list health ──
+    const withEmail = allFans.filter((f) => f.email);
+    if (withEmail.length >= 10) {
+      insights.push({
+        id: "email_list",
+        icon: "📧",
+        title: `${withEmail.length} fans have emails — use them`,
+        description: `Send a pre-event hype email 5 days before your next event. Email drives 20-30% of advance ticket sales for nightlife. Use the Marketing tab to blast.`,
+        action: "Go to Email Marketing",
+        actionType: "navigate",
+        actionTarget: "/dashboard/marketing",
+      });
+    }
+
+    return { error: null, insights };
+  } catch (err) {
+    console.error("[generateReachInsights]", err);
+    return { error: "Something went wrong", insights: [] };
+  }
+}
+
+// ── 8. syncContactMetrics ────────────────────────────────────────────────────
 
 /**
  * Sync total_spend, total_events, and last_seen_at from ticket purchases
