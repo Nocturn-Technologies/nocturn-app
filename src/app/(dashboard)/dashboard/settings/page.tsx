@@ -198,7 +198,7 @@ export default function SettingsPage() {
           <AlertCircle className="h-7 w-7 text-destructive" />
         </div>
         <div className="text-center space-y-1">
-          <h2 className="text-lg font-bold">Couldn&apos;t load settings</h2>
+          <h2 className="text-lg font-bold font-heading">Couldn&apos;t load settings</h2>
           <p className="text-sm text-muted-foreground max-w-sm truncate">{loadError}</p>
         </div>
         <Button

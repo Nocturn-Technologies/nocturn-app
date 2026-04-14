@@ -135,7 +135,7 @@ export default async function ProfileDetailPage({
         <div className="mt-3 flex items-center gap-2">
           <h1 className="text-2xl font-bold font-heading truncate">{profile.display_name}</h1>
           {profile.is_verified && (
-            <CheckCircle className="h-5 w-5 text-blue-400 fill-blue-400/20" />
+            <CheckCircle className="h-5 w-5 text-nocturn fill-nocturn/20" />
           )}
         </div>
 
@@ -277,7 +277,7 @@ export default async function ProfileDetailPage({
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-nocturn" />
-                <h3 className="text-sm font-semibold">
+                <h3 className="text-sm font-semibold font-heading">
                   Performance with your collective
                 </h3>
               </div>

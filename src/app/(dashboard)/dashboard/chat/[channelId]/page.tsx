@@ -453,7 +453,7 @@ export default function ChatRoomPage() {
           <ArrowLeft size={18} />
         </Link>
         <div className="flex-1 min-w-0">
-          <h1 className="font-bold truncate text-[15px]">
+          <h1 className="font-bold truncate text-[15px] font-heading">
             {channel?.name ?? "Chat"}
           </h1>
           {channel?.type === "event" && (

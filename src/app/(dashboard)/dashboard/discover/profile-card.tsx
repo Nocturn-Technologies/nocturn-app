@@ -88,7 +88,7 @@ export function ProfileCard({
           </div>
 
           {/* Name + City row */}
-          <h3 className="font-semibold truncate text-sm leading-tight">
+          <h3 className="font-semibold font-heading truncate text-sm leading-tight">
             {profile.display_name}
           </h3>
 

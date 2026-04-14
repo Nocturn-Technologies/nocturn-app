@@ -36,7 +36,7 @@ export function CollectiveCard({
     <Card className="overflow-hidden transition-all hover:border-white/[0.15] p-0 group bg-card/50">
       {/* Header row: logo + name + badge */}
       <div className="flex items-center gap-2.5 px-3 pt-2.5">
-        <div className="h-8 w-8 shrink-0 rounded-full bg-blue-500/10 flex items-center justify-center overflow-hidden ring-1 ring-blue-500/20">
+        <div className="h-8 w-8 shrink-0 rounded-full bg-nocturn/10 flex items-center justify-center overflow-hidden ring-1 ring-nocturn/20">
           {collective.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -49,11 +49,11 @@ export function CollectiveCard({
               }}
             />
           ) : (
-            <span className="text-[11px] font-bold text-blue-400">{initials}</span>
+            <span className="text-[11px] font-bold text-nocturn">{initials}</span>
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold truncate text-sm leading-tight">
+          <h3 className="font-semibold font-heading truncate text-sm leading-tight">
             {collective.name}
           </h3>
           {collective.city && (
@@ -63,7 +63,7 @@ export function CollectiveCard({
             </div>
           )}
         </div>
-        <span className="shrink-0 rounded-full bg-blue-500/10 text-blue-400 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider">
+        <span className="shrink-0 rounded-full bg-nocturn/10 text-nocturn px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider">
           Collective
         </span>
       </div>

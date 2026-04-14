@@ -171,7 +171,7 @@ export default function VenueMePage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-2xl space-y-6 animate-in fade-in duration-300">
+      <div className="mx-auto max-w-2xl space-y-6 overflow-x-hidden animate-in fade-in duration-300">
         <div className="space-y-2">
           <div className="h-7 w-28 rounded-lg bg-muted animate-pulse" />
           <div className="h-4 w-56 rounded-lg bg-muted animate-pulse" />
@@ -193,7 +193,7 @@ export default function VenueMePage() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6 overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-bold font-heading">
           {venueId ? "Your Venue" : "List Your Venue"}

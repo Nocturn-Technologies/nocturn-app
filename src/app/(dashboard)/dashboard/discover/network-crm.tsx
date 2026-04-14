@@ -78,7 +78,7 @@ interface NetworkCRMProps {
 function RelBadge({ tag }: { tag: RelationshipTag }) {
   const styles: Record<RelationshipTag, string> = {
     Booked:
-      "bg-[#7B2FF7]/15 text-[#9D5CFF] border border-[#7B2FF7]/25",
+      "bg-nocturn/15 text-nocturn-light border border-nocturn/25",
     Saved:
       "bg-rose-500/10 text-rose-400 border border-rose-500/20",
     Connected:
@@ -206,7 +206,7 @@ function ContactCard({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-sm leading-tight truncate">
+          <h3 className="font-semibold font-heading text-sm leading-tight truncate">
             {contact.name}
           </h3>
           {contact.city && (
@@ -782,8 +782,8 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
             icon={<Music2 className="h-5 w-5" />}
             label="Booked Artists"
             value={stats.bookedArtists}
-            iconBg="bg-[#7B2FF7]/10"
-            iconColor="text-[#9D5CFF]"
+            iconBg="bg-nocturn/10"
+            iconColor="text-nocturn-light"
           />
           <StatCard
             icon={<Bookmark className="h-5 w-5" />}
@@ -848,7 +848,7 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
           let chipClass = "";
           if (isActive) {
             if (value === "all") chipClass = "bg-nocturn text-white";
-            else if (value === "Booked") chipClass = "bg-[#7B2FF7] text-white";
+            else if (value === "Booked") chipClass = "bg-nocturn text-white";
             else if (value === "Saved") chipClass = "bg-rose-500 text-white";
             else chipClass = "bg-blue-500 text-white";
           } else {

@@ -166,7 +166,7 @@ function ChannelRow({
             {ch.name}
           </p>
           {ch.event_date && (
-            <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-[#7B2FF7]/10 text-[#7B2FF7] shrink-0">
+            <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-nocturn/10 text-nocturn shrink-0">
               {formatEventBadge(ch.event_date)}
             </span>
           )}
@@ -190,7 +190,7 @@ function ChannelRow({
             </span>
           </div>
         ) : ch.unread ? (
-          <div className="w-2.5 h-2.5 rounded-full bg-[#7B2FF7]" />
+          <div className="w-2.5 h-2.5 rounded-full bg-nocturn" />
         ) : null}
       </div>
     </Link>
@@ -210,7 +210,7 @@ function SectionHeader({
   return (
     <div className="flex items-center gap-2 px-4 py-2.5 select-none">
       <span className="text-muted-foreground/60">{icon}</span>
-      <h2 className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-widest">
+      <h2 className="text-[11px] font-semibold font-heading text-muted-foreground/60 uppercase tracking-widest">
         {label}
       </h2>
       <span className="text-[11px] font-medium text-muted-foreground/40 bg-white/[0.04] rounded-full px-1.5 py-0.5">
@@ -582,7 +582,7 @@ export default function ChatPage() {
             setInviteSent(false);
           }}
           size="sm"
-          className="shrink-0 whitespace-nowrap bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full min-h-[44px] h-11 px-4 text-sm font-semibold transition-all duration-200"
+          className="shrink-0 whitespace-nowrap bg-nocturn hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full min-h-[44px] h-11 px-4 text-sm font-semibold transition-all duration-200"
         >
           <Plus className="h-4 w-4 mr-1" />
           New Chat
@@ -661,8 +661,8 @@ export default function ChatPage() {
             </div>
           ) : totalChannels === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-              <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-5">
-                <MessageSquare size={28} className="text-[#7B2FF7]" />
+              <div className="w-16 h-16 rounded-full bg-nocturn/10 flex items-center justify-center mb-5">
+                <MessageSquare size={28} className="text-nocturn" />
               </div>
               <p className="font-semibold text-lg mb-2 text-foreground">
                 Start a conversation
@@ -672,7 +672,7 @@ export default function ChatPage() {
               </p>
               <Button
                 onClick={() => setSheetOpen(true)}
-                className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 min-h-[44px] transition-all duration-200"
+                className="mt-6 bg-nocturn hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 min-h-[44px] transition-all duration-200"
               >
                 <Plus className="h-4 w-4 mr-1.5" />
                 New Chat
@@ -696,8 +696,8 @@ export default function ChatPage() {
                       key={ch.id}
                       ch={ch}
                       icon={
-                        <div className="w-12 h-12 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center shrink-0">
-                          <Hash size={20} className="text-[#7B2FF7]" />
+                        <div className="w-12 h-12 rounded-full bg-nocturn/10 flex items-center justify-center shrink-0">
+                          <Hash size={20} className="text-nocturn" />
                         </div>
                       }
                     />
@@ -753,8 +753,8 @@ export default function ChatPage() {
             </div>
           ) : receivedInquiries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-              <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-5">
-                <Inbox size={28} className="text-[#7B2FF7]" />
+              <div className="w-16 h-16 rounded-full bg-nocturn/10 flex items-center justify-center mb-5">
+                <Inbox size={28} className="text-nocturn" />
               </div>
               <p className="font-semibold text-lg mb-2 text-foreground">
                 No requests yet
@@ -858,8 +858,8 @@ export default function ChatPage() {
             </div>
           ) : sentInquiries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
-              <div className="w-16 h-16 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center mb-5">
-                <ArrowUpRight size={28} className="text-[#7B2FF7]" />
+              <div className="w-16 h-16 rounded-full bg-nocturn/10 flex items-center justify-center mb-5">
+                <ArrowUpRight size={28} className="text-nocturn" />
               </div>
               <p className="font-semibold text-lg mb-2 text-foreground">
                 No sent requests
@@ -869,7 +869,7 @@ export default function ChatPage() {
               </p>
               <Button
                 onClick={() => router.push("/dashboard/discover")}
-                className="mt-6 bg-[#7B2FF7] hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 min-h-[44px] transition-all duration-200"
+                className="mt-6 bg-nocturn hover:bg-[#6B1FE7] active:scale-95 text-white rounded-full px-6 min-h-[44px] transition-all duration-200"
               >
                 <Search className="h-4 w-4 mr-1.5" />
                 Browse Discover
@@ -963,7 +963,7 @@ export default function ChatPage() {
             {/* Loading */}
             {collabSearching && (
               <div className="flex justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-[#7B2FF7]" />
+                <Loader2 className="h-5 w-5 animate-spin text-nocturn" />
               </div>
             )}
 
@@ -989,9 +989,9 @@ export default function ChatPage() {
                       )}
                     </div>
                     {startingCollab === c.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-[#7B2FF7] shrink-0" />
+                      <Loader2 className="h-4 w-4 animate-spin text-nocturn shrink-0" />
                     ) : (
-                      <span className="text-xs text-[#7B2FF7] font-semibold shrink-0">
+                      <span className="text-xs text-nocturn font-semibold shrink-0">
                         Chat
                       </span>
                     )}
@@ -1006,10 +1006,10 @@ export default function ChatPage() {
                 <button
                   onClick={() => handleInvite(collabQuery)}
                   disabled={inviting}
-                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-[#7B2FF7]/30 hover:bg-[#7B2FF7]/5 active:bg-[#7B2FF7]/10 transition-colors duration-200 text-left"
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-nocturn/30 hover:bg-nocturn/5 active:bg-nocturn/10 transition-colors duration-200 text-left"
                 >
-                  <div className="w-10 h-10 rounded-full bg-[#7B2FF7]/10 flex items-center justify-center shrink-0">
-                    <Mail size={18} className="text-[#7B2FF7]" />
+                  <div className="w-10 h-10 rounded-full bg-nocturn/10 flex items-center justify-center shrink-0">
+                    <Mail size={18} className="text-nocturn" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-sm text-foreground">
@@ -1020,9 +1020,9 @@ export default function ChatPage() {
                     </p>
                   </div>
                   {inviting ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-[#7B2FF7] shrink-0" />
+                    <Loader2 className="h-4 w-4 animate-spin text-nocturn shrink-0" />
                   ) : (
-                    <Send size={16} className="text-[#7B2FF7] shrink-0" />
+                    <Send size={16} className="text-nocturn shrink-0" />
                   )}
                 </button>
               </div>
@@ -1076,7 +1076,7 @@ export default function ChatPage() {
       {/* ── Record Call FAB ───────────────────────────────────────────────── */}
       <Link
         href="/dashboard/record"
-        className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2 rounded-full bg-[#7B2FF7] text-white shadow-lg shadow-[#7B2FF7]/30 px-5 py-3.5 hover:bg-[#6B1FE7] active:scale-95 transition-all duration-200 md:bottom-6"
+        className="fixed bottom-[calc(6rem+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-2 rounded-full bg-nocturn text-white shadow-lg shadow-[#7B2FF7]/30 px-5 py-3.5 hover:bg-[#6B1FE7] active:scale-95 transition-all duration-200 md:bottom-6"
       >
         <Mic className="h-5 w-5" />
         <span className="text-sm font-semibold">Record Call</span>

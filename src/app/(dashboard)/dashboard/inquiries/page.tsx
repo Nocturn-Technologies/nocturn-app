@@ -165,7 +165,7 @@ export default function InquiriesPage() {
           <div className="mx-auto h-12 w-12 rounded-full bg-nocturn/10 flex items-center justify-center mb-4">
             <MessageSquare className="h-6 w-6 text-nocturn" />
           </div>
-          <h3 className="font-semibold text-lg mb-1">No inquiries yet</h3>
+          <h3 className="font-semibold font-heading text-lg mb-1">No inquiries yet</h3>
           <p className="text-sm text-muted-foreground max-w-sm mx-auto">
             When collectives find you on Discover and want to work together, their messages will appear here.
           </p>

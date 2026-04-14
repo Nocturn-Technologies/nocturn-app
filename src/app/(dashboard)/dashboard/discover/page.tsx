@@ -480,7 +480,7 @@ function DiscoverContent() {
             collectives.length === 0 ? (
               <Card>
                 <CardContent className="flex flex-col items-center gap-4 py-12">
-                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-500/10">
+                  <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
                     <Users2 className="h-8 w-8 text-muted-foreground" />
                   </div>
                   <div className="text-center max-w-xs">
@@ -709,7 +709,7 @@ function DiscoverVenueCard({
       {/* Info */}
       <CardContent className="space-y-1.5 p-3 min-w-0">
         <div className="flex items-start justify-between gap-2 min-w-0">
-          <h3 className="text-sm font-semibold leading-tight truncate">{venue.name}</h3>
+          <h3 className="text-sm font-semibold font-heading leading-tight truncate">{venue.name}</h3>
           {venue.rating > 0 && (
             <div className="flex items-center gap-1 shrink-0">
               <Star className="h-3 w-3 fill-amber-400 text-amber-400" />

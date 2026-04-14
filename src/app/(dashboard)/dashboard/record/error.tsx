@@ -21,7 +21,7 @@ export default function DashboardError({
         <AlertTriangle className="h-7 w-7 text-destructive" />
       </div>
       <div>
-        <h2 className="text-lg font-semibold">Something went wrong</h2>
+        <h2 className="text-lg font-semibold font-heading">Something went wrong</h2>
         <p className="mt-1 max-w-sm text-sm text-muted-foreground">
           {error.message || "An unexpected error occurred. Please try again."}
         </p>

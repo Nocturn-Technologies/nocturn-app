@@ -139,7 +139,7 @@ export function ContactDialog({
                   id="event-select"
                   value={eventId}
                   onChange={(e) => setEventId(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+                  className="h-10 w-full rounded-lg border border-input bg-transparent px-3 py-2 text-base md:text-sm text-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
                 >
                   <option value="">No event</option>
                   {events.map((ev) => (

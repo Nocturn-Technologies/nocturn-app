@@ -172,23 +172,23 @@ function StepProgress({ current, steps }: { current: WizardStep; steps: WizardSt
               <div
                 className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition-all duration-300 ${
                   isActive
-                    ? "bg-[#7B2FF7] text-white scale-110 shadow-lg shadow-[#7B2FF7]/30"
+                    ? "bg-nocturn text-white scale-110 shadow-lg shadow-[#7B2FF7]/30"
                     : isDone
-                    ? "bg-[#7B2FF7]/20 text-[#7B2FF7]"
-                    : "bg-zinc-800 text-zinc-500"
+                    ? "bg-nocturn/20 text-nocturn"
+                    : "bg-zinc-800 text-muted-foreground"
                 }`}
               >
                 {isDone ? <Check className="h-3.5 w-3.5" /> : i + 1}
               </div>
               <span className={`text-[11px] font-medium transition-colors ${
-                isActive ? "text-white" : isDone ? "text-[#7B2FF7]" : "text-zinc-600"
+                isActive ? "text-white" : isDone ? "text-nocturn" : "text-muted-foreground"
               }`}>
                 {STEP_LABELS[s]}
               </span>
             </div>
             {i < steps.length - 1 && (
               <div className={`h-0.5 flex-1 mx-1 rounded-full transition-colors ${
-                i < currentIdx ? "bg-[#7B2FF7]/40" : "bg-zinc-800"
+                i < currentIdx ? "bg-nocturn/40" : "bg-zinc-800"
               }`} />
             )}
           </div>
@@ -229,7 +229,7 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
           if (editValue.trim()) onSave(editValue.trim());
           setEditing(false);
         }}
-        className="w-full text-lg font-bold text-white bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-[#7B2FF7]/50"
+        className="w-full text-lg font-bold text-white bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-nocturn/50"
       />
     );
   }
@@ -241,7 +241,7 @@ function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) =
         className="text-lg font-bold text-foreground flex items-center gap-1.5 text-left hover:text-nocturn-light active:scale-[0.98] transition-all duration-200"
       >
         {value}
-        <Pencil className="h-3 w-3 text-zinc-500 opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0" />
+        <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover/title:opacity-100 transition-opacity shrink-0" />
       </button>
     </div>
   );
@@ -268,7 +268,7 @@ function EditableRow({
 
   return (
     <div className="flex items-center gap-2 group">
-      <Icon className="h-3.5 w-3.5 text-[#7B2FF7] shrink-0" />
+      <Icon className="h-3.5 w-3.5 text-nocturn shrink-0" />
       {editing ? (
         <div className="flex items-center gap-1.5 flex-1 min-w-0">
           <input
@@ -289,7 +289,7 @@ function EditableRow({
               onSave(editValue);
               setEditing(false);
             }}
-            className="flex-1 min-w-0 bg-zinc-800 border border-white/10 rounded-md px-2 py-1 text-base md:text-sm text-white outline-none focus:border-[#7B2FF7]/50"
+            className="flex-1 min-w-0 bg-zinc-800 border border-white/10 rounded-md px-2 py-1 text-base md:text-sm text-white outline-none focus:border-nocturn/50"
           />
         </div>
       ) : (
@@ -299,7 +299,7 @@ function EditableRow({
         >
           <span className="text-zinc-400 shrink-0">{label}:</span>
           <span className="font-medium text-foreground truncate">{value}</span>
-          <Pencil className="h-3 w-3 text-zinc-500 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0" />
+          <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0" />
         </button>
       )}
     </div>
@@ -340,7 +340,7 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
           setEditing(false);
         }}
         rows={3}
-        className="w-full text-base md:text-sm text-zinc-300 bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-[#7B2FF7]/50 resize-none"
+        className="w-full text-base md:text-sm text-zinc-300 bg-zinc-800 border border-white/10 rounded-lg px-3 py-2 outline-none focus:border-nocturn/50 resize-none"
       />
     );
   }
@@ -352,7 +352,7 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
         className="text-sm text-zinc-400 line-clamp-3 text-left flex items-start gap-1.5 hover:text-zinc-300 active:scale-[0.98] transition-all duration-200"
       >
         <span className="flex-1">{value}</span>
-        <Pencil className="h-3 w-3 text-zinc-500 opacity-0 group-hover/desc:opacity-100 transition-opacity shrink-0 mt-0.5" />
+        <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover/desc:opacity-100 transition-opacity shrink-0 mt-0.5" />
       </button>
     </div>
   );
@@ -405,7 +405,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
             onBlur={commitEdit}
-            className="w-24 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-base md:text-sm text-white outline-none focus:border-[#7B2FF7]/50"
+            className="w-24 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-base md:text-sm text-white outline-none focus:border-nocturn/50"
           />
         ) : (
           <button
@@ -413,7 +413,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
             className="text-sm font-medium text-white hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/name flex items-center gap-1"
           >
             {tier.name}
-            <Pencil className="h-2.5 w-2.5 text-zinc-500 opacity-0 group-hover/name:opacity-100 transition-opacity" />
+            <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover/name:opacity-100 transition-opacity" />
           </button>
         )}
         {editingField === "capacity" ? (
@@ -425,15 +425,15 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
             onBlur={commitEdit}
-            className="w-20 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-base md:text-xs text-white outline-none focus:border-[#7B2FF7]/50"
+            className="w-20 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-base md:text-xs text-white outline-none focus:border-nocturn/50"
           />
         ) : (
           <button
             onClick={() => startEdit("capacity")}
-            className="text-xs text-zinc-500 hover:text-zinc-300 active:scale-[0.98] transition-all duration-200 group/cap flex items-center gap-1"
+            className="text-xs text-muted-foreground hover:text-zinc-300 active:scale-[0.98] transition-all duration-200 group/cap flex items-center gap-1"
           >
             {tier.capacity} tickets
-            <Pencil className="h-2.5 w-2.5 text-zinc-500 opacity-0 group-hover/cap:opacity-100 transition-opacity" />
+            <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover/cap:opacity-100 transition-opacity" />
           </button>
         )}
       </div>
@@ -446,15 +446,15 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
           onBlur={commitEdit}
-          className="w-16 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-base md:text-sm text-right text-white outline-none focus:border-[#7B2FF7]/50"
+          className="w-16 bg-zinc-700 border border-white/10 rounded-md px-2 py-0.5 text-base md:text-sm text-right text-white outline-none focus:border-nocturn/50"
         />
       ) : (
         <button
           onClick={() => startEdit("price")}
-          className="text-sm font-semibold text-[#7B2FF7] hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/price flex items-center gap-1"
+          className="text-sm font-semibold text-nocturn hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/price flex items-center gap-1"
         >
           {tier.price === 0 ? "Free" : `$${tier.price}`}
-          <Pencil className="h-2.5 w-2.5 text-zinc-500 opacity-0 group-hover/price:opacity-100 transition-opacity" />
+          <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover/price:opacity-100 transition-opacity" />
         </button>
       )}
     </div>
@@ -528,14 +528,14 @@ function QuickDatePicker({ value, onChange }: { value: string; onChange: (ymd: s
               }}
               className={`rounded-xl border px-2 py-2.5 text-center transition-all duration-200 min-h-[56px] flex flex-col items-center justify-center active:scale-[0.97] ${
                 active
-                  ? "border-[#7B2FF7] bg-[#7B2FF7]/15 shadow-sm shadow-[#7B2FF7]/20"
-                  : "border-white/10 bg-zinc-900 hover:border-[#7B2FF7]/40 hover:bg-[#7B2FF7]/5"
+                  ? "border-nocturn bg-nocturn/15 shadow-sm shadow-[#7B2FF7]/20"
+                  : "border-white/10 bg-zinc-900 hover:border-nocturn/40 hover:bg-nocturn/5"
               }`}
             >
               <span className={`text-xs font-semibold ${active ? "text-white" : "text-zinc-200"}`}>
                 {q.label}
               </span>
-              <span className={`text-[11px] mt-0.5 ${active ? "text-[#9D5CFF]" : "text-zinc-500"}`}>
+              <span className={`text-[11px] mt-0.5 ${active ? "text-nocturn-light" : "text-muted-foreground"}`}>
                 {q.sub}
               </span>
             </button>
@@ -543,14 +543,14 @@ function QuickDatePicker({ value, onChange }: { value: string; onChange: (ymd: s
         })}
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-[11px] text-zinc-500 uppercase tracking-wider shrink-0">Or pick a date</span>
+        <span className="text-[11px] text-muted-foreground uppercase tracking-wider shrink-0">Or pick a date</span>
         <div className="h-px flex-1 bg-white/5" />
       </div>
       <Input
         type="date"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+        className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
       />
     </div>
   );
@@ -597,7 +597,7 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
     return (
       <div className="rounded-2xl border border-white/5 bg-zinc-900/50 p-4 space-y-3">
         <div className="flex items-center gap-1.5">
-          <Target className="h-3.5 w-3.5 text-[#7B2FF7]" />
+          <Target className="h-3.5 w-3.5 text-nocturn" />
           <div className="h-3 w-32 rounded bg-zinc-800 animate-pulse" />
         </div>
         <div className="grid grid-cols-2 gap-1.5">
@@ -619,7 +619,7 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
   return (
     <div className="rounded-2xl border border-white/5 bg-zinc-900/50 p-4 space-y-3">
       <div className="flex items-center gap-1.5">
-        <Target className="h-3.5 w-3.5 text-[#7B2FF7]" />
+        <Target className="h-3.5 w-3.5 text-nocturn" />
         <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Market Pricing</span>
         <span className={`ml-auto text-[11px] px-1.5 py-0.5 rounded-full ${
           pricing.confidence === "high" ? "bg-green-500/10 text-green-400" :
@@ -633,11 +633,11 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
       <div className="grid grid-cols-2 gap-1.5">
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${pricing.avgGA}</p>
-          <p className="text-[11px] text-zinc-500">avg GA in {city}</p>
+          <p className="text-[11px] text-muted-foreground">avg GA in {city}</p>
         </div>
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${pricing.avgVIP}</p>
-          <p className="text-[11px] text-zinc-500">avg VIP in {city}</p>
+          <p className="text-[11px] text-muted-foreground">avg VIP in {city}</p>
         </div>
       </div>
 
@@ -650,12 +650,12 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
       )}
 
       {pricing.competingEvents > 0 && (
-        <p className="text-[11px] text-zinc-500">
+        <p className="text-[11px] text-muted-foreground">
           {pricing.competingEvents} other event{pricing.competingEvents > 1 ? "s" : ""} this weekend in {city}
         </p>
       )}
 
-      <p className="text-[11px] text-zinc-600 italic">{pricing.suggestion}</p>
+      <p className="text-[11px] text-muted-foreground italic">{pricing.suggestion}</p>
     </div>
   );
 }
@@ -709,7 +709,7 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
 
       {/* Forecast grid — horizontally scrollable on small screens */}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[420px] text-sm tabular-nums">
+        <table className="w-full min-w-[360px] text-sm tabular-nums">
           {/* Column headers */}
           <thead>
             <tr className="border-b border-white/[0.06]">
@@ -918,12 +918,12 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
     <div className="rounded-2xl border border-white/5 bg-zinc-900/50 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          <TrendingUp className="h-3.5 w-3.5 text-[#7B2FF7]" />
+          <TrendingUp className="h-3.5 w-3.5 text-nocturn" />
           <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
             Revenue Forecast
           </span>
         </div>
-        <span className="text-[11px] text-zinc-600 bg-zinc-800 rounded-full px-2 py-0.5">
+        <span className="text-[11px] text-muted-foreground bg-zinc-800 rounded-full px-2 py-0.5">
           {priceLabels[priceIndex]} pricing
         </span>
       </div>
@@ -935,11 +935,11 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
             ? `${projections[2].profit >= 0 ? "" : "-"}$${Math.abs(projections[2].profit).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
             : `$${projections[2].net.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
         </p>
-        <p className="text-xs text-zinc-500 mt-1">
+        <p className="text-xs text-muted-foreground mt-1">
           {totalExpenses > 0 ? "estimated profit at sell-out" : "max net revenue at sell-out"}
         </p>
         {totalExpenses > 0 && (
-          <p className="text-[11px] text-zinc-600 mt-0.5">
+          <p className="text-[11px] text-muted-foreground mt-0.5">
             ${projections[2].net.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue − ${totalExpenses.toLocaleString()} expenses
           </p>
         )}
@@ -948,8 +948,8 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
       {/* Price slider */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-zinc-500">What if you charge...</span>
-          <span className="text-xs font-bold text-[#7B2FF7]">
+          <span className="text-[11px] text-muted-foreground">What if you charge...</span>
+          <span className="text-xs font-bold text-nocturn">
             ${avgPrice.toFixed(0)} avg
           </span>
         </div>
@@ -962,7 +962,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
           onChange={(e) => handleSliderChange(parseFloat(e.target.value))}
           className="w-full h-1.5 rounded-full appearance-none bg-zinc-800 accent-[#7B2FF7] cursor-pointer"
         />
-        <div className="flex justify-between text-[11px] text-zinc-600">
+        <div className="flex justify-between text-[11px] text-muted-foreground">
           <span>${Math.round(baseTier0Price * 0.5)}</span>
           <span>${baseTier0Price} (base)</span>
           <span>${Math.round(baseTier0Price * 2)}</span>
@@ -974,7 +974,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
           {tiers.map((t, i) => (
             <span key={i} className="text-[11px] bg-zinc-800/80 text-zinc-400 rounded-full px-2 py-0.5">
               {t.name}: <span className="text-white font-medium">${t.price}</span>
-              <span className="text-zinc-600 line-through ml-1">${baseTiersRef.current[i]?.price ?? t.price}</span>
+              <span className="text-muted-foreground line-through ml-1">${baseTiersRef.current[i]?.price ?? t.price}</span>
             </span>
           ))}
         </div>
@@ -993,10 +993,10 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
               <span className="text-sm">{p.emoji}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] text-zinc-500">{p.label}</span>
+                  <span className="text-[11px] text-muted-foreground">{p.label}</span>
                   <span className={`text-xs font-bold ${totalExpenses > 0 ? (isLoss ? "text-red-400" : "text-green-400") : "text-white"}`}>
                     {isLoss ? "-" : ""}${Math.abs(displayValue).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    {totalExpenses > 0 && <span className="text-[11px] text-zinc-600 ml-1">{isLoss ? "loss" : "profit"}</span>}
+                    {totalExpenses > 0 && <span className="text-[11px] text-muted-foreground ml-1">{isLoss ? "loss" : "profit"}</span>}
                   </span>
                 </div>
                 <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
@@ -1020,11 +1020,11 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
       <div className="grid grid-cols-3 gap-1.5">
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">${avgPrice.toFixed(0)}</p>
-          <p className="text-[11px] text-zinc-500">avg ticket</p>
+          <p className="text-[11px] text-muted-foreground">avg ticket</p>
         </div>
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           <p className="text-xs font-bold text-white">{totalCapacity}</p>
-          <p className="text-[11px] text-zinc-500">capacity</p>
+          <p className="text-[11px] text-muted-foreground">capacity</p>
         </div>
         <div className="rounded-xl bg-zinc-800/50 p-2 text-center">
           {(() => {
@@ -1034,14 +1034,14 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
                 <p className={`text-xs font-bold ${totalExpenses > 0 ? (at75 >= 0 ? "text-green-400" : "text-red-400") : "text-green-400"}`}>
                   {at75 < 0 ? "-" : ""}${Math.abs(at75).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </p>
-                <p className="text-[11px] text-zinc-500">@ 75%</p>
+                <p className="text-[11px] text-muted-foreground">@ 75%</p>
               </>
             );
           })()}
         </div>
       </div>
 
-      <p className="text-[11px] text-zinc-600 text-center">
+      <p className="text-[11px] text-muted-foreground text-center">
         {totalExpenses > 0
           ? `Profit = revenue \u2212 $${totalExpenses.toLocaleString()} expenses \u2212 Stripe fees (2.9% + $0.30)`
           : "Net after Stripe fees (2.9% + $0.30) \u2022 You keep 100% of ticket price"}
@@ -1126,7 +1126,7 @@ function PlaybookSelector({
                 )}
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">{opt.description}</p>
-              <p className="text-[11px] text-zinc-500 mt-1">{opt.taskCount} tasks with auto-assigned due dates</p>
+              <p className="text-[11px] text-muted-foreground mt-1">{opt.taskCount} tasks with auto-assigned due dates</p>
             </div>
           </button>
         ))}
@@ -1135,7 +1135,7 @@ function PlaybookSelector({
       <button
         onClick={onSkip}
         disabled={applying}
-        className="flex items-center justify-center gap-1.5 py-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+        className="flex items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground hover:text-zinc-300 transition-colors"
       >
         <SkipForward className="h-3 w-3" />
         Skip — I&apos;ll set up tasks later
@@ -1216,9 +1216,9 @@ function FormField({ label, icon: Icon, required, children }: {
   return (
     <div className="space-y-1.5">
       <label className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
-        <Icon className="h-3.5 w-3.5 text-[#7B2FF7]" />
+        <Icon className="h-3.5 w-3.5 text-nocturn" />
         {label}
-        {required && <span className="text-[#7B2FF7] text-xs">*</span>}
+        {required && <span className="text-nocturn text-xs">*</span>}
       </label>
       {children}
     </div>
@@ -1628,7 +1628,7 @@ export default function NewEventPage() {
           <div className="text-center mt-2">
             <button
               onClick={() => router.push(`/dashboard/events/${createdEventId}`)}
-              className="text-xs text-zinc-600 hover:text-zinc-400 transition-colors"
+              className="text-xs text-muted-foreground hover:text-zinc-400 transition-colors"
             >
               Go to event dashboard directly
             </button>
@@ -1745,9 +1745,9 @@ export default function NewEventPage() {
   if (phase === "creating") {
     return (
       <div className="mx-auto max-w-lg flex flex-col items-center gap-4 py-24 animate-fade-in">
-        <Loader2 className="h-10 w-10 animate-spin text-[#7B2FF7]" />
+        <Loader2 className="h-10 w-10 animate-spin text-nocturn" />
         <p className="text-sm text-zinc-400">Creating your event...</p>
-        <p className="text-[11px] text-zinc-600">This may take a moment while we enrich your event page with AI</p>
+        <p className="text-[11px] text-muted-foreground">This may take a moment while we enrich your event page with AI</p>
       </div>
     );
   }
@@ -1776,7 +1776,7 @@ export default function NewEventPage() {
         {(formData.title || formData.venueName) && (
           <button
             onClick={() => setShowResetModal(true)}
-            className="ml-auto shrink-0 text-xs text-zinc-500 hover:text-zinc-300 transition-colors duration-200 px-2 py-1 rounded-md hover:bg-white/[0.04]"
+            className="ml-auto shrink-0 text-xs text-muted-foreground hover:text-zinc-300 transition-colors duration-200 px-2 py-1 rounded-md hover:bg-white/[0.04]"
           >
             Start over
           </button>
@@ -1801,7 +1801,7 @@ export default function NewEventPage() {
                   setShowExitModal(false);
                   router.push("/dashboard/events");
                 }}
-                className="w-full rounded-xl bg-[#7B2FF7] px-4 py-3 min-h-[44px] text-sm font-semibold text-white transition-colors hover:bg-[#6B1FE7] active:scale-[0.98]"
+                className="w-full rounded-xl bg-nocturn px-4 py-3 min-h-[44px] text-sm font-semibold text-white transition-colors hover:bg-[#6B1FE7] active:scale-[0.98]"
               >
                 Save Draft & Leave
               </button>
@@ -1877,13 +1877,13 @@ export default function NewEventPage() {
               <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
                 Event Details
               </h2>
-              <p className="text-sm text-zinc-500">What&apos;s the event?</p>
+              <p className="text-sm text-muted-foreground">What&apos;s the event?</p>
             </div>
 
             {/* Mode selector — free RSVP vs ticketed. This is the single most
                 important decision in the wizard, so it lives at the top. */}
             <div className="rounded-2xl border border-white/[0.06] bg-card p-4">
-              <p className="text-[11px] font-semibold tracking-wider uppercase text-zinc-500 mb-3">Event type</p>
+              <p className="text-[11px] font-semibold tracking-wider uppercase text-muted-foreground mb-3">Event type</p>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
@@ -1893,30 +1893,30 @@ export default function NewEventPage() {
                   }}
                   className={`rounded-xl border p-3 text-left transition-all duration-200 active:scale-[0.98] min-h-[72px] ${
                     formData.isFree
-                      ? "border-[#7B2FF7] bg-[#7B2FF7]/10"
+                      ? "border-nocturn bg-nocturn/10"
                       : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <Users className="h-4 w-4 text-[#7B2FF7]" />
+                    <Users className="h-4 w-4 text-nocturn" />
                     <span className="text-sm font-semibold text-white">Free · RSVP</span>
                   </div>
-                  <p className="text-[11px] text-zinc-500 leading-snug">Collect Yes/Maybe/No RSVPs. No tickets, no fees.</p>
+                  <p className="text-[11px] text-muted-foreground leading-snug">Collect Yes/Maybe/No RSVPs. No tickets, no fees.</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => updateForm({ isFree: false })}
                   className={`rounded-xl border p-3 text-left transition-all duration-200 active:scale-[0.98] min-h-[72px] ${
                     !formData.isFree
-                      ? "border-[#7B2FF7] bg-[#7B2FF7]/10"
+                      ? "border-nocturn bg-nocturn/10"
                       : "border-white/10 hover:border-white/20 hover:bg-white/[0.02]"
                   }`}
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <Ticket className="h-4 w-4 text-[#7B2FF7]" />
+                    <Ticket className="h-4 w-4 text-nocturn" />
                     <span className="text-sm font-semibold text-white">Ticketed</span>
                   </div>
-                  <p className="text-[11px] text-zinc-500 leading-snug">Sell tickets with Stripe. Multiple price tiers.</p>
+                  <p className="text-[11px] text-muted-foreground leading-snug">Sell tickets with Stripe. Multiple price tiers.</p>
                 </button>
               </div>
             </div>
@@ -1928,11 +1928,11 @@ export default function NewEventPage() {
                   value={formData.title}
                   onChange={(e) => updateForm({ title: e.target.value })}
                   maxLength={200}
-                  className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                  className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                   autoFocus
                 />
                 {formData.title.length > 150 && (
-                  <p className={`text-[11px] text-right ${formData.title.length > 190 ? "text-yellow-400" : "text-zinc-600"}`}>
+                  <p className={`text-[11px] text-right ${formData.title.length > 190 ? "text-yellow-400" : "text-muted-foreground"}`}>
                     {formData.title.length}/200
                   </p>
                 )}
@@ -1956,10 +1956,10 @@ export default function NewEventPage() {
                   type="time"
                   value={formData.startTime}
                   onChange={(e) => updateForm({ startTime: e.target.value })}
-                  className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                  className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                 />
                 {formData.startTime === "22:00" && (
-                  <p className="text-[11px] text-zinc-500 mt-0.5">Default: 10 PM — adjust if needed</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Default: 10 PM — adjust if needed</p>
                 )}
               </FormField>
 
@@ -1971,7 +1971,7 @@ export default function NewEventPage() {
                       type="time"
                       value={formData.doorsOpen}
                       onChange={(e) => { updateForm({ doorsOpen: e.target.value }); setShowOptionalDetails(true); }}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                     />
                   </FormField>
 
@@ -1980,10 +1980,10 @@ export default function NewEventPage() {
                       type="time"
                       value={formData.endTime}
                       onChange={(e) => { updateForm({ endTime: e.target.value }); setShowOptionalDetails(true); }}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                     />
                     {formData.endTime && formData.startTime && formData.endTime < formData.startTime && (
-                      <p className="text-[11px] text-zinc-500 mt-0.5">Ends after midnight (next day)</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Ends after midnight (next day)</p>
                     )}
                   </FormField>
 
@@ -1994,7 +1994,7 @@ export default function NewEventPage() {
                       onChange={(e) => { updateForm({ description: e.target.value }); setShowOptionalDetails(true); }}
                       maxLength={5000}
                       rows={3}
-                      className="flex w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-base md:text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-[#7B2FF7]/50 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 resize-none min-h-[44px] transition-colors"
+                      className="flex w-full bg-zinc-900 border border-white/10 rounded-xl px-3 py-2.5 text-base md:text-sm text-foreground placeholder:text-muted-foreground outline-none focus:border-nocturn/50 focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50 resize-none min-h-[44px] transition-colors"
                     />
                   </FormField>
                 </div>
@@ -2010,7 +2010,7 @@ export default function NewEventPage() {
               <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
                 Venue
               </h2>
-              <p className="text-sm text-zinc-500">Where&apos;s it happening?</p>
+              <p className="text-sm text-muted-foreground">Where&apos;s it happening?</p>
             </div>
 
             {venueMode === "picker" && !formData.venueName ? (
@@ -2027,7 +2027,7 @@ export default function NewEventPage() {
                       updateForm({ venueName: "", venueAddress: "", venueCity: "", venueCapacity: "" });
                       setVenueMode("picker");
                     }}
-                    className="text-xs text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors"
+                    className="text-xs text-nocturn hover:text-nocturn-light transition-colors"
                   >
                     Choose a different venue
                   </button>
@@ -2039,7 +2039,7 @@ export default function NewEventPage() {
                     value={formData.venueName}
                     onChange={(e) => updateForm({ venueName: e.target.value })}
                     maxLength={200}
-                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                     autoFocus={!formData.venueName}
                   />
                 </FormField>
@@ -2050,7 +2050,7 @@ export default function NewEventPage() {
                     value={formData.venueAddress}
                     onChange={(e) => updateForm({ venueAddress: e.target.value })}
                     maxLength={500}
-                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                   />
                 </FormField>
 
@@ -2060,7 +2060,7 @@ export default function NewEventPage() {
                     value={formData.venueCity}
                     onChange={(e) => updateForm({ venueCity: e.target.value })}
                     maxLength={100}
-                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                   />
                 </FormField>
 
@@ -2077,7 +2077,7 @@ export default function NewEventPage() {
                     }}
                     min={1}
                     max={100000}
-                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                    className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                   />
                 </FormField>
               </div>
@@ -2092,7 +2092,7 @@ export default function NewEventPage() {
               <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
                 Tickets & Pricing
               </h2>
-              <p className="text-sm text-zinc-500">How much are tickets?</p>
+              <p className="text-sm text-muted-foreground">How much are tickets?</p>
             </div>
 
             <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-5">
@@ -2219,7 +2219,7 @@ export default function NewEventPage() {
               <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
                 Budget Planning
               </h2>
-              <p className="text-sm text-zinc-500">Optional — helps forecast profit</p>
+              <p className="text-sm text-muted-foreground">Optional — helps forecast profit</p>
             </div>
 
             {/* Skip button */}
@@ -2235,7 +2235,7 @@ export default function NewEventPage() {
               {/* Headliner type */}
               <div className="space-y-2">
                 <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
-                  <Music className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                  <Music className="h-3.5 w-3.5 text-nocturn" />
                   Headliner
                 </span>
                 <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Headliner type">
@@ -2251,7 +2251,7 @@ export default function NewEventPage() {
                       onClick={() => setBudgetInput(prev => ({ ...prev, headlinerType: opt.value }))}
                       className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all duration-200 active:scale-[0.98] min-h-[72px] ${
                         budgetInput.headlinerType === opt.value
-                          ? "border-[#7B2FF7]/40 bg-[#7B2FF7]/5 text-white"
+                          ? "border-nocturn/40 bg-nocturn/5 text-white"
                           : "border-white/[0.06] bg-zinc-900 text-zinc-400 hover:border-nocturn/30 hover:text-zinc-200"
                       }`}
                     >
@@ -2270,7 +2270,7 @@ export default function NewEventPage() {
                       placeholder="London, UK"
                       value={budgetInput.headlinerOrigin || ""}
                       onChange={(e) => setBudgetInput(prev => ({ ...prev, headlinerOrigin: e.target.value }))}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                     />
                   </FormField>
                   <FormField label="Talent Fee" icon={DollarSign}>
@@ -2279,7 +2279,7 @@ export default function NewEventPage() {
                       placeholder="2000"
                       value={budgetInput.talentFee || ""}
                       onChange={(e) => setBudgetInput(prev => ({ ...prev, talentFee: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                     />
                   </FormField>
                   <FormField label="Stay (nights)" icon={Clock}>
@@ -2289,7 +2289,7 @@ export default function NewEventPage() {
                       value={budgetInput.stayNights || ""}
                       onChange={(e) => setBudgetInput(prev => ({ ...prev, stayNights: parseInt(e.target.value) || 0 }))}
                       min={0}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                     />
                   </FormField>
                 </div>
@@ -2303,7 +2303,7 @@ export default function NewEventPage() {
                       placeholder="500"
                       value={budgetInput.talentFee || ""}
                       onChange={(e) => setBudgetInput(prev => ({ ...prev, talentFee: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                     />
                   </FormField>
                 </div>
@@ -2312,49 +2312,49 @@ export default function NewEventPage() {
               {/* Venue costs */}
               <div className="space-y-3 border-t border-white/5 pt-4">
                 <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
-                  <DollarSign className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                  <DollarSign className="h-3.5 w-3.5 text-nocturn" />
                   Venue Costs
                 </span>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-500">Room Rental</label>
+                    <label className="text-xs text-muted-foreground">Room Rental</label>
                     <Input
                       type="number"
                       placeholder="0"
                       value={budgetInput.venueCost || ""}
                       onChange={(e) => setBudgetInput(prev => ({ ...prev, venueCost: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-500">Bar Minimum</label>
+                    <label className="text-xs text-muted-foreground">Bar Minimum</label>
                     <Input
                       type="number"
                       placeholder="0"
                       value={budgetInput.barMinimum || ""}
                       onChange={(e) => setBudgetInput(prev => ({ ...prev, barMinimum: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-500">Deposit</label>
+                    <label className="text-xs text-muted-foreground">Deposit</label>
                     <Input
                       type="number"
                       placeholder="0"
                       value={budgetInput.deposit || ""}
                       onChange={(e) => setBudgetInput(prev => ({ ...prev, deposit: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs text-zinc-500">Other (sound, lights, etc.)</label>
+                    <label className="text-xs text-muted-foreground">Other (sound, lights, etc.)</label>
                     <Input
                       type="number"
                       placeholder="0"
                       value={budgetInput.otherExpenses || ""}
                       onChange={(e) => setBudgetInput(prev => ({ ...prev, otherExpenses: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-[#7B2FF7]/50"
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
                     />
                   </div>
                 </div>
@@ -2364,7 +2364,7 @@ export default function NewEventPage() {
               <Button
                 onClick={handleCalculateBudget}
                 disabled={calculatingBudget || totalExpenses === 0}
-                className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px] transition-all duration-200 active:scale-[0.98]"
+                className="w-full bg-nocturn hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px] transition-all duration-200 active:scale-[0.98]"
               >
                 {calculatingBudget ? (
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -2395,7 +2395,7 @@ export default function NewEventPage() {
                   <div className="space-y-1">
                     {budgetResult.scenarios.map((s, i) => (
                       <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-zinc-500">{s.label}</span>
+                        <span className="text-muted-foreground">{s.label}</span>
                         <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
                           {s.profit >= 0 ? "+" : ""}${s.profit.toLocaleString()}
                         </span>
@@ -2411,7 +2411,7 @@ export default function NewEventPage() {
                         const scaled = scaleBudgetTiers(budgetResult.suggestedTiers, firstPrice);
                         setTiers(scaled);
                       }}
-                      className="text-xs text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors"
+                      className="text-xs text-nocturn hover:text-nocturn-light transition-colors"
                     >
                       Apply suggested tiers ({budgetResult.suggestedTiers.length} tiers)
                     </button>
@@ -2429,11 +2429,11 @@ export default function NewEventPage() {
               <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
                 Review & Create
               </h2>
-              <p className="text-sm text-zinc-500">Everything look good?</p>
+              <p className="text-sm text-muted-foreground">Everything look good?</p>
             </div>
 
             {/* Review card */}
-            <div className="rounded-2xl border border-[#7B2FF7]/20 bg-zinc-900 p-5 space-y-3">
+            <div className="rounded-2xl border border-nocturn/20 bg-zinc-900 p-5 space-y-3">
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
                   <Check className="h-3 w-3 text-green-400" />
@@ -2493,7 +2493,7 @@ export default function NewEventPage() {
               {tiers.length > 0 && (
                 <div className="border-t border-white/5 pt-3 mt-3">
                   <div className="flex items-center gap-1.5 mb-2">
-                    <Ticket className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                    <Ticket className="h-3.5 w-3.5 text-nocturn" />
                     <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                       {formData.isFree ? "Tickets" : "Ticket Tiers"}
                     </span>
@@ -2518,7 +2518,7 @@ export default function NewEventPage() {
               {totalExpenses > 0 && (
                 <div className="border-t border-white/5 pt-3 mt-3">
                   <div className="flex items-center gap-1.5 mb-1">
-                    <DollarSign className="h-3.5 w-3.5 text-[#7B2FF7]" />
+                    <DollarSign className="h-3.5 w-3.5 text-nocturn" />
                     <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Expenses</span>
                   </div>
                   <p className="text-sm font-bold text-white">${totalExpenses.toLocaleString()}</p>
@@ -2560,11 +2560,11 @@ export default function NewEventPage() {
             )}
 
             {/* Create button */}
-            <p className="text-[11px] text-zinc-500 text-center">Creates a draft — you can edit everything afterwards.</p>
+            <p className="text-[11px] text-muted-foreground text-center">Creates a draft — you can edit everything afterwards.</p>
             <Button
               onClick={() => handleCreate()}
               disabled={isSubmitting}
-              className="w-full bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white rounded-xl min-h-[48px] text-base font-semibold transition-all duration-200 active:scale-[0.98] shadow-lg shadow-[#7B2FF7]/20 disabled:opacity-50"
+              className="w-full bg-nocturn hover:bg-[#6B1FE7] text-white rounded-xl min-h-[48px] text-base font-semibold transition-all duration-200 active:scale-[0.98] shadow-lg shadow-[#7B2FF7]/20 disabled:opacity-50"
             >
               {isSubmitting ? (
                 <Loader2 className="h-5 w-5 mr-2 animate-spin" />
@@ -2600,7 +2600,7 @@ export default function NewEventPage() {
               <Button
                 onClick={goNext}
                 disabled={!canAdvance()}
-                className="flex-1 bg-[#7B2FF7] hover:bg-[#6B1FE7] text-white min-h-[44px] rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex-1 bg-nocturn hover:bg-[#6B1FE7] text-white min-h-[44px] rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {step === "budget" ? "Review" : "Next"}
               </Button>
@@ -2609,7 +2609,7 @@ export default function NewEventPage() {
             {visitedReview && (
               <button
                 onClick={() => goTo("review")}
-                className="text-xs text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors text-center py-1"
+                className="text-xs text-nocturn hover:text-nocturn-light transition-colors text-center py-1"
               >
                 Return to Review
               </button>

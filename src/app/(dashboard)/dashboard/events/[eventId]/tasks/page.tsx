@@ -1049,7 +1049,7 @@ function TaskCard({
               <div className="flex items-center gap-1.5">
                 <UserPlus className="h-3 w-3 text-muted-foreground" />
                 <select
-                  className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[32px]"
+                  className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[44px]"
                   value={(task.assigned_to as string) ?? ""}
                   onChange={(e) => onAssign(task.id as string, e.target.value || null)}
                 >
@@ -1063,7 +1063,7 @@ function TaskCard({
                 <CalendarClock className="h-3 w-3 text-muted-foreground" />
                 <input
                   type="date"
-                  className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[32px]"
+                  className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[44px]"
                   value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
                   onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
                 />
@@ -1205,7 +1205,7 @@ function ContentTaskCard({
             <div className="flex items-center gap-1.5">
               <UserPlus className="h-3 w-3 text-muted-foreground" />
               <select
-                className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[32px]"
+                className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[44px]"
                 value={(task.assigned_to as string) ?? ""}
                 onChange={(e) => onAssign(task.id as string, e.target.value || null)}
               >
@@ -1219,7 +1219,7 @@ function ContentTaskCard({
               <CalendarClock className="h-3 w-3 text-muted-foreground" />
               <input
                 type="date"
-                className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[32px]"
+                className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[44px]"
                 value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
                 onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
               />

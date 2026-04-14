@@ -21,7 +21,7 @@ export default async function PromotePage() {
   const totalClicks = externalEvents.reduce((sum, e) => sum + e.clickCount, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 overflow-x-hidden">
       <div>
         <h1 className="text-2xl font-bold font-heading">Promote</h1>
         <p className="text-sm text-muted-foreground">

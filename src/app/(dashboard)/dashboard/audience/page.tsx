@@ -270,7 +270,7 @@ export default function AudiencePage() {
           <CardContent className="p-4">
             <button
               onClick={() => setInsightsExpanded(!insightsExpanded)}
-              className="flex items-center gap-2 w-full text-left min-h-[36px]"
+              className="flex items-center gap-2 w-full text-left min-h-[44px]"
             >
               <Sparkles className="h-4 w-4 text-nocturn shrink-0" />
               <h2 className="text-sm font-bold flex-1">Reach Insights</h2>

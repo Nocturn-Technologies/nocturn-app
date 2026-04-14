@@ -254,7 +254,7 @@ export default function LiveEventPage() {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 rounded-full border-2 border-[#7B2FF7] border-t-transparent animate-spin" />
+          <div className="h-8 w-8 rounded-full border-2 border-nocturn border-t-transparent animate-spin" />
           <span className="text-sm text-zinc-400">Loading live mode...</span>
         </div>
       </div>
@@ -305,7 +305,7 @@ export default function LiveEventPage() {
             <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
               Check-ins
             </span>
-            <Users className="h-4 w-4 text-[#7B2FF7]" />
+            <Users className="h-4 w-4 text-nocturn" />
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-bold font-heading text-white tabular-nums">
@@ -316,7 +316,7 @@ export default function LiveEventPage() {
           {/* Progress bar */}
           <div className="mt-3 h-2.5 w-full rounded-full bg-zinc-800 overflow-hidden">
             <div
-              className="h-full rounded-full bg-[#7B2FF7] transition-all duration-700 ease-out"
+              className="h-full rounded-full bg-nocturn transition-all duration-700 ease-out"
               style={{ width: `${checkinPct}%` }}
             />
           </div>
@@ -406,7 +406,7 @@ export default function LiveEventPage() {
       <div className="grid grid-cols-2 gap-3">
         <Link href={`/dashboard/events/${eventId}/check-in`}>
           <button className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-zinc-900 p-5 min-h-[80px] hover:bg-zinc-800 active:scale-[0.98] transition-all">
-            <ScanLine className="h-6 w-6 text-[#7B2FF7]" />
+            <ScanLine className="h-6 w-6 text-nocturn" />
             <span className="text-sm font-medium text-white">
               Scan Tickets
             </span>
@@ -415,14 +415,14 @@ export default function LiveEventPage() {
 
         <Link href={`/dashboard/events/${eventId}/guests`}>
           <button className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-zinc-900 p-5 min-h-[80px] hover:bg-zinc-800 active:scale-[0.98] transition-all">
-            <ClipboardList className="h-6 w-6 text-[#7B2FF7]" />
+            <ClipboardList className="h-6 w-6 text-nocturn" />
             <span className="text-sm font-medium text-white">Guest List</span>
           </button>
         </Link>
 
         <Link href={`/dashboard/events/${eventId}/lineup`}>
           <button className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-zinc-900 p-5 min-h-[80px] hover:bg-zinc-800 active:scale-[0.98] transition-all">
-            <Music className="h-6 w-6 text-[#7B2FF7]" />
+            <Music className="h-6 w-6 text-nocturn" />
             <span className="text-sm font-medium text-white">Lineup</span>
           </button>
         </Link>
@@ -474,8 +474,8 @@ export default function LiveEventPage() {
                 className="flex items-center justify-between px-5 py-3 animate-fade-in-up"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-8 w-8 rounded-full bg-[#7B2FF7]/20 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-[#7B2FF7]">
+                  <div className="h-8 w-8 rounded-full bg-nocturn/20 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-nocturn">
                       {ci.attendee_name.charAt(0).toUpperCase()}
                     </span>
                   </div>
