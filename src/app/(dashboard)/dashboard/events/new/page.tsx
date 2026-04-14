@@ -419,6 +419,8 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
         {editingField === "capacity" ? (
           <input
             ref={editingField === "capacity" ? inputRef : undefined}
+            inputMode="numeric"
+            pattern="[0-9]*"
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
@@ -438,6 +440,8 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
       {editingField === "price" ? (
         <input
           ref={editingField === "price" ? inputRef : undefined}
+          inputMode="decimal"
+          pattern="[0-9.]*"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }}
@@ -652,6 +656,210 @@ function PricingInsight({ city, date, venueCapacity, tiers }: {
       )}
 
       <p className="text-[11px] text-zinc-600 italic">{pricing.suggestion}</p>
+    </div>
+  );
+}
+
+// ─── Inline P&L Forecast (tickets step) ──────────────────────────────────────
+
+function fmtCurrency(n: number, compact?: boolean): string {
+  if (compact && Math.abs(n) >= 1000) {
+    return `$${(n / 1000).toFixed(1)}k`;
+  }
+  return `$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+}
+
+function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExpenses?: number }) {
+  const STRIPE_RATE = 0.029;
+  const STRIPE_FLAT = 0.30;
+  const NOCTURN_RATE = 0.07;
+  const NOCTURN_FLAT = 0.50;
+
+  const rates = [0.5, 0.75, 1.0, 1.25];
+  const rateLabels = ["50%", "75%", "100%", "125%"];
+
+  const totalCapacity = tiers.reduce((s, t) => s + t.capacity, 0);
+
+  // Compute all scenarios
+  const scenarios = rates.map((rate) => {
+    const tierLines = tiers.map((t) => {
+      const sold = Math.min(Math.round(t.capacity * rate), Math.round(t.capacity * 1.25)); // cap at 125%
+      return { name: t.name, sold, capacity: t.capacity, gross: t.price * sold };
+    });
+    const gross = tierLines.reduce((s, t) => s + t.gross, 0);
+    const totalSold = tierLines.reduce((s, t) => s + t.sold, 0);
+    const stripe = totalSold * STRIPE_FLAT + gross * STRIPE_RATE;
+    const nocturn = totalSold * NOCTURN_FLAT + gross * NOCTURN_RATE;
+    const net = gross - stripe - nocturn;
+    const profit = net - totalExpenses;
+    return { rate, tierLines, gross, totalSold, stripe, nocturn, net, profit };
+  });
+
+  // Find break-even scenario index (first where profit >= 0)
+  const breakEvenIdx = totalExpenses > 0 ? scenarios.findIndex((s) => s.profit >= 0) : 0;
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
+        <TrendingUp className="h-3.5 w-3.5 text-nocturn" />
+        <span className="text-xs font-bold text-foreground uppercase tracking-wider">P&L Forecast</span>
+        <span className="ml-auto text-[11px] text-muted-foreground/60">updates live as you edit tiers</span>
+      </div>
+
+      {/* Forecast grid — horizontally scrollable on small screens */}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[420px] text-sm tabular-nums">
+          {/* Column headers */}
+          <thead>
+            <tr className="border-b border-white/[0.06]">
+              <th className="text-left text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-4 py-2 w-[40%]" />
+              {rateLabels.map((label, i) => (
+                <th
+                  key={i}
+                  className={`text-right text-[11px] font-semibold uppercase tracking-wider px-3 py-2 ${
+                    i === 2 ? "text-nocturn" : "text-muted-foreground"
+                  }`}
+                >
+                  {label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+
+          <tbody className="divide-y divide-white/[0.03]">
+            {/* Revenue section header */}
+            <tr className="bg-green-500/[0.04]">
+              <td colSpan={5} className="px-4 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <TrendingUp className="h-3 w-3 text-green-400" />
+                  <span className="text-[11px] font-bold text-green-400 uppercase tracking-wider">Revenue</span>
+                </div>
+              </td>
+            </tr>
+
+            {/* Per-tier rows */}
+            {tiers.map((tier, ti) => (
+              <tr key={ti} className="hover:bg-white/[0.02] transition-colors">
+                <td className="px-4 py-2">
+                  <p className="text-sm font-medium text-foreground truncate">{tier.name}</p>
+                  <p className="text-[11px] text-muted-foreground/60">{tier.capacity} tix @ ${tier.price}</p>
+                </td>
+                {scenarios.map((s, si) => (
+                  <td key={si} className="text-right px-3 py-2 text-sm text-green-400">
+                    {fmtCurrency(s.tierLines[ti].gross)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+
+            {/* Gross revenue total */}
+            <tr className="bg-green-500/[0.04] border-t border-white/[0.06]">
+              <td className="px-4 py-2 text-xs font-bold text-muted-foreground uppercase tracking-wider">Gross Revenue</td>
+              {scenarios.map((s, i) => (
+                <td key={i} className="text-right px-3 py-2 text-sm font-bold text-green-400">
+                  {fmtCurrency(s.gross)}
+                </td>
+              ))}
+            </tr>
+
+            {/* Fees section header */}
+            <tr className="bg-yellow-500/[0.03]">
+              <td colSpan={5} className="px-4 py-1.5">
+                <div className="flex items-center gap-1.5">
+                  <DollarSign className="h-3 w-3 text-yellow-400" />
+                  <span className="text-[11px] font-bold text-yellow-400 uppercase tracking-wider">Fees</span>
+                </div>
+              </td>
+            </tr>
+
+            {/* Stripe fees */}
+            <tr className="hover:bg-white/[0.02] transition-colors">
+              <td className="px-4 py-2">
+                <p className="text-sm text-muted-foreground">Stripe</p>
+                <p className="text-[11px] text-muted-foreground/50">2.9% + $0.30/tix</p>
+              </td>
+              {scenarios.map((s, i) => (
+                <td key={i} className="text-right px-3 py-2 text-sm text-yellow-400/80">
+                  ({fmtCurrency(s.stripe)})
+                </td>
+              ))}
+            </tr>
+
+            {/* Nocturn fees */}
+            <tr className="hover:bg-white/[0.02] transition-colors">
+              <td className="px-4 py-2">
+                <p className="text-sm text-muted-foreground">Nocturn</p>
+                <p className="text-[11px] text-muted-foreground/50">7% + $0.50/tix · buyer pays</p>
+              </td>
+              {scenarios.map((s, i) => (
+                <td key={i} className="text-right px-3 py-2 text-sm text-yellow-400/80">
+                  ({fmtCurrency(s.nocturn)})
+                </td>
+              ))}
+            </tr>
+
+            {/* Expenses section (if budget entered) */}
+            {totalExpenses > 0 && (
+              <>
+                <tr className="bg-red-500/[0.04]">
+                  <td colSpan={5} className="px-4 py-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp className="h-3 w-3 text-red-400 rotate-180" />
+                      <span className="text-[11px] font-bold text-red-400 uppercase tracking-wider">Expenses</span>
+                    </div>
+                  </td>
+                </tr>
+                <tr className="hover:bg-white/[0.02] transition-colors">
+                  <td className="px-4 py-2 text-sm text-muted-foreground">Event costs</td>
+                  {scenarios.map((_, i) => (
+                    <td key={i} className="text-right px-3 py-2 text-sm text-red-400">
+                      ({fmtCurrency(totalExpenses)})
+                    </td>
+                  ))}
+                </tr>
+              </>
+            )}
+
+            {/* Bottom line — Profit / Net Revenue */}
+            <tr className="border-t-2 border-white/[0.08]">
+              <td className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-foreground">
+                {totalExpenses > 0 ? "Profit" : "Net Revenue"}
+              </td>
+              {scenarios.map((s, i) => (
+                <td
+                  key={i}
+                  className={`text-right px-3 py-3 font-bold ${
+                    i === 2 ? "text-base" : "text-sm"
+                  } ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}
+                >
+                  {s.profit < 0 && "−"}{fmtCurrency(Math.abs(s.profit))}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      {/* Footer with break-even + note */}
+      <div className="px-4 py-2.5 border-t border-white/[0.06] flex items-center justify-between gap-2">
+        {totalExpenses > 0 && breakEvenIdx >= 0 ? (
+          <p className="text-[11px] text-green-400">
+            Break-even at ~{rateLabels[breakEvenIdx]} capacity
+          </p>
+        ) : totalExpenses > 0 ? (
+          <p className="text-[11px] text-red-400">
+            Does not break even — raise prices or cut expenses
+          </p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground/50">
+            Add expenses in the next step to see profit
+          </p>
+        )}
+        <p className="text-[11px] text-muted-foreground/40 shrink-0">
+          {totalCapacity} capacity
+        </p>
+      </div>
     </div>
   );
 }
@@ -1184,6 +1392,18 @@ export default function NewEventPage() {
     });
     setVenueMode("manual"); // show the filled fields
   }
+
+  // Auto-seed default tiers when user lands on tickets step with none
+  useEffect(() => {
+    if (step === "tickets" && !formData.isFree && tiers.length === 0) {
+      const capacity = typeof formData.venueCapacity === "number" ? formData.venueCapacity : 100;
+      setTiers([
+        { name: "Early Bird", price: 20, capacity: Math.round(capacity * 0.3) },
+        { name: "General Admission", price: 30, capacity: Math.round(capacity * 0.5) },
+        { name: "Door", price: 40, capacity: Math.round(capacity * 0.2) },
+      ]);
+    }
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-generate tiers from a price or price range
   function generateTiersFromPrice(priceStr: string) {
@@ -1876,129 +2096,109 @@ export default function NewEventPage() {
             </div>
 
             <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-5">
-              {/* Mode was chosen on step 1 — this step is skipped for free events.
-                  Keeping a one-line reminder with a shortcut back to details for rare cases. */}
-              <div className="flex items-center justify-between text-xs text-zinc-500">
+              {/* Mode reminder + shortcut */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>Paid event · ticketed</span>
                 <button
                   type="button"
                   onClick={() => goTo("details")}
-                  className="text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors"
+                  className="text-nocturn hover:text-nocturn-light transition-colors"
                 >
                   Change to free
                 </button>
               </div>
 
-              {(
-                <div className="space-y-4">
-                  {/* Quick price input */}
-                  <FormField label="Quick Price" icon={Ticket}>
-                    <div className="space-y-1">
-                      <Input
-                        placeholder="$25 or $20-$50 for a range"
-                        onBlur={(e) => {
-                          if (e.target.value.trim()) {
-                            generateTiersFromPrice(e.target.value.trim());
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            const val = (e.target as HTMLInputElement).value.trim();
-                            if (val) generateTiersFromPrice(val);
-                          }
-                        }}
-                        className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-[#7B2FF7]/50"
-                      />
-                      <p className="text-[11px] text-zinc-600">
-                        {tiers.length > 0 ? "Re-enter a price to regenerate tiers" : "Enter a price to auto-generate tiers, or add them manually below"}
-                      </p>
-                    </div>
-                  </FormField>
-
-                  {/* Tier editor */}
-                  {tiers.length > 0 && (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-1.5">
-                        <Ticket className="h-3.5 w-3.5 text-[#7B2FF7]" />
-                        <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Ticket Tiers</span>
-                      </div>
-                      {tiers.map((tier, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <div className="flex-1 grid grid-cols-3 gap-2">
-                            <Input
-                              aria-label={`Tier ${i + 1} name`}
-                              placeholder="Tier name"
-                              value={tier.name}
-                              onChange={(e) => {
-                                const updated = [...tiers];
-                                updated[i] = { ...tier, name: e.target.value };
-                                setTiers(updated);
-                              }}
-                              className="bg-zinc-900 border-white/10 rounded-lg text-base md:text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
-                            />
-                            <Input
-                              aria-label={`Tier ${i + 1} price`}
-                              type="number"
-                              placeholder="Price"
-                              value={tier.price}
-                              onChange={(e) => {
-                                const updated = [...tiers];
-                                const parsed = parseFloat(e.target.value);
-                                updated[i] = { ...tier, price: Number.isFinite(parsed) ? parsed : tier.price };
-                                setTiers(updated);
-                              }}
-                              min={0}
-                              className="bg-zinc-900 border-white/10 rounded-lg text-base md:text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
-                            />
-                            <Input
-                              aria-label={`Tier ${i + 1} quantity`}
-                              type="number"
-                              placeholder="Qty"
-                              value={tier.capacity}
-                              onChange={(e) => {
-                                const updated = [...tiers];
-                                updated[i] = { ...tier, capacity: parseInt(e.target.value) || 0 };
-                                setTiers(updated);
-                              }}
-                              min={1}
-                              className="bg-zinc-900 border-white/10 rounded-lg text-base md:text-sm min-h-[40px] focus:border-[#7B2FF7]/50"
-                            />
-                          </div>
-                          <button
-                            aria-label={`Remove tier ${i + 1}`}
-                            onClick={() => setTiers(tiers.filter((_, idx) => idx !== i))}
-                            className="p-2 text-zinc-500 hover:text-red-400 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {tiers.length < 10 && (
-                    <button
-                      onClick={() => {
-                        const capacity = typeof formData.venueCapacity === "number" ? formData.venueCapacity : 100;
-                        const remaining = capacity - tiers.reduce((s, t) => s + t.capacity, 0);
-                        setTiers([
-                          ...tiers,
-                          { name: `Tier ${tiers.length + 1}`, price: 0, capacity: Math.max(remaining, 10) },
-                        ]);
-                      }}
-                      className="flex items-center gap-1.5 text-sm text-[#7B2FF7] hover:text-[#9D5CFF] transition-colors py-1"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Add tier
-                    </button>
-                  )}
-                  {tiers.length >= 10 && (
-                    <p className="text-[11px] text-zinc-500">Maximum 10 tiers</p>
-                  )}
+              {/* Tier list — pill-style, tap to edit */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Ticket className="h-3.5 w-3.5 text-nocturn" />
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ticket Tiers</span>
+                  </div>
+                  <span className="text-[11px] text-muted-foreground/60">Tap any field to edit</span>
                 </div>
-              )}
+                <div className="space-y-2">
+                  {tiers.map((tier, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <div className="flex-1">
+                        <EditableTierRow
+                          tier={tier}
+                          onSave={(updatedTier) => {
+                            const updated = [...tiers];
+                            updated[i] = updatedTier;
+                            setTiers(updated);
+                          }}
+                        />
+                      </div>
+                      {tiers.length > 1 && (
+                        <button
+                          aria-label={`Remove tier ${i + 1}`}
+                          onClick={() => setTiers(tiers.filter((_, idx) => idx !== i))}
+                          className="p-2 text-muted-foreground/40 hover:text-red-400 transition-colors min-h-[40px] min-w-[40px] flex items-center justify-center"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {tiers.length < 10 && (
+                  <button
+                    onClick={() => {
+                      const capacity = typeof formData.venueCapacity === "number" ? formData.venueCapacity : 100;
+                      const remaining = capacity - tiers.reduce((s, t) => s + t.capacity, 0);
+                      setTiers([
+                        ...tiers,
+                        { name: `Tier ${tiers.length + 1}`, price: 0, capacity: Math.max(remaining, 10) },
+                      ]);
+                    }}
+                    className="flex items-center gap-1.5 text-sm text-nocturn hover:text-nocturn-light transition-colors py-1"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Add tier
+                  </button>
+                )}
+                {tiers.length >= 10 && (
+                  <p className="text-[11px] text-muted-foreground">Maximum 10 tiers</p>
+                )}
+              </div>
+
+              {/* Quick Price — secondary regeneration tool */}
+              <div className="border-t border-white/[0.06] pt-4">
+                <div className="space-y-1.5">
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Sparkles className="h-3 w-3 text-nocturn" />
+                    Quick regenerate
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="e.g. $25 or $20-$50"
+                      onBlur={(e) => {
+                        if (e.target.value.trim()) {
+                          generateTiersFromPrice(e.target.value.trim());
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          const val = (e.target as HTMLInputElement).value.trim();
+                          if (val) generateTiersFromPrice(val);
+                        }
+                      }}
+                      className="bg-card border-white/[0.06] rounded-xl min-h-[40px] text-sm focus:border-nocturn/50"
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60">
+                    Enter a price or range to regenerate all tiers
+                  </p>
+                </div>
+              </div>
             </div>
+
+            {/* Inline P&L forecast */}
+            {tiers.length > 0 && tiers.some(t => t.price > 0) && (
+              <InlinePnL tiers={tiers} totalExpenses={totalExpenses} />
+            )}
 
             {/* Pricing insight */}
             {!formData.isFree && tiers.length > 0 && tiers.some(t => t.price > 0) && formData.venueCity && formData.date && (

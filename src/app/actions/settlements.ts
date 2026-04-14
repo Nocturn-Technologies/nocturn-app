@@ -346,7 +346,14 @@ export async function addEventExpense(input: {
 }) {
   try {
   // Input validation
-  const VALID_EXPENSE_CATEGORIES = ["supply", "venue", "artist", "travel", "marketing", "production", "staff", "other"];
+  const VALID_EXPENSE_CATEGORIES = [
+    "talent", "venue", "production", "sound", "lighting", "staffing", "security",
+    "marketing", "hospitality", "transportation", "equipment", "decor", "insurance",
+    "permits", "booking_fee",
+    // Legacy values
+    "supply", "artist", "travel", "staff", "dj", "promotion", "miscellaneous",
+    "other",
+  ];
   if (!input.eventId || typeof input.eventId !== "string") return { error: "Invalid event ID" };
   if (!isValidUUID(input.eventId)) return { error: "Invalid event ID format" };
   if (!VALID_EXPENSE_CATEGORIES.includes(input.category)) return { error: "Invalid expense category" };

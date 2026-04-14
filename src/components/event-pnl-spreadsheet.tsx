@@ -36,15 +36,21 @@ function formatCurrency(amount: number): string {
 }
 
 const EXPENSE_CATEGORIES = [
+  "talent",
   "venue",
-  "marketing",
-  "equipment",
-  "staffing",
   "production",
+  "sound",
+  "lighting",
+  "staffing",
+  "security",
+  "marketing",
+  "hospitality",
+  "transportation",
+  "equipment",
+  "decor",
   "insurance",
   "permits",
-  "transportation",
-  "hospitality",
+  "booking_fee",
   "other",
 ] as const;
 

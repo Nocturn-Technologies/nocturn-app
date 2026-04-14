@@ -271,9 +271,13 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
 // ── Add Expense ──────────────────────────────────────────────────────
 
 const VALID_EXPENSE_CATEGORIES = [
-  "venue", "sound", "lighting", "dj", "artist", "promotion",
-  "security", "staff", "decor", "insurance", "permits", "transportation",
-  "hospitality", "equipment", "miscellaneous", "other",
+  "talent", "venue", "production", "sound", "lighting",
+  "staffing", "security", "marketing", "hospitality",
+  "transportation", "equipment", "decor", "insurance",
+  "permits", "booking_fee",
+  // Legacy values still accepted for backward compat
+  "dj", "artist", "promotion", "staff", "miscellaneous",
+  "other",
 ];
 
 export async function addExpense(eventId: string, data: { description: string; category: string; amount: number }) {
