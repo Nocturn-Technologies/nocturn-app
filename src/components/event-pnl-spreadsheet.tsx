@@ -13,6 +13,8 @@ import {
   TrendingUp,
   TrendingDown,
   Loader2,
+  Download,
+  Image as ImageIcon,
 } from "lucide-react";
 import type { EventFinancials } from "@/app/actions/event-financials";
 import {
@@ -568,6 +570,47 @@ export function EventPnlSpreadsheet({ financials }: Props) {
     });
   };
 
+  const pnlRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+
+  const exportPnl = async (format: "png" | "pdf") => {
+    if (!pnlRef.current) return;
+    setExporting(true);
+    try {
+      const html2canvas = (await import("html2canvas-pro")).default;
+      const canvas = await html2canvas(pnlRef.current, {
+        backgroundColor: "#09090B",
+        scale: 2,
+        useCORS: true,
+      });
+
+      if (format === "png") {
+        const link = document.createElement("a");
+        link.download = `${financials.eventTitle ?? "event"}-pnl.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+      } else {
+        const { jsPDF } = await import("jspdf");
+        const imgData = canvas.toDataURL("image/png");
+        const imgW = canvas.width;
+        const imgH = canvas.height;
+        const pdfW = imgW * 0.264583; // px to mm at 96 dpi
+        const pdfH = imgH * 0.264583;
+        const pdf = new jsPDF({
+          orientation: pdfW > pdfH ? "landscape" : "portrait",
+          unit: "mm",
+          format: [pdfW, pdfH],
+        });
+        pdf.addImage(imgData, "PNG", 0, 0, pdfW, pdfH);
+        pdf.save(`${financials.eventTitle ?? "event"}-pnl.pdf`);
+      }
+    } catch (err) {
+      console.error("Export failed:", err);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const isProfitable = financials.profitLoss >= 0;
 
   // ── Forecast scenarios ──────────────────────────────────────────────
@@ -592,7 +635,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Error Banner */}
       {error && (
         <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-400">
@@ -600,13 +643,35 @@ export function EventPnlSpreadsheet({ financials }: Props) {
           <button onClick={() => setError(null)} className="ml-auto text-red-400/60 hover:text-red-400">&times;</button>
         </div>
       )}
+
+      {/* Share / Export */}
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs gap-1.5 border-border/60 hover:border-nocturn/50 hover:text-nocturn"
+          onClick={() => exportPnl("png")}
+          disabled={exporting}
+        >
+          {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ImageIcon className="h-3.5 w-3.5" />}
+          Save as Image
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs gap-1.5 border-border/60 hover:border-nocturn/50 hover:text-nocturn"
+          onClick={() => exportPnl("pdf")}
+          disabled={exporting}
+        >
+          {exporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+          Export PDF
+        </Button>
+      </div>
+
+      {/* ── Exportable P&L area ─────────────────────────────────── */}
+      <div ref={pnlRef} className="space-y-4">
+
       {/* Summary Cards */}
-      {/*
-        Three cards, not four. Dropped the old "Net Revenue / After Stripe
-        fees" card because it confused organizers — Stripe is buyer-paid,
-        so net == gross from their perspective. Showing both was just
-        duplicate numbers.
-      */}
       <div className="grid grid-cols-3 gap-3">
         <SummaryCard
           label="Gross Revenue"
@@ -632,7 +697,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
       <div className="md:hidden space-y-3">
         {/* Revenue */}
         <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="px-4 py-2.5 bg-green-500/5 flex items-center gap-2 border-b border-border">
+          <div className="px-4 py-1.5 bg-green-500/5 flex items-center gap-2 border-b border-border">
             <TrendingUp className="h-4 w-4 text-green-400" />
             <span className="text-xs font-bold uppercase tracking-wider text-green-400">Revenue</span>
           </div>
@@ -660,7 +725,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
 
         {/* Expenses */}
         <div className="rounded-xl border border-border bg-card overflow-hidden">
-          <div className="px-4 py-2.5 bg-red-500/5 flex items-center gap-2 border-b border-border">
+          <div className="px-4 py-1.5 bg-red-500/5 flex items-center gap-2 border-b border-border">
             <TrendingDown className="h-4 w-4 text-red-400" />
             <span className="text-xs font-bold uppercase tracking-wider text-red-400">Expenses</span>
           </div>
@@ -731,7 +796,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
             <tbody>
               {/* ── REVENUE SECTION ────────────────────────────── */}
               <tr className="border-b border-border bg-green-500/5">
-                <td colSpan={8} className="px-4 py-2.5">
+                <td colSpan={8} className="px-4 py-1.5">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-green-400" />
                     <span className="text-xs font-bold uppercase tracking-wider text-green-400">
@@ -747,10 +812,10 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   key={tier.id}
                   className="border-b border-border/50 hover:bg-muted/20 transition-colors"
                 >
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">
                     Tickets
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-1.5">
                     <div className="flex flex-col">
                       <span className="text-sm">{tier.name}</span>
                       <span className="text-xs text-muted-foreground">
@@ -758,35 +823,35 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-1.5 text-right">
                     <span className="text-sm font-mono tabular-nums text-green-400">
                       {formatCurrency(tier.revenue)}
                     </span>
                   </td>
                   {forecasts.map((f, fi) => (
-                    <td key={fi} className="px-3 py-2.5 text-right">
+                    <td key={fi} className="px-3 py-1.5 text-right">
                       <span className="text-sm font-mono tabular-nums text-green-400/60">
                         {formatCurrency(f.tierRevs[ti])}
                       </span>
                     </td>
                   ))}
-                  <td className="px-4 py-2.5" />
+                  <td className="px-4 py-1.5" />
                 </tr>
               ))}
 
               {financials.ticketTiers.length === 0 && (
                 <tr className="border-b border-border/50">
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">
                     Tickets
                   </td>
-                  <td className="px-4 py-2.5 text-muted-foreground text-sm italic">
+                  <td className="px-4 py-1.5 text-muted-foreground text-sm italic">
                     No ticket tiers configured
                   </td>
-                  <td className="px-4 py-2.5 text-right text-sm font-mono text-muted-foreground">
+                  <td className="px-4 py-1.5 text-right text-sm font-mono text-muted-foreground">
                     $0.00
                   </td>
                   {fLabels.map((_, i) => (
-                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-muted-foreground/40">—</td>
+                    <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-muted-foreground/40">—</td>
                   ))}
                   <td />
                 </tr>
@@ -799,10 +864,10 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   key={line.id}
                   className="border-b border-border/50 hover:bg-muted/20 transition-colors group"
                 >
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">
                     {categoryLabel(line.category)}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-1.5">
                     <EditableTextCell
                       value={line.description}
                       onSave={async (v) => {
@@ -810,7 +875,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       }}
                     />
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-1.5 text-right">
                     <div className="flex items-center justify-end">
                       <EditableAmountCell
                         value={line.amount}
@@ -821,11 +886,11 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                     </div>
                   </td>
                   {fLabels.map((_, i) => (
-                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-muted-foreground/30">
+                    <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-muted-foreground/30">
                       —
                     </td>
                   ))}
-                  <td className="px-4 py-2.5 text-center">
+                  <td className="px-4 py-1.5 text-center">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -847,17 +912,17 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   toward gross. Actual bar revenue is tracked as a revenue line.) */}
               {financials.estimatedBarRevenue != null && financials.estimatedBarRevenue > 0 && (
                 <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">Bar (est)</td>
-                  <td className="px-4 py-2.5 text-sm text-muted-foreground italic">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">Bar (est)</td>
+                  <td className="px-4 py-1.5 text-sm text-muted-foreground italic">
                     Estimated Bar Revenue (forecast only)
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-1.5 text-right">
                     <span className="text-sm font-mono tabular-nums text-muted-foreground">
                       {formatCurrency(financials.estimatedBarRevenue)}
                     </span>
                   </td>
                   {fLabels.map((_, i) => (
-                    <td key={i} className="px-3 py-2.5" />
+                    <td key={i} className="px-3 py-1.5" />
                   ))}
                   <td />
                 </tr>
@@ -865,17 +930,17 @@ export function EventPnlSpreadsheet({ financials }: Props) {
 
               {/* Revenue Subtotal */}
               <tr className="border-b border-border bg-green-500/5">
-                <td className="px-4 py-2.5" />
-                <td className="px-4 py-2.5 text-right text-xs font-semibold text-green-400 uppercase">
+                <td className="px-4 py-1.5" />
+                <td className="px-4 py-1.5 text-right text-xs font-semibold text-green-400 uppercase">
                   Gross Revenue
                 </td>
-                <td className="px-4 py-2.5 text-right">
+                <td className="px-4 py-1.5 text-right">
                   <span className="text-sm font-bold font-mono tabular-nums text-green-400">
                     {formatCurrency(financials.grossRevenue)}
                   </span>
                 </td>
                 {forecasts.map((f, fi) => (
-                  <td key={fi} className="px-3 py-2.5 text-right">
+                  <td key={fi} className="px-3 py-1.5 text-right">
                     <span className="text-sm font-bold font-mono tabular-nums text-green-400/70">
                       {formatCurrency(f.gross)}
                     </span>
@@ -886,7 +951,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
 
               {/* ── EXPENSES SECTION ───────────────────────────── */}
               <tr className="border-b border-border bg-red-500/5">
-                <td colSpan={8} className="px-4 py-2.5">
+                <td colSpan={8} className="px-4 py-1.5">
                   <div className="flex items-center gap-2">
                     <TrendingDown className="h-4 w-4 text-red-400" />
                     <span className="text-xs font-bold uppercase tracking-wider text-red-400">
@@ -899,17 +964,17 @@ export function EventPnlSpreadsheet({ financials }: Props) {
               {/* Venue Cost */}
               {financials.venueCost != null && financials.venueCost > 0 && (
                 <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">
                     Venue
                   </td>
-                  <td className="px-4 py-2.5 text-sm">Venue Cost</td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-1.5 text-sm">Venue Cost</td>
+                  <td className="px-4 py-1.5 text-right">
                     <span className="text-sm font-mono tabular-nums text-red-400">
                       ({formatCurrency(financials.venueCost)})
                     </span>
                   </td>
                   {fLabels.map((_, i) => (
-                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-red-400/40">
+                    <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-red-400/40">
                       ({formatCurrency(financials.venueCost!)})
                     </td>
                   ))}
@@ -920,17 +985,17 @@ export function EventPnlSpreadsheet({ financials }: Props) {
               {/* Venue Deposit */}
               {financials.venueDeposit != null && financials.venueDeposit > 0 && (
                 <tr className="border-b border-border/50 hover:bg-muted/20 transition-colors">
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">
                     Venue
                   </td>
-                  <td className="px-4 py-2.5 text-sm">Venue Deposit</td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-1.5 text-sm">Venue Deposit</td>
+                  <td className="px-4 py-1.5 text-right">
                     <span className="text-sm font-mono tabular-nums text-red-400/70">
                       ({formatCurrency(financials.venueDeposit)})
                     </span>
                   </td>
                   {fLabels.map((_, i) => (
-                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-red-400/30">
+                    <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-red-400/30">
                       ({formatCurrency(financials.venueDeposit!)})
                     </td>
                   ))}
@@ -944,10 +1009,10 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   key={expense.id}
                   className="border-b border-border/50 hover:bg-muted/20 transition-colors group"
                 >
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">
                     {categoryLabel(expense.category)}
                   </td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-4 py-1.5">
                     <EditableTextCell
                       value={expense.description}
                       onSave={async (v) => {
@@ -955,7 +1020,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       }}
                     />
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-1.5 text-right">
                     <div className="flex items-center justify-end">
                       <span className="text-red-400 mr-1">(</span>
                       <EditableAmountCell
@@ -968,11 +1033,11 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                     </div>
                   </td>
                   {fLabels.map((_, i) => (
-                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-red-400/30">
+                    <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-red-400/30">
                       ({formatCurrency(expense.amount)})
                     </td>
                   ))}
-                  <td className="px-4 py-2.5 text-center">
+                  <td className="px-4 py-1.5 text-center">
                     <Button
                       variant="ghost"
                       size="icon"
@@ -996,8 +1061,8 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   venue out of pocket. */}
               {financials.barShortfall > 0 && (
                 <tr className="border-b border-border/50 bg-amber-500/5">
-                  <td className="px-4 py-2.5 text-muted-foreground text-xs">Bar</td>
-                  <td className="px-4 py-2.5 text-sm">
+                  <td className="px-4 py-1.5 text-muted-foreground text-xs">Bar</td>
+                  <td className="px-4 py-1.5 text-sm">
                     <div className="flex flex-col">
                       <span>Bar Minimum Shortfall</span>
                       <span className="text-xs text-muted-foreground">
@@ -1005,13 +1070,13 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-4 py-1.5 text-right">
                     <span className="text-sm font-mono tabular-nums text-amber-400">
                       ({formatCurrency(financials.barShortfall)})
                     </span>
                   </td>
                   {fLabels.map((_, i) => (
-                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-amber-400/30">
+                    <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-amber-400/30">
                       ({formatCurrency(financials.barShortfall)})
                     </td>
                   ))}
@@ -1021,17 +1086,17 @@ export function EventPnlSpreadsheet({ financials }: Props) {
 
               {/* Expenses Subtotal */}
               <tr className="border-b border-border bg-red-500/5">
-                <td className="px-4 py-2.5" />
-                <td className="px-4 py-2.5 text-right text-xs font-semibold text-red-400 uppercase">
+                <td className="px-4 py-1.5" />
+                <td className="px-4 py-1.5 text-right text-xs font-semibold text-red-400 uppercase">
                   Total Expenses
                 </td>
-                <td className="px-4 py-2.5 text-right">
+                <td className="px-4 py-1.5 text-right">
                   <span className="text-sm font-bold font-mono tabular-nums text-red-400">
                     ({formatCurrency(financials.totalExpenses + (financials.venueCost ?? 0) + financials.barShortfall)})
                   </span>
                 </td>
                 {fLabels.map((_, i) => (
-                  <td key={i} className="px-3 py-2.5 text-right">
+                  <td key={i} className="px-3 py-1.5 text-right">
                     <span className="text-sm font-bold font-mono tabular-nums text-red-400/50">
                       ({formatCurrency(financials.totalExpenses + (financials.venueCost ?? 0) + financials.barShortfall)})
                     </span>
@@ -1044,7 +1109,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
               {financials.artistFees.length > 0 && (
                 <>
                   <tr className="border-b border-border bg-amber-500/5">
-                    <td colSpan={8} className="px-4 py-2.5">
+                    <td colSpan={8} className="px-4 py-1.5">
                       <div className="flex items-center gap-2">
                         <DollarSign className="h-4 w-4 text-amber-400" />
                         <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
@@ -1059,17 +1124,17 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       key={artist.id}
                       className="border-b border-border/50 hover:bg-muted/20 transition-colors"
                     >
-                      <td className="px-4 py-2.5 text-muted-foreground text-xs">
+                      <td className="px-4 py-1.5 text-muted-foreground text-xs">
                         Artist
                       </td>
-                      <td className="px-4 py-2.5 text-sm">{artist.artistName}</td>
-                      <td className="px-4 py-2.5 text-right">
+                      <td className="px-4 py-1.5 text-sm">{artist.artistName}</td>
+                      <td className="px-4 py-1.5 text-right">
                         <span className="text-sm font-mono tabular-nums text-amber-400">
                           ({formatCurrency(artist.fee)})
                         </span>
                       </td>
                       {fLabels.map((_, i) => (
-                        <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-amber-400/30">
+                        <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-amber-400/30">
                           ({formatCurrency(artist.fee)})
                         </td>
                       ))}
@@ -1078,17 +1143,17 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   ))}
 
                   <tr className="border-b border-border bg-amber-500/5">
-                    <td className="px-4 py-2.5" />
-                    <td className="px-4 py-2.5 text-right text-xs font-semibold text-amber-400 uppercase">
+                    <td className="px-4 py-1.5" />
+                    <td className="px-4 py-1.5 text-right text-xs font-semibold text-amber-400 uppercase">
                       Total Artist Fees
                     </td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-4 py-1.5 text-right">
                       <span className="text-sm font-bold font-mono tabular-nums text-amber-400">
                         ({formatCurrency(financials.totalArtistFees)})
                       </span>
                     </td>
                     {fLabels.map((_, i) => (
-                      <td key={i} className="px-3 py-2.5 text-right">
+                      <td key={i} className="px-3 py-1.5 text-right">
                         <span className="text-sm font-bold font-mono tabular-nums text-amber-400/50">
                           ({formatCurrency(financials.totalArtistFees)})
                         </span>
@@ -1135,6 +1200,8 @@ export function EventPnlSpreadsheet({ financials }: Props) {
           </table>
         </div>
       </div>
+
+      </div>{/* close pnlRef wrapper */}
 
       {/* Bar Settings — editable minimum and actual.
           The shortfall is computed server-side from these two and rendered
