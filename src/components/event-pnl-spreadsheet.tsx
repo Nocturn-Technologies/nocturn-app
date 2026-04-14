@@ -291,7 +291,7 @@ function AddExpenseRow({ eventId }: { eventId: string }) {
   if (!open) {
     return (
       <tr>
-        <td colSpan={4} className="px-4 py-2">
+        <td colSpan={8} className="px-4 py-2">
           <Button
             variant="ghost"
             size="sm"
@@ -422,7 +422,7 @@ function AddRevenueRow({ eventId }: { eventId: string }) {
   if (!open) {
     return (
       <tr>
-        <td colSpan={4} className="px-4 py-2">
+        <td colSpan={8} className="px-4 py-2">
           <Button
             variant="ghost"
             size="sm"
@@ -570,6 +570,27 @@ export function EventPnlSpreadsheet({ financials }: Props) {
 
   const isProfitable = financials.profitLoss >= 0;
 
+  // ── Forecast scenarios ──────────────────────────────────────────────
+  const fRates = [0.5, 0.75, 1.0, 1.25];
+  const fLabels = ["50%", "75%", "100%", "125%"];
+  const totalFixedCosts =
+    (financials.venueCost ?? 0) +
+    (financials.venueDeposit ?? 0) +
+    financials.totalExpenses +
+    financials.totalArtistFees +
+    financials.barShortfall;
+
+  const forecasts = fRates.map((rate) => {
+    const tierRevs = financials.ticketTiers.map((t) => {
+      const sold = Math.min(Math.round(t.capacity * rate), Math.round(t.capacity * 1.25));
+      return t.price * sold;
+    });
+    const ticketRev = tierRevs.reduce((s, r) => s + r, 0);
+    const gross = ticketRev + financials.additionalRevenue;
+    const profit = gross - totalFixedCosts;
+    return { tierRevs, gross, profit };
+  });
+
   return (
     <div className="space-y-6">
       {/* Error Banner */}
@@ -682,17 +703,27 @@ export function EventPnlSpreadsheet({ financials }: Props) {
             {/* Header */}
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[160px]">
+                <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[140px]">
                   Category
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Description
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[160px]">
-                  Amount
+                <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[120px]">
+                  Actual
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[80px]">
-                  Actions
+                {fLabels.map((label, i) => (
+                  <th
+                    key={i}
+                    className={`px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider w-[100px] ${
+                      i === 2 ? "text-nocturn" : "text-muted-foreground/60"
+                    }`}
+                  >
+                    {label}
+                  </th>
+                ))}
+                <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[60px]">
+
                 </th>
               </tr>
             </thead>
@@ -700,7 +731,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
             <tbody>
               {/* ── REVENUE SECTION ────────────────────────────── */}
               <tr className="border-b border-border bg-green-500/5">
-                <td colSpan={4} className="px-4 py-2.5">
+                <td colSpan={8} className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-green-400" />
                     <span className="text-xs font-bold uppercase tracking-wider text-green-400">
@@ -711,7 +742,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
               </tr>
 
               {/* Ticket Tiers */}
-              {financials.ticketTiers.map((tier) => (
+              {financials.ticketTiers.map((tier, ti) => (
                 <tr
                   key={tier.id}
                   className="border-b border-border/50 hover:bg-muted/20 transition-colors"
@@ -732,6 +763,13 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       {formatCurrency(tier.revenue)}
                     </span>
                   </td>
+                  {forecasts.map((f, fi) => (
+                    <td key={fi} className="px-3 py-2.5 text-right">
+                      <span className="text-sm font-mono tabular-nums text-green-400/60">
+                        {formatCurrency(f.tierRevs[ti])}
+                      </span>
+                    </td>
+                  ))}
                   <td className="px-4 py-2.5" />
                 </tr>
               ))}
@@ -747,6 +785,9 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   <td className="px-4 py-2.5 text-right text-sm font-mono text-muted-foreground">
                     $0.00
                   </td>
+                  {fLabels.map((_, i) => (
+                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-muted-foreground/40">—</td>
+                  ))}
                   <td />
                 </tr>
               )}
@@ -779,6 +820,11 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       />
                     </div>
                   </td>
+                  {fLabels.map((_, i) => (
+                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-muted-foreground/30">
+                      —
+                    </td>
+                  ))}
                   <td className="px-4 py-2.5 text-center">
                     <Button
                       variant="ghost"
@@ -810,6 +856,9 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       {formatCurrency(financials.estimatedBarRevenue)}
                     </span>
                   </td>
+                  {fLabels.map((_, i) => (
+                    <td key={i} className="px-3 py-2.5" />
+                  ))}
                   <td />
                 </tr>
               )}
@@ -825,12 +874,19 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                     {formatCurrency(financials.grossRevenue)}
                   </span>
                 </td>
+                {forecasts.map((f, fi) => (
+                  <td key={fi} className="px-3 py-2.5 text-right">
+                    <span className="text-sm font-bold font-mono tabular-nums text-green-400/70">
+                      {formatCurrency(f.gross)}
+                    </span>
+                  </td>
+                ))}
                 <td />
               </tr>
 
               {/* ── EXPENSES SECTION ───────────────────────────── */}
               <tr className="border-b border-border bg-red-500/5">
-                <td colSpan={4} className="px-4 py-2.5">
+                <td colSpan={8} className="px-4 py-2.5">
                   <div className="flex items-center gap-2">
                     <TrendingDown className="h-4 w-4 text-red-400" />
                     <span className="text-xs font-bold uppercase tracking-wider text-red-400">
@@ -852,6 +908,11 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       ({formatCurrency(financials.venueCost)})
                     </span>
                   </td>
+                  {fLabels.map((_, i) => (
+                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-red-400/40">
+                      ({formatCurrency(financials.venueCost!)})
+                    </td>
+                  ))}
                   <td />
                 </tr>
               )}
@@ -868,6 +929,11 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       ({formatCurrency(financials.venueDeposit)})
                     </span>
                   </td>
+                  {fLabels.map((_, i) => (
+                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-red-400/30">
+                      ({formatCurrency(financials.venueDeposit!)})
+                    </td>
+                  ))}
                   <td />
                 </tr>
               )}
@@ -901,6 +967,11 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       <span className="text-red-400 ml-0.5">)</span>
                     </div>
                   </td>
+                  {fLabels.map((_, i) => (
+                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-red-400/30">
+                      ({formatCurrency(expense.amount)})
+                    </td>
+                  ))}
                   <td className="px-4 py-2.5 text-center">
                     <Button
                       variant="ghost"
@@ -939,6 +1010,11 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       ({formatCurrency(financials.barShortfall)})
                     </span>
                   </td>
+                  {fLabels.map((_, i) => (
+                    <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-amber-400/30">
+                      ({formatCurrency(financials.barShortfall)})
+                    </td>
+                  ))}
                   <td />
                 </tr>
               )}
@@ -954,6 +1030,13 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                     ({formatCurrency(financials.totalExpenses + (financials.venueCost ?? 0) + financials.barShortfall)})
                   </span>
                 </td>
+                {fLabels.map((_, i) => (
+                  <td key={i} className="px-3 py-2.5 text-right">
+                    <span className="text-sm font-bold font-mono tabular-nums text-red-400/50">
+                      ({formatCurrency(financials.totalExpenses + (financials.venueCost ?? 0) + financials.barShortfall)})
+                    </span>
+                  </td>
+                ))}
                 <td />
               </tr>
 
@@ -961,7 +1044,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
               {financials.artistFees.length > 0 && (
                 <>
                   <tr className="border-b border-border bg-amber-500/5">
-                    <td colSpan={4} className="px-4 py-2.5">
+                    <td colSpan={8} className="px-4 py-2.5">
                       <div className="flex items-center gap-2">
                         <DollarSign className="h-4 w-4 text-amber-400" />
                         <span className="text-xs font-bold uppercase tracking-wider text-amber-400">
@@ -985,6 +1068,11 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                           ({formatCurrency(artist.fee)})
                         </span>
                       </td>
+                      {fLabels.map((_, i) => (
+                        <td key={i} className="px-3 py-2.5 text-right text-sm font-mono text-amber-400/30">
+                          ({formatCurrency(artist.fee)})
+                        </td>
+                      ))}
                       <td />
                     </tr>
                   ))}
@@ -999,6 +1087,13 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                         ({formatCurrency(financials.totalArtistFees)})
                       </span>
                     </td>
+                    {fLabels.map((_, i) => (
+                      <td key={i} className="px-3 py-2.5 text-right">
+                        <span className="text-sm font-bold font-mono tabular-nums text-amber-400/50">
+                          ({formatCurrency(financials.totalArtistFees)})
+                        </span>
+                      </td>
+                    ))}
                     <td />
                   </tr>
                 </>
@@ -1025,6 +1120,15 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                     {isProfitable ? "" : "-"}{formatCurrency(Math.abs(financials.profitLoss))}
                   </span>
                 </td>
+                {forecasts.map((f, fi) => (
+                  <td key={fi} className="px-3 py-4 text-right">
+                    <span className={`text-sm font-bold font-mono tabular-nums ${
+                      f.profit >= 0 ? "text-green-400" : "text-red-400"
+                    }`}>
+                      {f.profit < 0 && "−"}{formatCurrency(Math.abs(f.profit))}
+                    </span>
+                  </td>
+                ))}
                 <td />
               </tr>
             </tbody>
