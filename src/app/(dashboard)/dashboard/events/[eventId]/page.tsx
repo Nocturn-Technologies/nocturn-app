@@ -25,7 +25,6 @@ import {
   Palette,
   Coffee,
   RotateCcw,
-  Share2,
   MessageSquare,
   Sheet,
 } from "lucide-react";

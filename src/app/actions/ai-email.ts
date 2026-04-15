@@ -150,7 +150,7 @@ Return JSON with "subject" and "body" fields. The body should be plain text with
         body: sanitizeAIText(text),
       },
     };
-  } catch (err: unknown) {
+  } catch (_err: unknown) {
     // Return fallback template on error
     return {
       error: null,

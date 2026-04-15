@@ -56,7 +56,7 @@ interface EventCardLiveProps {
   eventId: string;
 }
 
-export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
+export function EventCardLive({ channelId: _channelId, eventId }: EventCardLiveProps) {
   const [card, setCard] = useState<EventCardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);

@@ -1,7 +1,6 @@
 "use server";
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { PLATFORM_FEE_PERCENT } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
 import { rateLimitStrict } from "@/lib/rate-limit";

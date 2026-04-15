@@ -293,7 +293,7 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
 
     // Find the max dayOffset span in the template (for proportional scaling)
     const preLaunchTasks = template.filter(t => t.dayOffset <= 0);
-    const postEventTasks = template.filter(t => t.dayOffset > 0);
+    const _postEventTasks = template.filter(t => t.dayOffset > 0);
     const maxPreOffset = Math.max(...preLaunchTasks.map(t => Math.abs(t.dayOffset)), 1);
 
     // Scale factor: if event is 35 days out and template spans 33 days, scale ~1:1

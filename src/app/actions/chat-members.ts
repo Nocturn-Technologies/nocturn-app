@@ -450,7 +450,7 @@ export async function searchInvitableUsers(
           .replace(/\\/g, "\\\\")
           .replace(/%/g, "\\%")
           .replace(/_/g, "\\_");
-        const lowerQuery = sanitized.toLowerCase();
+        const _lowerQuery = sanitized.toLowerCase();
 
         // Search platform artists by name (PostgREST .or() can't cross into joined tables)
         const { data: platformArtists } = await sb

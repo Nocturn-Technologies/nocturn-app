@@ -14,7 +14,6 @@ import {
   Plus,
   Send,
   Users,
-  Mic,
   MapPin,
   MessageSquare,
   AlertTriangle,
@@ -351,7 +350,7 @@ function SetupChecklist(props: DashboardHomeProps) {
           {/* Checklist items */}
           <div className="space-y-1">
             {steps.map((step) => {
-              const Icon = step.icon;
+              const _Icon = step.icon;
               return (
                 <Link
                   key={step.label}
@@ -724,7 +723,7 @@ export function DashboardHome(props: DashboardHomeProps) {
 
 // ── Lazy-loaded AI Briefing (doesn't block page render) ──
 
-function LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string; initialBriefing?: BriefingItem[] }) {
+function _LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string; initialBriefing?: BriefingItem[] }) {
   const [briefing, setBriefing] = React.useState<BriefingItem[]>(initialBriefing ?? []);
   const [loading, setLoading] = React.useState(!initialBriefing?.length && !!collectiveId);
 

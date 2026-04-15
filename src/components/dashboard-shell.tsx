@@ -19,7 +19,6 @@ import {
 import {
   Home,
   Calendar,
-  Sparkles,
   DollarSign,
   Settings,
   LogOut,

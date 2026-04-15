@@ -207,7 +207,7 @@ export async function POST(request: NextRequest) {
       trackCheckoutStart(eventId)
     ).catch(() => {});
 
-    const serviceFeePerTicketCents = pricing.serviceFeePerTicketCents;
+    const _serviceFeePerTicketCents = pricing.serviceFeePerTicketCents;
     const totalPerTicketCents = pricing.totalPerTicketCents;
     const totalUsdCents = totalPerTicketCents * quantity;
 

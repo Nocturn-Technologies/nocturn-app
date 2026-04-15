@@ -14,7 +14,7 @@ interface Props {
 export function LiveTicketStats({ eventId, initialSold, initialCapacity, initialRevenue, initialCheckedIn }: Props) {
   const [sold, setSold] = useState(initialSold);
   const [checkedIn, setCheckedIn] = useState(initialCheckedIn);
-  const [revenue, setRevenue] = useState(initialRevenue);
+  const [revenue, _setRevenue] = useState(initialRevenue);
 
   useEffect(() => {
     const supabase = createClient();
