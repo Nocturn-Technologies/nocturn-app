@@ -62,11 +62,26 @@ export function CollectiveCard({
   const isActive = collective.recent_events_count > 0;
 
   return (
-    <Card className="overflow-hidden p-0 group relative bg-card/50 hover:border-nocturn/30 transition-all duration-200">
+    <Card
+      className={`overflow-hidden p-0 group relative bg-card/50 transition-all duration-200 ${
+        isConnected
+          ? "border-nocturn/50 ring-1 ring-nocturn/30 shadow-[0_0_0_1px_rgba(123,47,247,0.12)]"
+          : "hover:border-nocturn/30"
+      }`}
+    >
+      {/* "In your network" indicator ribbon — top of card, above flyer */}
+      {isConnected && (
+        <div className="absolute top-0 left-0 right-0 z-20 flex items-center justify-center gap-1 py-0.5 bg-nocturn/90 text-white text-[11px] font-bold uppercase tracking-wider">
+          <CheckCircle2 className="h-3 w-3" />
+          In your network
+        </div>
+      )}
       {/* Flyer-forward header */}
       <Link
         href={`/dashboard/discover/c/${collective.slug}`}
-        className="block relative h-36 bg-gradient-to-br from-nocturn/30 via-nocturn/10 to-background overflow-hidden"
+        className={`block relative h-36 bg-gradient-to-br from-nocturn/30 via-nocturn/10 to-background overflow-hidden ${
+          isConnected ? "pt-4" : ""
+        }`}
       >
         {hasFlyer ? (
           /* eslint-disable-next-line @next/next/no-img-element */
@@ -187,16 +202,17 @@ export function CollectiveCard({
         </div>
       </div>
 
-      {/* Pitch a collab CTA */}
+      {/* Pitch a collab CTA — "Open chat" when already connected */}
       <div className="flex items-center gap-1.5 px-3 pt-3 pb-3">
         <Button
           size="sm"
           className={`flex-1 min-h-[44px] text-xs font-semibold ${
             isConnected
-              ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+              ? "bg-card border-nocturn/30 text-nocturn hover:bg-nocturn/10"
               : "bg-nocturn hover:bg-nocturn-light text-white"
           }`}
-          disabled={isConnecting || isConnected || !canPitch}
+          variant={isConnected ? "outline" : "default"}
+          disabled={isConnecting || !canPitch}
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -207,7 +223,7 @@ export function CollectiveCard({
           {isConnected ? (
             <>
               <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-              Pitched
+              Open chat
             </>
           ) : isConnecting ? (
             "Starting chat..."

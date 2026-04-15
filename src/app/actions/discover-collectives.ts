@@ -253,6 +253,61 @@ export async function getMyNextEvent(): Promise<NextEventSummary | null> {
 }
 
 /**
+ * Return the set of collective IDs the current user's collective has
+ * already started a collab chat with — i.e. "collectives in my network."
+ * Used to power the "My network" filter on the Discover page.
+ */
+export async function getMyConnectedCollectiveIds(): Promise<string[]> {
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const sb = createAdminClient();
+
+    // Find the user's collective
+    const { data: membership } = await sb
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+
+    const myCollectiveId = (membership as { collective_id?: string } | null)?.collective_id;
+    if (!myCollectiveId) return [];
+
+    // Find collab channels where I'm owner OR partner, then extract the OTHER collective id
+    const [owned, partnered] = await Promise.all([
+      sb
+        .from("channels")
+        .select("partner_collective_id")
+        .eq("collective_id", myCollectiveId)
+        .eq("type", "collab"),
+      sb
+        .from("channels")
+        .select("collective_id")
+        .eq("partner_collective_id", myCollectiveId)
+        .eq("type", "collab"),
+    ]);
+
+    const ids = new Set<string>();
+    for (const row of (owned.data ?? []) as { partner_collective_id: string | null }[]) {
+      if (row.partner_collective_id) ids.add(row.partner_collective_id);
+    }
+    for (const row of (partnered.data ?? []) as { collective_id: string | null }[]) {
+      if (row.collective_id) ids.add(row.collective_id);
+    }
+    return Array.from(ids);
+  } catch (err) {
+    console.error("[getMyConnectedCollectiveIds]", err);
+    return [];
+  }
+}
+
+/**
  * Fetch the 5 most recent published events for a collective (for detail page).
  */
 export interface CollectiveEventTile {

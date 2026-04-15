@@ -16,6 +16,7 @@ import {
 import {
   getDiscoverCollectives,
   getMyNextEvent,
+  getMyConnectedCollectiveIds,
   type DiscoverCollective,
   type NextEventSummary,
 } from "@/app/actions/discover-collectives";
@@ -140,6 +141,11 @@ function DiscoverContent() {
   const [peopleType, setPeopleType] = useState<string>("all");
   const [showMoreTypes, setShowMoreTypes] = useState(false);
 
+  // View toggle — applies across all 3 tabs.
+  // "discover": everyone matching filters. "network": only the subset I've
+  // saved (profiles/venues) or started a collab chat with (collectives).
+  const [view, setView] = useState<"discover" | "network">("discover");
+
   // ── Results state, per tab ──────────────────────────────────────────────
   const [collectives, setCollectives] = useState<DiscoverCollective[]>([]);
   const [collectivesTotal, setCollectivesTotal] = useState(0);
@@ -173,13 +179,18 @@ function DiscoverContent() {
     city: string;
   } | null>(null);
 
-  // ── Bootstrap: fetch next event + user's collective city ───────────────
+  // ── Bootstrap: fetch next event + user's collective city + connected set ─
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const evt = await getMyNextEvent();
+      // Run in parallel: next event + connected collectives
+      const [evt, connectedList] = await Promise.all([
+        getMyNextEvent(),
+        getMyConnectedCollectiveIds(),
+      ]);
       if (cancelled) return;
       setNextEvent(evt);
+      setConnectedIds(new Set(connectedList));
       // Default the city filter to the user's collective city (once)
       if (!cityAutoApplied && evt?.collective_city) {
         setCityFilter(evt.collective_city);
@@ -360,11 +371,45 @@ function DiscoverContent() {
     }
   }
 
-  // ── Computed ────────────────────────────────────────────────────────────
+  // ── Filtering + computed ────────────────────────────────────────────────
+  // When view === "network", we show only the user's saved subset:
+  //   collectives → collab-chat partners (connectedIds, loaded server-side)
+  //   people      → marketplace_saved profiles (savedProfileIds)
+  //   venues      → saved_venues (savedVenueIds)
+  const visibleCollectives =
+    view === "network" ? collectives.filter((c) => connectedIds.has(c.id)) : collectives;
+  const visibleProfiles =
+    view === "network" ? profiles.filter((p) => savedProfileIds.has(p.id)) : profiles;
+  const visibleVenues =
+    view === "network" ? venues.filter((v) => savedVenueIds.has(v.place_id)) : venues;
+
   const activeLoading =
     tab === "collectives" ? collectivesLoading : tab === "people" ? profilesLoading : venuesLoading;
+
+  // When in "network" view, the displayed total is the filtered length (we
+  // can't just reuse the server-provided total since filtering is client-side
+  // within the current result page).
   const activeTotal =
-    tab === "collectives" ? collectivesTotal : tab === "people" ? profilesTotal : venues.length;
+    view === "network"
+      ? tab === "collectives"
+        ? visibleCollectives.length
+        : tab === "people"
+          ? visibleProfiles.length
+          : visibleVenues.length
+      : tab === "collectives"
+        ? collectivesTotal
+        : tab === "people"
+          ? profilesTotal
+          : venues.length;
+
+  // Per-tab network counts (always visible in the toggle, so the user knows
+  // how many of their network are on the screen right now)
+  const networkCountForTab =
+    tab === "collectives"
+      ? collectives.filter((c) => connectedIds.has(c.id)).length
+      : tab === "people"
+        ? profiles.filter((p) => savedProfileIds.has(p.id)).length
+        : venues.filter((v) => savedVenueIds.has(v.place_id)).length;
 
   const peopleTypeLabel =
     ALL_PEOPLE_OPTIONS.find((o) => o.value === peopleType)?.label ?? "All";
@@ -382,10 +427,11 @@ function DiscoverContent() {
         </div>
         <Link
           href="/dashboard/network"
-          className="shrink-0 inline-flex items-center gap-1 min-h-[44px] text-xs text-muted-foreground hover:text-foreground transition-colors"
+          className="shrink-0 inline-flex items-center gap-1 min-h-[44px] text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          title="Full CRM — import contacts, tags, booking history"
         >
           <Users2 className="h-3.5 w-3.5" />
-          Your network
+          CRM
           <ArrowRight className="h-3 w-3" />
         </Link>
       </div>
@@ -393,25 +439,36 @@ function DiscoverContent() {
       {/* Desktop-only context card: your next event */}
       {nextEvent && <NextEventHero event={nextEvent} />}
 
-      {/* Top tabs: Collectives / People / Venues */}
-      <div className="flex gap-1 rounded-xl bg-muted/30 p-1 w-full md:w-fit">
-        <TabButton
-          active={tab === "collectives"}
-          onClick={() => switchTab("collectives")}
-          icon={<Users2 className="h-3.5 w-3.5" />}
-          label="Collectives"
-        />
-        <TabButton
-          active={tab === "people"}
-          onClick={() => switchTab("people")}
-          icon={<User className="h-3.5 w-3.5" />}
-          label="People"
-        />
-        <TabButton
-          active={tab === "venues"}
-          onClick={() => switchTab("venues")}
-          icon={<MapPin className="h-3.5 w-3.5" />}
-          label="Venues"
+      {/* Top tabs + view toggle */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div className="flex gap-1 rounded-xl bg-muted/30 p-1 w-full md:w-fit">
+          <TabButton
+            active={tab === "collectives"}
+            onClick={() => switchTab("collectives")}
+            icon={<Users2 className="h-3.5 w-3.5" />}
+            label="Collectives"
+          />
+          <TabButton
+            active={tab === "people"}
+            onClick={() => switchTab("people")}
+            icon={<User className="h-3.5 w-3.5" />}
+            label="People"
+          />
+          <TabButton
+            active={tab === "venues"}
+            onClick={() => switchTab("venues")}
+            icon={<MapPin className="h-3.5 w-3.5" />}
+            label="Venues"
+          />
+        </div>
+
+        <ViewToggle
+          view={view}
+          networkCount={networkCountForTab}
+          onChange={(next) => {
+            haptic("light");
+            setView(next);
+          }}
         />
       </div>
 
@@ -469,11 +526,12 @@ function DiscoverContent() {
       <div>
         {tab === "collectives" && (
           <CollectivesResults
-            collectives={collectives}
-            total={collectivesTotal}
+            collectives={visibleCollectives}
+            total={visibleCollectives.length}
             loading={collectivesLoading}
             query={query}
             city={cityFilter}
+            view={view}
             onPitchCollab={handlePitchCollab}
             connectingId={connectingId}
             connectedIds={connectedIds}
@@ -483,9 +541,10 @@ function DiscoverContent() {
 
         {tab === "people" && (
           <PeopleResults
-            profiles={profiles}
-            total={profilesTotal}
+            profiles={visibleProfiles}
+            total={visibleProfiles.length}
             loading={profilesLoading}
+            view={view}
             savedIds={savedProfileIds}
             onSave={handleSaveProfile}
             onUnsave={handleUnsaveProfile}
@@ -502,9 +561,10 @@ function DiscoverContent() {
 
         {tab === "venues" && (
           <VenuesResults
-            venues={venues}
+            venues={visibleVenues}
             loading={venuesLoading}
             query={query}
+            view={view}
             savedVenueIds={savedVenueIds}
             savingVenueId={savingVenueId}
             onSave={handleSaveVenue}
@@ -557,6 +617,66 @@ function TabButton({
       {icon}
       {label}
     </button>
+  );
+}
+
+/**
+ * Discover ↔ My network toggle. Lives next to the tab bar and re-filters the
+ * current tab's results to only the subset I've saved / started a collab with.
+ * The "My network" segment always shows its current count so operators can see
+ * their shortlist at a glance.
+ */
+function ViewToggle({
+  view,
+  networkCount,
+  onChange,
+}: {
+  view: "discover" | "network";
+  networkCount: number;
+  onChange: (next: "discover" | "network") => void;
+}) {
+  return (
+    <div
+      className="inline-flex gap-1 rounded-xl bg-muted/30 p-1 w-full md:w-fit self-stretch md:self-auto"
+      role="tablist"
+      aria-label="Filter results by network"
+    >
+      <button
+        role="tab"
+        aria-selected={view === "discover"}
+        onClick={() => onChange("discover")}
+        className={`flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all min-h-[44px] ${
+          view === "discover"
+            ? "bg-nocturn text-white shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <Sparkles className="h-3.5 w-3.5" />
+        Discover
+      </button>
+      <button
+        role="tab"
+        aria-selected={view === "network"}
+        onClick={() => onChange("network")}
+        className={`flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-all min-h-[44px] ${
+          view === "network"
+            ? "bg-nocturn text-white shadow-sm"
+            : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <Users2 className="h-3.5 w-3.5" />
+        My network
+        <span
+          className={`ml-0.5 inline-flex items-center justify-center rounded-full px-1.5 min-w-[20px] h-5 text-[11px] font-bold ${
+            view === "network"
+              ? "bg-white/20 text-white"
+              : "bg-muted text-muted-foreground"
+          }`}
+        >
+          {networkCount}
+        </span>
+      </button>
+    </div>
   );
 }
 
@@ -734,6 +854,7 @@ function CollectivesResults({
   loading,
   query,
   city,
+  view,
   onPitchCollab,
   connectingId,
   connectedIds,
@@ -744,6 +865,7 @@ function CollectivesResults({
   loading: boolean;
   query: string;
   city: string;
+  view: "discover" | "network";
   onPitchCollab: (id: string) => void;
   connectingId: string | null;
   connectedIds: Set<string>;
@@ -754,11 +876,13 @@ function CollectivesResults({
     return (
       <EmptyState
         icon={<Users2 className="h-8 w-8 text-muted-foreground" />}
-        title="No collectives found"
+        title={view === "network" ? "No collectives in your network yet" : "No collectives found"}
         subtitle={
-          query || city
-            ? "Try a different search or widen the city filter."
-            : "No other collectives on Nocturn yet — invite one to join."
+          view === "network"
+            ? "Pitch a collab to add collectives to your network. They'll show up here."
+            : query || city
+              ? "Try a different search or widen the city filter."
+              : "No other collectives on Nocturn yet — invite one to join."
         }
       />
     );
@@ -782,6 +906,7 @@ function CollectivesResults({
 function PeopleResults({
   profiles,
   loading,
+  view,
   savedIds,
   onSave,
   onUnsave,
@@ -790,6 +915,7 @@ function PeopleResults({
   profiles: DiscoverProfileRow[];
   total: number;
   loading: boolean;
+  view: "discover" | "network";
   savedIds: Set<string>;
   onSave: (id: string) => void;
   onUnsave: (id: string) => void;
@@ -800,8 +926,12 @@ function PeopleResults({
     return (
       <EmptyState
         icon={<User className="h-8 w-8 text-muted-foreground" />}
-        title="No one matched"
-        subtitle="Try a different search or role."
+        title={view === "network" ? "Nobody saved yet" : "No one matched"}
+        subtitle={
+          view === "network"
+            ? "Save profiles you like. They'll show up here."
+            : "Try a different search or role."
+        }
       />
     );
   }
@@ -826,6 +956,7 @@ function VenuesResults({
   venues,
   loading,
   query,
+  view,
   savedVenueIds,
   savingVenueId,
   onSave,
@@ -834,6 +965,7 @@ function VenuesResults({
   venues: VenueResult[];
   loading: boolean;
   query: string;
+  view: "discover" | "network";
   savedVenueIds: Set<string>;
   savingVenueId: string | null;
   onSave: (v: VenueResult) => void;
@@ -844,8 +976,14 @@ function VenuesResults({
     return (
       <EmptyState
         icon={<MapPin className="h-8 w-8 text-muted-foreground" />}
-        title="No venues found"
-        subtitle={query ? "Try a different search." : "No venues available."}
+        title={view === "network" ? "No saved venues" : "No venues found"}
+        subtitle={
+          view === "network"
+            ? "Save venues you like. They'll show up here."
+            : query
+              ? "Try a different search."
+              : "No venues available."
+        }
       />
     );
   }
