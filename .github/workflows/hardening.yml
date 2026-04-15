@@ -1,0 +1,321 @@
+name: Daily Hardening
+
+# 15 slots: Mon-Fri at 9am/1pm/4pm ET (13:00 / 17:00 / 20:00 UTC during EDT).
+# Plus a 6pm ET (22:00 UTC) digest.
+# GitHub Actions cron is UTC. During EST (winter), add 1 hour.
+on:
+  schedule:
+    - cron: '0 13 * * 1-5'   # 9am ET — morning audit
+    - cron: '0 17 * * 1-5'   # 1pm ET — midday fix
+    - cron: '0 20 * * 1-5'   # 4pm ET — afternoon
+    - cron: '0 22 * * 1-5'   # 6pm ET — digest
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: 'Manual slot to run (e.g. day1-morning, day0-bootstrap-e2e, digest)'
+        required: true
+        type: string
+
+concurrency:
+  group: hardening-${{ github.event.schedule || inputs.slot }}
+  cancel-in-progress: false
+
+jobs:
+  resolve-slot:
+    name: Resolve slot
+    runs-on: ubuntu-latest
+    outputs:
+      slot: ${{ steps.pick.outputs.slot }}
+      day: ${{ steps.pick.outputs.day }}
+      kind: ${{ steps.pick.outputs.kind }}
+      skip: ${{ steps.pick.outputs.skip }}
+    steps:
+      - id: pick
+        name: Determine which prompt file to run
+        run: |
+          set -eu
+          # Manual dispatch wins
+          if [ -n "${{ inputs.slot }}" ]; then
+            SLOT="${{ inputs.slot }}"
+          else
+            # Map cron schedule + weekday → slot
+            DOW=$(date -u +%u)   # 1 (Mon) ... 7 (Sun)
+            SCHED="${{ github.event.schedule }}"
+            case "$SCHED" in
+              "0 13 * * 1-5") KIND=morning ;;
+              "0 17 * * 1-5") KIND=midday ;;
+              "0 20 * * 1-5") KIND=afternoon ;;
+              "0 22 * * 1-5") KIND=digest ;;
+              *) echo "Unknown schedule"; exit 1 ;;
+            esac
+            if [ "$KIND" = "digest" ]; then
+              SLOT="digest"
+            else
+              SLOT="day${DOW}-${KIND}"
+            fi
+          fi
+          echo "slot=$SLOT" >> "$GITHUB_OUTPUT"
+          DAY=$(echo "$SLOT" | sed -E 's/^day([0-9]+)-.*/\1/; t; s/.*/0/')
+          KIND=$(echo "$SLOT" | sed -E 's/^day[0-9]+-//; s/^(digest)$/\1/')
+          echo "day=$DAY" >> "$GITHUB_OUTPUT"
+          echo "kind=$KIND" >> "$GITHUB_OUTPUT"
+          # Skip weekends (belt-and-suspenders against misconfigured cron)
+          if [ "$SLOT" != "digest" ] && [ "$(date -u +%u)" -gt 5 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "Resolved: slot=$SLOT day=$DAY kind=$KIND"
+
+  run-slot:
+    name: Run ${{ needs.resolve-slot.outputs.slot }}
+    needs: resolve-slot
+    if: needs.resolve-slot.outputs.skip == 'false' && needs.resolve-slot.outputs.kind != 'digest'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Resolve prompt file
+        id: prompt
+        run: |
+          SLOT="${{ needs.resolve-slot.outputs.slot }}"
+          FILE="prompts/hardening/${SLOT}.md"
+          if [ ! -f "$FILE" ]; then
+            echo "No prompt file at $FILE — skipping gracefully."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "found=true" >> "$GITHUB_OUTPUT"
+          echo "file=$FILE" >> "$GITHUB_OUTPUT"
+          # Combine shared context + slot prompt
+          mkdir -p .hardening/_build
+          cat prompts/hardening/_context.md "$FILE" > .hardening/_build/prompt.md
+          echo "Combined prompt: $(wc -l < .hardening/_build/prompt.md) lines"
+
+      - name: Configure git
+        if: steps.prompt.outputs.found == 'true'
+        run: |
+          git config user.name 'nocturn-hardening-bot'
+          git config user.email 'hardening@trynocturn.com'
+
+      - name: Create work branch
+        if: steps.prompt.outputs.found == 'true'
+        id: branch
+        run: |
+          SLOT="${{ needs.resolve-slot.outputs.slot }}"
+          DATE=$(date -u +%Y%m%d)
+          BR="hardening/${DATE}-${SLOT}"
+          git checkout -b "$BR"
+          echo "name=$BR" >> "$GITHUB_OUTPUT"
+
+      - name: Run Claude Code
+        if: steps.prompt.outputs.found == 'true'
+        uses: anthropics/claude-code-base-action@beta
+        with:
+          prompt_file: .hardening/_build/prompt.md
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          max_turns: '50'
+          timeout_minutes: '30'
+
+      - name: Run E2E (non-blocking log)
+        if: steps.prompt.outputs.found == 'true' && needs.resolve-slot.outputs.kind != 'morning'
+        id: e2e
+        continue-on-error: true
+        run: |
+          npx playwright install chromium --with-deps
+          DAY="${{ needs.resolve-slot.outputs.day }}"
+          mkdir -p ".hardening/day${DAY}"
+          if ! npm run test:e2e 2>&1 | tee ".hardening/day${DAY}/e2e-output.log"; then
+            echo "E2E failed — logging but not aborting; PR review is the gate."
+            echo "e2e_failed=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
+
+      - name: Check build
+        if: steps.prompt.outputs.found == 'true'
+        id: build
+        continue-on-error: true
+        run: npm run build
+
+      - name: Commit changes
+        if: steps.prompt.outputs.found == 'true'
+        id: commit
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changes to commit."
+          else
+            SLOT="${{ needs.resolve-slot.outputs.slot }}"
+            git commit -m "hardening(${SLOT}): automated ${{ needs.resolve-slot.outputs.kind }}"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Revert broken build
+        if: steps.prompt.outputs.found == 'true' && steps.commit.outputs.changed == 'true' && steps.build.outcome == 'failure' && needs.resolve-slot.outputs.kind != 'morning'
+        run: |
+          echo "Build failed — reverting commit on branch."
+          git revert --no-edit HEAD
+          DAY="${{ needs.resolve-slot.outputs.day }}"
+          mkdir -p ".hardening/day${DAY}"
+          echo "Build broke on ${{ needs.resolve-slot.outputs.slot }} at $(date -u). Commit reverted." >> ".hardening/day${DAY}/test-breakage.md"
+          git add ".hardening/day${DAY}/test-breakage.md"
+          git commit -m "hardening: log build break for ${{ needs.resolve-slot.outputs.slot }}"
+
+      - name: Push branch
+        if: steps.prompt.outputs.found == 'true' && steps.commit.outputs.changed == 'true'
+        run: git push origin "${{ steps.branch.outputs.name }}"
+
+      - name: Open PR
+        if: steps.prompt.outputs.found == 'true' && steps.commit.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SLOT="${{ needs.resolve-slot.outputs.slot }}"
+          BUILD_STATUS="${{ steps.build.outcome }}"
+          E2E_STATUS="${{ steps.e2e.outcome || 'skipped' }}"
+          TITLE="hardening: ${SLOT}"
+          BODY=$(cat <<EOF
+          Automated hardening run.
+
+          - **Slot**: \`${SLOT}\`
+          - **Build**: ${BUILD_STATUS}
+          - **E2E**: ${E2E_STATUS}
+          - **Prompt**: \`prompts/hardening/${SLOT}.md\`
+
+          Review the diff, check the Vercel preview, merge if green. Otherwise close the PR.
+
+          _Generated by \`.github/workflows/hardening.yml\`._
+          EOF
+          )
+          gh pr create \
+            --base main \
+            --head "${{ steps.branch.outputs.name }}" \
+            --title "$TITLE" \
+            --body "$BODY" \
+            --label hardening || echo "PR may already exist."
+
+      - name: Open failure issue
+        if: failure() && steps.prompt.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          SLOT="${{ needs.resolve-slot.outputs.slot }}"
+          gh issue create \
+            --title "hardening failed: ${SLOT}" \
+            --label hardening-failed \
+            --body "Workflow run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  digest:
+    name: 6pm digest
+    needs: resolve-slot
+    if: needs.resolve-slot.outputs.kind == 'digest'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect email channel
+        id: channel
+        env:
+          RESEND: ${{ secrets.RESEND_API_KEY }}
+        run: |
+          if [ -n "$RESEND" ]; then
+            echo "via=resend" >> "$GITHUB_OUTPUT"
+          else
+            echo "via=github" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build summary
+        id: sum
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          PRS=$(gh pr list --label hardening --state open \
+            --json number,title,url --jq '[.[] | "• <a href=\"\(.url)\">#\(.number)</a> \(.title)"] | join("<br>")' || echo "")
+          FAILS=$(gh issue list --label hardening-failed --state open \
+            --json number,title,url --jq '[.[] | "⚠️ <a href=\"\(.url)\">#\(.number)</a> \(.title)"] | join("<br>")' || echo "")
+          DAY=$(date -u +%u)
+          BREAK=$(cat ".hardening/day${DAY}/test-breakage.md" 2>/dev/null || echo "None")
+          {
+            echo "prs<<EOF"
+            echo "${PRS:-None}"
+            echo "EOF"
+            echo "fails<<EOF"
+            echo "${FAILS:-None}"
+            echo "EOF"
+            echo "break<<EOF"
+            echo "${BREAK}"
+            echo "EOF"
+            echo "day=${DAY}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send digest via Resend
+        if: steps.channel.outputs.via == 'resend'
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          DIGEST_TO: ${{ secrets.DIGEST_TO_EMAIL }}
+          DIGEST_FROM: ${{ vars.DIGEST_FROM_EMAIL || 'onboarding@resend.dev' }}
+        run: |
+          PRS=$(cat <<'EOF'
+          ${{ steps.sum.outputs.prs }}
+          EOF
+          )
+          FAILS=$(cat <<'EOF'
+          ${{ steps.sum.outputs.fails }}
+          EOF
+          )
+          BREAK=$(cat <<'EOF'
+          ${{ steps.sum.outputs.break }}
+          EOF
+          )
+          DAY="${{ steps.sum.outputs.day }}"
+          HTML="<h2>Nocturn hardening — Day ${DAY} digest</h2><h3>✅ PRs opened today</h3><p>${PRS}</p><h3>⚠️ Failed slots</h3><p>${FAILS}</p><h3>🧪 Build / E2E breakage</h3><pre>${BREAK}</pre>"
+          curl -sS -X POST https://api.resend.com/emails \
+            -H "Authorization: Bearer ${RESEND_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg from "$DIGEST_FROM" --arg to "$DIGEST_TO" --arg subj "Nocturn hardening — Day ${DAY} digest" --arg html "$HTML" \
+              '{from:$from, to:$to, subject:$subj, html:$html}')"
+
+      - name: Fallback digest via GitHub issue
+        if: steps.channel.outputs.via == 'github'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DAY="${{ steps.sum.outputs.day }}"
+          BODY=$(cat <<EOF
+          @shawn-nocturn daily hardening digest
+
+          **✅ PRs opened today**
+          ${{ steps.sum.outputs.prs }}
+
+          **⚠️ Failed slots**
+          ${{ steps.sum.outputs.fails }}
+
+          **🧪 Build / E2E breakage**
+          \`\`\`
+          ${{ steps.sum.outputs.break }}
+          \`\`\`
+          EOF
+          )
+          gh issue create --title "Hardening digest — day ${DAY}" --body "$BODY" --label hardening-digest
