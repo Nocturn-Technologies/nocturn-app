@@ -367,7 +367,7 @@ export default function MembersPage() {
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300">
+    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
@@ -630,7 +630,7 @@ export default function MembersPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="relative">
+              <div className="relative md:max-w-lg">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search collectives by name or city..."

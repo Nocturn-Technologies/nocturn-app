@@ -143,7 +143,7 @@ export default async function FinancePage() {
   ];
 
   return (
-    <div className="space-y-6 pb-24 overflow-x-hidden animate-in fade-in duration-300">
+    <div className="space-y-6 pb-24 overflow-x-hidden animate-in fade-in duration-300 max-w-6xl mx-auto">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold font-heading truncate">Money</h1>

@@ -213,7 +213,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300">
+    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300 max-w-3xl mx-auto">
       <div className="min-w-0">
         <h1 className="text-2xl font-bold font-heading truncate">Settings</h1>
         <p className="text-sm text-muted-foreground truncate">
@@ -232,6 +232,8 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {/* Profile + Collective: stacked on mobile, side-by-side on desktop */}
+      <div className="grid gap-6 md:grid-cols-2">
       {/* Profile settings */}
       <Card>
         <CardHeader>
@@ -272,7 +274,7 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Separator />
+      <Separator className="md:hidden" />
 
       {/* Collective settings */}
       <Card>
@@ -357,6 +359,7 @@ export default function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+      </div>
 
       <Separator />
 

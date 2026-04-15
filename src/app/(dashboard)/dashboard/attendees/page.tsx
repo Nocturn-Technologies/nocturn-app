@@ -169,7 +169,7 @@ export default function AttendeesPage() {
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300">
+    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300 max-w-6xl mx-auto">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold font-heading">Attendees</h1>
@@ -234,7 +234,7 @@ export default function AttendeesPage() {
 
       {/* Search */}
       {attendees.length > 0 && (
-        <div className="relative">
+        <div className="relative md:max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search by name, email, or event..."

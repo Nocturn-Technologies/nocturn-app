@@ -115,7 +115,7 @@ export default function ArtistAnalyticsPage() {
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
+    <div className="space-y-6 overflow-x-hidden max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link

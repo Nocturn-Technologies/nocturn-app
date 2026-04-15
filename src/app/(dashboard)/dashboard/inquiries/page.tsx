@@ -146,7 +146,7 @@ export default function InquiriesPage() {
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
+    <div className="space-y-6 overflow-x-hidden max-w-5xl mx-auto">
       <div>
         <h1 className="text-2xl font-bold font-heading">Inquiries</h1>
         <p className="text-sm text-muted-foreground">

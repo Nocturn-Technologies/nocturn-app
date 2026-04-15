@@ -270,7 +270,7 @@ export default function LiveEventPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg space-y-5 pb-8 overflow-x-hidden">
+    <div className="mx-auto max-w-4xl space-y-5 pb-8 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
@@ -298,7 +298,7 @@ export default function LiveEventPage() {
       </div>
 
       {/* Main Stats */}
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {/* Check-ins */}
         <div className="rounded-xl border border-white/5 bg-zinc-900 p-5">
           <div className="flex items-center justify-between mb-3">

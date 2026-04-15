@@ -76,7 +76,7 @@ export function CollapsibleEventSection({
         }`}
       >
         <div className="overflow-hidden">
-          <div className="grid gap-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <SwipeableEventList events={events} stagger={!defaultOpen && hasAnimated} />
           </div>
         </div>

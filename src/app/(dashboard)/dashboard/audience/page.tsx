@@ -16,7 +16,6 @@ import {
   Copy,
   Check,
   ExternalLink,
-  ChevronRight,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReachInsight } from "@/app/actions/contacts";
@@ -223,7 +222,7 @@ export default function AudiencePage() {
   const selectedEvent = events.find((e) => e.id === selectedEventId);
 
   return (
-    <div className="space-y-6 pb-24 overflow-x-hidden">
+    <div className="space-y-6 pb-24 overflow-x-hidden max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>

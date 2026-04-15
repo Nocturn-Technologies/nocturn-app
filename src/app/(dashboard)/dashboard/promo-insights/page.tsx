@@ -102,7 +102,7 @@ export default async function PromoInsightsPage() {
   const schedule = scheduleResult.data;
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
+    <div className="space-y-6 overflow-x-hidden max-w-6xl mx-auto">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold font-heading">Promo Insights</h1>

@@ -29,7 +29,7 @@ import {
 } from "@/app/actions/network-crm";
 import { getContacts, type Contact } from "@/app/actions/contacts";
 import { saveProfile, unsaveProfile } from "@/app/actions/marketplace";
-import { ContactDialog } from "./contact-dialog";
+import { ContactDialog } from "../discover/contact-dialog";
 import { ImportSheet } from "@/components/people/import-sheet";
 import { ContactDetailSheet } from "@/components/people/contact-detail-sheet";
 import { haptic } from "@/lib/haptics";
