@@ -104,7 +104,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
   const isCheckedIn = !!typedTicket.checked_in_at;
 
   return (
-    <div className="min-h-dvh bg-[#09090B]">
+    <div className="min-h-dvh bg-[#09090B] overflow-x-hidden">
       {/* Ambient gradient */}
       <div className="fixed inset-0 pointer-events-none">
         <div className="absolute -top-40 -right-40 w-[500px] h-[500px] bg-nocturn/[0.06] rounded-full blur-[120px]" />
@@ -114,7 +114,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
       {/* Header */}
       <header className="relative z-10 border-b border-white/[0.06] px-4 py-4">
         <div className="max-w-lg mx-auto flex items-center justify-between">
-          <Link href="/" className="text-nocturn font-heading font-bold text-lg">
+          <Link href="/" className="text-nocturn font-heading font-bold text-lg min-h-[44px] inline-flex items-center">
             nocturn.
           </Link>
           <span className="text-[11px] text-white/50 uppercase tracking-[0.15em] font-semibold">
@@ -166,7 +166,7 @@ export default async function TicketPage({ params }: TicketPageProps) {
 
       {/* Footer */}
       <footer className="relative z-10 text-center py-6">
-        <Link href="/" className="text-[11px] text-white/40 hover:text-white/60 transition-colors">
+        <Link href="/" className="text-[11px] text-white/40 hover:text-white/60 transition-colors min-h-[44px] inline-flex items-center">
           Powered by Nocturn
         </Link>
       </footer>

@@ -237,7 +237,7 @@ export default function VenueMePage() {
             <div className="space-y-2">
               <Label>Description</Label>
               <textarea
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm min-h-[80px] resize-none"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-base md:text-sm min-h-[80px] resize-none"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Tell promoters about your space — vibe, sound system, what makes it special..."

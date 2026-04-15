@@ -28,6 +28,7 @@ import {
   type Guest,
 } from "@/app/actions/guest-list";
 import { createClient } from "@/lib/supabase/client";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 const statusConfig: Record<
   string,
@@ -66,6 +67,7 @@ export default function GuestListPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   // Form state
   const [name, setName] = useState("");
@@ -164,7 +166,13 @@ export default function GuestListPage() {
   const [removeSuccess, setRemoveSuccess] = useState<string | null>(null);
 
   async function handleRemove(guestId: string) {
-    if (!confirm("Remove this guest from the list?")) return;
+    const ok = await confirm({
+      title: "Remove this guest?",
+      description: "They'll be removed from the guest list.",
+      confirmText: "Remove",
+      destructive: true,
+    });
+    if (!ok) return;
     setRemovingGuestId(guestId);
     setRemoveSuccess(null);
     await removeGuest(guestId);
@@ -542,6 +550,7 @@ export default function GuestListPage() {
           })}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

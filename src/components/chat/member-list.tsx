@@ -30,6 +30,7 @@ import {
   removeChannelMember,
   updatePresence,
 } from "@/app/actions/chat-members";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 // ---------------------------------------------------------------------------
 // Props
@@ -327,7 +328,7 @@ function MemberListContent({
 
 export function ChatMemberList({
   channelId,
-  channelType,
+  channelType: _channelType,
   isOpen,
   onToggle,
   onInvite,
@@ -337,11 +338,12 @@ export function ChatMemberList({
 }: ChatMemberListProps) {
   const supabase = useMemo(() => createClient(), []);
   const [members, setMembers] = useState<ChatMember[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [_loading, setLoading] = useState(true);
   const presenceIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const subscriptionRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const onMemberCountChangeRef = useRef(onMemberCountChange);
   onMemberCountChangeRef.current = onMemberCountChange;
+  const { confirm: confirmDialog, confirmDialog: confirmDialogUI } = useConfirm();
 
   // ── Fetch members ──
   const fetchMembers = useCallback(async () => {
@@ -354,7 +356,13 @@ export function ChatMemberList({
   // ── Remove member ──
   const handleRemove = useCallback(
     async (userId: string) => {
-      if (!confirm("Remove this member from the chat?")) return;
+      const ok = await confirmDialog({
+        title: "Remove member?",
+        description: "They'll lose access to this chat.",
+        confirmText: "Remove",
+        destructive: true,
+      });
+      if (!ok) return;
       const { error } = await removeChannelMember(channelId, userId);
       if (error) {
         console.error("[ChatMemberList] remove error:", error);
@@ -363,7 +371,7 @@ export function ChatMemberList({
       // Optimistic removal
       setMembers((prev) => prev.filter((m) => m.user_id !== userId));
     },
-    [channelId]
+    [channelId, confirmDialog]
   );
 
   // ── Initial fetch + Realtime subscription ──
@@ -467,6 +475,7 @@ export function ChatMemberList({
     <>
       {desktopSidebar}
       {mobileSheet}
+      {confirmDialogUI}
     </>
   );
 }

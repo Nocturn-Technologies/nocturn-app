@@ -74,7 +74,7 @@ export default function PendingApprovalPage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-[#09090B] px-4">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-[#09090B] px-4 overflow-x-hidden">
       {/* Subtle background glow */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-1/2 top-1/3 -translate-x-1/2 -translate-y-1/2 h-[500px] w-[500px] rounded-full bg-nocturn/[0.04] blur-[120px]" />

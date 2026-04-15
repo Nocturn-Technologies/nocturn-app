@@ -473,7 +473,7 @@ export default async function AdminPage({ searchParams }: Props) {
   // ══════════════════════════════════════════════════════════════════════
 
   return (
-    <div className="min-h-dvh bg-[#09090B] text-zinc-100 px-4 py-8 md:px-8">
+    <div className="min-h-dvh overflow-x-hidden bg-[#09090B] text-zinc-100 px-4 py-8 md:px-8">
       <div className="mx-auto max-w-7xl space-y-8">
         {/* ── Header ──────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between">
@@ -493,7 +493,7 @@ export default async function AdminPage({ searchParams }: Props) {
           </div>
           <a
             href="/admin"
-            className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
+            className="inline-flex items-center min-h-[44px] px-3 text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
           >
             Lock
           </a>
@@ -510,7 +510,7 @@ export default async function AdminPage({ searchParams }: Props) {
               <a
                 key={tab.key}
                 href={tabHref(tab.key)}
-                className={`px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+                className={`inline-flex items-center min-h-[44px] px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
                   isActive
                     ? "text-[#7B2FF7] border-b-2 border-[#7B2FF7]"
                     : "text-zinc-400 hover:text-zinc-200 border-b-2 border-transparent"
@@ -616,13 +616,13 @@ export default async function AdminPage({ searchParams }: Props) {
                             <td className="px-4 py-3 space-x-3">
                               <a
                                 href={generateApprovalUrls(user.id).approveUrl}
-                                className="text-green-400 hover:text-green-300 font-medium transition-colors"
+                                className="inline-flex items-center min-h-[44px] text-green-400 hover:text-green-300 font-medium transition-colors"
                               >
                                 Approve
                               </a>
                               <a
                                 href={generateApprovalUrls(user.id).denyUrl}
-                                className="text-red-400 hover:text-red-300 font-medium transition-colors"
+                                className="inline-flex items-center min-h-[44px] text-red-400 hover:text-red-300 font-medium transition-colors"
                               >
                                 Deny
                               </a>
@@ -735,7 +735,7 @@ export default async function AdminPage({ searchParams }: Props) {
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-sm text-center hover:border-[#7B2FF7] hover:text-[#7B2FF7] transition-colors"
+                    className="flex items-center justify-center min-h-[44px] rounded-lg border border-zinc-800 bg-zinc-900/50 px-4 py-3 text-sm text-center hover:border-[#7B2FF7] hover:text-[#7B2FF7] transition-colors"
                   >
                     {link.label}
                   </a>
@@ -761,11 +761,11 @@ export default async function AdminPage({ searchParams }: Props) {
                     name="q"
                     defaultValue={searchQuery}
                     placeholder="Search by name or email..."
-                    className="flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-[#7B2FF7]"
+                    className="flex-1 min-h-[44px] rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-base md:text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-[#7B2FF7]"
                   />
                   <button
                     type="submit"
-                    className="rounded-lg bg-[#7B2FF7] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6b24e0] transition-colors"
+                    className="min-h-[44px] rounded-lg bg-[#7B2FF7] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6b24e0] transition-colors"
                   >
                     Search
                   </button>
@@ -774,7 +774,7 @@ export default async function AdminPage({ searchParams }: Props) {
               <div className="flex gap-2 flex-wrap">
                 <a
                   href={`/admin?tab=users${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
-                  className={`rounded-lg border px-3 py-2.5 text-xs font-medium transition-colors ${
+                  className={`inline-flex items-center min-h-[44px] rounded-lg border px-3 py-2.5 text-xs font-medium transition-colors ${
                     !filterType ? "border-[#7B2FF7] text-[#7B2FF7] bg-[#7B2FF7]/10" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
                   }`}
                 >
@@ -784,7 +784,7 @@ export default async function AdminPage({ searchParams }: Props) {
                   <a
                     key={ut}
                     href={`/admin?tab=users&type=${ut}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
-                    className={`rounded-lg border px-3 py-2.5 text-xs font-medium capitalize transition-colors ${
+                    className={`inline-flex items-center min-h-[44px] rounded-lg border px-3 py-2.5 text-xs font-medium capitalize transition-colors ${
                       filterType === ut ? "border-[#7B2FF7] text-[#7B2FF7] bg-[#7B2FF7]/10" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
                     }`}
                   >
@@ -848,13 +848,13 @@ export default async function AdminPage({ searchParams }: Props) {
                             <>
                               <a
                                 href={generateApprovalUrls(user.id).approveUrl}
-                                className="text-green-400 hover:text-green-300 font-medium transition-colors"
+                                className="inline-flex items-center min-h-[44px] text-green-400 hover:text-green-300 font-medium transition-colors"
                               >
                                 Approve
                               </a>
                               <a
                                 href={generateApprovalUrls(user.id).denyUrl}
-                                className="text-red-400 hover:text-red-300 font-medium transition-colors"
+                                className="inline-flex items-center min-h-[44px] text-red-400 hover:text-red-300 font-medium transition-colors"
                               >
                                 Deny
                               </a>
@@ -882,7 +882,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 {pageNum > 1 && (
                   <a
                     href={`/admin?tab=users&page=${pageNum - 1}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
-                    className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+                    className="inline-flex items-center min-h-[44px] rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
                   >
                     Prev
                   </a>
@@ -893,7 +893,7 @@ export default async function AdminPage({ searchParams }: Props) {
                     <a
                       key={p}
                       href={`/admin?tab=users&page=${p}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
-                      className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                      className={`inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg border px-3 py-2 text-sm transition-colors ${
                         p === pageNum ? "border-[#7B2FF7] text-[#7B2FF7] bg-[#7B2FF7]/10" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
                       }`}
                     >
@@ -904,7 +904,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 {pageNum < totalPages && (
                   <a
                     href={`/admin?tab=users&page=${pageNum + 1}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
-                    className="rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+                    className="inline-flex items-center min-h-[44px] rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
                   >
                     Next
                   </a>
@@ -1117,7 +1117,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 href="https://sentry.io"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-block rounded-lg bg-[#7B2FF7] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6b24e0] transition-colors"
+                className="inline-flex items-center min-h-[44px] rounded-lg bg-[#7B2FF7] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6b24e0] transition-colors"
               >
                 Open Sentry Dashboard
               </a>

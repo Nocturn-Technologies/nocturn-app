@@ -887,7 +887,7 @@ export default function EventDesignPage() {
           <div className="space-y-2">
             <label className="text-sm font-medium">Description</label>
             <textarea
-              className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm leading-relaxed outline-none focus:ring-1 focus:ring-ring resize-y min-h-[120px]"
+              className="w-full rounded-xl border border-border bg-card px-4 py-3 text-base md:text-sm leading-relaxed outline-none focus:ring-1 focus:ring-ring resize-y min-h-[120px]"
               placeholder="Tell people what this event is about..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -901,7 +901,7 @@ export default function EventDesignPage() {
               A personal note displayed on the public event page
             </p>
             <textarea
-              className="w-full rounded-xl border border-border bg-card px-4 py-3 text-sm leading-relaxed outline-none focus:ring-1 focus:ring-ring resize-y min-h-[80px]"
+              className="w-full rounded-xl border border-border bg-card px-4 py-3 text-base md:text-sm leading-relaxed outline-none focus:ring-1 focus:ring-ring resize-y min-h-[80px]"
               placeholder="e.g. Can't wait to see you all tonight — bring the energy!"
               value={hostMessage}
               onChange={(e) => setHostMessage(e.target.value)}
@@ -1040,7 +1040,7 @@ export default function EventDesignPage() {
             <p className="text-sm font-medium text-muted-foreground">Preview</p>
             <div
               className="overflow-hidden rounded-2xl border border-border bg-[#09090B]"
-              style={{ maxHeight: "calc(100vh - 120px)", overflowY: "auto" }}
+              style={{ maxHeight: "calc(100dvh - 120px)", overflowY: "auto" }}
             >
               <div className="w-full">
                 {/* Mini hero */}

@@ -224,7 +224,7 @@ function EditableTextCell({
               setEditing(false);
             }
           }}
-          className="h-7 w-full text-sm bg-background border-nocturn/50 focus-visible:ring-nocturn/30"
+          className="h-7 w-full text-base md:text-sm bg-background border-nocturn/50 focus-visible:ring-nocturn/30"
           disabled={saving}
         />
         <Button
@@ -314,7 +314,7 @@ function AddExpenseRow({ eventId }: { eventId: string }) {
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="h-7 rounded-md bg-background border border-border text-xs px-2 text-foreground focus:ring-1 focus:ring-nocturn/30"
+          className="h-7 rounded-md bg-background border border-border text-base md:text-xs px-2 text-foreground focus:ring-1 focus:ring-nocturn/30"
         >
           {EXPENSE_CATEGORIES.map((cat) => (
             <option key={cat} value={cat}>
@@ -333,7 +333,7 @@ function AddExpenseRow({ eventId }: { eventId: string }) {
             if (e.key === "Enter") handleSubmit();
             if (e.key === "Escape") setOpen(false);
           }}
-          className="h-7 text-sm bg-background border-nocturn/50 focus-visible:ring-nocturn/30"
+          className="h-7 text-base md:text-sm bg-background border-nocturn/50 focus-visible:ring-nocturn/30"
           disabled={isPending}
         />
       </td>
@@ -351,7 +351,7 @@ function AddExpenseRow({ eventId }: { eventId: string }) {
               if (e.key === "Enter") handleSubmit();
               if (e.key === "Escape") setOpen(false);
             }}
-            className="h-7 w-24 text-sm bg-background border-nocturn/50 focus-visible:ring-nocturn/30"
+            className="h-7 w-24 text-base md:text-sm bg-background border-nocturn/50 focus-visible:ring-nocturn/30"
             disabled={isPending}
           />
         </div>
@@ -445,7 +445,7 @@ function AddRevenueRow({ eventId }: { eventId: string }) {
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="h-7 rounded-md bg-background border border-border text-xs px-2 text-foreground focus:ring-1 focus:ring-green-400/30"
+          className="h-7 rounded-md bg-background border border-border text-base md:text-xs px-2 text-foreground focus:ring-1 focus:ring-green-400/30"
         >
           {REVENUE_CATEGORIES.map((cat) => (
             <option key={cat} value={cat}>
@@ -464,7 +464,7 @@ function AddRevenueRow({ eventId }: { eventId: string }) {
             if (e.key === "Enter") handleSubmit();
             if (e.key === "Escape") setOpen(false);
           }}
-          className="h-7 text-sm bg-background border-green-400/40 focus-visible:ring-green-400/30"
+          className="h-7 text-base md:text-sm bg-background border-green-400/40 focus-visible:ring-green-400/30"
           disabled={isPending}
         />
       </td>
@@ -482,7 +482,7 @@ function AddRevenueRow({ eventId }: { eventId: string }) {
               if (e.key === "Enter") handleSubmit();
               if (e.key === "Escape") setOpen(false);
             }}
-            className="h-7 w-24 text-sm bg-background border-green-400/40 focus-visible:ring-green-400/30"
+            className="h-7 w-24 text-base md:text-sm bg-background border-green-400/40 focus-visible:ring-green-400/30"
             disabled={isPending}
           />
         </div>

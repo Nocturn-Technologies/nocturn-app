@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { publishEvent, cancelEvent, completeEvent } from "@/app/actions/events";
 import { Button } from "@/components/ui/button";
 import { Send, XCircle, CheckCircle } from "lucide-react";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 export function EventStatusActions({
   eventId,
@@ -16,6 +17,7 @@ export function EventStatusActions({
   const router = useRouter();
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   async function handleAction(
     action: (id: string) => Promise<{ error: string | null }>,
@@ -90,8 +92,15 @@ export function EventStatusActions({
             <Button
               variant="destructive"
               className="active:scale-95 transition-all duration-200 min-h-[44px]"
-              onClick={() => {
-                if (!confirm("Are you sure you want to cancel this event? All ticket holders will be refunded.")) return;
+              onClick={async () => {
+                const ok = await confirm({
+                  title: "Cancel this event?",
+                  description: "All ticket holders will be refunded. This cannot be undone.",
+                  confirmText: "Cancel event",
+                  cancelText: "Keep event",
+                  destructive: true,
+                });
+                if (!ok) return;
                 handleAction(cancelEvent, "cancel");
               }}
               disabled={loading !== null}
@@ -117,6 +126,7 @@ export function EventStatusActions({
           </p>
         )}
       </div>
+      {confirmDialog}
     </div>
   );
 }

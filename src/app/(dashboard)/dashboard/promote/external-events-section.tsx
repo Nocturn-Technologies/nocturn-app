@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ExternalLink, Copy, Check, Trash2, MousePointerClick } from "lucide-react";
 import { AddExternalEventDialog } from "@/components/add-external-event-dialog";
 import { deleteExternalEvent } from "@/app/actions/external-events";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface ExternalEvent {
   id: string;
@@ -40,6 +41,7 @@ export function ExternalEventsSection({
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   async function handleCopy(token: string, eventId: string) {
     const link = `${appUrl}/go/${token}`;
@@ -49,7 +51,13 @@ export function ExternalEventsSection({
   }
 
   async function handleDelete(eventId: string) {
-    if (!confirm("Delete this external event?")) return;
+    const ok = await confirm({
+      title: "Delete this external event?",
+      description: "The tracking link will stop working.",
+      confirmText: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
     setDeletingId(eventId);
     setDeleteSuccess(null);
     await deleteExternalEvent(eventId);
@@ -152,6 +160,7 @@ export function ExternalEventsSection({
           </div>
         )}
       </CardContent>
+      {confirmDialog}
     </Card>
   );
 }

@@ -295,7 +295,7 @@ function EditableRow({
       ) : (
         <button
           onClick={() => { setEditValue(value); setEditing(true); }}
-          className="flex items-center gap-1.5 text-sm text-left min-w-0 group/row hover:text-nocturn-light active:scale-[0.98] transition-all duration-200"
+          className="flex items-center gap-1.5 text-sm text-left min-w-0 group/row hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 min-h-[44px]"
         >
           <span className="text-zinc-400 shrink-0">{label}:</span>
           <span className="font-medium text-foreground truncate">{value}</span>
@@ -349,7 +349,7 @@ function EditableDescription({ value, onSave }: { value: string; onSave: (v: str
     <div className="group/desc">
       <button
         onClick={() => { setEditValue(value); setEditing(true); }}
-        className="text-sm text-zinc-400 line-clamp-3 text-left flex items-start gap-1.5 hover:text-zinc-300 active:scale-[0.98] transition-all duration-200"
+        className="text-sm text-zinc-400 line-clamp-3 text-left flex items-start gap-1.5 hover:text-zinc-300 active:scale-[0.98] transition-all duration-200 min-h-[44px]"
       >
         <span className="flex-1">{value}</span>
         <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover/desc:opacity-100 transition-opacity shrink-0 mt-0.5" />
@@ -410,7 +410,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
         ) : (
           <button
             onClick={() => startEdit("name")}
-            className="text-sm font-medium text-white hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/name flex items-center gap-1"
+            className="text-sm font-medium text-white hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/name flex items-center gap-1 min-h-[44px]"
           >
             {tier.name}
             <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover/name:opacity-100 transition-opacity" />
@@ -430,7 +430,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
         ) : (
           <button
             onClick={() => startEdit("capacity")}
-            className="text-xs text-muted-foreground hover:text-zinc-300 active:scale-[0.98] transition-all duration-200 group/cap flex items-center gap-1"
+            className="text-xs text-muted-foreground hover:text-zinc-300 active:scale-[0.98] transition-all duration-200 group/cap flex items-center gap-1 min-h-[44px]"
           >
             {tier.capacity} tickets
             <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover/cap:opacity-100 transition-opacity" />
@@ -451,7 +451,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
       ) : (
         <button
           onClick={() => startEdit("price")}
-          className="text-sm font-semibold text-nocturn hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/price flex items-center gap-1"
+          className="text-sm font-semibold text-nocturn hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/price flex items-center gap-1 min-h-[44px]"
         >
           {tier.price === 0 ? "Free" : `$${tier.price}`}
           <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover/price:opacity-100 transition-opacity" />
@@ -1064,7 +1064,7 @@ const PLAYBOOK_ICONS: Record<string, React.ReactNode> = {
 };
 
 function PlaybookSelector({
-  eventTitle,
+  eventTitle: _eventTitle,
   onSelect,
   onSkip,
   applying,
@@ -1135,7 +1135,7 @@ function PlaybookSelector({
       <button
         onClick={onSkip}
         disabled={applying}
-        className="flex items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground hover:text-zinc-300 transition-colors"
+        className="flex items-center justify-center gap-1.5 py-2 text-xs text-muted-foreground hover:text-zinc-300 transition-colors min-h-[44px]"
       >
         <SkipForward className="h-3 w-3" />
         Skip — I&apos;ll set up tasks later
@@ -1195,7 +1195,7 @@ function CollapsibleSection({ label, children, defaultOpen = false }: { label: s
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 transition-colors py-1"
+        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 transition-colors py-1 min-h-[44px]"
       >
         {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         {label}
@@ -1247,7 +1247,7 @@ export default function NewEventPage() {
   const [preflight, setPreflight] = useState<"loading" | "ok" | "no-auth" | "no-collective">("loading");
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [visitedReview, setVisitedReview] = useState(false);
-  const [successBanner, setSuccessBanner] = useState(false);
+  const [_successBanner, _setSuccessBanner] = useState(false);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Auth + collective preflight check ──
@@ -2152,7 +2152,7 @@ export default function NewEventPage() {
                         { name: `Tier ${tiers.length + 1}`, price: 0, capacity: Math.max(remaining, 10) },
                       ]);
                     }}
-                    className="flex items-center gap-1.5 text-sm text-nocturn hover:text-nocturn-light transition-colors py-1"
+                    className="flex items-center gap-1.5 text-sm text-nocturn hover:text-nocturn-light transition-colors py-1 min-h-[44px]"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     Add tier
@@ -2185,7 +2185,7 @@ export default function NewEventPage() {
                           if (val) generateTiersFromPrice(val);
                         }
                       }}
-                      className="bg-card border-white/[0.06] rounded-xl min-h-[40px] text-sm focus:border-nocturn/50"
+                      className="bg-card border-white/[0.06] rounded-xl min-h-[40px] focus:border-nocturn/50"
                     />
                   </div>
                   <p className="text-[11px] text-muted-foreground/60">

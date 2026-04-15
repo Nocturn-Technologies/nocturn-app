@@ -41,6 +41,7 @@ import {
   Share2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 type Role = "admin" | "promoter" | "talent_buyer" | "door_staff" | "member";
 type Tab = "team" | "collabs" | "referral";
@@ -242,9 +243,16 @@ export default function MembersPage() {
 
   // Remove member
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   async function handleRemove(memberId: string) {
-    if (!confirm("Remove this member from the collective?")) return;
+    const ok = await confirm({
+      title: "Remove this member?",
+      description: "They'll lose access to the collective.",
+      confirmText: "Remove",
+      destructive: true,
+    });
+    if (!ok) return;
     const member = members.find((m) => m.id === memberId);
     if (member?.role === "admin") {
       const adminCount = members.filter((m) => m.role === "admin").length;
@@ -823,6 +831,7 @@ export default function MembersPage() {
           </Card>
         </>
       )}
+      {confirmDialog}
     </div>
   );
 }

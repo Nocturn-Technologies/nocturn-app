@@ -150,13 +150,13 @@ export default function HomePage() {
         <div className="flex items-center gap-3">
           <Link
             href="/login"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors px-3 py-2"
+            className="text-sm text-muted-foreground hover:text-foreground transition-colors px-3 min-h-[44px] inline-flex items-center"
           >
             Sign In
           </Link>
           <Link
             href="/signup"
-            className="inline-flex h-9 items-center justify-center rounded-lg bg-gradient-to-r from-nocturn to-nocturn-light px-5 text-sm font-semibold text-white hover:shadow-lg hover:shadow-nocturn/25 hover:brightness-110 transition-all duration-300"
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-gradient-to-r from-nocturn to-nocturn-light px-5 text-sm font-semibold text-white hover:shadow-lg hover:shadow-nocturn/25 hover:brightness-110 transition-all duration-300"
           >
             Get Started
           </Link>

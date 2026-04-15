@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeft, RotateCcw, AlertTriangle, Check, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { getRefundableTickets, getRefundedTickets, refundTicket, getRefundPolicy, toggleRefundPolicy } from "@/app/actions/refunds";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface RefundableTicket {
   id: string;
@@ -37,6 +38,7 @@ export default function RefundsPage() {
   const [error, setError] = useState<string | null>(null);
   const [refundsEnabled, setRefundsEnabled] = useState(true);
   const [togglingPolicy, setTogglingPolicy] = useState(false);
+  const { confirm, confirmDialog } = useConfirm();
 
   const loadTickets = useCallback(async () => {
     const [ticketResult, refundedResult, policyResult] = await Promise.all([
@@ -55,7 +57,13 @@ export default function RefundsPage() {
   }, [loadTickets]);
 
   async function handleRefund(ticketId: string) {
-    if (!confirm("Are you sure you want to refund this ticket? This cannot be undone.")) return;
+    const ok = await confirm({
+      title: "Refund this ticket?",
+      description: "The buyer will be refunded via Stripe. This cannot be undone.",
+      confirmText: "Refund",
+      destructive: true,
+    });
+    if (!ok) return;
 
     setRefunding(ticketId);
     setError(null);
@@ -130,7 +138,14 @@ export default function RefundsPage() {
         </div>
         <button
           onClick={async () => {
-            if (!confirm("Change the refund policy for this event?")) return;
+            const ok = await confirm({
+              title: "Change the refund policy?",
+              description: refundsEnabled
+                ? "Attendees will no longer be able to request refunds."
+                : "Attendees will be able to request refunds.",
+              confirmText: "Change policy",
+            });
+            if (!ok) return;
             setTogglingPolicy(true);
             const result = await toggleRefundPolicy(eventId, !refundsEnabled);
             if (!result.error) setRefundsEnabled(!refundsEnabled);
@@ -252,6 +267,7 @@ export default function RefundsPage() {
       <p className="text-[11px] text-muted-foreground text-center">
         Refunds are processed via Stripe. Buyers receive the ticket price back within 5-10 business days. The service fee is non-refundable.
       </p>
+      {confirmDialog}
     </div>
   );
 }

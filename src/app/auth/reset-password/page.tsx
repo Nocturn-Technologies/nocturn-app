@@ -58,7 +58,7 @@ export default function ResetPasswordPage() {
 
   if (done) {
     return (
-      <div className="flex min-h-dvh items-center justify-center px-4">
+      <div className="flex min-h-dvh overflow-x-hidden items-center justify-center px-4">
         <Card className="w-full max-w-sm">
           <CardHeader className="text-center">
             <CardTitle>Password updated</CardTitle>
@@ -70,7 +70,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center px-4">
+    <div className="flex min-h-dvh overflow-x-hidden items-center justify-center px-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Set new password</CardTitle>

@@ -594,7 +594,7 @@ function EventTasksPageInner() {
                   <button
                     key={key}
                     onClick={() => setFilterCategory(isActive ? null : key)}
-                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all active:scale-95 min-h-[32px] ${
+                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all active:scale-95 min-h-[44px] ${
                       isActive
                         ? cfg.color + " ring-1 ring-white/20 shadow-sm"
                         : filterCategory && !isActive
@@ -619,7 +619,7 @@ function EventTasksPageInner() {
             <div className="flex items-center gap-2 flex-wrap">
               {assignedOwners.length > 0 && (
                 <select
-                  className="rounded-lg border bg-background px-2.5 py-1.5 text-base md:text-xs min-h-[36px]"
+                  className="rounded-lg border bg-background px-2.5 py-1.5 text-base md:text-xs min-h-[44px]"
                   value={filterOwner ?? ""}
                   onChange={(e) => setFilterOwner(e.target.value || null)}
                 >
@@ -631,14 +631,14 @@ function EventTasksPageInner() {
               )}
               <button
                 onClick={() => setSortDir(sortDir === "asc" ? "desc" : "asc")}
-                className="inline-flex items-center gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[36px] hover:border-white/20 transition-colors"
+                className="inline-flex items-center gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[44px] hover:border-white/20 transition-colors"
               >
                 <CalendarClock className="h-3 w-3 text-muted-foreground" />
                 Due {sortDir === "asc" ? "↑ earliest" : "↓ latest"}
               </button>
               <button
                 onClick={() => setHideDone(!hideDone)}
-                className={`inline-flex items-center gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[36px] hover:border-white/20 transition-colors ${hideDone ? "border-nocturn/30 text-nocturn" : ""}`}
+                className={`inline-flex items-center gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[44px] hover:border-white/20 transition-colors ${hideDone ? "border-nocturn/30 text-nocturn" : ""}`}
               >
                 {hideDone ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
                 {hideDone ? "Done hidden" : "Show all"}
@@ -646,7 +646,7 @@ function EventTasksPageInner() {
               {hasActiveFilters && (
                 <button
                   onClick={() => { setFilterCategory(null); setFilterOwner(null); setSearchQuery(""); }}
-                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors min-h-[44px] px-2"
                 >
                   Clear filters
                 </button>
@@ -787,7 +787,7 @@ function EventTasksPageInner() {
             <div className="ml-auto flex items-center gap-2">
               <button
                 onClick={() => setHideDone(!hideDone)}
-                className={`inline-flex items-center gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[36px] hover:border-white/20 transition-colors ${hideDone ? "border-nocturn/30 text-nocturn" : ""}`}
+                className={`inline-flex items-center gap-1 rounded-lg border bg-background px-2.5 py-1.5 text-xs min-h-[44px] hover:border-white/20 transition-colors ${hideDone ? "border-nocturn/30 text-nocturn" : ""}`}
               >
                 {hideDone ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3 text-muted-foreground" />}
                 {hideDone ? "Done hidden" : "Show all"}
@@ -1085,11 +1085,11 @@ function TaskCard({
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveNote(); }
                   if (e.key === "Escape") { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }
                 }}
-                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-nocturn/50 resize-none"
+                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-base md:text-xs text-foreground outline-none focus:border-nocturn/50 resize-none"
               />
               <div className="flex gap-2">
-                <button onClick={saveNote} className="text-[11px] text-nocturn hover:text-nocturn-light font-medium min-h-[36px]">Save</button>
-                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[11px] text-muted-foreground hover:text-foreground min-h-[36px]">Cancel</button>
+                <button onClick={saveNote} className="text-[11px] text-nocturn hover:text-nocturn-light font-medium min-h-[44px] px-3">Save</button>
+                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[11px] text-muted-foreground hover:text-foreground min-h-[44px] px-3">Cancel</button>
               </div>
             </div>
           ) : (
@@ -1240,11 +1240,11 @@ function ContentTaskCard({
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); saveNote(); }
                   if (e.key === "Escape") { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }
                 }}
-                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-xs text-foreground outline-none focus:border-nocturn/50 resize-none"
+                className="w-full bg-zinc-900 border border-white/10 rounded-lg px-3 py-2 text-base md:text-xs text-foreground outline-none focus:border-nocturn/50 resize-none"
               />
               <div className="flex gap-2">
-                <button onClick={saveNote} className="text-[11px] text-nocturn hover:text-nocturn-light font-medium min-h-[36px]">Save</button>
-                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[11px] text-muted-foreground hover:text-foreground min-h-[36px]">Cancel</button>
+                <button onClick={saveNote} className="text-[11px] text-nocturn hover:text-nocturn-light font-medium min-h-[44px] px-3">Save</button>
+                <button onClick={() => { setNoteValue(typeof task.description === "string" ? task.description : ""); setEditingNote(false); }} className="text-[11px] text-muted-foreground hover:text-foreground min-h-[44px] px-3">Cancel</button>
               </div>
             </div>
           ) : (

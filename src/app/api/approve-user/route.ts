@@ -149,7 +149,7 @@ export async function GET(request: NextRequest) {
       `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nocturn - ${safeAction === "approve" ? "Approve" : "Deny"} User</title></head>
-<body style="background:#09090B;color:#FAFAFA;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+<body style="background:#09090B;color:#FAFAFA;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100dvh;margin:0;">
   <div style="max-width:420px;width:100%;padding:40px 24px;text-align:center;">
     <div style="margin-bottom:32px;">
       <span style="color:#7B2FF7;font-weight:700;font-size:20px;">nocturn.</span>
@@ -189,7 +189,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error("[approve-user] GET", err);
     return new NextResponse(
-      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error</title></head><body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;"><div><h1 style="color:#FB7185;">Something went wrong</h1><p style="color:#A1A1AA;">Please try again later.</p></div></body></html>`,
+      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error</title></head><body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100dvh;text-align:center;"><div><h1 style="color:#FB7185;">Something went wrong</h1><p style="color:#A1A1AA;">Please try again later.</p></div></body></html>`,
       { status: 500, headers: { "Content-Type": "text/html" } }
     );
   }
@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
         `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Account Denied</title></head>
-<body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;">
+<body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100dvh;text-align:center;">
   <div><h1 style="color:#FB7185;">Account Denied</h1><p style="color:#A1A1AA;">User ${safeUserId} has been denied.</p></div>
 </body></html>`,
         { headers: { "Content-Type": "text/html" } }
@@ -337,7 +337,7 @@ export async function POST(request: NextRequest) {
       `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Account Approved</title></head>
-<body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;">
+<body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100dvh;text-align:center;">
   <div><h1 style="color:#2DD4BF;">Account Approved!</h1><p style="color:#A1A1AA;">${safeEmail} now has full access to Nocturn.</p></div>
 </body></html>`,
       { headers: { "Content-Type": "text/html" } }

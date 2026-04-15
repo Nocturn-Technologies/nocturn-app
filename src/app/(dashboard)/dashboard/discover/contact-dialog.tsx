@@ -162,7 +162,7 @@ export function ContactDialog({
                 required
                 placeholder="Introduce yourself and what you're looking for..."
                 rows={4}
-                className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30"
+                className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-base md:text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 resize-none dark:bg-input/30"
               />
               <p className="text-xs text-muted-foreground text-right">
                 {message.length}/500

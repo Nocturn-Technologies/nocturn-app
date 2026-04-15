@@ -27,7 +27,7 @@ export default function AdminGate() {
   }
 
   return (
-    <div className="min-h-dvh bg-[#09090B] flex items-center justify-center px-4">
+    <div className="min-h-dvh overflow-x-hidden bg-[#09090B] flex items-center justify-center px-4">
       <form
         onSubmit={handleSubmit}
         className="w-full max-w-sm space-y-4"

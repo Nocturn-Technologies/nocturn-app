@@ -325,7 +325,7 @@ export function MarketplaceConnect({
               <Input
                 value={inviteLink}
                 readOnly
-                className="flex-1 text-xs"
+                className="flex-1 text-base md:text-xs"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
               />
               <Button

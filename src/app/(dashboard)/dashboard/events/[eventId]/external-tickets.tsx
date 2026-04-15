@@ -93,7 +93,7 @@ export function ExternalTicketsForm({ eventId, initial }: ExternalTicketsFormPro
           </CardTitle>
           <button
             onClick={() => setExpanded(false)}
-            className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent active:scale-95 transition-all duration-200"
+            className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-accent active:scale-95 transition-all duration-200 min-h-[44px] min-w-[44px]"
           >
             <ChevronUp className="h-4 w-4" />
           </button>
@@ -113,7 +113,7 @@ export function ExternalTicketsForm({ eventId, initial }: ExternalTicketsFormPro
                   key={p}
                   type="button"
                   onClick={() => setPlatform(p)}
-                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200 min-h-[36px] active:scale-95 ${
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all duration-200 min-h-[44px] active:scale-95 ${
                     platform === p
                       ? "bg-nocturn text-white shadow-sm shadow-nocturn/20"
                       : "bg-accent text-muted-foreground hover:text-foreground hover:bg-accent/80"
