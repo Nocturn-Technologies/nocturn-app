@@ -16,6 +16,20 @@ jobs:
     name: Playwright
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      # Placeholder env for `next build` — real backends are mocked at the
+      # network layer in tests/e2e/fixtures/mocks.ts, so these don't need to
+      # point at real services.
+      NEXT_PUBLIC_SUPABASE_URL: https://mock.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiJ9.e30.mockanon
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiJ9.e30.mockservice
+      STRIPE_SECRET_KEY: sk_test_mock
+      STRIPE_WEBHOOK_SECRET: whsec_mock
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      RESEND_API_KEY: re_mock
+      ANTHROPIC_API_KEY: sk-ant-mock
+      OPENAI_API_KEY: sk-mock
+      CRON_SECRET: mock-cron-secret
     steps:
       - uses: actions/checkout@v4
 
@@ -32,42 +46,16 @@ jobs:
 
       - name: Build Next.js
         run: npm run build
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
-          STRIPE_SECRET_KEY: ${{ secrets.E2E_STRIPE_TEST_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.E2E_STRIPE_WEBHOOK_SECRET }}
-          NEXT_PUBLIC_APP_URL: http://localhost:3000
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          CRON_SECRET: test-cron-secret
 
-      - name: Start Next.js
-        run: npm run start &
-        env:
-          PORT: 3000
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.E2E_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.E2E_SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.E2E_SUPABASE_SERVICE_ROLE_KEY }}
-          STRIPE_SECRET_KEY: ${{ secrets.E2E_STRIPE_TEST_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.E2E_STRIPE_WEBHOOK_SECRET }}
-          NEXT_PUBLIC_APP_URL: http://localhost:3000
-
-      - name: Wait for server
-        run: npx wait-on http://localhost:3000 --timeout 120000
-
-      - name: Run Playwright
+      - name: Run Playwright (starts server via webServer config)
         run: npm run test:e2e
         env:
-          PLAYWRIGHT_BASE_URL: http://localhost:3000
           CI: '1'
 
       - name: Upload Playwright report
-        if: always()
+        if: always() && !cancelled()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ github.run_id }}
           path: playwright-report/
           retention-days: 7
