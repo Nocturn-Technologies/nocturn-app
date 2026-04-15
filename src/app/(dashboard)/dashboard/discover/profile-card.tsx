@@ -2,10 +2,8 @@
 
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { User, MapPin, Heart, MessageSquare } from "lucide-react";
-import { TYPE_BADGE_COLORS, TYPE_LABELS_SHORT } from "@/lib/marketplace-constants";
-import { safeBgUrl } from "@/lib/utils";
+import { User, MapPin, Bookmark, MessageSquare, CheckCircle2 } from "lucide-react";
+import { TYPE_LABELS_SHORT } from "@/lib/marketplace-constants";
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -16,7 +14,7 @@ interface ProfileCardProps {
   onSave: () => void;
   onUnsave: () => void;
   onContact: () => void;
-  /** Connection labels shown in network view (e.g. "saved", "contacted") */
+  /** Optional connection labels shown in network view. */
   connectionTags?: string[];
 }
 
@@ -28,157 +26,131 @@ export function ProfileCard({
   onSave,
   onUnsave,
   onContact,
-  connectionTags,
 }: ProfileCardProps) {
   const type = profile.user_type ?? profile.type ?? "artist";
-  const badgeColor = TYPE_BADGE_COLORS[type] ?? "bg-muted text-muted-foreground";
   const typeLabel = TYPE_LABELS_SHORT[type] ?? type;
+
   const tags: string[] = [
     ...(profile.genres ?? []),
     ...(profile.services ?? []),
   ];
-  const shownTags = tags.slice(0, 3);
-  const extraCount = Math.max(0, tags.length - 3);
-
-  const hasRate = profile.rate_range;
+  const shownTags = tags.slice(0, 2);
+  const extraCount = Math.max(0, tags.length - 2);
+  const initials =
+    (profile.display_name as string)
+      ?.split(/\s+/)
+      .slice(0, 2)
+      .map((w: string) => w[0])
+      .join("")
+      .toUpperCase() ?? "·";
 
   return (
-    <Card className="overflow-hidden transition-all hover:border-white/[0.15] p-0 group bg-card/50">
-      <Link href={`/dashboard/discover/${profile.slug}`} className="block">
-        {/* Cover photo area */}
-        <div
-          className="relative h-24 bg-gradient-to-br from-nocturn/30 via-nocturn/10 to-transparent"
-          style={
-            profile.cover_photo_url
-              ? {
-                  backgroundImage: safeBgUrl(profile.cover_photo_url as string),
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                }
-              : undefined
-          }
-        >
-          {/* Type badge overlaid on cover */}
-          <span
-            className={`absolute top-2.5 right-2.5 rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider ${badgeColor}`}
-          >
-            {typeLabel}
-          </span>
+    <Card
+      className={`relative overflow-hidden p-0 group bg-card/40 transition-all duration-200 ${
+        isSaved
+          ? "border-nocturn/40 ring-1 ring-nocturn/20"
+          : "hover:border-white/[0.12]"
+      }`}
+    >
+      {isSaved && (
+        <div className="absolute top-2 right-2 z-20 inline-flex items-center gap-1 rounded-full bg-nocturn/15 border border-nocturn/30 px-2 py-0.5 text-[11px] font-semibold text-nocturn backdrop-blur-sm">
+          <CheckCircle2 className="h-3 w-3" />
+          Saved
+        </div>
+      )}
+
+      <Link
+        href={`/dashboard/discover/${profile.slug}`}
+        className="flex items-start gap-3 p-3"
+      >
+        {/* Avatar — the primary visual for people profiles */}
+        <div className="h-14 w-14 md:h-16 md:w-16 shrink-0 rounded-xl overflow-hidden bg-gradient-to-br from-nocturn/25 to-nocturn/5 flex items-center justify-center ring-1 ring-white/[0.06]">
+          {profile.avatar_url ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img
+              src={profile.avatar_url}
+              alt={profile.display_name}
+              className="h-full w-full object-cover"
+              loading="lazy"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = "none";
+              }}
+            />
+          ) : (
+            <span className="text-sm font-bold font-heading text-nocturn/80">
+              {initials}
+            </span>
+          )}
         </div>
 
-        {/* Content */}
-        <div className="px-3 pb-2.5">
-          {/* Avatar - overlapping cover and content */}
-          <div className="flex items-end -mt-5 mb-1.5">
-            <div className="h-10 w-10 shrink-0 rounded-full border-2 border-card bg-nocturn/10 flex items-center justify-center overflow-hidden shadow-md">
-              {profile.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.display_name}
-                  className="h-full w-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).style.display = "none";
-                  }}
-                />
-              ) : (
-                <User className="h-4 w-4 text-nocturn/60" />
-              )}
-            </div>
+        {/* Identity + role + location */}
+        <div className="flex-1 min-w-0 pt-0.5">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <h3 className="font-semibold font-heading text-sm leading-tight text-foreground truncate min-w-0">
+              {profile.display_name}
+            </h3>
+            <span className="shrink-0 rounded-full border border-white/[0.08] bg-white/[0.03] px-1.5 py-0.5 text-[11px] text-muted-foreground uppercase tracking-wide font-medium">
+              {typeLabel}
+            </span>
           </div>
 
-          {/* Name + City row */}
-          <h3 className="font-semibold font-heading truncate text-sm leading-tight">
-            {profile.display_name}
-          </h3>
-
           {profile.city && (
-            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+            <div className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground min-w-0">
               <MapPin className="h-2.5 w-2.5 shrink-0" />
               <span className="truncate">{profile.city}</span>
             </div>
           )}
 
-          {/* Genre / service tags */}
           {shownTags.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
+            <div className="mt-1.5 flex flex-wrap gap-1 min-w-0">
               {shownTags.map((tag) => (
                 <span
                   key={tag}
-                  className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-muted-foreground"
+                  className="inline-block rounded bg-white/[0.04] px-1.5 py-0.5 text-[11px] text-muted-foreground max-w-full truncate"
                 >
                   {tag.replace(/-/g, " ")}
                 </span>
               ))}
               {extraCount > 0 && (
-                <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                <span className="inline-block rounded bg-white/[0.04] px-1.5 py-0.5 text-[11px] text-muted-foreground">
                   +{extraCount}
                 </span>
               )}
             </div>
           )}
-
-          {/* Rate range */}
-          {hasRate && (
-            <p className="mt-1.5 text-xs font-medium text-nocturn">
-              {/* rate_range comes in as free text that usually already starts
-                  with "$" (see import-profile.ts prompt example "$500-1500").
-                  Only prefix "$" ourselves if the string doesn't already have
-                  one — otherwise we render "$$500-1500". */}
-              {typeof profile.rate_range === "string" && profile.rate_range.trim().startsWith("$")
-                ? profile.rate_range
-                : `$${profile.rate_range}`}
-            </p>
-          )}
-
-          {/* Connection tags (network view) */}
-          {connectionTags && connectionTags.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1">
-              {connectionTags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full bg-nocturn/10 px-2 py-0.5 text-[11px] font-medium text-nocturn capitalize"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </Link>
 
-      {/* Bottom action row */}
-      <div className="flex items-center gap-1.5 px-3 pb-3">
-        <Button
-          size="sm"
-          className="flex-1 bg-nocturn hover:bg-nocturn-light text-white h-9 min-h-[44px] text-xs"
+      {/* Action row — understated, not a second block of purple */}
+      <div className="flex items-center gap-1 px-3 pb-3 pt-0">
+        <button
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
             onContact();
           }}
+          className="flex-1 inline-flex items-center justify-center gap-1.5 min-h-[44px] rounded-lg border border-nocturn/30 bg-nocturn/10 hover:bg-nocturn/20 hover:border-nocturn/50 text-nocturn text-xs font-semibold transition-all px-3 active:scale-[0.98]"
         >
-          <MessageSquare className="mr-1.5 h-3 w-3" />
-          Contact
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          aria-label={isSaved ? "Unsave profile" : "Save profile"}
-          aria-pressed={isSaved}
-          className={`shrink-0 h-9 w-9 min-h-[44px] min-w-[44px] ${
-            isSaved
-              ? "text-red-400 hover:text-red-300"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
+          <MessageSquare className="h-3.5 w-3.5" />
+          Message
+        </button>
+        <button
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
-            isSaved ? onUnsave() : onSave();
+            if (isSaved) onUnsave();
+            else onSave();
           }}
+          aria-label={isSaved ? "Unsave profile" : "Save profile"}
+          aria-pressed={isSaved}
+          className={`shrink-0 inline-flex items-center justify-center min-h-[44px] min-w-[44px] rounded-lg border transition-all active:scale-[0.92] ${
+            isSaved
+              ? "border-nocturn/40 bg-nocturn/15 text-nocturn hover:bg-nocturn/25"
+              : "border-white/[0.08] bg-transparent text-muted-foreground hover:text-foreground hover:border-white/[0.15]"
+          }`}
         >
-          <Heart className={`h-3.5 w-3.5 ${isSaved ? "fill-red-400" : ""}`} />
-        </Button>
+          <Bookmark className={`h-3.5 w-3.5 ${isSaved ? "fill-nocturn" : ""}`} />
+        </button>
       </div>
     </Card>
   );
