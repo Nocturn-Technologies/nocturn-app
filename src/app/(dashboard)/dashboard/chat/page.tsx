@@ -721,8 +721,11 @@ export default function ChatPage() {
                 </div>
               )}
               {searchQuery && filteredCollabs.length === 0 && filteredTeam.length === 0 && filteredEvents.length === 0 && (
-                <div className="py-10 text-center">
-                  <p className="text-sm text-muted-foreground">
+                <div className="py-10 px-6 text-center animate-in fade-in duration-200">
+                  <div className="w-12 h-12 rounded-full bg-white/[0.04] flex items-center justify-center mx-auto mb-3">
+                    <Search size={18} className="text-muted-foreground/60" />
+                  </div>
+                  <p className="text-sm text-muted-foreground truncate">
                     No conversations matching &ldquo;{searchQuery}&rdquo;
                   </p>
                 </div>
@@ -734,13 +737,13 @@ export default function ChatPage() {
 
       {/* ── REQUESTS TAB ─────────────────────────────────────────────── */}
       {activeTab === "requests" && (
-        <div className="space-y-3">
+        <div className="space-y-3 animate-in fade-in duration-300">
           {inquiryError && (
-            <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex items-start justify-between gap-2">
-              <span>{inquiryError}</span>
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex items-start justify-between gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+              <span className="min-w-0 break-words">{inquiryError}</span>
               <button
                 onClick={() => setInquiryError(null)}
-                className="text-destructive/70 hover:text-destructive shrink-0"
+                className="text-destructive/70 hover:text-destructive active:scale-90 transition-all duration-200 shrink-0 min-h-[32px] min-w-[32px] flex items-center justify-center -mr-1 -mt-1"
                 aria-label="Dismiss error"
               >
                 <X className="h-4 w-4" />
@@ -748,8 +751,29 @@ export default function ChatPage() {
             </div>
           )}
           {!inquiriesLoaded ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-nocturn" />
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="rounded-2xl border border-white/[0.06] bg-card p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+                      <div className="space-y-2">
+                        <div className="h-3.5 w-28 rounded bg-white/[0.06] animate-pulse" />
+                        <div className="h-3 w-36 rounded bg-white/[0.04] animate-pulse" />
+                      </div>
+                    </div>
+                    <div className="h-4 w-16 rounded-full bg-white/[0.04] animate-pulse" />
+                  </div>
+                  <div className="h-12 rounded-lg bg-white/[0.03] animate-pulse" />
+                  <div className="flex items-center gap-2 pt-1">
+                    <div className="flex-1 h-10 rounded-md bg-white/[0.06] animate-pulse" />
+                    <div className="w-24 h-10 rounded-md bg-white/[0.04] animate-pulse" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : receivedInquiries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
@@ -769,22 +793,22 @@ export default function ChatPage() {
               return (
                 <div
                   key={inq.id}
-                  className="rounded-xl border border-white/[0.06] bg-card p-4 space-y-3"
+                  className="rounded-2xl border border-white/[0.06] bg-card p-4 space-y-3 hover:border-white/[0.1] transition-colors duration-200 animate-in fade-in duration-300"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
                       <Avatar name={inq.contact_name} size="sm" />
-                      <div>
-                        <p className="font-medium text-sm text-foreground">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-foreground truncate">
                           {inq.contact_name}
                         </p>
                         {inq.contact_email && (
-                          <p className="text-xs text-muted-foreground">{inq.contact_email}</p>
+                          <p className="text-xs text-muted-foreground truncate">{inq.contact_email}</p>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${
                         inq.status === "pending"
                           ? "bg-amber-500/10 text-amber-400"
                           : inq.status === "accepted"
@@ -793,14 +817,14 @@ export default function ChatPage() {
                       }`}>
                         {inq.status}
                       </span>
-                      <span className="text-[11px] text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                         {new Date(inq.created_at).toLocaleDateString("en", { month: "short", day: "numeric" })}
                       </span>
                     </div>
                   </div>
 
                   {inq.message && (
-                    <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed">
+                    <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed break-words">
                       {inq.message}
                     </div>
                   )}
@@ -809,7 +833,7 @@ export default function ChatPage() {
                     <div className="flex items-center gap-2 pt-1">
                       <Button
                         size="sm"
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-10 min-h-[44px] text-xs font-semibold"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white h-10 min-h-[44px] text-xs font-semibold transition-all duration-200"
                         disabled={isProcessing}
                         onClick={() => handleAcceptInquiry(inq.id)}
                       >
@@ -823,7 +847,7 @@ export default function ChatPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-10 min-h-[44px] text-xs text-muted-foreground hover:text-foreground"
+                        className="h-10 min-h-[44px] text-xs text-muted-foreground hover:text-foreground hover:bg-white/[0.04] active:scale-[0.98] transition-all duration-200"
                         disabled={isProcessing}
                         onClick={() => handleRejectInquiry(inq.id)}
                       >
@@ -851,10 +875,27 @@ export default function ChatPage() {
 
       {/* ── SENT TAB ─────────────────────────────────────────────────── */}
       {activeTab === "sent" && (
-        <div className="space-y-3">
+        <div className="space-y-3 animate-in fade-in duration-300">
           {!inquiriesLoaded ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-nocturn" />
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="rounded-2xl border border-white/[0.06] bg-card p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+                      <div className="space-y-2">
+                        <div className="h-3.5 w-32 rounded bg-white/[0.06] animate-pulse" />
+                        <div className="h-3 w-20 rounded bg-white/[0.04] animate-pulse" />
+                      </div>
+                    </div>
+                    <div className="h-4 w-20 rounded-full bg-white/[0.04] animate-pulse" />
+                  </div>
+                  <div className="h-12 rounded-lg bg-white/[0.03] animate-pulse" />
+                </div>
+              ))}
             </div>
           ) : sentInquiries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
@@ -879,22 +920,22 @@ export default function ChatPage() {
             sentInquiries.map((inq) => (
               <div
                 key={inq.id}
-                className="rounded-xl border border-white/[0.06] bg-card p-4 space-y-3"
+                className="rounded-2xl border border-white/[0.06] bg-card p-4 space-y-3 hover:border-white/[0.1] transition-colors duration-200 animate-in fade-in duration-300"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
                     <Avatar name={inq.profile_display_name || inq.contact_name} size="sm" />
-                    <div>
-                      <p className="font-medium text-sm text-foreground">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm text-foreground truncate">
                         {inq.profile_display_name || inq.contact_name}
                       </p>
                       {inq.inquiry_type !== "general" && (
-                        <p className="text-xs text-muted-foreground capitalize">{inq.inquiry_type}</p>
+                        <p className="text-xs text-muted-foreground capitalize truncate">{inq.inquiry_type}</p>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
                       inq.status === "pending"
                         ? "bg-amber-500/10 text-amber-400"
                         : inq.status === "accepted"
@@ -903,14 +944,14 @@ export default function ChatPage() {
                     }`}>
                       {inq.status === "pending" ? "awaiting reply" : inq.status}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                       {new Date(inq.created_at).toLocaleDateString("en", { month: "short", day: "numeric" })}
                     </span>
                   </div>
                 </div>
 
                 {inq.message && (
-                  <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed">
+                  <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed break-words">
                     {inq.message}
                   </div>
                 )}
@@ -962,8 +1003,20 @@ export default function ChatPage() {
           <div className="overflow-y-auto max-h-[55vh] px-5 pb-5">
             {/* Loading */}
             {collabSearching && (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-nocturn" />
+              <div className="space-y-1">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 p-3 rounded-xl"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="h-3.5 w-32 rounded bg-white/[0.06] animate-pulse" />
+                      <div className="h-3 w-20 rounded bg-white/[0.04] animate-pulse" />
+                    </div>
+                    <div className="w-10 h-3 rounded bg-white/[0.04] animate-pulse shrink-0" />
+                  </div>
+                ))}
               </div>
             )}
 
@@ -975,15 +1028,15 @@ export default function ChatPage() {
                     key={c.id}
                     onClick={() => handleStartCollab(c.id)}
                     disabled={startingCollab === c.id}
-                    className="w-full flex items-center gap-3 p-3 min-h-[48px] rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 text-left"
+                    className="w-full flex items-center gap-3 p-3 min-h-[48px] rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] active:scale-[0.99] transition-all duration-200 text-left disabled:opacity-60"
                   >
                     <Avatar name={c.name} size="sm" />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate text-foreground">
+                      <p className="font-semibold text-sm truncate text-foreground">
                         {c.name}
                       </p>
                       {c.city && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground truncate">
                           {c.city}
                         </p>
                       )}
@@ -1006,13 +1059,13 @@ export default function ChatPage() {
                 <button
                   onClick={() => handleInvite(collabQuery)}
                   disabled={inviting}
-                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-nocturn/30 hover:bg-nocturn/5 active:bg-nocturn/10 transition-colors duration-200 text-left"
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-nocturn/30 hover:bg-nocturn/5 hover:border-nocturn/50 active:bg-nocturn/10 active:scale-[0.99] transition-all duration-200 text-left disabled:opacity-60"
                 >
                   <div className="w-10 h-10 rounded-full bg-nocturn/10 flex items-center justify-center shrink-0">
                     <Mail size={18} className="text-nocturn" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-foreground">
+                    <p className="font-semibold text-sm text-foreground truncate">
                       Invite to Nocturn
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
@@ -1030,15 +1083,15 @@ export default function ChatPage() {
 
             {/* Invite sent confirmation */}
             {inviteSent && (
-              <div className="mt-2 flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <div className="mt-2 flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 animate-in fade-in zoom-in-95 duration-200">
                 <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
                   <Check size={18} className="text-emerald-400" />
                 </div>
-                <div>
-                  <p className="font-medium text-sm text-foreground">
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm text-foreground truncate">
                     Invitation sent
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground truncate">
                     The chat will activate when they join Nocturn
                   </p>
                 </div>
