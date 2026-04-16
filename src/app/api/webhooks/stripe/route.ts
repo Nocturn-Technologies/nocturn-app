@@ -31,7 +31,11 @@ import { createAdminClient } from "@/lib/supabase/config";
 import { logPaymentEvent } from "@/lib/payment-events";
 
 export async function POST(request: NextRequest) {
-  // TODO(audit): add replay-window check on event timestamp (reject events older than 5min) as defense-in-depth alongside signature verification
+  // NOTE: No replay-window check on event.created — Stripe's constructEvent()
+  // already validates the signature header timestamp (`t=`) against a 300s
+  // tolerance, which is freshly generated on each delivery (including retries).
+  // Adding an event.created check would reject legitimate Stripe retries, which
+  // can arrive up to 3 days after the original event.
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
 
