@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { revalidatePath } from "next/cache";
+import { sanitizePostgRESTInput } from "@/lib/utils";
 
 // Types
 export interface ChatMember {
@@ -158,7 +159,6 @@ export async function getChannelMembers(
 /**
  * Add a user to a channel. Caller must be admin or manager of the collective.
  */
-// TODO(audit): validate role against ["member","admin"] enum
 export async function addChannelMember(
   channelId: string,
   userId: string,
@@ -167,6 +167,9 @@ export async function addChannelMember(
   try {
     if (!channelId?.trim() || !userId?.trim()) {
       return { error: "Channel ID and user ID are required" };
+    }
+    if (!["member", "admin"].includes(role)) {
+      return { error: "Invalid role" };
     }
 
     const user = await getAuthenticatedUser();
@@ -350,18 +353,10 @@ export async function searchInvitableUsers(
       .is("deleted_at", null);
 
     if (query?.trim()) {
-      // TODO(audit): replace inline sanitizer with shared sanitizePostgRESTInput() from @/lib/utils + length cap
-      const sanitized = query
-        .replace(/\\/g, "")
-        .replace(/[%_.,()'"`]/g, "")
-        .trim();
+      const sanitized = sanitizePostgRESTInput(query.slice(0, 100));
       if (sanitized) {
-        const escaped = sanitized
-          .replace(/\\/g, "\\\\")
-          .replace(/%/g, "\\%")
-          .replace(/_/g, "\\_");
         teamQuery = teamQuery.or(
-          `users.full_name.ilike.%${escaped}%,users.email.ilike.%${escaped}%`
+          `users.full_name.ilike.%${sanitized}%,users.email.ilike.%${sanitized}%`
         );
       }
     }
@@ -440,24 +435,16 @@ export async function searchInvitableUsers(
 
     // For event channels with a search query, also search platform-wide artists and collectives
     if (channel.type === "event" && query?.trim()) {
-      const sanitized = query
-        .replace(/\\/g, "")
-        .replace(/[%_.,()'"`]/g, "")
-        .trim();
+      const sanitized = sanitizePostgRESTInput(query.slice(0, 100));
 
       if (sanitized) {
-        const escaped = sanitized
-          .replace(/\\/g, "\\\\")
-          .replace(/%/g, "\\%")
-          .replace(/_/g, "\\_");
-        const _lowerQuery = sanitized.toLowerCase();
 
         // Search platform artists by name (PostgREST .or() can't cross into joined tables)
         const { data: platformArtists } = await sb
           .from("artists")
           .select("id, user_id, name, users!inner(id, full_name, email)")
           .not("user_id", "is", null)
-          .ilike("name", `%${escaped}%`)
+          .ilike("name", `%${sanitized}%`)
           .limit(20);
 
         if (platformArtists) {
@@ -485,7 +472,7 @@ export async function searchInvitableUsers(
           .from("artists")
           .select("id, user_id, name, users!inner(id, full_name, email)")
           .not("user_id", "is", null)
-          .or(`full_name.ilike.%${escaped}%,email.ilike.%${escaped}%`, { referencedTable: "users" })
+          .or(`full_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%`, { referencedTable: "users" })
           .limit(20);
 
         if (platformArtistsByUser) {
@@ -512,7 +499,7 @@ export async function searchInvitableUsers(
         const { data: platformCollectives } = await sb
           .from("collectives")
           .select("id, name, collective_members!inner(user_id, role, users!inner(id, full_name, email))")
-          .ilike("name", `%${escaped}%`)
+          .ilike("name", `%${sanitized}%`)
           .neq("id", channel.collective_id)
           .limit(10);
 
