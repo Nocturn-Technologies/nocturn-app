@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/config";
 import Replicate from "replicate";
 import { rateLimitStrict } from "@/lib/rate-limit";
+import { generatePosterPrompt } from "@/app/actions/ai-poster";
 
 const REPLICATE_API_TOKEN = process.env.REPLICATE_API_TOKEN;
 
@@ -64,23 +66,69 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // TODO(audit): client sends arbitrary prompt bypassing server-side generatePosterPrompt. Require HMAC-signed prompt or regenerate server-side.
-  let prompt: string;
+  // Accept eventId + optional structured params; regenerate prompt server-side
+  let eventId: string;
+  let clientVibeTags: string[] | undefined;
+  let clientVenueName: string | undefined;
+  let clientStyleDirection: string | undefined;
   try {
     const body = await request.json();
-    prompt = body.prompt;
+    eventId = body.eventId;
+    clientVibeTags = Array.isArray(body.vibeTags)
+      ? (body.vibeTags as unknown[]).filter((t): t is string => typeof t === "string").slice(0, 10)
+      : undefined;
+    clientVenueName = typeof body.venueName === "string" ? body.venueName.slice(0, 100) : undefined;
+    clientStyleDirection = typeof body.styleDirection === "string" ? body.styleDirection.slice(0, 200) : undefined;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  try {
-    if (typeof prompt !== "string" || prompt.length > 2000) {
-      return NextResponse.json({ error: "Invalid or too-long prompt (max 2000 chars)" }, { status: 400 });
-    }
-    if (!prompt) {
-      return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
-    }
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!eventId || !uuidRegex.test(eventId)) {
+    return NextResponse.json({ error: "Missing or invalid eventId" }, { status: 400 });
+  }
 
+  // Fetch event and verify the authenticated user is a collective member
+  const admin = createAdminClient();
+  const { data: eventRow } = await admin
+    .from("events")
+    .select("title, vibe_tags, collective_id, venues(name, city)")
+    .eq("id", eventId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (!eventRow) {
+    return NextResponse.json({ error: "Event not found" }, { status: 404 });
+  }
+
+  const ev = eventRow as unknown as { title: string; vibe_tags: string[] | null; collective_id: string; venues: { name: string; city: string } | null };
+
+  const { count: memberCount } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("collective_id", ev.collective_id)
+    .eq("user_id", authedUserId)
+    .is("deleted_at", null);
+
+  if (!memberCount) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+  }
+
+  // Generate prompt server-side from structured event data
+  const venue = ev.venues;
+  const { prompt, error: promptError } = await generatePosterPrompt({
+    title: ev.title,
+    genre: clientVibeTags ?? (ev.vibe_tags || []),
+    venueName: clientVenueName ?? venue?.name,
+    city: venue?.city,
+    styleDirection: clientStyleDirection,
+  });
+
+  if (promptError || !prompt) {
+    return NextResponse.json({ error: "Failed to generate poster prompt" }, { status: 500 });
+  }
+
+  try {
     const replicate = new Replicate({ auth: REPLICATE_API_TOKEN });
     let imageUrl: string | null = null;
 

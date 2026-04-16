@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { updateEventDesign, getEventDesign } from "@/app/actions/events";
-import { generatePosterPrompt } from "@/app/actions/ai-poster";
 import { uploadFlyerAndExtractTheme, type EventTheme } from "@/app/actions/ai-theme";
 
 const VIBE_OPTIONS = [
@@ -186,19 +185,16 @@ export default function EventDesignPage() {
     setGeneratedUrl(null);
 
     try {
-      // Step 1: Claude crafts prompt for BACKGROUND ART ONLY (no text)
-      const { prompt } = await generatePosterPrompt({
-        title: eventTitle,
-        genre: vibeTags,
-        venueName: posterVenue || undefined,
-        styleDirection: posterStyle || undefined,
-      });
-
-      // Step 2: Replicate generates the background art
+      // Generate poster: prompt is generated server-side, then Replicate renders background art
       const res = await fetch("/api/generate-poster", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({
+          eventId,
+          vibeTags,
+          venueName: posterVenue || undefined,
+          styleDirection: posterStyle || undefined,
+        }),
       });
 
       const data = await res.json();
@@ -209,7 +205,7 @@ export default function EventDesignPage() {
         return;
       }
 
-      // Step 3: Composite text on top using canvas
+      // Composite text on top using canvas
       const composited = await compositeTextOnPoster(data.imageUrl, {
         title: eventTitle,
         djs: posterDJs,
