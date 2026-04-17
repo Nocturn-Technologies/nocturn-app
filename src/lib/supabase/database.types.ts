@@ -3406,6 +3406,13 @@ export type Database = {
         }
         Returns: Json
       }
+      get_collective_revenue: {
+        Args: { p_collective_ids: string[] }
+        Returns: {
+          ticket_count: number
+          total_revenue: number
+        }[]
+      }
       get_user_collectives: { Args: never; Returns: string[] }
       has_collective_role: {
         Args: {
