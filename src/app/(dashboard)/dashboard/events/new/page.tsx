@@ -1314,6 +1314,53 @@ interface MoneyRowProps {
   onDelete?: () => void;
 }
 
+// Controlled numeric input with local string state so typing "0" actually
+// shows "0" (instead of the `value || ""` pattern that treated 0 as empty
+// and made it impossible to enter zero). Syncs external updates — like the
+// auto-fill travel button — back into the text when the parent's number
+// diverges from what the user last typed.
+function NumberInput({
+  value,
+  onChange,
+  placeholder,
+  className,
+  inputProps,
+}: {
+  value: number;
+  onChange: (n: number) => void;
+  placeholder?: string;
+  className?: string;
+  inputProps?: React.InputHTMLAttributes<HTMLInputElement>;
+}) {
+  const [text, setText] = useState<string>(value > 0 ? String(value) : "");
+  const prevExternal = useRef<number>(value);
+
+  useEffect(() => {
+    if (value === prevExternal.current) return;
+    prevExternal.current = value;
+    // Only sync from external if our local text no longer parses to the new value
+    // (prevents clobbering intermediate states like "1." → would reset to "1").
+    const asNum = parseFloat(text);
+    if (asNum !== value) setText(value > 0 ? String(value) : value === 0 ? "" : "");
+  }, [value, text]);
+
+  return (
+    <Input
+      type="number"
+      inputMode="decimal"
+      placeholder={placeholder ?? "0"}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const parsed = parseFloat(e.target.value);
+        onChange(Number.isFinite(parsed) ? parsed : 0);
+      }}
+      className={className}
+      {...inputProps}
+    />
+  );
+}
+
 function MoneyRow({ label, placeholder, value, onChange, eventCurrency, Icon, onDelete }: MoneyRowProps) {
   // No client-side FX here — we'd need to ship rates to the browser. The
   // "≈ converted" hint fires when the user taps Calculate Budget (result
@@ -1338,12 +1385,10 @@ function MoneyRow({ label, placeholder, value, onChange, eventCurrency, Icon, on
         )}
       </div>
       <div className="flex gap-1.5">
-        <Input
-          type="number"
-          inputMode="decimal"
+        <NumberInput
+          value={value.amount}
+          onChange={(n) => onChange({ ...value, amount: n })}
           placeholder={placeholder ?? "0"}
-          value={value.amount || ""}
-          onChange={(e) => onChange({ ...value, amount: parseFloat(e.target.value) || 0 })}
           className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50 flex-1"
         />
         <select
@@ -1572,31 +1617,25 @@ function BudgetStep({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Room rental</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={draft.venueRental || ""}
-                onChange={(e) => setDraft(prev => ({ ...prev, venueRental: parseInt(e.target.value) || 0 }))}
+              <NumberInput
+                value={draft.venueRental}
+                onChange={(n) => setDraft(prev => ({ ...prev, venueRental: n }))}
                 className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Bar minimum</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={draft.barMinimum || ""}
-                onChange={(e) => setDraft(prev => ({ ...prev, barMinimum: parseInt(e.target.value) || 0 }))}
+              <NumberInput
+                value={draft.barMinimum}
+                onChange={(n) => setDraft(prev => ({ ...prev, barMinimum: n }))}
                 className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
               />
             </div>
             <div className="space-y-1">
               <label className="text-xs text-muted-foreground">Deposit</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={draft.deposit || ""}
-                onChange={(e) => setDraft(prev => ({ ...prev, deposit: parseInt(e.target.value) || 0 }))}
+              <NumberInput
+                value={draft.deposit}
+                onChange={(n) => setDraft(prev => ({ ...prev, deposit: n }))}
                 className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
               />
             </div>
@@ -1631,12 +1670,9 @@ function BudgetStep({
                     </button>
                   </div>
                   <div className="flex gap-1.5">
-                    <Input
-                      type="number"
-                      inputMode="decimal"
-                      placeholder="0"
-                      value={p.amount || ""}
-                      onChange={(e) => updateProdItem(i, { amount: parseFloat(e.target.value) || 0 })}
+                    <NumberInput
+                      value={p.amount}
+                      onChange={(n) => updateProdItem(i, { amount: n })}
                       className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50 flex-1"
                     />
                     <select
