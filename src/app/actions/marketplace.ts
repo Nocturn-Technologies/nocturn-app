@@ -533,9 +533,19 @@ export async function sendInquiry(data: {
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not logged in" };
 
-  // Rate limit: 5 inquiries per minute per user (sends email notifications)
+  // Rate limits: per-user (spam velocity) AND per (sender, recipient) pair
+  // (prevents one sender from repeatedly messaging the same target, which
+  // the per-user limit alone allows). Also triggers recipient email each
+  // time, so without the pair limit a single attacker can inbox-spam a
+  // target 5/min × N attackers without the target blocking them.
   const { success: rlOk } = await rateLimitStrict(`inquiry:${user.id}`, 5, 60_000);
   if (!rlOk) return { error: "Too many messages. Please wait a moment." };
+  const { success: pairOk } = await rateLimitStrict(
+    `inquiry:pair:${user.id}:${data.toProfileId}`,
+    1,
+    86_400_000, // one per target per day
+  );
+  if (!pairOk) return { error: "You've already messaged this collective today. Wait for their reply." };
 
   const admin = createAdminClient();
 

@@ -333,15 +333,10 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
 
 // ── Add Expense ──────────────────────────────────────────────────────
 
-const VALID_EXPENSE_CATEGORIES = [
-  "talent", "venue", "production", "sound", "lighting",
-  "staffing", "security", "marketing", "hospitality",
-  "transportation", "equipment", "decor", "insurance",
-  "permits", "booking_fee",
-  // Legacy values still accepted for backward compat
-  "dj", "artist", "promotion", "staff", "miscellaneous",
-  "other",
-];
+// Canonical + legacy categories — single source of truth in
+// `@/lib/expense-categories` so this file, settlements.ts, budget-planner.ts,
+// and the wizard never diverge (they used to).
+import { ACCEPTED_EXPENSE_CATEGORIES as VALID_EXPENSE_CATEGORIES } from "@/lib/expense-categories";
 
 export async function addExpense(eventId: string, data: { description: string; category: string; amount: number }) {
   try {

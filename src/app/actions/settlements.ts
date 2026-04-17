@@ -5,6 +5,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { isValidUUID } from "@/lib/utils";
+import { isAcceptedExpenseCategory } from "@/lib/expense-categories";
 
 // Generate a settlement for a completed event
 export async function generateSettlement(eventId: string) {
@@ -346,18 +347,13 @@ export async function addEventExpense(input: {
   amount: number;
 }) {
   try {
-  // Input validation
-  const VALID_EXPENSE_CATEGORIES = [
-    "talent", "venue", "production", "sound", "lighting", "staffing", "security",
-    "marketing", "hospitality", "transportation", "equipment", "decor", "insurance",
-    "permits", "booking_fee",
-    // Legacy values
-    "supply", "artist", "travel", "staff", "dj", "promotion", "miscellaneous",
-    "other",
-  ];
+  // Input validation — category list is shared via `@/lib/expense-categories`
+  // so this file, event-financials.ts, and the wizard all agree on what
+  // "valid" means (they used to diverge — `supply` and `travel` were only
+  // accepted here, `dj`/`artist` only on event-financials, etc.)
   if (!input.eventId || typeof input.eventId !== "string") return { error: "Invalid event ID" };
   if (!isValidUUID(input.eventId)) return { error: "Invalid event ID format" };
-  if (!VALID_EXPENSE_CATEGORIES.includes(input.category)) return { error: "Invalid expense category" };
+  if (!isAcceptedExpenseCategory(input.category)) return { error: "Invalid expense category" };
   if (!input.description || input.description.length > 500) return { error: "Description is required and must be under 500 characters" };
   if (!Number.isFinite(input.amount) || input.amount <= 0 || input.amount > 1000000) return { error: "Amount must be between $0.01 and $1,000,000" };
 
