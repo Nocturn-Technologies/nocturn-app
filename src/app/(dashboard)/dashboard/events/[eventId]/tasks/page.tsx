@@ -997,6 +997,23 @@ function TaskCard({
   const dueLabel = relativeDue(task);
   const hasNote = typeof task.description === "string" && task.description.length > 0;
 
+  // "In progress" pop-in hint — the circle → clock → check cycle isn't obvious
+  // from the icon alone, so when the user lands on the intermediate state we
+  // briefly show a pill telling them to tap again to finish.
+  const [showInProgressHint, setShowInProgressHint] = useState(false);
+  const prevStatusRef = useRef<string>(task.status as string);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const curr = task.status as string;
+    if (curr === "in_progress" && prev !== "in_progress") {
+      setShowInProgressHint(true);
+      const t = setTimeout(() => setShowInProgressHint(false), 1800);
+      prevStatusRef.current = curr;
+      return () => clearTimeout(t);
+    }
+    prevStatusRef.current = curr;
+  }, [task.status]);
+
   useEffect(() => {
     if (editingNote && noteRef.current) noteRef.current.focus();
   }, [editingNote]);
@@ -1008,15 +1025,26 @@ function TaskCard({
 
   return (
     <div
-      className={`rounded-lg border p-3 transition-all duration-200 hover:border-nocturn/20 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : ""}`}
+      className={`relative rounded-lg border p-3 transition-all duration-200 hover:border-nocturn/20 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : ""}`}
     >
       <div className="flex items-start gap-3">
-        <button
-          onClick={() => onStatusChange(task.id as string, nextStatus)}
-          className="shrink-0 mt-0.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full active:scale-90 active:bg-white/10 transition-all duration-150"
-        >
-          {statusIcons[task.status as string]}
-        </button>
+        <div className="relative shrink-0">
+          <button
+            onClick={() => onStatusChange(task.id as string, nextStatus)}
+            className="min-w-[44px] min-h-[44px] mt-0.5 flex items-center justify-center rounded-full active:scale-90 active:bg-white/10 transition-all duration-150"
+          >
+            {statusIcons[task.status as string]}
+          </button>
+          {showInProgressHint && (
+            <span
+              role="status"
+              className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-blue-500 text-white text-[11px] font-semibold px-2.5 py-1 shadow-lg shadow-blue-500/30 animate-in-progress-pop z-10"
+            >
+              In progress — tap again to finish
+              <span className="absolute left-1/2 -top-1 -translate-x-1/2 w-2 h-2 bg-blue-500 rotate-45" />
+            </span>
+          )}
+        </div>
         <button
           type="button"
           className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"

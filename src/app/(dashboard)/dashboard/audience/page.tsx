@@ -279,85 +279,96 @@ export default function AudiencePage() {
         </div>
       </div>
 
-      {/* ── Reach Agent Insights Panel ──────────────────────────── */}
+      {/* ── Reach Agent Insights Panel ──────────────────────────────
+          Redesigned to a denser 2-col grid (1-col on mobile) with each
+          insight as a compact card: emoji chip left, 2-line title/body,
+          inline action link at the bottom. The old layout stacked 5
+          full-width cards which made the screen feel longer than it
+          needed to. */}
       {reachInsights.length > 0 && (
-        <Card className="border-l-4 border-l-nocturn bg-card">
-          <CardContent className="p-4">
-            <button
-              onClick={() => setInsightsExpanded(!insightsExpanded)}
-              className="flex items-center gap-2 w-full text-left min-h-[44px]"
-            >
-              <Sparkles className="h-4 w-4 text-nocturn shrink-0" />
-              <h2 className="text-sm font-bold flex-1">Reach Insights</h2>
-              <span className="text-[11px] text-muted-foreground mr-1">
-                {reachInsights.length} action{reachInsights.length !== 1 ? "s" : ""}
-              </span>
-              <ChevronDown
-                className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
-                  insightsExpanded ? "rotate-0" : "-rotate-90"
-                }`}
-              />
-            </button>
+        <div className="rounded-2xl border border-nocturn/20 bg-gradient-to-br from-nocturn/[0.04] via-transparent to-transparent p-3">
+          <button
+            onClick={() => setInsightsExpanded(!insightsExpanded)}
+            className="flex items-center gap-2 w-full text-left min-h-[32px] px-1"
+          >
+            <Sparkles className="h-4 w-4 text-nocturn shrink-0" />
+            <h2 className="text-sm font-bold flex-1">Reach Insights</h2>
+            <span className="text-[11px] text-muted-foreground bg-nocturn/10 rounded-full px-2 py-0.5">
+              {reachInsights.length} action{reachInsights.length !== 1 ? "s" : ""}
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${
+                insightsExpanded ? "rotate-0" : "-rotate-90"
+              }`}
+            />
+          </button>
 
-            {insightsExpanded && (
-              <div className="mt-3 space-y-3">
-                {reachInsights.map((insight) => (
-                  <div
-                    key={insight.id}
-                    className="rounded-lg bg-muted/30 p-3 space-y-2"
-                  >
-                    <div className="flex items-start gap-2">
-                      <span className="text-base shrink-0 mt-0.5">{insight.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-foreground">
-                          {insight.title}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                          {insight.description}
-                        </p>
+          {insightsExpanded && (
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {reachInsights.map((insight) => {
+                const isCopy = insight.actionType !== "navigate";
+                const justCopied = copiedInsight === insight.id;
+                const ActionWrapper: React.ComponentType<{ children: React.ReactNode }> = isCopy
+                  ? ({ children }) => (
+                      <button
+                        type="button"
+                        onClick={() => handleInsightAction(insight)}
+                        className="group/card w-full text-left"
+                      >
+                        {children}
+                      </button>
+                    )
+                  : ({ children }) => (
+                      <Link href={insight.actionTarget ?? "#"} className="group/card block">
+                        {children}
+                      </Link>
+                    );
+
+                return (
+                  <ActionWrapper key={insight.id}>
+                    <div className="h-full flex flex-col rounded-xl border border-white/5 bg-zinc-900/40 hover:border-nocturn/30 hover:bg-zinc-900/60 transition-all duration-200 p-3 gap-2">
+                      <div className="flex items-start gap-2.5">
+                        <span className="shrink-0 h-8 w-8 rounded-lg bg-nocturn/10 border border-nocturn/15 grid place-items-center text-base leading-none">
+                          {insight.icon}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-semibold text-foreground leading-tight">
+                            {insight.title}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground mt-1 leading-snug line-clamp-3">
+                            {insight.description}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                    {insight.action && (
-                      <div className="pl-7">
-                        {insight.actionType === "navigate" ? (
-                          <Link href={insight.actionTarget ?? "#"}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-nocturn hover:text-nocturn-light gap-1"
-                            >
-                              {insight.action}
-                              <ExternalLink className="h-3 w-3" />
-                            </Button>
-                          </Link>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs text-nocturn hover:text-nocturn-light gap-1"
-                            onClick={() => handleInsightAction(insight)}
-                          >
-                            {copiedInsight === insight.id ? (
+                      {insight.action && (
+                        <div className="mt-auto flex items-center gap-1 text-[11px] font-medium text-nocturn group-hover/card:text-nocturn-light transition-colors">
+                          {isCopy ? (
+                            justCopied ? (
                               <>
                                 <Check className="h-3 w-3 text-emerald-400" />
-                                Copied!
+                                <span className="text-emerald-400">Copied!</span>
                               </>
                             ) : (
                               <>
                                 <Copy className="h-3 w-3" />
-                                {insight.action}
+                                <span>{insight.action}</span>
                               </>
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                            )
+                          ) : (
+                            <>
+                              <span>{insight.action}</span>
+                              <ExternalLink className="h-3 w-3" />
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </ActionWrapper>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Per-event filter */}

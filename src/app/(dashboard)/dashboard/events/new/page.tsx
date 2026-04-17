@@ -1037,35 +1037,37 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
   const priceIndex = priceMultiplier < 1 ? 0 : priceMultiplier > 1 ? 2 : 1;
   const baseTier0Price = baseTiersRef.current[0]?.price || 0;
 
+  // Slider range is 0.5x–2.0x, so the 1.0x "base" sits at 33.3% of the track,
+  // not the middle. Position the three tick labels absolutely at their true
+  // track positions so "$20 (base)" doesn't look centered when it isn't.
+  const basePct = ((1.0 - 0.5) / (2.0 - 0.5)) * 100; // 33.33%
+
   return (
     <div className="rounded-2xl border border-white/5 bg-zinc-900/50 p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <TrendingUp className="h-3.5 w-3.5 text-nocturn" />
-          <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-            Revenue Forecast
-          </span>
+      {/* Headline row — title, chip, and big profit number share one horizontal
+          band so the card feels level instead of three stacked sub-headers. */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="h-3.5 w-3.5 text-nocturn" />
+            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+              Revenue Forecast
+            </span>
+          </div>
+          <p className={`mt-1.5 text-3xl font-bold leading-none ${totalExpenses > 0 ? (projections[2].profit >= 0 ? "text-green-400" : "text-red-400") : "text-white"}`}>
+            {totalExpenses > 0
+              ? `${projections[2].profit >= 0 ? "" : "-"}${fmtCurrency(projections[2].profit)}`
+              : fmtCurrency(projections[2].net)}
+          </p>
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {totalExpenses > 0
+              ? `${fmtCurrency(projections[2].net)} − ${fmtCurrency(totalExpenses)} expenses at sell-out`
+              : "max net revenue at sell-out"}
+          </p>
         </div>
-        <span className="text-[11px] text-muted-foreground bg-zinc-800 rounded-full px-2 py-0.5">
+        <span className="shrink-0 text-[11px] text-muted-foreground bg-zinc-800 rounded-full px-2 py-0.5">
           {priceLabels[priceIndex]} pricing
         </span>
-      </div>
-
-      {/* Headline */}
-      <div className="text-center py-2">
-        <p className={`text-3xl font-bold ${totalExpenses > 0 ? (projections[2].profit >= 0 ? "text-green-400" : "text-red-400") : "text-white"}`}>
-          {totalExpenses > 0
-            ? `${projections[2].profit >= 0 ? "" : "-"}$${Math.abs(projections[2].profit).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-            : `$${projections[2].net.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          {totalExpenses > 0 ? "estimated profit at sell-out" : "max net revenue at sell-out"}
-        </p>
-        {totalExpenses > 0 && (
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            ${projections[2].net.toLocaleString(undefined, { maximumFractionDigits: 0 })} revenue − ${totalExpenses.toLocaleString()} expenses
-          </p>
-        )}
       </div>
 
       {/* Price slider */}
@@ -1085,10 +1087,12 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
           onChange={(e) => handleSliderChange(parseFloat(e.target.value))}
           className="w-full h-1.5 rounded-full appearance-none bg-zinc-800 accent-[#7B2FF7] cursor-pointer"
         />
-        <div className="flex justify-between text-[11px] text-muted-foreground">
-          <span>${Math.round(baseTier0Price * 0.5)}</span>
-          <span>${baseTier0Price} (base)</span>
-          <span>${Math.round(baseTier0Price * 2)}</span>
+        <div className="relative h-4 text-[11px] text-muted-foreground">
+          <span className="absolute left-0 -translate-x-0">${Math.round(baseTier0Price * 0.5)}</span>
+          <span className="absolute -translate-x-1/2" style={{ left: `${basePct}%` }}>
+            ${baseTier0Price} (base)
+          </span>
+          <span className="absolute right-0 translate-x-0">${Math.round(baseTier0Price * 2)}</span>
         </div>
       </div>
 
@@ -1103,7 +1107,9 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
         </div>
       )}
 
-      {/* Scenario comparison */}
+      {/* Scenario comparison — emoji + label + value on one flex row, progress
+          bar as a full-width thin track beneath so the three rows line up
+          horizontally instead of nesting inside a 2-line cell. */}
       <div className="space-y-1.5">
         {projections.map((p) => {
           const displayValue = totalExpenses > 0 ? p.profit : p.net;
@@ -1111,31 +1117,29 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
           return (
             <div
               key={p.label}
-              className="flex items-center gap-3 rounded-xl bg-zinc-800/30 px-3 py-2 transition-colors duration-200 hover:bg-zinc-800/50"
+              className="rounded-xl bg-zinc-800/30 px-3 py-2 space-y-1.5 transition-colors duration-200 hover:bg-zinc-800/50"
             >
-              <span className="text-sm">{p.emoji}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] text-muted-foreground">
-                    {p.label}
-                    <span className="text-muted-foreground/70 ml-1">({p.ticketsSold} tix)</span>
-                  </span>
-                  <span className={`text-xs font-bold ${totalExpenses > 0 ? (isLoss ? "text-red-400" : "text-green-400") : "text-white"}`}>
-                    {isLoss ? "-" : ""}${Math.abs(displayValue).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    {totalExpenses > 0 && <span className="text-[11px] text-muted-foreground ml-1">{isLoss ? "loss" : "profit"}</span>}
-                  </span>
-                </div>
-                <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{
-                      width: `${p.rate * 100}%`,
-                      backgroundColor: totalExpenses > 0
-                        ? (isLoss ? "#ef4444" : "#22c55e")
-                        : (p.rate >= 1 ? "#7B2FF7" : p.rate >= 0.75 ? "#22c55e" : "#eab308"),
-                    }}
-                  />
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm w-5 text-center shrink-0">{p.emoji}</span>
+                <span className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">
+                  {p.label}
+                  <span className="text-muted-foreground/70 ml-1">({p.ticketsSold} tix)</span>
+                </span>
+                <span className={`text-xs font-bold shrink-0 tabular-nums ${totalExpenses > 0 ? (isLoss ? "text-red-400" : "text-green-400") : "text-white"}`}>
+                  {isLoss ? "-" : ""}{fmtCurrency(displayValue)}
+                  {totalExpenses > 0 && <span className="text-[11px] text-muted-foreground ml-1 font-normal">{isLoss ? "loss" : "profit"}</span>}
+                </span>
+              </div>
+              <div className="h-1 rounded-full bg-zinc-800 overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${p.rate * 100}%`,
+                    backgroundColor: totalExpenses > 0
+                      ? (isLoss ? "#ef4444" : "#22c55e")
+                      : (p.rate >= 1 ? "#7B2FF7" : p.rate >= 0.75 ? "#22c55e" : "#eab308"),
+                  }}
+                />
               </div>
             </div>
           );
