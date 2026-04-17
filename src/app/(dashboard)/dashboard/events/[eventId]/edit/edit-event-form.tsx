@@ -504,7 +504,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                       </select>
                     </div>
                     {showFxHint && (
-                      <p className="text-[11px] text-muted-foreground/60">
+                      <p className="text-[11px] text-muted-foreground/70">
                         Converts to {eventCurrency.toUpperCase()} on save
                       </p>
                     )}
@@ -538,7 +538,7 @@ export function EditEventForm({ event }: { event: EventData }) {
           </div>
 
           {expenses.length === 0 && (
-            <p className="text-[11px] text-muted-foreground/60">
+            <p className="text-[11px] text-muted-foreground/70">
               Tap a chip to add an expense row. Stored per-event — edits here update the P&amp;L.
             </p>
           )}

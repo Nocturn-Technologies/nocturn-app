@@ -271,7 +271,7 @@ export default function InquiriesPage() {
                 )}
 
                 {inq.status === "rejected" && (
-                  <p className="text-xs text-muted-foreground/60 italic">Dismissed</p>
+                  <p className="text-xs text-muted-foreground/70 italic">Dismissed</p>
                 )}
               </div>
             );

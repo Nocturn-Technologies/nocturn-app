@@ -210,8 +210,8 @@ function SectionHeader({
   if (count === 0) return null;
   return (
     <div className="flex items-center gap-2 px-4 py-2.5 select-none">
-      <span className="text-muted-foreground/60">{icon}</span>
-      <h2 className="text-[11px] font-semibold font-heading text-muted-foreground/60 uppercase tracking-widest">
+      <span className="text-muted-foreground/70">{icon}</span>
+      <h2 className="text-[11px] font-semibold font-heading text-muted-foreground/70 uppercase tracking-widest">
         {label}
       </h2>
       <span className="text-[11px] font-medium text-muted-foreground/40 bg-white/[0.04] rounded-full px-1.5 py-0.5">
@@ -873,7 +873,7 @@ export default function ChatPage() {
                   )}
 
                   {inq.status === "rejected" && (
-                    <p className="text-xs text-muted-foreground/60 italic">Dismissed</p>
+                    <p className="text-xs text-muted-foreground/70 italic">Dismissed</p>
                   )}
                 </div>
               );
@@ -966,7 +966,7 @@ export default function ChatPage() {
                 )}
 
                 {inq.status === "pending" && (
-                  <p className="text-xs text-muted-foreground/60 flex items-center gap-1.5">
+                  <p className="text-xs text-muted-foreground/70 flex items-center gap-1.5">
                     <Clock className="h-3 w-3" /> Waiting for them to respond
                   </p>
                 )}

@@ -332,7 +332,7 @@ function SetupChecklist(props: DashboardHomeProps) {
               </span>
               <button
                 onClick={handleDismiss}
-                className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
               >
                 Dismiss
               </button>

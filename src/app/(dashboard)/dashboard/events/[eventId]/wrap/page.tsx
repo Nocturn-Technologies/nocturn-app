@@ -512,17 +512,17 @@ export default function WrapPage() {
       </Card>
 
       {/* Section 3: What Worked */}
-      <Card className="border-l-4 border-l-green-500 animate-fade-in-up delay-300">
+      <Card className="border-l-4 border-l-emerald-500 animate-fade-in-up delay-300">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-base">
-            <CheckCircle className="h-4 w-4 text-green-500" />
+            <CheckCircle className="h-4 w-4 text-emerald-500" />
             What Worked
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
           {whatWorked.map((item, i) => (
             <div key={i} className="flex items-start gap-2 text-sm">
-              <TrendingUp className="h-3.5 w-3.5 shrink-0 mt-0.5 text-green-500" />
+              <TrendingUp className="h-3.5 w-3.5 shrink-0 mt-0.5 text-emerald-500" />
               <span>{item}</span>
             </div>
           ))}

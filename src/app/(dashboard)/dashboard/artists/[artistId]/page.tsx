@@ -157,7 +157,7 @@ export default function ArtistDetailPage() {
 
   const statusColors: Record<string, string> = {
     pending: "bg-yellow-500/10 text-yellow-500",
-    confirmed: "bg-green-500/10 text-green-500",
+    confirmed: "bg-emerald-500/10 text-emerald-500",
     declined: "bg-red-500/10 text-red-500",
     cancelled: "bg-muted text-muted-foreground",
   };

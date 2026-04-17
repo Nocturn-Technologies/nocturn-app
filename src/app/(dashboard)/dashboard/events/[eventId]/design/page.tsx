@@ -564,7 +564,7 @@ export default function EventDesignPage() {
                         AI-extracted theme
                       </span>
                       {extractedTheme.mood && (
-                        <span className="text-[11px] text-muted-foreground/60 italic">
+                        <span className="text-[11px] text-muted-foreground/70 italic">
                           {extractedTheme.mood}
                         </span>
                       )}
@@ -585,7 +585,7 @@ export default function EventDesignPage() {
                             }`}
                             style={{ backgroundColor: extractedTheme[key] }}
                           />
-                          <span className="block text-[11px] uppercase text-muted-foreground/60">
+                          <span className="block text-[11px] uppercase text-muted-foreground/70">
                             {key}
                           </span>
                         </button>
@@ -752,7 +752,7 @@ export default function EventDesignPage() {
                 {/* Style reference upload */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Style reference (optional)</label>
-                  <p className="text-[11px] text-muted-foreground/60">Upload a poster you like as inspiration</p>
+                  <p className="text-[11px] text-muted-foreground/70">Upload a poster you like as inspiration</p>
                   <div className="flex items-center gap-3">
                     <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                       <Upload className="h-4 w-4" />
