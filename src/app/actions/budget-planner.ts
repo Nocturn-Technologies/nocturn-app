@@ -1,7 +1,6 @@
 "use server";
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
-import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 
 export interface BudgetInput {
   headlinerType: "local" | "international" | "none";
@@ -142,16 +141,13 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
 
     const capacity = input.venueCapacity ?? 200;
 
-    // Calculate break-even price
-    const PLATFORM_FEE_RATE = PLATFORM_FEE_PERCENT / 100;
-    const PLATFORM_FEE_FLAT = PLATFORM_FEE_FLAT_CENTS / 100;
-    const STRIPE_FEE_RATE = 0.029;
-    const STRIPE_FEE_FLAT = 0.30;
-
-    // Target 75% sell-through for safety
+    // Calculate break-even price.
+    // Organizer keeps 100% of ticket price — buyer pays Nocturn's 7%+$0.50 service fee
+    // on top at checkout, and Nocturn absorbs Stripe processing. So no fee gross-up here.
+    // Target 75% sell-through for safety.
     const targetTickets = Math.round(capacity * 0.75);
     const breakEvenPrice = targetTickets > 0
-      ? Math.ceil((totalExpenses / targetTickets + PLATFORM_FEE_FLAT + STRIPE_FEE_FLAT) / (1 - PLATFORM_FEE_RATE - STRIPE_FEE_RATE))
+      ? Math.ceil(totalExpenses / targetTickets)
       : 0;
 
     // Suggest tiers

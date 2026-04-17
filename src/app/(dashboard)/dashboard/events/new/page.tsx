@@ -56,6 +56,15 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
+// Buyer-facing total: organizer keeps the ticket price, buyer pays Nocturn's
+// 7% + $0.50 service fee on top at checkout. Nocturn absorbs Stripe processing.
+const BUYER_FEE_RATE = 0.07;
+const BUYER_FEE_FLAT = 0.50;
+function buyerTotal(ticketPrice: number): number {
+  if (ticketPrice <= 0) return 0;
+  return ticketPrice + ticketPrice * BUYER_FEE_RATE + BUYER_FEE_FLAT;
+}
+
 // ─── Draft Persistence ─────────────────────────────────────────────────────
 
 const DRAFT_STORAGE_KEY = "nocturn-event-draft";
@@ -125,7 +134,7 @@ function clearDraft() {
   }
 }
 
-const ALL_STEPS: WizardStep[] = ["details", "venue", "tickets", "budget", "review"];
+const ALL_STEPS: WizardStep[] = ["details", "venue", "budget", "tickets", "review"];
 const STEP_LABELS: Record<WizardStep, string> = {
   details: "Details",
   venue: "Venue",
@@ -451,10 +460,17 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
       ) : (
         <button
           onClick={() => startEdit("price")}
-          className="text-sm font-semibold text-nocturn hover:text-nocturn-light active:scale-[0.98] transition-all duration-200 group/price flex items-center gap-1 min-h-[44px]"
+          className="active:scale-[0.98] transition-all duration-200 group/price flex flex-col items-end gap-0 min-h-[44px] justify-center"
         >
-          {tier.price === 0 ? "Free" : `$${tier.price}`}
-          <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover/price:opacity-100 transition-opacity" />
+          <span className="flex items-center gap-1 text-sm font-semibold text-nocturn group-hover/price:text-nocturn-light">
+            {tier.price === 0 ? "Free" : `$${tier.price}`}
+            <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover/price:opacity-100 transition-opacity" />
+          </span>
+          {tier.price > 0 && (
+            <span className="text-[10px] text-muted-foreground/70 leading-tight">
+              buyer pays ${buyerTotal(tier.price).toFixed(2)}
+            </span>
+          )}
         </button>
       )}
     </div>
@@ -670,17 +686,14 @@ function fmtCurrency(n: number, compact?: boolean): string {
 }
 
 function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExpenses?: number }) {
-  const STRIPE_RATE = 0.029;
-  const STRIPE_FLAT = 0.30;
-  const NOCTURN_RATE = 0.07;
-  const NOCTURN_FLAT = 0.50;
-
   const rates = [0.5, 0.75, 1.0, 1.25];
   const rateLabels = ["50%", "75%", "100%", "125%"];
 
   const totalCapacity = tiers.reduce((s, t) => s + t.capacity, 0);
 
-  // Compute all scenarios
+  // Compute all scenarios. Organizer keeps 100% of ticket price — Nocturn's 7% + $0.50
+  // is added to the buyer's total at checkout, and Nocturn absorbs Stripe processing.
+  // So Profit = Gross − Expenses (no fee deductions on the organizer's side).
   const scenarios = rates.map((rate) => {
     const tierLines = tiers.map((t) => {
       const sold = Math.min(Math.round(t.capacity * rate), Math.round(t.capacity * 1.25)); // cap at 125%
@@ -688,11 +701,8 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
     });
     const gross = tierLines.reduce((s, t) => s + t.gross, 0);
     const totalSold = tierLines.reduce((s, t) => s + t.sold, 0);
-    const stripe = totalSold * STRIPE_FLAT + gross * STRIPE_RATE;
-    const nocturn = totalSold * NOCTURN_FLAT + gross * NOCTURN_RATE;
-    const net = gross - stripe - nocturn;
-    const profit = net - totalExpenses;
-    return { rate, tierLines, gross, totalSold, stripe, nocturn, net, profit };
+    const profit = gross - totalExpenses;
+    return { rate, tierLines, gross, totalSold, profit };
   });
 
   // Find break-even scenario index (first where profit >= 0)
@@ -763,40 +773,16 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
               ))}
             </tr>
 
-            {/* Fees section header */}
-            <tr className="bg-yellow-500/[0.03]">
+            {/* Buyer-paid platform fees note — informational, not deducted from operator */}
+            <tr className="bg-nocturn/[0.04]">
               <td colSpan={5} className="px-4 py-1.5">
                 <div className="flex items-center gap-1.5">
-                  <DollarSign className="h-3 w-3 text-yellow-400" />
-                  <span className="text-[11px] font-bold text-yellow-400 uppercase tracking-wider">Fees</span>
+                  <DollarSign className="h-3 w-3 text-nocturn" />
+                  <span className="text-[11px] font-medium text-nocturn/90">
+                    You keep 100% — buyers cover platform fees at checkout
+                  </span>
                 </div>
               </td>
-            </tr>
-
-            {/* Stripe fees */}
-            <tr className="hover:bg-white/[0.02] transition-colors">
-              <td className="px-4 py-2">
-                <p className="text-sm text-muted-foreground">Stripe</p>
-                <p className="text-[11px] text-muted-foreground/50">2.9% + $0.30/tix</p>
-              </td>
-              {scenarios.map((s, i) => (
-                <td key={i} className="text-right px-3 py-2 text-sm text-yellow-400/80">
-                  ({fmtCurrency(s.stripe)})
-                </td>
-              ))}
-            </tr>
-
-            {/* Nocturn fees */}
-            <tr className="hover:bg-white/[0.02] transition-colors">
-              <td className="px-4 py-2">
-                <p className="text-sm text-muted-foreground">Nocturn</p>
-                <p className="text-[11px] text-muted-foreground/50">7% + $0.50/tix · buyer pays</p>
-              </td>
-              {scenarios.map((s, i) => (
-                <td key={i} className="text-right px-3 py-2 text-sm text-yellow-400/80">
-                  ({fmtCurrency(s.nocturn)})
-                </td>
-              ))}
             </tr>
 
             {/* Expenses section (if budget entered) */}
@@ -853,7 +839,7 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
           </p>
         ) : (
           <p className="text-[11px] text-muted-foreground/50">
-            Add expenses in the next step to see profit
+            Go back to Budget to add expenses and see profit
           </p>
         )}
         <p className="text-[11px] text-muted-foreground/40 shrink-0">
@@ -876,9 +862,6 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
     }
   }, [tiers, priceMultiplier]);
 
-  const STRIPE_FEE_RATE = 0.029;
-  const STRIPE_FEE_FLAT = 0.30;
-
   const totalCapacity = tiers.reduce((s, t) => s + t.capacity, 0);
   const maxRevenue = tiers.reduce((s, t) => s + t.price * t.capacity, 0);
   const avgPrice = totalCapacity > 0 ? maxRevenue / totalCapacity : 0;
@@ -897,10 +880,9 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
   function calcNet(rate: number) {
     const ticketsSold = Math.round(totalCapacity * rate);
     const gross = tiers.reduce((s, t) => s + t.price * Math.round(t.capacity * rate), 0);
-    const stripeProcessing = ticketsSold * STRIPE_FEE_FLAT + gross * STRIPE_FEE_RATE;
-    const netRevenue = gross - stripeProcessing;
-    const profit = netRevenue - totalExpenses;
-    return { ticketsSold, gross, net: netRevenue, profit };
+    // Organizer keeps 100% of ticket price — buyer covers platform fees, Nocturn absorbs Stripe.
+    const profit = gross - totalExpenses;
+    return { ticketsSold, gross, net: gross, profit };
   }
 
   const scenarios = [
@@ -1043,8 +1025,8 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
 
       <p className="text-[11px] text-muted-foreground text-center">
         {totalExpenses > 0
-          ? `Profit = revenue \u2212 $${totalExpenses.toLocaleString()} expenses \u2212 Stripe fees (2.9% + $0.30)`
-          : "Net after Stripe fees (2.9% + $0.30) \u2022 You keep 100% of ticket price"}
+          ? `Profit = revenue \u2212 $${totalExpenses.toLocaleString()} expenses \u2022 You keep 100%, buyer covers fees`
+          : "You keep 100% of ticket price \u2022 Buyer covers platform fees at checkout"}
       </p>
     </div>
   );
@@ -2095,6 +2077,16 @@ export default function NewEventPage() {
               <p className="text-sm text-muted-foreground">How much are tickets?</p>
             </div>
 
+            {/* Attribution: tiers were suggested from the budget step */}
+            {budgetResult && budgetResult.suggestedTiers.length > 0 && tiers.length > 0 && (
+              <div className="flex items-start gap-2 rounded-xl border border-nocturn/20 bg-nocturn/[0.05] px-3 py-2.5 animate-fade-in">
+                <Sparkles className="h-3.5 w-3.5 text-nocturn shrink-0 mt-0.5" />
+                <p className="text-[12px] text-zinc-300 leading-snug">
+                  Tiers suggested from your ${totalExpenses.toLocaleString()} budget. Edit freely.
+                </p>
+              </div>
+            )}
+
             <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-5">
               {/* Mode reminder + shortcut */}
               <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -2418,6 +2410,18 @@ export default function NewEventPage() {
                   )}
                 </div>
               )}
+
+              {/* Market pricing sanity-check — sits next to the cost-plus suggestion
+                  so operators don't anchor on expense-driven prices without seeing
+                  what the local market is actually charging. */}
+              {budgetResult && formData.venueCity && formData.date && budgetResult.suggestedTiers.length > 0 && (
+                <PricingInsight
+                  city={formData.venueCity}
+                  date={formData.date}
+                  venueCapacity={typeof formData.venueCapacity === "number" ? formData.venueCapacity : undefined}
+                  tiers={budgetResult.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity }))}
+                />
+              )}
             </div>
           </div>
         )}
@@ -2602,7 +2606,7 @@ export default function NewEventPage() {
                 disabled={!canAdvance()}
                 className="flex-1 bg-nocturn hover:bg-[#6B1FE7] text-white min-h-[44px] rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                {step === "budget" ? "Review" : "Next"}
+                {currentIdx === activeSteps.length - 2 ? "Review" : "Next"}
               </Button>
             </div>
             {/* Quick jump back to review if user has been there */}
