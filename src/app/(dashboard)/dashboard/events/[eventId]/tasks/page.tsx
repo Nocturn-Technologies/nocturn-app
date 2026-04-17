@@ -49,7 +49,7 @@ import { haptic } from "@/lib/haptics";
 const statusIcons: Record<string, React.ReactNode> = {
   todo: <Circle className="h-5 w-5 text-muted-foreground transition-all duration-200" />,
   in_progress: <Clock className="h-5 w-5 text-blue-500 transition-all duration-200" />,
-  done: <Check className="h-5 w-5 text-green-500 transition-all duration-200" />,
+  done: <Check className="h-5 w-5 text-emerald-500 transition-all duration-200" />,
   blocked: <AlertTriangle className="h-5 w-5 text-red-500 transition-all duration-200" />,
 };
 
@@ -129,14 +129,14 @@ function CompletionCelebration({ show, is100 }: { show: boolean; is100: boolean 
       <div className="animate-scale-in flex flex-col items-center gap-2">
         {is100 ? (
           <>
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500/20 animate-bounce">
-              <PartyPopper className="h-10 w-10 text-green-400" />
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/20 animate-bounce">
+              <PartyPopper className="h-10 w-10 text-emerald-400" />
             </div>
-            <p className="text-lg font-bold text-green-400 animate-fade-in-up">All tasks complete!</p>
+            <p className="text-lg font-bold text-emerald-400 animate-fade-in-up">All tasks complete!</p>
           </>
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-500/20">
-            <Check className="h-7 w-7 text-green-400" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20">
+            <Check className="h-7 w-7 text-emerald-400" />
           </div>
         )}
       </div>
@@ -527,11 +527,11 @@ function EventTasksPageInner() {
         <div className="animate-fade-in-up">
           <div className="flex items-center justify-between text-sm mb-2">
             <span className="text-muted-foreground">{doneTasks.length} of {tasks.length} tasks done</span>
-            <span className={`font-bold ${progress === 100 ? "text-green-400" : "text-nocturn"}`}>{progress}%</span>
+            <span className={`font-bold ${progress === 100 ? "text-emerald-400" : "text-nocturn"}`}>{progress}%</span>
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${progress === 100 ? "bg-green-500" : "bg-nocturn"}`}
+              className={`h-full rounded-full transition-all duration-500 ${progress === 100 ? "bg-emerald-500" : "bg-nocturn"}`}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -945,7 +945,7 @@ function CategoryGroup({
         </span>
         <div className="flex-1 h-1 rounded-full bg-muted ml-2 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-300 ${doneCount === tasks.length ? "bg-green-500" : "bg-nocturn"}`}
+            className={`h-full rounded-full transition-all duration-300 ${doneCount === tasks.length ? "bg-emerald-500" : "bg-nocturn"}`}
             style={{ width: tasks.length > 0 ? `${(doneCount / tasks.length) * 100}%` : "0%" }}
           />
         </div>

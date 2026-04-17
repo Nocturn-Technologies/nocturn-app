@@ -815,7 +815,7 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
       <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
         <TrendingUp className="h-3.5 w-3.5 text-nocturn" />
         <span className="text-xs font-bold text-foreground uppercase tracking-wider">P&L Forecast</span>
-        <span className="ml-auto text-[11px] text-muted-foreground/60">updates live as you edit tiers</span>
+        <span className="ml-auto text-[11px] text-muted-foreground/70">updates live as you edit tiers</span>
       </div>
 
       {/* Forecast grid — horizontally scrollable on small screens */}
@@ -841,7 +841,7 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
                 tickets cap at total inventory and we surface waitlist demand
                 as a secondary "+N waitlist" note. */}
             <tr className="border-b border-white/[0.06] bg-white/[0.01]">
-              <td className="px-4 py-1 text-[11px] text-muted-foreground/60 uppercase tracking-wider">Tickets sold</td>
+              <td className="px-4 py-1 text-[11px] text-muted-foreground/70 uppercase tracking-wider">Tickets sold</td>
               {scenarios.map((s, i) => (
                 <td key={i} className="text-right px-3 py-1 text-[11px] text-muted-foreground tabular-nums">
                   {s.totalSold}
@@ -870,14 +870,14 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
               <tr key={ti} className="hover:bg-white/[0.02] transition-colors">
                 <td className="px-4 py-2">
                   <p className="text-sm font-medium text-foreground truncate">{tier.name}</p>
-                  <p className="text-[11px] text-muted-foreground/60">{tier.capacity} tix @ ${tier.price}</p>
+                  <p className="text-[11px] text-muted-foreground/70">{tier.capacity} tix @ ${tier.price}</p>
                 </td>
                 {scenarios.map((s, si) => {
                   const line = s.tierLines[ti];
                   return (
                     <td key={si} className="text-right px-3 py-2 text-sm text-green-400">
                       {fmtCurrency(line.revenue)}
-                      <span className="block text-[11px] text-muted-foreground/60 tabular-nums">
+                      <span className="block text-[11px] text-muted-foreground/70 tabular-nums">
                         {line.sold}/{line.capacity}
                       </span>
                     </td>
@@ -972,7 +972,7 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
             Does not break even — raise prices or cut expenses
           </p>
         ) : (
-          <p className="text-[11px] text-muted-foreground/50">
+          <p className="text-[11px] text-muted-foreground/70">
             Go back to Budget to add expenses and see profit
           </p>
         )}
@@ -1820,7 +1820,7 @@ function BudgetStep({
                       <span>{it.label}</span>
                       <span>
                         {converted && (
-                          <span className="text-muted-foreground/50 mr-1">
+                          <span className="text-muted-foreground/70 mr-1">
                             {it.amount.toLocaleString()} {it.currency.toUpperCase()} →
                           </span>
                         )}

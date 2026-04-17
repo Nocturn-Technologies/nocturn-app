@@ -144,7 +144,7 @@ function DialogContent({
       {onClose && (
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-full p-1 text-muted-foreground hover:text-foreground transition-colors"
+          className="absolute right-4 top-4 rounded-full p-1 text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
           aria-label="Close"
         >
           <X className="h-4 w-4" />

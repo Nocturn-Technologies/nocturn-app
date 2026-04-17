@@ -63,13 +63,13 @@ function timeAgo(dateStr: string): string {
 }
 
 function getCapacityColor(pct: number): string {
-  if (pct < 70) return "text-green-400";
+  if (pct < 70) return "text-emerald-400";
   if (pct < 90) return "text-yellow-400";
   return "text-red-400";
 }
 
 function getCapacityBarColor(pct: number): string {
-  if (pct < 70) return "bg-green-500";
+  if (pct < 70) return "bg-emerald-500";
   if (pct < 90) return "bg-yellow-500";
   return "bg-red-500";
 }
@@ -366,7 +366,7 @@ export default function LiveEventPage() {
         const barPct = estimatedBar > 0 ? Math.min(Math.round((estimatedBar / barMin) * 100), 100) : 0;
         const atRisk = estimatedBar < barMin;
         return (
-          <div className={`rounded-xl border ${atRisk ? "border-red-500/30 bg-red-500/5" : "border-green-500/30 bg-green-500/5"} p-4`}>
+          <div className={`rounded-xl border ${atRisk ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/30 bg-emerald-500/5"} p-4`}>
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
                 Bar Minimum
@@ -376,7 +376,7 @@ export default function LiveEventPage() {
                   ⚠️ ${deposit.toLocaleString()} deposit at risk
                 </span>
               ) : (
-                <span className="text-[11px] font-medium text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">
+                <span className="text-[11px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
                   ✅ On track
                 </span>
               )}
@@ -389,7 +389,7 @@ export default function LiveEventPage() {
             </div>
             <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-500 ${atRisk ? "bg-red-500" : "bg-green-500"}`}
+                className={`h-full rounded-full transition-all duration-500 ${atRisk ? "bg-red-500" : "bg-emerald-500"}`}
                 style={{ width: `${barPct}%` }}
               />
             </div>

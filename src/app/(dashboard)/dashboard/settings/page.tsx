@@ -119,6 +119,7 @@ export default function SettingsPage() {
     }
 
     setSuccess(true);
+    setTimeout(() => setSuccess(false), 5000);
     setSaving(false);
     router.refresh();
   }
@@ -148,6 +149,7 @@ export default function SettingsPage() {
     }
 
     setSuccess(true);
+    setTimeout(() => setSuccess(false), 5000);
     setSaving(false);
     router.refresh();
   }

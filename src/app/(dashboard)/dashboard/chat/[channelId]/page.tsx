@@ -616,7 +616,7 @@ export default function ChatRoomPage() {
                 }
               }}
               placeholder={channel?.type === "general" ? "Ask Nocturn anything..." : "Message your team... (@ai for Nocturn)"}
-              className="w-full bg-transparent text-[16px] placeholder:text-muted-foreground/50 resize-none outline-none max-h-[120px] leading-5"
+              className="w-full bg-transparent text-[16px] placeholder:text-muted-foreground/70 resize-none outline-none max-h-[120px] leading-5"
               rows={1}
               style={{ fontSize: "16px" }}
             />

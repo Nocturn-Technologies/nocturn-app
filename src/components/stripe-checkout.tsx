@@ -138,7 +138,7 @@ function TicketSuccess({
       </div>
 
       {/* Subtle share hint */}
-      <p className="text-[11px] text-muted-foreground/50 text-center">
+      <p className="text-[11px] text-muted-foreground/70 text-center">
         📸 Screenshot and post to your story
       </p>
     </div>

@@ -293,7 +293,7 @@ export function SalesTrajectoryCard({
         </div>
 
         {/* Curve info */}
-        <p className="text-[11px] text-muted-foreground/50">
+        <p className="text-[11px] text-muted-foreground/70">
           Compared to: {prediction.curveProfile.label} reference curve
         </p>
       </CardContent>

@@ -845,7 +845,7 @@ export default function EventDesignPage() {
                       ))}
                     </div>
                     {unsplashResults.length > 0 && (
-                      <p className="text-[11px] text-muted-foreground/50 text-center">
+                      <p className="text-[11px] text-muted-foreground/70 text-center">
                         Photos by Unsplash
                       </p>
                     )}
