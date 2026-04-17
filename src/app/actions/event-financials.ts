@@ -19,7 +19,18 @@ export interface ExpenseRow {
   id: string;
   description: string;
   category: string;
+  // `amount` is always in the event's reporting currency (what the P&L sums).
   amount: number;
+  // FX snapshot from when the row was entered (populated by the wizard and
+  // edit form). When present + originalCurrency differs from the event
+  // currency, the P&L renders "3500 USD @ 1.38" alongside the converted
+  // amount so operators can tie it back to their bank statement / DJ invoice.
+  // Null for rows added before multi-currency support (legacy) or manually
+  // added post-event without currency metadata.
+  originalAmount: number | null;
+  originalCurrency: string | null;
+  fxRate: number | null;
+  fxLockedAt: string | null;
 }
 
 export interface RevenueLineRow {
@@ -137,7 +148,7 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
         .in("status", ["paid", "checked_in"]),
       admin
         .from("expenses")
-        .select("id, description, category, amount")
+        .select("id, description, category, amount, metadata")
         .eq("event_id", eventId)
         .order("created_at"),
       admin
@@ -158,7 +169,15 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
 
     const tiers = tiersRes.data ?? [];
     const tickets = ticketsRes.data ?? [];
-    const expenses = expensesRes.data ?? [];
+    // Exclude venue_rental + deposit from the itemized expenses view. Those
+    // values live authoritatively on events.venue_cost / events.venue_deposit
+    // columns and get subtracted from profitLoss separately below — including
+    // them here would double-count. (The wizard's multi-currency intake
+    // produces these rows so the operator can edit them by category; the
+    // columns remain the single source of truth for the P&L.)
+    const expenses = (expensesRes.data ?? []).filter(
+      (e) => e.category !== "venue_rental" && e.category !== "deposit",
+    );
     const revenueLinesData = revenueRes.data ?? [];
     const eventArtists = artistsRes.data ?? [];
 
@@ -176,13 +195,27 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
       };
     });
 
-    // Build expense rows
-    const expenseRows: ExpenseRow[] = expenses.map((e) => ({
-      id: e.id,
-      description: e.description ?? "",
-      category: e.category ?? "other",
-      amount: Number(e.amount) || 0,
-    }));
+    // Build expense rows. Pull FX snapshot out of metadata so the P&L can
+    // render "Original: 3500 USD @ 1.38" next to the converted amount for any
+    // rows whose native currency differs from the event's reporting currency.
+    const expenseRows: ExpenseRow[] = expenses.map((e) => {
+      const meta = (e.metadata ?? {}) as {
+        original_amount?: number;
+        original_currency?: string;
+        fx_rate?: number;
+        fx_locked_at?: string;
+      };
+      return {
+        id: e.id,
+        description: e.description ?? "",
+        category: e.category ?? "other",
+        amount: Number(e.amount) || 0,
+        originalAmount: typeof meta.original_amount === "number" ? meta.original_amount : null,
+        originalCurrency: typeof meta.original_currency === "string" ? meta.original_currency : null,
+        fxRate: typeof meta.fx_rate === "number" ? meta.fx_rate : null,
+        fxLockedAt: typeof meta.fx_locked_at === "string" ? meta.fx_locked_at : null,
+      };
+    });
 
     // Build revenue line rows
     const revenueLineRows: RevenueLineRow[] = revenueLinesData.map((r) => ({

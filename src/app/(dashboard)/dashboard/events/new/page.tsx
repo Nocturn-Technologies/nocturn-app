@@ -2105,13 +2105,23 @@ export default function NewEventPage() {
         // Event currency = per-event override; createEvent falls back to the
         // collective's default_currency if null.
         currency: budgetDraft.eventCurrency,
-        // Persist the wizard's itemized budget so the P&L page and finance
-        // screens have the line-item breakdown with FX snapshots. Bar minimum
-        // is a threshold (revenue target), not an expense, so it rides along
-        // as a scalar.
+        // Venue cost + deposit are authoritatively stored on events.venue_cost
+        // and events.venue_deposit columns (not in the expenses table). The
+        // wizard's local state carries them as scalar fields in the event
+        // currency; passing them here keeps the P&L's profit math working
+        // without requiring the itemized list to carry them too.
         barMinimum: budgetDraft.barMinimum || null,
         venueCost: budgetDraft.venueRental || null,
-        expenseItems: budgetResult?.resolvedItems ?? null,
+        venueDeposit: budgetDraft.deposit || null,
+        // Itemized expense rows — EXCLUDING venue_rental + deposit. Those
+        // are already carried by venueCost / venueDeposit scalar fields
+        // above; writing them to expenses too would double-count in the
+        // finance P&L (which subtracts both the column AND the expenses sum).
+        expenseItems: budgetResult?.resolvedItems
+          ? budgetResult.resolvedItems.filter(
+              (it) => it.category !== "venue_rental" && it.category !== "deposit",
+            )
+          : null,
       });
 
       if (result.error) {

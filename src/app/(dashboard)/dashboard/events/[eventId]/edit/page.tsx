@@ -33,13 +33,24 @@ export default async function EditEventPage({ params }: Props) {
   const { data: event } = await admin
     .from("events")
     .select(
-      "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_id, bar_minimum, venue_deposit, venue_cost, estimated_bar_revenue, venues(id, name, address, city, capacity)"
+      "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_id, bar_minimum, venue_deposit, venue_cost, estimated_bar_revenue, currency, venues(id, name, address, city, capacity)"
     )
     .eq("id", eventId)
     .is("deleted_at", null)
     .maybeSingle();
 
   if (!event || !collectiveIds.includes(event.collective_id)) notFound();
+
+  // Resolve event reporting currency: event override → collective default → usd.
+  let resolvedCurrency: string = (event.currency ?? "").toLowerCase();
+  if (!resolvedCurrency) {
+    const { data: collective } = await admin
+      .from("collectives")
+      .select("default_currency")
+      .eq("id", event.collective_id)
+      .maybeSingle();
+    resolvedCurrency = (collective?.default_currency ?? "usd").toLowerCase();
+  }
 
   // Only draft events can be edited
   if (event.status !== "draft") {
@@ -59,6 +70,24 @@ export default async function EditEventPage({ params }: Props) {
     .select("id, name, price, capacity, sort_order")
     .eq("event_id", eventId)
     .order("sort_order");
+
+  // Fetch itemized expenses (v2 multi-currency budget). The `metadata` JSONB
+  // carries the FX snapshot from when each row was first entered — we pass
+  // the original amount+currency back so the operator edits in the currency
+  // they typed, not the converted local value.
+  //
+  // Excluding venue_rental + deposit: those live on the Venue Financials
+  // scalar card and map to events.venue_cost / venue_deposit columns. Any
+  // existing rows with those categories (from the brief window where the
+  // wizard double-wrote) are invisible here, since the scalar card is the
+  // canonical editor for those costs.
+  const { data: expenseRows } = await admin
+    .from("expenses")
+    .select("id, category, description, amount, metadata")
+    .eq("event_id", eventId)
+    .is("deleted_at", null)
+    .not("category", "in", '("venue_rental","deposit")')
+    .order("created_at");
 
   const venue = event.venues as unknown as {
     id: string;
@@ -108,6 +137,23 @@ export default async function EditEventPage({ params }: Props) {
     venueDeposit: event.venue_deposit ? Number(event.venue_deposit) : null,
     venueCost: event.venue_cost ? Number(event.venue_cost) : null,
     estimatedBarRevenue: event.estimated_bar_revenue ? Number(event.estimated_bar_revenue) : null,
+    currency: resolvedCurrency,
+    expenses:
+      expenseRows?.map((r) => {
+        const meta = (r.metadata ?? {}) as {
+          original_amount?: number;
+          original_currency?: string;
+        };
+        const originalAmount = typeof meta.original_amount === "number" ? meta.original_amount : Number(r.amount ?? 0);
+        const originalCurrency = typeof meta.original_currency === "string" ? meta.original_currency : resolvedCurrency;
+        return {
+          id: r.id,
+          category: r.category ?? "other",
+          label: r.description ?? "",
+          amount: originalAmount,
+          currency: originalCurrency,
+        };
+      }) ?? [],
   };
 
   return <EditEventForm event={eventData} />;

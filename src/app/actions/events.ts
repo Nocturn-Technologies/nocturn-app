@@ -84,6 +84,24 @@ interface UpdateEventInput {
   venueCost?: number | null;
   estimatedBarRevenue?: number | null;
   timezone?: string; // IANA timezone, defaults to America/Toronto
+  // ── Multi-currency budget (v2) ──
+  // Per-event currency override; NULL keeps the current value unchanged.
+  currency?: string | null;
+  // Itemized expenses. Reconciled against the `expenses` table:
+  //   id present → update in place (amount re-converted via event currency)
+  //   id absent  → insert new row
+  //   ids listed in `removedExpenseIds` → deleted
+  // If `expenseItems` is undefined, expenses are left untouched (the old
+  // edit-path behavior — handy so callers that don't know about expenses
+  // don't accidentally wipe them).
+  expenseItems?: Array<{
+    id?: string;
+    category: string;
+    label: string;
+    amount: number;    // in the row's native currency (`currency`)
+    currency: string;
+  }>;
+  removedExpenseIds?: string[];
 }
 
 export async function createEvent(input: CreateEventInput) {
@@ -643,6 +661,15 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     return { error: "Tier prices cannot be negative" };
   }
 
+  // Sanitize per-event currency override (ISO 4217 lowercase 3-letter).
+  // NULL/undefined keeps the column unchanged; empty string → clear it.
+  let nextEventCurrency: string | null | undefined = undefined;
+  if (input.currency === null || input.currency === "") {
+    nextEventCurrency = null;
+  } else if (typeof input.currency === "string" && /^[a-z]{3}$/.test(input.currency.toLowerCase())) {
+    nextEventCurrency = input.currency.toLowerCase();
+  }
+
   // Update event
   const eventUpdatePayload: Record<string, unknown> = {
     venue_id: venueId,
@@ -656,6 +683,9 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     venue_cost: input.venueCost ?? null,
     estimated_bar_revenue: input.estimatedBarRevenue ?? null,
   };
+  if (nextEventCurrency !== undefined) {
+    eventUpdatePayload.currency = nextEventCurrency;
+  }
   if (newSlug) {
     eventUpdatePayload.slug = newSlug;
   }
@@ -718,6 +748,112 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
       if (tierError) {
         console.error("[updateEvent] tier insert error:", tierError.message);
         return { error: "Failed to add ticket tier" };
+      }
+    }
+  }
+
+  // ── Reconcile itemized expenses (v2 multi-currency) ──
+  // Only runs when expenseItems is explicitly provided — undefined means
+  // "leave existing expenses alone", which matches legacy behavior. Each
+  // input row is re-converted to the event's reporting currency at save
+  // time so the FX snapshot reflects the rate the operator actually
+  // committed to. Drafts only (page.tsx gates edit to draft status), so
+  // re-snapshotting rates doesn't drift historical data.
+  if (input.expenseItems !== undefined) {
+    // Resolve the event's reporting currency: explicit override on this
+    // update → existing event.currency → collective default → 'usd'.
+    let resolvedEventCurrency = nextEventCurrency ?? undefined;
+    if (!resolvedEventCurrency) {
+      const { data: eventRow } = await admin
+        .from("events")
+        .select("currency, collective_id")
+        .eq("id", eventId)
+        .maybeSingle();
+      resolvedEventCurrency = eventRow?.currency ?? undefined;
+      if (!resolvedEventCurrency && eventRow?.collective_id) {
+        const { data: collectiveRow } = await admin
+          .from("collectives")
+          .select("default_currency")
+          .eq("id", eventRow.collective_id)
+          .maybeSingle();
+        resolvedEventCurrency = collectiveRow?.default_currency ?? undefined;
+      }
+    }
+    const eventCurrency = (resolvedEventCurrency ?? "usd").toLowerCase();
+
+    // Delete explicitly-removed rows first, scoped to this event (defense
+    // in depth — the client could technically pass arbitrary IDs).
+    if (input.removedExpenseIds && input.removedExpenseIds.length > 0) {
+      const { error: delErr } = await admin
+        .from("expenses")
+        .delete()
+        .in("id", input.removedExpenseIds)
+        .eq("event_id", eventId);
+      if (delErr) {
+        console.error("[updateEvent] expense delete error:", delErr.message);
+        // Non-fatal; continue so upserts still land.
+      }
+    }
+
+    // Validate + re-convert each item.
+    const fxLockedAt = new Date().toISOString();
+    const { convertBetween } = await import("@/lib/currency");
+
+    for (const it of input.expenseItems) {
+      if (!Number.isFinite(it.amount) || it.amount < 0 || it.amount > 10_000_000) continue;
+      if (!/^[a-z]{3}$/.test(it.currency.toLowerCase())) continue;
+      const label = (it.label ?? "").toString().slice(0, 200);
+      const category = (it.category ?? "other").toString().slice(0, 50);
+      const rowCurrency = it.currency.toLowerCase();
+
+      const { amount: localAmountRaw, rate } = await convertBetween(
+        it.amount,
+        rowCurrency,
+        eventCurrency,
+      );
+      // Inline safeMoney equivalent — cap to NUMERIC(10,2), non-negative.
+      const localAmt =
+        !Number.isFinite(localAmountRaw) || localAmountRaw < 0 || localAmountRaw > 9999999.99
+          ? 0
+          : Math.round(localAmountRaw * 100) / 100;
+      if (localAmt <= 0) continue;
+
+      const metadata = {
+        original_amount: it.amount,
+        original_currency: rowCurrency,
+        local_currency: eventCurrency,
+        fx_rate: rate,
+        fx_locked_at: fxLockedAt,
+      } as Database["public"]["Tables"]["expenses"]["Insert"]["metadata"];
+
+      if (it.id) {
+        const { error: upErr } = await admin
+          .from("expenses")
+          .update({
+            description: label,
+            category,
+            amount: localAmt,
+            metadata,
+          })
+          .eq("id", it.id)
+          .eq("event_id", eventId); // tenancy guard
+        if (upErr) {
+          console.error("[updateEvent] expense update error:", upErr.message);
+        }
+      } else {
+        const { error: insErr } = await admin
+          .from("expenses")
+          .insert({
+            event_id: eventId,
+            collective_id: ownership.event.collective_id,
+            description: label,
+            category,
+            amount: localAmt,
+            metadata,
+          });
+        if (insErr) {
+          console.error("[updateEvent] expense insert error:", insErr.message);
+        }
       }
     }
   }
