@@ -1083,9 +1083,9 @@ export default function EventDesignPage() {
                   <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col items-center rounded-lg bg-white/5 px-2.5 py-1.5">
-                        <span className="text-[11px] font-semibold uppercase text-white/40">SAT</span>
+                        <span className="text-[11px] font-semibold uppercase text-white/60">SAT</span>
                         <span className="text-sm font-bold text-white">25</span>
-                        <span className="text-[11px] font-semibold uppercase text-white/40">APR</span>
+                        <span className="text-[11px] font-semibold uppercase text-white/60">APR</span>
                       </div>
                       <div className="text-xs text-white/60">
                         10:00 PM — 2:00 AM
@@ -1100,7 +1100,7 @@ export default function EventDesignPage() {
                   )}
 
                   {dressCode && (
-                    <p className="text-[11px] text-white/40">
+                    <p className="text-[11px] text-white/60">
                       Dress code: {dressCode}
                     </p>
                   )}
@@ -1113,7 +1113,7 @@ export default function EventDesignPage() {
                     Get Tickets
                   </div>
 
-                  <p className="text-center text-[11px] text-white/40">
+                  <p className="text-center text-[11px] text-white/60">
                     Powered by <span style={{ color: themeColor }}>nocturn.</span>
                   </p>
                 </div>

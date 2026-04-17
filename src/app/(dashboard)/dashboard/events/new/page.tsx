@@ -1768,7 +1768,7 @@ function BudgetStep({
                   key={c.category}
                   type="button"
                   onClick={() => addProdItem(c.category, c.label)}
-                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:border-nocturn/40 hover:bg-nocturn/10 hover:text-white transition-all active:scale-[0.97] min-h-[36px]"
+                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:border-nocturn/40 hover:bg-nocturn/10 hover:text-white transition-all active:scale-[0.97] min-h-[44px]"
                 >
                   <Plus className="h-3 w-3" />
                   {c.label}
@@ -1777,7 +1777,7 @@ function BudgetStep({
               <button
                 type="button"
                 onClick={addCustomProdItem}
-                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-400 hover:border-nocturn/40 hover:bg-nocturn/10 hover:text-white transition-all active:scale-[0.97] min-h-[36px]"
+                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-400 hover:border-nocturn/40 hover:bg-nocturn/10 hover:text-white transition-all active:scale-[0.97] min-h-[44px]"
               >
                 <Plus className="h-3 w-3" />
                 Custom

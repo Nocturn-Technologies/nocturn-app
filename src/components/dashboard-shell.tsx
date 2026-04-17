@@ -353,7 +353,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
           {!isPromoter && !isMarketplace && (
             <Link
               href="/dashboard/marketing"
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground/70 hover:text-muted-foreground/60 transition-colors"
             >
               <Lock className="h-4 w-4" />
               <span>Promo</span>

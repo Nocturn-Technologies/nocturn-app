@@ -152,7 +152,7 @@ function getSmartActions(props: DashboardHomeProps) {
       description: "Your event is ready to go live",
       href: "/dashboard/events",
       icon: <Send className="h-5 w-5" />,
-      color: "text-green-400",
+      color: "text-emerald-400",
       iconBg: "bg-green-500/15",
       priority: "primary",
     });

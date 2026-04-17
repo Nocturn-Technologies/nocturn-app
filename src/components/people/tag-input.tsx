@@ -108,7 +108,7 @@ export function TagInput({
                 removeTag(tag);
               }}
               aria-label="Remove tag"
-              className="text-white/40 hover:text-white transition-colors"
+              className="text-white/60 hover:text-white transition-colors"
             >
               <X className="h-3 w-3" />
             </button>

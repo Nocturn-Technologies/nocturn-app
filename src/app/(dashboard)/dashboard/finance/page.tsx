@@ -403,7 +403,7 @@ export default async function FinancePage() {
                                   className={`text-[11px] text-center leading-tight ${
                                     isComplete
                                       ? "text-foreground"
-                                      : "text-muted-foreground/50"
+                                      : "text-muted-foreground/70"
                                   }`}
                                 >
                                   {ps.label}
