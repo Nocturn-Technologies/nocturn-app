@@ -4,8 +4,11 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
 import { isValidUUID } from "@/lib/utils";
+import { verifyEventOwnership } from "@/lib/auth/ownership";
 
-// Verify user owns the event via collective membership
+// Thin wrapper over the shared ownership helper — preserves the original
+// `{ error, userId }` return shape so call sites don't have to change.
+// UUID validation up-front keeps callers from hitting the DB with junk.
 async function verifyEventAccess(eventId: string) {
   if (!isValidUUID(eventId)) return { error: "Invalid event ID", userId: null };
 
@@ -13,24 +16,8 @@ async function verifyEventAccess(eventId: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated", userId: null };
 
-  const admin = createAdminClient();
-  const { data: event } = await admin
-    .from("events")
-    .select("collective_id")
-    .eq("id", eventId)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (!event) return { error: "Event not found", userId: null };
-
-  const { count } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", event.collective_id)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-
-  if (!count || count === 0) return { error: "You don't have access to this event", userId: null };
+  const ok = await verifyEventOwnership(user.id, eventId);
+  if (!ok) return { error: "You don't have access to this event", userId: null };
 
   return { error: null, userId: user.id };
 }

@@ -5,8 +5,14 @@ import { createAdminClient } from "@/lib/supabase/config";
 import { sendEmail } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/html";
 import { DEFAULT_TIMEZONE } from "@/lib/utils";
+import { verifyCollectiveRole } from "@/lib/auth/ownership";
 
-/** Verify the caller is an admin/member of the collective that owns this event */
+// Guest-list ops require a role stricter than plain membership —
+// door_staff / promoter / admin can manage the list, regular members
+// cannot. Composes the shared `verifyCollectiveRole` with an event
+// lookup rather than maintaining a second copy of the membership query.
+const GUEST_LIST_ROLES = ["admin", "promoter", "door_staff"] as const;
+
 async function verifyEventAccess(eventId: string): Promise<{ error: string | null; userId: string | null }> {
   try {
     const supabase = await createServerClient();
@@ -14,12 +20,11 @@ async function verifyEventAccess(eventId: string): Promise<{ error: string | nul
     if (!user) return { error: "Not authenticated", userId: null };
 
     const admin = createAdminClient();
-
-    // Get the event's collective
     const { data: event, error: eventError } = await admin
       .from("events")
       .select("collective_id")
       .eq("id", eventId)
+      .is("deleted_at", null)
       .maybeSingle();
 
     if (eventError) {
@@ -28,21 +33,8 @@ async function verifyEventAccess(eventId: string): Promise<{ error: string | nul
     }
     if (!event) return { error: "Event not found", userId: null };
 
-    // Check membership with role verification
-    const { data: membership, error: memberError } = await admin
-      .from("collective_members")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("collective_id", event.collective_id)
-      .in("role", ["admin", "promoter", "door_staff"])
-      .is("deleted_at", null)
-      .maybeSingle();
-
-    if (memberError) {
-      console.error("[verifyEventAccess]", memberError);
-      return { error: "Something went wrong", userId: null };
-    }
-    if (!membership) return { error: "You don't have access to this event", userId: null };
+    const hasRole = await verifyCollectiveRole(user.id, event.collective_id, GUEST_LIST_ROLES);
+    if (!hasRole) return { error: "You don't have access to this event", userId: null };
 
     return { error: null, userId: user.id };
   } catch (err) {

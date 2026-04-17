@@ -31,10 +31,18 @@ export async function verifyEventOwnership(
   if (!userId || !eventId) return false;
   try {
     const admin = createAdminClient();
+    // Filter soft-deleted events — ownership over a deleted event is
+    // meaningless and lets mutations (tasks, promos, themes, etc.)
+    // run against rows the operator already "removed". Original
+    // tasks.ts + guest-list.ts omitted this filter; promo-codes.ts +
+    // ai-theme.ts added it. Strict default is the safer behavior —
+    // tightening tasks/guest-list matches their UI which already
+    // hides deleted events.
     const { data: event, error: eventError } = await admin
       .from("events")
       .select("collective_id")
       .eq("id", eventId)
+      .is("deleted_at", null)
       .maybeSingle();
     if (eventError) {
       console.error("[verifyEventOwnership] event lookup error:", eventError);

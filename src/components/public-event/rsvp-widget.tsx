@@ -442,6 +442,13 @@ export function RsvpWidget({
           <p className="text-xs text-white/60">
             Your name, email, and phone so the organizer knows who&apos;s coming and can reach you with updates.
           </p>
+          <p className="text-[11px] text-white/40 leading-snug">
+            By submitting, you agree that Nocturn may share your name, email, and phone with the event organizer so they can contact you about this event. Your <span className="text-white/60">first name and last initial</span> will show on the public guest list (e.g. &ldquo;Maya K.&rdquo;); email and phone stay private to the organizer. See our{" "}
+            <a href="/legal/privacy" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-white/70">
+              Privacy Policy
+            </a>
+            .
+          </p>
           <input
             type="text"
             placeholder="Your full name"
@@ -533,6 +540,13 @@ export function RsvpWidget({
             {memberPhone
               ? "Confirm your phone so the organizer can reach you with updates."
               : "Add your phone so the organizer can reach you with updates."}
+          </p>
+          <p className="text-[11px] text-white/40 leading-snug">
+            By submitting, you agree that Nocturn may share your name, email, and phone with the event organizer so they can contact you about this event. Your <span className="text-white/60">first name and last initial</span> will show on the public guest list; email and phone stay private to the organizer. See our{" "}
+            <a href="/legal/privacy" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-white/70">
+              Privacy Policy
+            </a>
+            .
           </p>
           <div className="relative">
             <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />

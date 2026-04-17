@@ -11,9 +11,10 @@ import { PastEvents } from "@/components/public-event/past-events";
 import { StickyTicketBar } from "@/components/public-event/sticky-ticket-bar";
 import { AlsoThisWeek } from "@/components/public-event/also-this-week";
 import { RsvpWidget } from "@/components/public-event/rsvp-widget";
+import { PublicRsvpList } from "@/components/public-event/public-rsvp-list";
 import { EventUpdatesFeed } from "@/components/public-event/event-updates-feed";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
-import { getRsvpCounts, getMyRsvp, getRsvpByToken } from "@/app/actions/rsvps";
+import { getRsvpCounts, getMyRsvp, getRsvpByToken, listPublicEventRsvps } from "@/app/actions/rsvps";
 import { listEventUpdatesPublic } from "@/app/actions/event-updates";
 import type { Metadata } from "next";
 import Image from "next/image";
@@ -227,7 +228,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const showTickets = (eventMode === "ticketed" || eventMode === "hybrid") && !isEffectivelyFree;
 
   // RSVP counts + current user's RSVP + event updates — fetched in parallel for RSVP/hybrid events
-  const [rsvpCountsResult, myRsvpResult, updatesResult, currentUserResult] = await Promise.all([
+  const [rsvpCountsResult, myRsvpResult, updatesResult, currentUserResult, publicRsvpsResult] = await Promise.all([
     showRsvp ? getRsvpCounts(event.id) : Promise.resolve({ error: null, counts: { yes: 0, maybe: 0, no: 0 } }),
     showRsvp ? getMyRsvp(event.id) : Promise.resolve({ error: null, rsvp: null }),
     listEventUpdatesPublic(event.id),
@@ -236,11 +237,15 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       const { data: { user } } = await ssr.auth.getUser();
       return user;
     })(),
+    showRsvp
+      ? listPublicEventRsvps(event.id)
+      : Promise.resolve({ error: null, rsvps: [] as Awaited<ReturnType<typeof listPublicEventRsvps>>["rsvps"] }),
   ]);
   const rsvpCounts = rsvpCountsResult.counts;
   let myRsvpStatus = myRsvpResult.rsvp?.status ?? null;
   const eventUpdates = updatesResult.updates;
   const isLoggedIn = !!currentUserResult;
+  const initialPublicRsvps = publicRsvpsResult.rsvps;
 
   // Pre-fill phone from the logged-in user's profile so the confirm form
   // doesn't force them to retype it every time.
@@ -628,6 +633,20 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                 isLoggedIn={isLoggedIn}
                 initialPhone={viewerPhone}
                 rsvpToken={rsvpToken ?? null}
+              />
+            </div>
+          )}
+
+          {/* ═══ LIVE GUEST LIST (free events) ═══
+              Partiful-style: first name + last initial, live counter,
+              avatar stack, flash animation on new RSVPs. Server strips
+              last names before they leave the server. */}
+          {isUpcoming && showRsvp && (
+            <div className="pb-10 border-t border-white/[0.04] pt-10">
+              <PublicRsvpList
+                eventId={event.id}
+                accentColor={accentColor}
+                initialRsvps={initialPublicRsvps}
               />
             </div>
           )}

@@ -480,6 +480,85 @@ export async function getMyRsvp(eventId: string): Promise<{
   }
 }
 
+// ── List RSVPs for the public event page (safe — no PII leak) ──
+//
+// Returns only what a Partiful-style live guest list needs:
+// first name + last initial, plus-ones count, status (yes/maybe only),
+// and created_at for ordering / flash-animation. NEVER exposes email,
+// phone, message, or the raw last name. Safe to call unauthenticated.
+//
+// Privacy contract: the server derives the display name here; the
+// client never receives `full_name`. If full_name is "Maya Kovalenko"
+// the client sees "Maya K.".
+
+function firstNameAndLastInitial(fullName: string | null): string | null {
+  if (!fullName) return null;
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return null;
+  const first = parts[0];
+  if (parts.length === 1) return first;
+  const lastInitial = parts[parts.length - 1]!.charAt(0).toUpperCase();
+  return `${first} ${lastInitial}.`;
+}
+
+export async function listPublicEventRsvps(eventId: string): Promise<{
+  error: string | null;
+  rsvps: Array<{
+    id: string;
+    display_name: string | null;
+    status: "yes" | "maybe";
+    plus_ones: number;
+    created_at: string;
+  }>;
+}> {
+  try {
+    if (!eventId?.trim()) return { error: "Event ID required", rsvps: [] };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(eventId)) {
+      return { error: "Invalid event ID", rsvps: [] };
+    }
+
+    const admin = createAdminClient();
+
+    // Don't leak attendee lists for draft / cancelled / deleted events.
+    const { data: event } = await admin
+      .from("events")
+      .select("id, status")
+      .eq("id", eventId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (!event || event.status !== "published") {
+      return { error: null, rsvps: [] };
+    }
+
+    const { data, error } = await admin
+      .from("rsvps")
+      .select("id, status, full_name, plus_ones, created_at")
+      .eq("event_id", eventId)
+      .in("status", ["yes", "maybe"])
+      .order("created_at", { ascending: false })
+      .limit(500);
+
+    if (error) {
+      console.error("[listPublicEventRsvps]", error);
+      return { error: "Failed to load guest list", rsvps: [] };
+    }
+
+    return {
+      error: null,
+      rsvps: (data || []).map((r) => ({
+        id: r.id,
+        display_name: firstNameAndLastInitial(r.full_name),
+        status: r.status as "yes" | "maybe",
+        plus_ones: r.plus_ones ?? 0,
+        created_at: r.created_at,
+      })),
+    };
+  } catch (err) {
+    console.error("[listPublicEventRsvps]", err);
+    return { error: "Something went wrong", rsvps: [] };
+  }
+}
+
 // ── List RSVPs for a collective member (dashboard) ──
 
 export async function listEventRsvps(eventId: string): Promise<{
