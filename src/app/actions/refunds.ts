@@ -25,10 +25,13 @@ export async function refundTicket(ticketId: string) {
 
     const sb = createAdminClient();
 
-    // Get ticket with event info for ownership check
+    // Get ticket with event info for ownership check.
+    // `promo_code_id` is pulled so we can release the promo slot on refund —
+    // previously only the webhook path decremented the counter, so server-action
+    // refunds silently left the slot consumed forever.
     const { data: ticket, error: ticketError } = await sb
       .from("tickets")
-      .select("id, event_id, ticket_tier_id, status, price_paid, stripe_payment_intent_id, metadata, events(collective_id, metadata)")
+      .select("id, event_id, ticket_tier_id, status, price_paid, stripe_payment_intent_id, metadata, promo_code_id, events(collective_id, metadata)")
       .eq("id", ticketId)
       .maybeSingle();
 
@@ -46,16 +49,19 @@ export async function refundTicket(ticketId: string) {
     if (eventMeta.refunds_enabled === false) {
       return { error: "Refunds are disabled for this event. The organizer has set a no-refund policy." };
     }
+    // Admin-only. Previously admin+promoter, but refunds move real money —
+    // a compromised promoter account could drain revenue before an admin
+    // notices. Aligns with toggleRefundPolicy's admin-only gate.
     const { data: membership } = await sb
       .from("collective_members")
       .select("role")
       .eq("user_id", user.id)
       .eq("collective_id", event.collective_id)
-      .in("role", ["admin", "promoter"])
+      .eq("role", "admin")
       .is("deleted_at", null)
       .maybeSingle();
 
-    if (!membership) return { error: "Only active admins and promoters can issue refunds" };
+    if (!membership) return { error: "Only active admins can issue refunds" };
 
     // Can only refund paid or checked_in tickets
     if (!["paid", "checked_in"].includes(ticket.status)) {
@@ -117,6 +123,23 @@ export async function refundTicket(ticketId: string) {
           .eq("id", ticketId)
           .eq("status", "refunded");
         return { error: "Refund failed — please try again or contact support" };
+      }
+    }
+
+    // Release the promo slot (if any). Without this, a promo_code's
+    // current_uses locks at max_uses forever after refunds. Defensive:
+    // clamp to 0 in case the DB value drifted negative from prior bugs.
+    if (ticket.promo_code_id) {
+      const { data: promoRow } = await sb
+        .from("promo_codes")
+        .select("current_uses")
+        .eq("id", ticket.promo_code_id)
+        .maybeSingle();
+      if (promoRow) {
+        await sb
+          .from("promo_codes")
+          .update({ current_uses: Math.max((promoRow.current_uses ?? 0) - 1, 0) })
+          .eq("id", ticket.promo_code_id);
       }
     }
 
@@ -330,27 +353,36 @@ export async function toggleRefundPolicy(eventId: string, enabled: boolean) {
 
     const sb = createAdminClient();
 
-    // Get current event metadata
+    // Get current event metadata + status. Status check prevents
+    // operators from flipping refund policy on an already-completed /
+    // archived event — those rows feed settlement calculations, and
+    // retroactive policy changes silently shift P&L on closed books.
     const { data: event, error: eventError } = await sb
       .from("events")
-      .select("metadata, collective_id")
+      .select("metadata, collective_id, status")
       .eq("id", eventId)
       .maybeSingle();
 
     if (eventError) return { error: "Failed to look up event" };
     if (!event) return { error: "Event not found" };
 
-    // Verify admin/promoter
+    if (event.status !== "draft" && event.status !== "published") {
+      return { error: "Refund policy can only be changed while the event is draft or published." };
+    }
+
+    // Verify admin only — promoters can issue individual refunds (admin/promoter
+    // role on refundTicket) but policy-level changes are a finance owner
+    // decision, not a promoter one.
     const { data: membership } = await sb
       .from("collective_members")
       .select("role")
       .eq("user_id", user.id)
       .eq("collective_id", event.collective_id)
-      .in("role", ["admin", "promoter"])
+      .eq("role", "admin")
       .is("deleted_at", null)
       .maybeSingle();
 
-    if (!membership) return { error: "Only admins and promoters can change refund policy" };
+    if (!membership) return { error: "Only admins can change refund policy" };
 
     const currentMeta = (event.metadata as Record<string, unknown>) || {};
     const { error } = await sb

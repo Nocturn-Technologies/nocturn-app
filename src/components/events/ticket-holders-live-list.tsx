@@ -252,8 +252,9 @@ export function TicketHoldersLiveList({ eventId, initialHolders }: Props) {
         </div>
       )}
 
-      {/* List */}
-      <ul className="space-y-2">
+      {/* List — aria-live so screen readers hear ticket updates as they
+          stream in. Matches the visual flash-on-change pattern for SR users. */}
+      <ul className="space-y-2" role="status" aria-live="polite" aria-atomic="false">
         {visible.map((h) => {
           const meta = STATUS_META[h.status];
           const Icon = meta.icon;

@@ -37,7 +37,7 @@ export function LiveTicketStats({ eventId, initialSold, initialCapacity, initial
   const pct = initialCapacity > 0 ? Math.round((sold / initialCapacity) * 100) : 0;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" role="status" aria-live="polite">
       <div className="flex items-center gap-4 text-sm">
         <div className="flex items-center gap-1.5">
           <span className="text-zinc-500">Sold:</span>

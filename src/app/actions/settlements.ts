@@ -367,14 +367,20 @@ export async function addEventExpense(input: {
 
   const admin = createAdminClient();
 
-  // Get collective_id from event
+  // Get collective_id + status. Expense edits on completed/archived events
+  // silently shift P&L on already-generated settlements — so we gate writes
+  // to pre-completion statuses only. Operators who need to correct a settled
+  // event must regenerate the settlement.
   const { data: event } = await admin
     .from("events")
-    .select("collective_id")
+    .select("collective_id, status")
     .eq("id", input.eventId)
     .maybeSingle();
 
   if (!event) return { error: "Event not found" };
+  if (event.status !== "draft" && event.status !== "published") {
+    return { error: "Can't add expenses to a completed or archived event. Regenerate the settlement instead." };
+  }
 
   // Verify user is a member of this collective
   const { count } = await admin

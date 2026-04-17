@@ -167,7 +167,7 @@ export function InviteMemberModal({
             Add Members
           </SheetTitle>
           <SheetDescription className="text-muted-foreground">
-            Search your team, artists, and collectives — or invite by email
+            Search members, artists, and collectives — or invite by email
           </SheetDescription>
         </SheetHeader>
 

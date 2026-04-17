@@ -175,8 +175,22 @@ export async function getTicketByToken(ticketToken: string) {
     }
   }
 
-  // For unauthenticated users, the ticket token itself is the proof of access
-  // (only the buyer has the token from their email/success page)
+  // For unauthenticated users, the ticket token itself is the proof of
+  // access (only the buyer has the token from their email/success page) —
+  // BUT strip internal metadata (buyer email, referrer token, promo id)
+  // before returning. If the ticket link gets forwarded/screenshot-leaked,
+  // none of the buyer's PII goes with it. Legit buyers already know their
+  // own email + promo; they don't need the app to tell it back to them.
+  // Authenticated collective staff (door scanners) get full metadata
+  // because they need customer_email to disambiguate guests at check-in.
+  const isCollectiveStaff = !!user && !!ticket.user_id && ticket.user_id !== user.id;
+  const isOwnTicket = !!user && ticket.user_id === user.id;
+  const shouldIncludeMetadata = isCollectiveStaff || isOwnTicket;
+
+  if (!shouldIncludeMetadata) {
+    const safe = { ...ticket, metadata: null };
+    return { error: null, ticket: safe };
+  }
   return { error: null, ticket };
   } catch (err) {
     console.error("[getTicketByToken] Unexpected error:", err);

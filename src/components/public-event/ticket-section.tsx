@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { Minus, Plus, Ticket, Check, AlertCircle, Bell, Loader2, Phone } from "lucide-react";
 import dynamic from "next/dynamic";
-const StripeCheckout = dynamic(() => import("@/components/stripe-checkout").then(m => m.StripeCheckout), { ssr: false, loading: () => <div className="flex items-center justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-[#7B2FF7] border-t-transparent" /></div> });
+const StripeCheckout = dynamic(() => import("@/components/stripe-checkout").then(m => m.StripeCheckout), { ssr: false, loading: () => <div className="flex items-center justify-center py-12"><div className="h-6 w-6 animate-spin rounded-full border-2 border-nocturn border-t-transparent" /></div> });
 import { joinWaitlist } from "@/app/actions/ticket-waitlist";
 import { validatePromoCode } from "@/app/actions/promo-codes";
 import { haptic } from "@/lib/haptics";

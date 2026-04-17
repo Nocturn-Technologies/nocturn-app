@@ -137,13 +137,18 @@ export async function createPromoCode(input: {
       return { error: "Promo code must be alphanumeric and under 50 characters" };
     }
 
-    // Look up the event's collective_id for the required FK
+    // Status guard + collective_id lookup in one query. Creating promo codes
+    // on completed/archived events doesn't make sense (event already happened,
+    // no tickets to discount) and could confuse settlement reconciliation.
     const { data: eventRow } = await supabase
       .from("events")
-      .select("collective_id")
+      .select("status, collective_id")
       .eq("id", input.eventId)
       .is("deleted_at", null)
       .maybeSingle();
+    if (eventRow && eventRow.status !== "draft" && eventRow.status !== "published") {
+      return { error: "Can't create promo codes for a completed or archived event." };
+    }
 
     if (!eventRow) return { error: "Event not found" };
 
