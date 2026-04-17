@@ -43,6 +43,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -225,6 +226,7 @@ function SectionHeader({
 export default function ChatPage() {
   const supabase = createClient();
   const router = useRouter();
+  const { confirm, confirmDialog } = useConfirm();
   const [userId, setUserId] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelWithMeta[]>([]);
   const [collabChannels, setCollabChannels] = useState<ChannelWithMeta[]>([]);
@@ -451,6 +453,13 @@ export default function ChatPage() {
   }
 
   async function handleRejectInquiry(inquiryId: string) {
+    const ok = await confirm({
+      title: "Dismiss this inquiry?",
+      description: "You can't undo this. The sender won't be notified.",
+      confirmText: "Dismiss",
+      destructive: true,
+    });
+    if (!ok) return;
     setProcessingInquiryId(inquiryId);
     setInquiryError(null);
     const result = await rejectInquiry(inquiryId);
@@ -1134,6 +1143,7 @@ export default function ChatPage() {
         <Mic className="h-5 w-5" />
         <span className="text-sm font-semibold">Record Call</span>
       </Link>
+      {confirmDialog}
     </div>
   );
 }

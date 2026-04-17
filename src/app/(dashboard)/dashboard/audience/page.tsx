@@ -16,6 +16,7 @@ import {
   Copy,
   Check,
   ExternalLink,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import type { ReachInsight } from "@/app/actions/contacts";
@@ -199,10 +200,19 @@ export default function AudiencePage() {
   // Loading state
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-7 w-7 animate-spin rounded-full border-2 border-nocturn border-t-transparent" />
-          <p className="text-xs text-muted-foreground">Loading...</p>
+      <div className="space-y-6 pb-24 max-w-6xl mx-auto animate-in fade-in duration-300">
+        <div className="h-7 w-48 rounded-lg bg-muted animate-pulse" />
+        <div className="h-11 w-full rounded-xl bg-muted animate-pulse md:max-w-md" />
+        <div className="space-y-3">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-3 rounded-xl">
+              <div className="h-10 w-10 rounded-full bg-muted animate-pulse shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+                <div className="h-3 w-24 rounded bg-muted animate-pulse" />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -211,10 +221,16 @@ export default function AudiencePage() {
   // No collective
   if (!collectiveId) {
     return (
-      <div className="flex items-center justify-center py-24">
-        <p className="text-sm text-muted-foreground">
-          No collective found. Join or create one to manage your fans.
-        </p>
+      <div className="flex flex-col items-center gap-4 py-20">
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-nocturn/10">
+          <Users className="h-8 w-8 text-muted-foreground" />
+        </div>
+        <div className="text-center max-w-xs">
+          <p className="font-semibold">No collective yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Join or create a collective to see your audience insights.
+          </p>
+        </div>
       </div>
     );
   }
@@ -323,7 +339,7 @@ export default function AudiencePage() {
                           >
                             {copiedInsight === insight.id ? (
                               <>
-                                <Check className="h-3 w-3 text-green-400" />
+                                <Check className="h-3 w-3 text-emerald-400" />
                                 Copied!
                               </>
                             ) : (

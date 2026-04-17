@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Navigation, Music, MapPin } from "lucide-react";
+import { Navigation, Music, MapPin, CalendarPlus } from "lucide-react";
 import { TicketSection } from "@/components/public-event/ticket-section";
 import { ShareButton } from "@/components/public-event/share-button";
 import { PublicEventShareCard } from "@/components/public-event/public-event-share-card";
@@ -26,6 +26,21 @@ import Link from "next/link";
 // Revalidate public event pages every 10 seconds (ISR)
 // Short window reduces stale capacity data shown to buyers (Gap 16)
 export const revalidate = 10;
+
+function buildCalendarUrl(event: { title: string; starts_at: string; ends_at: string | null; description: string | null; }, venueName?: string) {
+  const start = new Date(event.starts_at).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const end = event.ends_at
+    ? new Date(event.ends_at).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")
+    : new Date(new Date(event.starts_at).getTime() + 4 * 60 * 60 * 1000).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: event.title,
+    dates: `${start}/${end}`,
+    details: event.description ?? "",
+    location: venueName ?? "",
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
 
 interface Props {
   params: Promise<{ slug: string; eventSlug: string }>;
@@ -63,22 +78,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const appUrl = "https://app.trynocturn.com";
   const canonicalUrl = `${appUrl}/e/${slug}/${eventSlug}`;
 
-  // Use flyer if available, otherwise generate dynamic OG image
+  // Always use the dynamic OG generator — even when a flyer exists.
+  // Portrait flyers (1080×1350 for IG stories) get cropped unreadably by
+  // social platforms that enforce 1.91:1 aspect ratio. The generator composites
+  // the flyer as a left panel and renders title/date/venue in the right panel,
+  // guaranteeing every share preview is readable regardless of flyer orientation.
   const venue = event.venues;
   const dateStr = event.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })
     : "";
-  // Only use flyer_url for OG if it's a real URL (not a base64 data URL)
   const flyerIsValidUrl = event.flyer_url && event.flyer_url.startsWith("http");
-  const ogImageUrl = flyerIsValidUrl
-    ? event.flyer_url!
-    : `${appUrl}/og-image/event?${new URLSearchParams({
-      title: event.title,
-      collective: collective.name,
-      date: dateStr,
-      venue: venue ? `${venue.name}, ${venue.city}` : "",
-      price: "Tickets Available",
-    }).toString()}`;
+  const ogParams: Record<string, string> = {
+    title: event.title,
+    collective: collective.name,
+    date: dateStr,
+    venue: venue ? `${venue.name}, ${venue.city}` : "",
+    price: "Tickets Available",
+  };
+  if (flyerIsValidUrl) {
+    ogParams.flyer = event.flyer_url!;
+  }
+  const ogImageUrl = `${appUrl}/og-image/event?${new URLSearchParams(ogParams).toString()}`;
 
   return {
     title,
@@ -554,7 +574,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
         {dressCode && (
           <div className="py-4 border-t border-white/[0.04]">
-            <p className="text-[13px] text-white/40"><span className="text-white/40">Dress code</span> — {dressCode}</p>
+            <p className="text-[13px] text-white/60"><span className="text-white/60">Dress code</span> — {dressCode}</p>
           </div>
         )}
 
@@ -691,7 +711,18 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
           {/* ─── Share + About ─── */}
           <div className="space-y-6 py-8 border-t border-white/[0.04]">
-            <ShareButton url={publicUrl} title={event.title} />
+            <div className="flex items-center gap-3">
+              <ShareButton url={publicUrl} title={event.title} />
+              <a
+                href={buildCalendarUrl(event, shareCardVenue)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/[0.08] transition-colors min-h-[44px]"
+              >
+                <CalendarPlus className="h-4 w-4" />
+                Add to calendar
+              </a>
+            </div>
 
             <PublicEventShareCard
               event={{

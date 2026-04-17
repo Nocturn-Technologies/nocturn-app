@@ -102,7 +102,7 @@ export function FlippableTicket(props: FlippableTicketProps) {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <Ticket className="h-3 w-3 text-white/40" />
-                  <span className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">
+                  <span className="text-[11px] font-semibold text-white/60 uppercase tracking-wider">
                     {props.tierName}
                   </span>
                 </div>
@@ -147,11 +147,11 @@ export function FlippableTicket(props: FlippableTicketProps) {
               {/* Bottom info */}
               <div className="flex items-center justify-between relative z-10">
                 <div>
-                  <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-0.5">Attendee</p>
+                  <p className="text-[11px] text-white/60 uppercase tracking-wider font-semibold mb-0.5">Attendee</p>
                   <p className="text-[13px] text-white/50 font-medium">{props.attendeeName || props.attendeeEmail}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[11px] text-white/40 uppercase tracking-wider font-semibold mb-0.5">Paid</p>
+                  <p className="text-[11px] text-white/60 uppercase tracking-wider font-semibold mb-0.5">Paid</p>
                   <p className="text-[13px] text-white/50 font-medium">
                     {props.pricePaid === 0 ? "Free" : `$${props.pricePaid.toFixed(2)}`}
                   </p>
@@ -169,7 +169,7 @@ export function FlippableTicket(props: FlippableTicketProps) {
               {/* Flip hint */}
               <div className="mt-4 flex items-center justify-center gap-1.5 relative z-10">
                 <QrCode className="h-3 w-3 text-white/40" />
-                <span className="text-[11px] text-white/40 font-medium">Tap to show QR code</span>
+                <span className="text-[11px] text-white/60 font-medium">Tap to show QR code</span>
               </div>
             </div>
           </div>
@@ -212,14 +212,14 @@ export function FlippableTicket(props: FlippableTicketProps) {
               )}
 
               {/* Ticket ID */}
-              <p className="text-[11px] text-white/40 font-mono tracking-wider">
+              <p className="text-[11px] text-white/60 font-mono tracking-wider">
                 {props.ticketToken.slice(0, 8)}...{props.ticketToken.slice(-4)}
               </p>
 
               {/* Flip hint */}
               <div className="mt-4 flex items-center justify-center gap-1.5">
                 <Ticket className="h-3 w-3 text-white/40" />
-                <span className="text-[11px] text-white/40 font-medium">Tap to see details</span>
+                <span className="text-[11px] text-white/60 font-medium">Tap to see details</span>
               </div>
             </div>
           </div>

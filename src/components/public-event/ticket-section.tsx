@@ -155,7 +155,7 @@ export function TicketSection({
   if (showCheckout && selectedTier && selected) {
     return (
       <div className="space-y-4">
-        <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.25em] text-white/40">
+        <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.25em] text-white/60">
           Complete Payment
         </h2>
         <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5">
@@ -164,7 +164,7 @@ export function TicketSection({
               <p className="font-heading text-base font-semibold text-white">
                 {quantity}x {selected.name}
               </p>
-              <p className="text-sm text-white/40">{email}</p>
+              <p className="text-sm text-white/60">{email}</p>
             </div>
             <div className="text-right">
               <p
@@ -206,7 +206,7 @@ export function TicketSection({
 
   return (
     <div className="space-y-3">
-      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/40">
+      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.15em] text-white/60">
         Tickets
       </h2>
 
@@ -276,7 +276,7 @@ export function TicketSection({
                         <p className={`font-heading text-base font-semibold truncate ${isSoldOut || isLocked ? "text-white/50" : "text-white"}`}>
                           {tier.name}
                         </p>
-                        <p className="text-sm text-white/40">
+                        <p className="text-sm text-white/60">
                           {salesNotStarted
                             ? `Sales start ${new Date(tier.sales_start!).toLocaleDateString("en", { month: "short", day: "numeric" })}`
                             : salesEnded
@@ -323,7 +323,9 @@ export function TicketSection({
                       <>
                         <p className="text-sm text-white/60">Get notified if a spot opens up:</p>
                         <div className="flex gap-2">
+                          <label htmlFor="waitlist-email" className="sr-only">Waitlist email address</label>
                           <input
+                            id="waitlist-email"
                             type="email"
                             placeholder="your@email.com"
                             value={waitlistEmail}
@@ -545,14 +547,14 @@ export function TicketSection({
       {/* Order confirmation */}
       {showConfirmation && selectedTier && selected && !showCheckout && (
         <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 space-y-2 animate-fade-in-up">
-          <p className="text-xs font-semibold uppercase tracking-wider text-white/40">Order Summary</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-white/60">Order Summary</p>
           <div className="flex items-center justify-between text-sm">
             <span className="text-white/70">{quantity}× {selected.name}</span>
             <span className="text-white font-medium">${subtotal.toFixed(2)}</span>
           </div>
           {totalFees > 0 && (
             <div className="flex items-center justify-between text-sm">
-              <span className="text-white/40">Service fee</span>
+              <span className="text-white/60">Service fee</span>
               <span className="text-white/60">${totalFees.toFixed(2)}</span>
             </div>
           )}
@@ -621,7 +623,7 @@ export function TicketSection({
               </p>
             )}
             {totalFees > 0 && (
-              <p className="mt-2.5 text-center text-[11px] text-white/40 tracking-wide">
+              <p className="mt-2.5 text-center text-[11px] text-white/60 tracking-wide">
                 ${subtotal.toFixed(2)} + ${totalFees.toFixed(2)} service fee
               </p>
             )}

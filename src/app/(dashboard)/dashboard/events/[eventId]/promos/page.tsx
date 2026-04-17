@@ -166,7 +166,7 @@ export default function PromosPage() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4 text-center">
-            <p className="text-2xl font-bold text-green-500">{activeCodes}</p>
+            <p className="text-2xl font-bold text-emerald-500">{activeCodes}</p>
             <p className="text-xs text-muted-foreground">Active</p>
           </CardContent>
         </Card>
@@ -365,7 +365,7 @@ export default function PromosPage() {
                     {togglingId === promo.id ? (
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                     ) : promo.is_active ? (
-                      <ToggleRight className="h-6 w-6 text-green-500" />
+                      <ToggleRight className="h-6 w-6 text-emerald-500" />
                     ) : (
                       <ToggleLeft className="h-6 w-6 text-muted-foreground" />
                     )}
@@ -383,7 +383,7 @@ export default function PromosPage() {
                         title="Copy code"
                       >
                         {copiedId === promo.id ? (
-                          <Check className="h-3 w-3 text-green-500" />
+                          <Check className="h-3 w-3 text-emerald-500" />
                         ) : (
                           <Copy className="h-3 w-3" />
                         )}

@@ -25,7 +25,7 @@ export function CollectiveProfile({
 
   return (
     <div className="space-y-2">
-      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">
+      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
         About the collective
       </h2>
       <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 space-y-4">
@@ -52,7 +52,7 @@ export function CollectiveProfile({
             <p className="font-heading text-base font-semibold text-white">
               {name}
             </p>
-            <p className="text-xs text-white/40">
+            <p className="text-xs text-white/60">
               {eventCount} {eventCount === 1 ? "event" : "events"} hosted
             </p>
           </div>

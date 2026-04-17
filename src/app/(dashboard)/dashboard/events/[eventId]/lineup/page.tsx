@@ -195,7 +195,7 @@ export default function LineupPage() {
 
   const statusColors: Record<string, string> = {
     pending: "bg-yellow-500/10 text-yellow-500",
-    confirmed: "bg-green-500/10 text-green-500",
+    confirmed: "bg-emerald-500/10 text-emerald-500",
     declined: "bg-red-500/10 text-red-500",
     cancelled: "bg-muted text-muted-foreground",
   };
@@ -467,7 +467,7 @@ export default function LineupPage() {
                   />
                 </div>
                 {newEmail && (
-                  <label className="flex items-start gap-2 rounded-md border border-border bg-card/50 p-3 text-xs cursor-pointer">
+                  <label className="flex items-start gap-2 rounded-md border border-border bg-card/50 p-3 text-xs cursor-pointer min-h-[44px]">
                     <input
                       type="checkbox"
                       checked={sendInvite}
@@ -553,7 +553,7 @@ export default function LineupPage() {
                     <DropdownMenuContent align="end">
                       {item.status !== "confirmed" && (
                         <DropdownMenuItem onClick={() => handleStatusChange(item.id, "confirmed")} disabled={!!changingStatusId}>
-                          <Check className="mr-2 h-4 w-4 text-green-500" />
+                          <Check className="mr-2 h-4 w-4 text-emerald-500" />
                           Confirm
                         </DropdownMenuItem>
                       )}

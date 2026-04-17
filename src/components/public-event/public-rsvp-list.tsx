@@ -134,7 +134,7 @@ export function PublicRsvpList({ eventId, accentColor, initialRsvps }: Props) {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/40">
+          <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/60">
             Guest list
           </h3>
         </div>
@@ -160,7 +160,7 @@ export function PublicRsvpList({ eventId, accentColor, initialRsvps }: Props) {
     <div className="space-y-4">
       {/* Header row: section title + live counter */}
       <div className="flex items-center justify-between">
-        <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/40">
+        <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/60">
           Guest list
         </h3>
         <div className="flex items-center gap-1.5">
@@ -284,7 +284,7 @@ export function PublicRsvpList({ eventId, accentColor, initialRsvps }: Props) {
                       +{r.plus_ones}
                     </span>
                   )}
-                  <span className="ml-auto text-[11px] text-white/40 shrink-0">
+                  <span className="ml-auto text-[11px] text-white/60 shrink-0">
                     {timeAgo(r.created_at)}
                   </span>
                 </div>

@@ -46,8 +46,8 @@ const statusConfig: Record<
   },
   checked_in: {
     label: "Checked In",
-    color: "bg-green-500/10 text-green-500 ring-green-500/20",
-    dotColor: "bg-green-500",
+    color: "bg-emerald-500/10 text-emerald-500 ring-emerald-500/20",
+    dotColor: "bg-emerald-500",
   },
   no_show: {
     label: "No Show",
@@ -261,7 +261,7 @@ export default function GuestListPage() {
         </Card>
         <Card>
           <CardContent className="pt-4 pb-4 text-center">
-            <p className="text-2xl font-bold text-green-500">{checkedInCount}</p>
+            <p className="text-2xl font-bold text-emerald-500">{checkedInCount}</p>
             <p className="text-xs text-muted-foreground">Checked In</p>
           </CardContent>
         </Card>
@@ -478,7 +478,7 @@ export default function GuestListPage() {
                         </span>
                       )}
                       {guest.checked_in_at && (
-                        <span className="text-[11px] text-green-500">
+                        <span className="text-[11px] text-emerald-500">
                           In @{" "}
                           {new Date(guest.checked_in_at).toLocaleTimeString(
                             "en",
@@ -495,7 +495,7 @@ export default function GuestListPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="text-green-500 hover:bg-green-500/10 h-9 min-h-[44px] px-2"
+                        className="text-emerald-500 hover:bg-emerald-500/10 h-9 min-h-[44px] px-2"
                         onClick={() => handleCheckIn(guest.id)}
                         title="Check in"
                       >

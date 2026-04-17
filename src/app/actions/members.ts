@@ -480,3 +480,89 @@ export async function acceptInvitation(token: string) {
     return { error: "Something went wrong" };
   }
 }
+
+/**
+ * Remove a member from a collective. Server-side authorization:
+ *  1. Caller must be authenticated.
+ *  2. Caller must be an admin/owner of the SAME collective as the target member.
+ *  3. Cannot remove the last admin (would lock the collective).
+ *
+ * Previously this was done client-side via supabase.from().delete() — any
+ * browser-console call could bypass the UI-only admin guard.
+ */
+export async function removeCollectiveMember(
+  memberId: string
+): Promise<{ error: string | null }> {
+  try {
+    if (!memberId || typeof memberId !== "string" || memberId.length > 100) {
+      return { error: "Invalid member ID" };
+    }
+
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) return { error: "Not authenticated" };
+
+    const sb = createAdminClient();
+
+    // Look up the target member to get their collective_id and role
+    const { data: target } = await sb
+      .from("collective_members")
+      .select("id, collective_id, user_id, role")
+      .eq("id", memberId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (!target) return { error: "Member not found" };
+
+    // Verify the CALLER is an admin/owner in the same collective
+    const { data: callerMembership } = await sb
+      .from("collective_members")
+      .select("role")
+      .eq("collective_id", target.collective_id)
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (!callerMembership || !["admin", "owner"].includes(callerMembership.role as string)) {
+      return { error: "Only admins can remove members" };
+    }
+
+    // Prevent removing the last admin
+    if (target.role === "admin" || target.role === "owner") {
+      const { count } = await sb
+        .from("collective_members")
+        .select("id", { count: "exact", head: true })
+        .eq("collective_id", target.collective_id)
+        .in("role", ["admin", "owner"])
+        .is("deleted_at", null);
+
+      if ((count ?? 0) <= 1) {
+        return { error: "Can't remove the last admin. Promote another member first." };
+      }
+    }
+
+    // Soft-delete the member
+    const { error: deleteError } = await sb
+      .from("collective_members")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", memberId);
+
+    if (deleteError) {
+      console.error("[removeCollectiveMember] delete failed:", deleteError);
+      return { error: "Failed to remove member" };
+    }
+
+    // Sync chat memberships
+    void syncTeamMembers(target.collective_id).catch((err) =>
+      console.error("[removeCollectiveMember] sync chat failed:", err)
+    );
+
+    return { error: null };
+  } catch (err) {
+    console.error("[removeCollectiveMember] Unexpected error:", err);
+    return { error: "Something went wrong" };
+  }
+}

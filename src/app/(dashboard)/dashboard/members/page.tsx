@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { inviteMember, getTeamMembers, getPendingInvitations, cancelInvitation } from "@/app/actions/members";
+import { inviteMember, getTeamMembers, getPendingInvitations, cancelInvitation, removeCollectiveMember } from "@/app/actions/members";
 import { searchCollectives, startCollabChat } from "@/app/actions/collab";
 import { getReferralCode } from "@/app/actions/referral-program";
 import { Button } from "@/components/ui/button";
@@ -211,6 +211,13 @@ export default function MembersPage() {
 
   // Cancel a pending invite
   async function handleCancelInvite(inviteId: string) {
+    const ok = await confirm({
+      title: "Cancel this invitation?",
+      description: "The invited person won't be able to join.",
+      confirmText: "Cancel invitation",
+      destructive: true,
+    });
+    if (!ok) return;
     setCancellingInviteId(inviteId);
     const result = await cancelInvitation(inviteId);
     if (result.error) {
@@ -253,23 +260,13 @@ export default function MembersPage() {
       destructive: true,
     });
     if (!ok) return;
-    const member = members.find((m) => m.id === memberId);
-    if (member?.role === "admin") {
-      const adminCount = members.filter((m) => m.role === "admin").length;
-      if (adminCount <= 1) {
-        setError("Can't remove the last admin. Promote another member first.");
-        return;
-      }
-    }
 
     setRemovingId(memberId);
-    const { error } = await supabase
-      .from("collective_members")
-      .delete()
-      .eq("id", memberId);
+    // Server-side auth: verifies caller is admin/owner + prevents last-admin removal
+    const { error } = await removeCollectiveMember(memberId);
 
     if (error) {
-      setError(error.message);
+      setError(error);
       setRemovingId(null);
       return;
     }
@@ -413,13 +410,13 @@ export default function MembersPage() {
       {error && (
         <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive flex items-center justify-between animate-in fade-in duration-200">
           {error}
-          <button onClick={() => setError(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-destructive/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
+          <button aria-label="Dismiss" onClick={() => setError(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-destructive/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
         </div>
       )}
       {success && (
         <div className="rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-500 flex items-center justify-between animate-in fade-in duration-200">
           {success}
-          <button onClick={() => setSuccess(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-emerald-500/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
+          <button aria-label="Dismiss" onClick={() => setSuccess(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-emerald-500/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
         </div>
       )}
 

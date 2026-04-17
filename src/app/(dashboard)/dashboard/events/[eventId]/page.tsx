@@ -60,8 +60,8 @@ const statusConfig: Record<
   },
   published: {
     label: "Published",
-    color: "bg-green-500/10 text-green-500 ring-green-500/20",
-    dotColor: "bg-green-500",
+    color: "bg-emerald-500/10 text-emerald-500 ring-emerald-500/20",
+    dotColor: "bg-emerald-500",
   },
   upcoming: {
     label: "Upcoming",
@@ -91,7 +91,7 @@ const statusConfig: Record<
 const actionTones = {
   nocturn: "bg-nocturn/10 text-nocturn group-hover:bg-nocturn/15",
   glow: "bg-nocturn-glow/10 text-nocturn-glow group-hover:bg-nocturn-glow/15",
-  green: "bg-green-400/10 text-green-400 group-hover:bg-green-400/15",
+  green: "bg-emerald-400/10 text-emerald-400 group-hover:bg-emerald-400/15",
   amber: "bg-nocturn-amber/10 text-nocturn-amber group-hover:bg-nocturn-amber/15",
   muted: "bg-muted text-muted-foreground group-hover:bg-muted/80",
 } as const;
@@ -625,7 +625,7 @@ export default async function EventDetailPage({ params }: Props) {
             <Users className="h-4 w-4 text-nocturn" />
             {isTicketedMode ? "Ticket holders" : "RSVPs"}
             <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Live
             </span>
           </CardTitle>

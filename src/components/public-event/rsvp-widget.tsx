@@ -259,7 +259,7 @@ export function RsvpWidget({
       <div className="space-y-4" id="rsvp">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/40">
+          <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/60">
             RSVP
           </h3>
           {total > 0 && (
@@ -336,7 +336,7 @@ export function RsvpWidget({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/40">
+          <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/60">
             RSVP
           </h3>
           <p className="mt-1 text-sm text-white/60">
@@ -442,14 +442,16 @@ export function RsvpWidget({
           <p className="text-xs text-white/60">
             Your name, email, and phone so the organizer knows who&apos;s coming and can reach you with updates.
           </p>
-          <p className="text-[11px] text-white/40 leading-snug">
+          <p className="text-[11px] text-white/60 leading-snug">
             By submitting, you agree that Nocturn may share your name, email, and phone with the event organizer so they can contact you about this event. Your <span className="text-white/60">first name and last initial</span> will show on the public guest list (e.g. &ldquo;Maya K.&rdquo;); email and phone stay private to the organizer. See our{" "}
             <a href="/legal/privacy" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-white/70">
               Privacy Policy
             </a>
             .
           </p>
+          <label htmlFor="rsvp-name" className="sr-only">Your name</label>
           <input
+            id="rsvp-name"
             type="text"
             placeholder="Your full name"
             value={guestName}
@@ -466,7 +468,9 @@ export function RsvpWidget({
           />
           <div className="relative">
             <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <label htmlFor="rsvp-email" className="sr-only">Email address</label>
             <input
+              id="rsvp-email"
               type="email"
               inputMode="email"
               autoComplete="email"
@@ -484,7 +488,9 @@ export function RsvpWidget({
           </div>
           <div className="relative">
             <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <label htmlFor="rsvp-phone" className="sr-only">Phone number</label>
             <input
+              id="rsvp-phone"
               type="tel"
               inputMode="tel"
               autoComplete="tel"
@@ -541,7 +547,7 @@ export function RsvpWidget({
               ? "Confirm your phone so the organizer can reach you with updates."
               : "Add your phone so the organizer can reach you with updates."}
           </p>
-          <p className="text-[11px] text-white/40 leading-snug">
+          <p className="text-[11px] text-white/60 leading-snug">
             By submitting, you agree that Nocturn may share your name, email, and phone with the event organizer so they can contact you about this event. Your <span className="text-white/60">first name and last initial</span> will show on the public guest list; email and phone stay private to the organizer. See our{" "}
             <a href="/legal/privacy" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-white/70">
               Privacy Policy

@@ -179,7 +179,7 @@ export default async function EventsPage() {
             <CollapsibleEventSection
               title="Published"
               events={published}
-              dotColor="bg-green-500"
+              dotColor="bg-emerald-500"
               defaultOpen={true}
             />
           )}

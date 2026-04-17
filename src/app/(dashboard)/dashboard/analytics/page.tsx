@@ -247,7 +247,7 @@ export default async function AnalyticsPage() {
                   </p>
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
-                  e.status === "published" ? "bg-green-500/10 text-green-500" :
+                  e.status === "published" ? "bg-emerald-500/10 text-emerald-500" :
                   e.status === "completed" ? "bg-blue-500/10 text-blue-500" :
                   e.status === "draft" ? "bg-yellow-500/10 text-yellow-500" :
                   "bg-muted text-muted-foreground"
@@ -280,7 +280,7 @@ function KPICard({ label, value, sub, growth, icon }: {
         <p className="text-xl font-bold truncate">{value}</p>
         <div className="flex items-center gap-1 mt-0.5">
           {growth !== undefined && growth !== 0 && (
-            <span className={`text-xs flex items-center gap-0.5 ${growth > 0 ? "text-green-500" : "text-red-400"}`}>
+            <span className={`text-xs flex items-center gap-0.5 ${growth > 0 ? "text-emerald-500" : "text-red-400"}`}>
               {growth > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
               {Math.abs(Math.round(growth))}%
             </span>
