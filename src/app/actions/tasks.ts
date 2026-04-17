@@ -2,37 +2,9 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
-
-/** Verify user has access to an event via collective membership */
-async function verifyEventAccess(userId: string, eventId: string): Promise<boolean> {
-  try {
-    const admin = createAdminClient();
-    const { data: event, error: eventError } = await admin
-      .from("events")
-      .select("collective_id")
-      .eq("id", eventId)
-      .maybeSingle();
-    if (eventError) {
-      console.error("[verifyEventAccess] event lookup error:", eventError);
-      return false;
-    }
-    if (!event) return false;
-    const { count, error: memberError } = await admin
-      .from("collective_members")
-      .select("*", { count: "exact", head: true })
-      .eq("collective_id", event.collective_id)
-      .eq("user_id", userId)
-      .is("deleted_at", null);
-    if (memberError) {
-      console.error("[verifyEventAccess] membership lookup error:", memberError);
-      return false;
-    }
-    return (count ?? 0) > 0;
-  } catch (err) {
-    console.error("[verifyEventAccess]", err);
-    return false;
-  }
-}
+// Canonical ownership check. Previously a local copy of this function —
+// now shared with guest-list/promo-codes/ai-theme via `src/lib/auth/ownership`.
+import { verifyEventOwnership as verifyEventAccess } from "@/lib/auth/ownership";
 
 /** Auth + ownership check. Returns userId if authorized, null otherwise. */
 async function authAndVerifyEvent(eventId: string): Promise<string | null> {
