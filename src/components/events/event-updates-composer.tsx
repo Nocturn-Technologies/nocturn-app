@@ -119,7 +119,7 @@ export function EventUpdatesComposer({ eventId, initialUpdates }: EventUpdatesCo
           className="w-full resize-none rounded-xl border border-border bg-background px-3 py-3 text-base md:text-sm placeholder:text-muted-foreground/60 outline-none focus:border-nocturn/40 transition-all min-h-[100px]"
         />
         <div className="flex items-center justify-between text-[11px]">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <label className="flex items-center gap-2 cursor-pointer select-none min-h-[44px]">
             <input
               type="checkbox"
               checked={sendEmail}

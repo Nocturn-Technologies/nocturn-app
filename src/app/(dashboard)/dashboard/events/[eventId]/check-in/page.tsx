@@ -531,7 +531,7 @@ export default function CheckInScannerPage() {
         <div
           className={`rounded-2xl border-2 p-5 transition-all animate-fade-in-up ${
             scanResult.type === "success"
-              ? "border-green-500/50 bg-green-500/15"
+              ? "border-emerald-500/50 bg-emerald-500/15"
               : scanResult.type === "duplicate"
               ? "border-amber-500/50 bg-amber-500/15"
               : scanResult.type === "queued"
@@ -541,7 +541,7 @@ export default function CheckInScannerPage() {
         >
           <div className="flex items-center gap-4">
             {scanResult.type === "success" ? (
-              <CheckCircle2 className="h-10 w-10 shrink-0 text-green-400" />
+              <CheckCircle2 className="h-10 w-10 shrink-0 text-emerald-400" />
             ) : scanResult.type === "duplicate" ? (
               <AlertTriangle className="h-10 w-10 shrink-0 text-amber-400" />
             ) : scanResult.type === "queued" ? (
@@ -553,7 +553,7 @@ export default function CheckInScannerPage() {
               <p
                 className={`text-xl font-bold ${
                   scanResult.type === "success"
-                    ? "text-green-400"
+                    ? "text-emerald-400"
                     : scanResult.type === "duplicate"
                     ? "text-amber-400"
                     : scanResult.type === "queued"
@@ -598,7 +598,7 @@ export default function CheckInScannerPage() {
                 className="flex items-center justify-between rounded-lg border border-border px-3 py-2"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-500" />
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
                   <span className="text-sm font-medium truncate">
                     {ci.guestName}
                   </span>
@@ -634,11 +634,11 @@ export default function CheckInScannerPage() {
             {guests.map((g, i) => (
               <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-zinc-800/50 text-sm">
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className={`h-2 w-2 rounded-full shrink-0 ${g.status === "checked_in" ? "bg-green-500" : g.status === "confirmed" || g.status === "paid" ? "bg-blue-500" : "bg-zinc-600"}`} />
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${g.status === "checked_in" ? "bg-emerald-500" : g.status === "confirmed" || g.status === "paid" ? "bg-blue-500" : "bg-zinc-600"}`} />
                   <span className="truncate text-foreground">{g.name}</span>
                   <span className="text-[11px] text-zinc-600 shrink-0">{g.type === "guest" ? "GUEST" : "TICKET"}</span>
                 </div>
-                <span className={`text-xs shrink-0 ${g.status === "checked_in" ? "text-green-400" : "text-zinc-500"}`}>
+                <span className={`text-xs shrink-0 ${g.status === "checked_in" ? "text-emerald-400" : "text-zinc-500"}`}>
                   {g.status === "checked_in" ? "\u2713 In" : g.status}
                 </span>
               </div>
