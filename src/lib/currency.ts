@@ -178,3 +178,96 @@ export function formatLocalAmount(amount: number, currency: string): string {
 
   return `${symbol}${(amount / 100).toFixed(2)}`;
 }
+
+// ─── Multi-currency budget support ──────────────────────────────────────────
+// Used by the event budget intake: operators enter headliner fees in the
+// currency they actually pay (USD for international DJs, local for venues),
+// and the P&L converts everything to the event's currency at entry time.
+
+/**
+ * Convert a dollar amount (whole units, not cents) from one currency to
+ * another, using USD as the cross-rate pivot.
+ *
+ * Returns the converted amount plus the effective rate so callers can
+ * snapshot the rate for audit/settlement consistency.
+ *
+ * Falls back to { amount, rate: 1 } if either currency is unsupported —
+ * callers should treat an explicit rate of 1 with mismatched currencies
+ * as a "rate unavailable, check network" signal if needed.
+ */
+export async function convertBetween(
+  amount: number,
+  fromCurrency: string,
+  toCurrency: string,
+): Promise<{ amount: number; rate: number }> {
+  const from = fromCurrency.toLowerCase();
+  const to = toCurrency.toLowerCase();
+
+  if (from === to || amount === 0) {
+    return { amount, rate: 1 };
+  }
+
+  const rates = await getExchangeRates();
+  // rates[] is USD → X. Cross-rate: (USD → to) / (USD → from) = from → to
+  const usdToFrom = from === "usd" ? 1 : rates[from];
+  const usdToTo = to === "usd" ? 1 : rates[to];
+
+  if (!usdToFrom || !usdToTo) {
+    return { amount, rate: 1 };
+  }
+
+  const rate = usdToTo / usdToFrom;
+  const converted = amount * rate;
+  // Round to nearest cent for non-zero-decimal currencies, whole unit for JPY etc.
+  const rounded = isZeroDecimal(to) ? Math.round(converted) : Math.round(converted * 100) / 100;
+  return { amount: rounded, rate };
+}
+
+/**
+ * Common currencies operators will need to pick from in the budget form.
+ * Keep this list short — long pickers are decision paralysis. If someone
+ * needs an exotic currency we don't have, they can type it into "Other"
+ * (or we add it here). Order reflects real-world use by Toronto/NYC
+ * collectives: USD/CAD at top, then the main international DJ-fee currencies.
+ */
+export const SUPPORTED_CURRENCIES: Array<{ code: string; label: string }> = [
+  { code: "usd", label: "USD · US Dollar" },
+  { code: "cad", label: "CAD · Canadian Dollar" },
+  { code: "eur", label: "EUR · Euro" },
+  { code: "gbp", label: "GBP · British Pound" },
+  { code: "aud", label: "AUD · Australian Dollar" },
+  { code: "mxn", label: "MXN · Mexican Peso" },
+  { code: "brl", label: "BRL · Brazilian Real" },
+  { code: "jpy", label: "JPY · Japanese Yen" },
+  { code: "chf", label: "CHF · Swiss Franc" },
+  { code: "zar", label: "ZAR · South African Rand" },
+];
+
+/**
+ * Small city → currency map used to pre-select the collective's default
+ * currency at signup. Covers the nightlife cities we actually target;
+ * unknowns fall through to USD (safe default matching ticket settlement).
+ */
+const CITY_CURRENCY: Record<string, string> = {
+  toronto: "cad", montreal: "cad", vancouver: "cad", calgary: "cad", ottawa: "cad",
+  "new york": "usd", nyc: "usd", "los angeles": "usd", la: "usd",
+  miami: "usd", chicago: "usd", detroit: "usd", "san francisco": "usd", sf: "usd",
+  austin: "usd", atlanta: "usd", boston: "usd", philadelphia: "usd", philly: "usd",
+  london: "gbp", manchester: "gbp",
+  berlin: "eur", paris: "eur", amsterdam: "eur", barcelona: "eur", madrid: "eur",
+  milan: "eur", rome: "eur", ibiza: "eur",
+  sydney: "aud", melbourne: "aud",
+  tokyo: "jpy",
+  "mexico city": "mxn", cdmx: "mxn",
+  "sao paulo": "brl", "são paulo": "brl", rio: "brl",
+};
+
+/**
+ * Infer a sensible default currency from a city name. Returns "usd" if
+ * the city isn't in the map — safe fallback that matches how tickets
+ * settle today.
+ */
+export function currencyForCity(city: string | null | undefined): string {
+  if (!city) return "usd";
+  return CITY_CURRENCY[city.trim().toLowerCase()] ?? "usd";
+}

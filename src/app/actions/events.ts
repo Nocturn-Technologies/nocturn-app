@@ -7,6 +7,7 @@ import { generateAutoSettlement } from "./auto-settlement";
 import { getStripe } from "@/lib/stripe";
 import { DEFAULT_TIMEZONE } from "@/lib/utils";
 import { rateLimitStrict } from "@/lib/rate-limit";
+import type { Database } from "@/lib/supabase/database.types";
 
 function slugify(text: string): string {
   return text
@@ -46,6 +47,23 @@ interface CreateEventInput {
   // Talent travel (flights/hotel/transport/per diem). May be a server-computed
   // estimate from calculateBudget rather than a user input.
   travelCost?: number | null;
+  // ── Multi-currency budget (v2) ──
+  // `currency` is the event's reporting currency (per-event override; when
+  // omitted the event inherits the collective's default_currency).
+  currency?: string | null;
+  // When the wizard's Budget step produces resolved line items via
+  // calculateBudget(), they land here. Each row writes to the `expenses`
+  // table with FX snapshot stashed in metadata for later settlement math.
+  expenseItems?: Array<{
+    category: string;
+    label: string;
+    amount: number;        // original amount in the row's native currency
+    currency: string;      // ISO 4217 lowercase
+    local_amount: number;  // amount in the event's reporting currency
+    local_currency: string;
+    fx_rate: number;
+    fx_locked_at: string;
+  }> | null;
 }
 
 interface UpdateEventInput {
@@ -323,6 +341,14 @@ export async function createEvent(input: CreateEventInput) {
   const otherExpensesClean = safeMoney(input.otherExpenses);
   const travelCostClean = safeMoney(input.travelCost);
 
+  // ── v2 multi-currency budget ──
+  // Sanitize the event-level currency override. NULL means "inherit from
+  // collective.default_currency" (handled at read time, not write time).
+  const eventCurrencyClean =
+    typeof input.currency === "string" && /^[a-z]{3}$/.test(input.currency.toLowerCase())
+      ? input.currency.toLowerCase()
+      : null;
+
   // Create event
   const { data: event, error: eventError } = await admin
     .from("events")
@@ -346,6 +372,7 @@ export async function createEvent(input: CreateEventInput) {
       venue_deposit: venueDepositClean,
       bar_minimum: barMinimumClean,
       estimated_bar_revenue: estimatedBarRevenueClean,
+      ...(eventCurrencyClean ? { currency: eventCurrencyClean } : {}),
       metadata: {
         timezone: tz,
         ...(dressCode ? { dress_code: dressCode } : {}),
@@ -387,44 +414,61 @@ export async function createEvent(input: CreateEventInput) {
   }
 
   // Persist budget-step line items as expense rows so the P&L reads them
-  // back without asking the user to re-enter every cost. These mirror the
-  // buckets the wizard's budget step collects. Failure here is non-fatal
-  // — the event itself is already saved and the user can re-add expenses
-  // manually on the financials page.
-  const budgetExpenseRows: Array<{
-    event_id: string;
-    collective_id: string;
-    description: string;
-    category: string;
-    amount: number;
-  }> = [];
-  if (talentFeeClean && talentFeeClean > 0) {
-    budgetExpenseRows.push({
-      event_id: event.id,
-      collective_id: collectiveId,
-      description: "Talent fee",
-      category: "artist",
-      amount: talentFeeClean,
-    });
+  // back without asking the user to re-enter every cost. Failure here is
+  // non-fatal — the event itself is already saved and the user can re-add
+  // expenses manually on the financials page.
+  //
+  // v2 multi-currency path: if `expenseItems` was provided, write each
+  // resolved row (post-FX) and stash the original amount/currency/rate in
+  // metadata for audit. Legacy callers that pass flat talentFee/otherExpenses/
+  // travelCost still work via the fallback branch below.
+  type BudgetExpenseRow = Database["public"]["Tables"]["expenses"]["Insert"];
+  const budgetExpenseRows: BudgetExpenseRow[] = [];
+
+  if (input.expenseItems && input.expenseItems.length > 0) {
+    for (const it of input.expenseItems) {
+      const localAmt = safeMoney(it.local_amount);
+      if (!localAmt || localAmt <= 0) continue;
+      budgetExpenseRows.push({
+        event_id: event.id,
+        collective_id: collectiveId,
+        description: it.label.slice(0, 200),
+        category: it.category,
+        amount: localAmt, // stored in the event's reporting currency
+        metadata: {
+          original_amount: it.amount,
+          original_currency: it.currency,
+          local_currency: it.local_currency,
+          fx_rate: it.fx_rate,
+          fx_locked_at: it.fx_locked_at,
+        },
+      });
+    }
+  } else {
+    // Legacy path — scalar fields only. Kept for backward compat with any
+    // caller that hasn't migrated to itemized input yet.
+    if (talentFeeClean && talentFeeClean > 0) {
+      budgetExpenseRows.push({
+        event_id: event.id, collective_id: collectiveId,
+        description: "Talent fee", category: "artist", amount: talentFeeClean,
+      });
+    }
+    if (travelCostClean && travelCostClean > 0) {
+      budgetExpenseRows.push({
+        event_id: event.id, collective_id: collectiveId,
+        description: "Talent travel (flights, hotel, transport)",
+        category: "transportation", amount: travelCostClean,
+      });
+    }
+    if (otherExpensesClean && otherExpensesClean > 0) {
+      budgetExpenseRows.push({
+        event_id: event.id, collective_id: collectiveId,
+        description: "Other expenses (sound, lights, security, promo)",
+        category: "other", amount: otherExpensesClean,
+      });
+    }
   }
-  if (travelCostClean && travelCostClean > 0) {
-    budgetExpenseRows.push({
-      event_id: event.id,
-      collective_id: collectiveId,
-      description: "Talent travel (flights, hotel, transport)",
-      category: "transportation",
-      amount: travelCostClean,
-    });
-  }
-  if (otherExpensesClean && otherExpensesClean > 0) {
-    budgetExpenseRows.push({
-      event_id: event.id,
-      collective_id: collectiveId,
-      description: "Other expenses (sound, lights, security, promo)",
-      category: "other",
-      amount: otherExpensesClean,
-    });
-  }
+
   if (budgetExpenseRows.length > 0) {
     const { error: expErr } = await admin.from("expenses").insert(budgetExpenseRows);
     if (expErr) {

@@ -5,7 +5,16 @@ import { useRouter } from "next/navigation";
 import { createEvent } from "@/app/actions/events";
 import { type TicketTier } from "@/app/actions/ai-parse-event";
 import { getTicketPricingSuggestion, type PricingSuggestion } from "@/app/actions/pricing-suggestion";
-import { calculateBudget, type BudgetResult, type BudgetInput } from "@/app/actions/budget-planner";
+import {
+  calculateBudget,
+  suggestTravel,
+  type BudgetResult,
+  type BudgetInput,
+  type ExpenseItem,
+  type ExpenseCategory,
+} from "@/app/actions/budget-planner";
+import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { getMyCollectiveDefaults } from "@/app/actions/collective-settings";
 import { applyLaunchPlaybook } from "@/app/actions/launch-playbook";
 import { createClient } from "@/lib/supabase/client";
 import { trackEvent } from "@/lib/track";
@@ -65,10 +74,94 @@ function buyerTotal(ticketPrice: number): number {
   return ticketPrice + ticketPrice * BUYER_FEE_RATE + BUYER_FEE_FLAT;
 }
 
+// ─── Budget draft (client-side state shape) ─────────────────────────────────
+// The Budget step used to collect a handful of flat numbers (talentFee,
+// venueCost, etc.). Now it's itemized with per-row currency so international
+// DJ fees in USD can coexist with local venue costs in CAD. `flattenBudget()`
+// walks this tree and produces the ExpenseItem[] the server action expects.
+
+interface AmountInCurrency {
+  amount: number;
+  currency: string; // ISO 4217 lowercase
+}
+
+interface BudgetDraft {
+  eventCurrency: string; // e.g. "cad"; falls back to collective default, then "usd"
+  headliner: {
+    type: "local" | "international" | "none";
+    origin: string;
+    stayNights: number;
+  };
+  talentFee: AmountInCurrency;
+  // Travel rows only shown for international; amounts may be zero when skipped
+  travel: {
+    flights: AmountInCurrency;
+    hotel: AmountInCurrency;
+    transport: AmountInCurrency;
+    perDiem: AmountInCurrency;
+  };
+  // Venue costs are always assumed in the event currency (paid to local vendor)
+  venueRental: number;
+  barMinimum: number;
+  deposit: number;
+  // Dynamic rows from the chip-add Production & Marketing section
+  prodItems: Array<{
+    category: ExpenseCategory;
+    label: string;
+    amount: number;
+    currency: string;
+  }>;
+}
+
+function defaultBudgetDraft(eventCurrency = "usd"): BudgetDraft {
+  return {
+    eventCurrency,
+    headliner: { type: "none", origin: "", stayNights: 2 },
+    talentFee: { amount: 0, currency: eventCurrency },
+    travel: {
+      flights: { amount: 0, currency: eventCurrency },
+      hotel: { amount: 0, currency: eventCurrency },
+      transport: { amount: 0, currency: eventCurrency },
+      perDiem: { amount: 0, currency: eventCurrency },
+    },
+    venueRental: 0,
+    barMinimum: 0,
+    deposit: 0,
+    prodItems: [],
+  };
+}
+
+function flattenBudget(draft: BudgetDraft): ExpenseItem[] {
+  const items: ExpenseItem[] = [];
+  const push = (category: ExpenseCategory, label: string, a: AmountInCurrency) => {
+    if (a.amount > 0) items.push({ category, label, amount: a.amount, currency: a.currency });
+  };
+
+  if (draft.headliner.type !== "none") {
+    push("talent", "Talent fee", draft.talentFee);
+  }
+  if (draft.headliner.type === "international") {
+    push("flights", "Flights", draft.travel.flights);
+    push("hotel", "Hotel", draft.travel.hotel);
+    push("transport", "Transport", draft.travel.transport);
+    push("per_diem", "Per diem", draft.travel.perDiem);
+  }
+  if (draft.venueRental > 0) {
+    items.push({ category: "venue_rental", label: "Venue rental", amount: draft.venueRental, currency: draft.eventCurrency });
+  }
+  if (draft.deposit > 0) {
+    items.push({ category: "deposit", label: "Venue deposit", amount: draft.deposit, currency: draft.eventCurrency });
+  }
+  for (const p of draft.prodItems) {
+    if (p.amount > 0) items.push({ category: p.category, label: p.label, amount: p.amount, currency: p.currency });
+  }
+  return items;
+}
+
 // ─── Draft Persistence ─────────────────────────────────────────────────────
 
 const DRAFT_STORAGE_KEY = "nocturn-event-draft";
-const DRAFT_VERSION = 3;
+const DRAFT_VERSION = 4;
 
 type WizardStep = "details" | "venue" | "tickets" | "budget" | "review";
 
@@ -93,7 +186,7 @@ interface DraftState {
   step: WizardStep;
   formData: EventFormData;
   tiers: TicketTier[];
-  budgetInput: Partial<BudgetInput>;
+  budgetDraft: BudgetDraft;
   budgetResult: BudgetResult | null;
   phase: "wizard" | "creating" | "playbook" | "done";
 }
@@ -1207,6 +1300,477 @@ function FormField({ label, icon: Icon, required, children }: {
   );
 }
 
+// ─── Budget Step ────────────────────────────────────────────────────────────
+// Multi-currency budget intake. Each expense row has its own currency;
+// everything converts to the event's currency at entry time for the P&L math.
+
+interface MoneyRowProps {
+  label: string;
+  placeholder?: string;
+  value: AmountInCurrency;
+  onChange: (v: AmountInCurrency) => void;
+  eventCurrency: string; // used for the "≈ converted" hint
+  Icon?: React.ComponentType<{ className?: string }>;
+  onDelete?: () => void;
+}
+
+function MoneyRow({ label, placeholder, value, onChange, eventCurrency, Icon, onDelete }: MoneyRowProps) {
+  // No client-side FX here — we'd need to ship rates to the browser. The
+  // "≈ converted" hint fires when the user taps Calculate Budget (result
+  // shows resolved local amounts). Keeps the form fast and predictable.
+  const showFxHint = value.currency.toLowerCase() !== eventCurrency.toLowerCase() && value.amount > 0;
+
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between">
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          {Icon && <Icon className="h-3 w-3 text-nocturn" />}
+          {label}
+        </label>
+        {onDelete && (
+          <button
+            onClick={onDelete}
+            aria-label={`Remove ${label}`}
+            className="text-muted-foreground/40 hover:text-red-400 transition-colors min-h-[28px] min-w-[28px] flex items-center justify-center"
+          >
+            <Trash2 className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+      <div className="flex gap-1.5">
+        <Input
+          type="number"
+          inputMode="decimal"
+          placeholder={placeholder ?? "0"}
+          value={value.amount || ""}
+          onChange={(e) => onChange({ ...value, amount: parseFloat(e.target.value) || 0 })}
+          className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50 flex-1"
+        />
+        <select
+          value={value.currency}
+          onChange={(e) => onChange({ ...value, currency: e.target.value })}
+          aria-label={`${label} currency`}
+          className="bg-zinc-900 border border-white/10 rounded-lg px-2 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[40px] min-w-[72px]"
+        >
+          {SUPPORTED_CURRENCIES.map(c => (
+            <option key={c.code} value={c.code}>{c.code.toUpperCase()}</option>
+          ))}
+        </select>
+      </div>
+      {showFxHint && (
+        <p className="text-[10px] text-muted-foreground/60">
+          Converts to {eventCurrency.toUpperCase()} when you tap Calculate
+        </p>
+      )}
+    </div>
+  );
+}
+
+// Chip-add row definitions for Production & Marketing. One tap adds a row
+// with the label + default category prefilled; operator fills amount + currency.
+const PROD_CHIPS: Array<{ category: ExpenseCategory; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { category: "ads",             label: "Ads",             icon: Megaphone },
+  { category: "graphic_design",  label: "Graphic design",  icon: Sparkles },
+  { category: "photo",           label: "Photo",           icon: Sparkles },
+  { category: "video",           label: "Video",           icon: Sparkles },
+];
+
+interface BudgetStepProps {
+  draft: BudgetDraft;
+  setDraft: React.Dispatch<React.SetStateAction<BudgetDraft>>;
+  result: BudgetResult | null;
+  calculating: boolean;
+  venueCity: string;
+  eventDate: string;
+  venueCapacity: number | undefined;
+  onSkip: () => void;
+  onCalculate: () => void;
+  onSuggestTravel: () => void;
+  tiers: TicketTier[];
+  onApplySuggestedTiers: () => void;
+}
+
+function BudgetStep({
+  draft, setDraft, result, calculating,
+  venueCity, eventDate, venueCapacity,
+  onSkip, onCalculate, onSuggestTravel,
+  tiers, onApplySuggestedTiers,
+}: BudgetStepProps) {
+  const ec = draft.eventCurrency;
+  const hasAnyExpense =
+    draft.talentFee.amount > 0 ||
+    draft.venueRental > 0 ||
+    draft.deposit > 0 ||
+    draft.travel.flights.amount > 0 ||
+    draft.travel.hotel.amount > 0 ||
+    draft.travel.transport.amount > 0 ||
+    draft.travel.perDiem.amount > 0 ||
+    draft.prodItems.some(p => p.amount > 0);
+
+  function updateTravel(key: keyof BudgetDraft["travel"], value: AmountInCurrency) {
+    setDraft(prev => ({ ...prev, travel: { ...prev.travel, [key]: value } }));
+  }
+
+  function addProdItem(category: ExpenseCategory, label: string) {
+    setDraft(prev => ({
+      ...prev,
+      prodItems: [...prev.prodItems, { category, label, amount: 0, currency: prev.eventCurrency }],
+    }));
+  }
+
+  function addCustomProdItem() {
+    addProdItem("other", "Custom expense");
+  }
+
+  function updateProdItem(idx: number, partial: Partial<BudgetDraft["prodItems"][number]>) {
+    setDraft(prev => ({
+      ...prev,
+      prodItems: prev.prodItems.map((p, i) => (i === idx ? { ...p, ...partial } : p)),
+    }));
+  }
+
+  function removeProdItem(idx: number) {
+    setDraft(prev => ({ ...prev, prodItems: prev.prodItems.filter((_, i) => i !== idx) }));
+  }
+
+  // Which prod chips are still available (already-added ones disappear from the tray).
+  const addedCategories = new Set(draft.prodItems.map(p => p.category));
+  const availableChips = PROD_CHIPS.filter(c => !addedCategories.has(c.category));
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      <div className="text-center space-y-1 pb-2">
+        <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
+          Budget Planning
+        </h2>
+        <p className="text-sm text-muted-foreground">Optional — helps forecast profit</p>
+      </div>
+
+      {/* Skip shortcut */}
+      <button
+        onClick={onSkip}
+        className="w-full flex items-center justify-center gap-2 rounded-2xl border border-white/[0.06] bg-card p-4 text-sm text-zinc-400 hover:text-zinc-200 hover:border-nocturn/30 transition-all duration-200 active:scale-[0.98]"
+      >
+        <SkipForward className="h-4 w-4" />
+        Skip — I&apos;ll figure out costs later
+      </button>
+
+      <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-5">
+        {/* Event currency */}
+        <div className="space-y-1.5">
+          <label className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
+            <DollarSign className="h-3.5 w-3.5 text-nocturn" />
+            Report this event&apos;s budget in
+          </label>
+          <select
+            value={ec}
+            onChange={(e) => setDraft(prev => ({ ...prev, eventCurrency: e.target.value }))}
+            aria-label="Event currency"
+            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px]"
+          >
+            {SUPPORTED_CURRENCIES.map(c => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
+          <p className="text-[11px] text-muted-foreground/60">
+            Totals and profit display in this currency. Individual rows can be entered in any currency.
+          </p>
+        </div>
+
+        {/* ── Headliner ── */}
+        <div className="space-y-2 border-t border-white/5 pt-4">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
+            <Music className="h-3.5 w-3.5 text-nocturn" />
+            Headliner
+          </span>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Headliner type">
+            {([
+              { value: "international" as const, label: "International", icon: Plane },
+              { value: "local" as const,         label: "Local",         icon: Music },
+              { value: "none" as const,          label: "No headliner",  icon: Users },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                role="radio"
+                aria-checked={draft.headliner.type === opt.value}
+                onClick={() => setDraft(prev => ({ ...prev, headliner: { ...prev.headliner, type: opt.value } }))}
+                className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all duration-200 active:scale-[0.98] min-h-[72px] ${
+                  draft.headliner.type === opt.value
+                    ? "border-nocturn/40 bg-nocturn/5 text-white"
+                    : "border-white/[0.06] bg-zinc-900 text-zinc-400 hover:border-nocturn/30 hover:text-zinc-200"
+                }`}
+              >
+                <opt.icon className="h-4 w-4" />
+                <span className="text-xs font-medium">{opt.label}</span>
+              </button>
+            ))}
+          </div>
+
+          {draft.headliner.type !== "none" && (
+            <div className="space-y-3 pt-2 animate-fade-in">
+              {draft.headliner.type === "international" && (
+                <>
+                  <FormField label="Flying from" icon={Plane}>
+                    <Input
+                      placeholder="London, UK"
+                      value={draft.headliner.origin}
+                      onChange={(e) => setDraft(prev => ({ ...prev, headliner: { ...prev.headliner, origin: e.target.value } }))}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
+                    />
+                  </FormField>
+                  <FormField label="Stay (nights)" icon={Clock}>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={draft.headliner.stayNights || ""}
+                      onChange={(e) => setDraft(prev => ({ ...prev, headliner: { ...prev.headliner, stayNights: parseInt(e.target.value) || 0 } }))}
+                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
+                    />
+                  </FormField>
+                </>
+              )}
+
+              <MoneyRow
+                label="Talent fee"
+                placeholder={draft.headliner.type === "international" ? "2000" : "500"}
+                value={draft.talentFee}
+                onChange={(v) => setDraft(prev => ({ ...prev, talentFee: v }))}
+                eventCurrency={ec}
+                Icon={DollarSign}
+              />
+
+              {draft.headliner.type === "international" && (
+                <>
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-xs text-muted-foreground">Travel costs</span>
+                    <button
+                      type="button"
+                      onClick={onSuggestTravel}
+                      disabled={!draft.headliner.origin || !venueCity}
+                      className="text-xs text-nocturn hover:text-nocturn-light transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <Sparkles className="h-3 w-3 inline mr-1" />
+                      Auto-fill estimates
+                    </button>
+                  </div>
+                  <MoneyRow label="Flights"   value={draft.travel.flights}   onChange={(v) => updateTravel("flights", v)}   eventCurrency={ec} />
+                  <MoneyRow label="Hotel"     value={draft.travel.hotel}     onChange={(v) => updateTravel("hotel", v)}     eventCurrency={ec} />
+                  <MoneyRow label="Transport" value={draft.travel.transport} onChange={(v) => updateTravel("transport", v)} eventCurrency={ec} />
+                  <MoneyRow label="Per diem"  value={draft.travel.perDiem}   onChange={(v) => updateTravel("perDiem", v)}   eventCurrency={ec} />
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── Venue (all in event currency) ── */}
+        <div className="space-y-3 border-t border-white/5 pt-4">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
+            <Warehouse className="h-3.5 w-3.5 text-nocturn" />
+            Venue costs
+          </span>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Room rental</label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={draft.venueRental || ""}
+                onChange={(e) => setDraft(prev => ({ ...prev, venueRental: parseInt(e.target.value) || 0 }))}
+                className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Bar minimum</label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={draft.barMinimum || ""}
+                onChange={(e) => setDraft(prev => ({ ...prev, barMinimum: parseInt(e.target.value) || 0 }))}
+                className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Deposit</label>
+              <Input
+                type="number"
+                placeholder="0"
+                value={draft.deposit || ""}
+                onChange={(e) => setDraft(prev => ({ ...prev, deposit: parseInt(e.target.value) || 0 }))}
+                className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground/60">All in {ec.toUpperCase()} — venue is paid locally.</p>
+        </div>
+
+        {/* ── Production & Marketing (chip-add) ── */}
+        <div className="space-y-3 border-t border-white/5 pt-4">
+          <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
+            <Megaphone className="h-3.5 w-3.5 text-nocturn" />
+            Production &amp; marketing
+          </span>
+
+          {/* Added rows */}
+          {draft.prodItems.length > 0 && (
+            <div className="space-y-3">
+              {draft.prodItems.map((p, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Input
+                      value={p.label}
+                      onChange={(e) => updateProdItem(i, { label: e.target.value })}
+                      className="bg-transparent border-0 p-0 text-xs text-muted-foreground focus:outline-none focus:text-white h-auto min-h-0"
+                    />
+                    <button
+                      onClick={() => removeProdItem(i)}
+                      aria-label={`Remove ${p.label}`}
+                      className="text-muted-foreground/40 hover:text-red-400 transition-colors min-h-[28px] min-w-[28px] flex items-center justify-center"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Input
+                      type="number"
+                      inputMode="decimal"
+                      placeholder="0"
+                      value={p.amount || ""}
+                      onChange={(e) => updateProdItem(i, { amount: parseFloat(e.target.value) || 0 })}
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50 flex-1"
+                    />
+                    <select
+                      value={p.currency}
+                      onChange={(e) => updateProdItem(i, { currency: e.target.value })}
+                      aria-label={`${p.label} currency`}
+                      className="bg-zinc-900 border border-white/10 rounded-lg px-2 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[40px] min-w-[72px]"
+                    >
+                      {SUPPORTED_CURRENCIES.map(c => (
+                        <option key={c.code} value={c.code}>{c.code.toUpperCase()}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Chip tray */}
+          {(availableChips.length > 0 || true) && (
+            <div className="flex flex-wrap gap-2">
+              {availableChips.map((c) => (
+                <button
+                  key={c.category}
+                  type="button"
+                  onClick={() => addProdItem(c.category, c.label)}
+                  className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:border-nocturn/40 hover:bg-nocturn/10 hover:text-white transition-all active:scale-[0.97] min-h-[36px]"
+                >
+                  <Plus className="h-3 w-3" />
+                  {c.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={addCustomProdItem}
+                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-400 hover:border-nocturn/40 hover:bg-nocturn/10 hover:text-white transition-all active:scale-[0.97] min-h-[36px]"
+              >
+                <Plus className="h-3 w-3" />
+                Custom
+              </button>
+            </div>
+          )}
+
+          {draft.prodItems.length === 0 && (
+            <p className="text-[11px] text-muted-foreground/60">Tap a chip to add — ads, photographer, flyer designer, etc.</p>
+          )}
+        </div>
+
+        {/* Calculate */}
+        <Button
+          onClick={onCalculate}
+          disabled={calculating || !hasAnyExpense}
+          className="w-full bg-nocturn hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px] transition-all duration-200 active:scale-[0.98]"
+        >
+          {calculating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <TrendingUp className="h-4 w-4 mr-2" />}
+          Calculate Budget
+        </Button>
+
+        {/* Result */}
+        {result && (
+          <div className="rounded-xl bg-zinc-800/50 p-4 space-y-3 animate-fade-in">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Budget Summary</span>
+              <span className="text-sm font-bold text-white">
+                {result.totalExpenses.toLocaleString()} {result.eventCurrency.toUpperCase()}
+              </span>
+            </div>
+
+            {/* Per-line-item breakdown with original currency visible */}
+            {result.resolvedItems.length > 0 && (
+              <div className="space-y-1 pt-1">
+                {result.resolvedItems.map((it, i) => {
+                  const converted = it.currency !== it.local_currency;
+                  return (
+                    <div key={i} className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>{it.label}</span>
+                      <span>
+                        {converted && (
+                          <span className="text-muted-foreground/50 mr-1">
+                            {it.amount.toLocaleString()} {it.currency.toUpperCase()} →
+                          </span>
+                        )}
+                        <span className="text-zinc-300">
+                          {Math.round(it.local_amount).toLocaleString()} {it.local_currency.toUpperCase()}
+                        </span>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <p className="text-xs text-zinc-400 pt-1">
+              Break-even: <span className="text-white font-medium">{result.breakEven.ticketsNeeded} tickets</span> at {result.breakEven.atPrice} {result.eventCurrency.toUpperCase()}
+            </p>
+
+            <div className="space-y-1">
+              {result.scenarios.map((s, i) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">{s.label}</span>
+                  <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    {s.profit >= 0 ? "+" : ""}{s.profit.toLocaleString()} {result.eventCurrency.toUpperCase()}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {result.suggestedTiers.length > 0 && tiers.length > 0 && (
+              <button
+                onClick={onApplySuggestedTiers}
+                className="text-xs text-nocturn hover:text-nocturn-light transition-colors"
+              >
+                Apply suggested tiers ({result.suggestedTiers.length} tiers)
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Market pricing sanity-check — sits next to the cost-plus suggestion
+            so operators don't anchor on expense-driven prices without seeing
+            what the local market is actually charging. */}
+        {result && venueCity && eventDate && result.suggestedTiers.length > 0 && (
+          <PricingInsight
+            city={venueCity}
+            date={eventDate}
+            venueCapacity={venueCapacity}
+            tiers={result.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity }))}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function NewEventPage() {
@@ -1214,7 +1778,7 @@ export default function NewEventPage() {
   const [step, setStep] = useState<WizardStep>("details");
   const [formData, setFormData] = useState<EventFormData>(DEFAULT_FORM);
   const [tiers, setTiers] = useState<TicketTier[]>([]);
-  const [budgetInput, setBudgetInput] = useState<Partial<BudgetInput>>({});
+  const [budgetDraft, setBudgetDraft] = useState<BudgetDraft>(() => defaultBudgetDraft());
   const [budgetResult, setBudgetResult] = useState<BudgetResult | null>(null);
   const [phase, setPhase] = useState<"wizard" | "creating" | "playbook" | "done">("wizard");
   const [error, setError] = useState<string | null>(null);
@@ -1257,28 +1821,41 @@ export default function NewEventPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Restore draft on mount
+  // Restore draft on mount. If no draft, fetch the collective's default
+  // currency so the budget step starts in the right unit (CAD for Toronto etc.)
+  // rather than USD.
   useEffect(() => {
     const draft = loadDraft();
     if (draft) {
       setStep(draft.step);
       setFormData(draft.formData);
       setTiers(draft.tiers);
-      setBudgetInput(draft.budgetInput);
+      setBudgetDraft(draft.budgetDraft);
       setBudgetResult(draft.budgetResult);
       setPhase(draft.phase === "creating" || draft.phase === "playbook" ? "wizard" : draft.phase);
+      setDraftLoaded(true);
+      return;
     }
-    setDraftLoaded(true);
+    // Fresh wizard — seed event currency from collective default.
+    getMyCollectiveDefaults()
+      .then((defaults) => {
+        const cc = defaults?.defaultCurrency ?? "usd";
+        setBudgetDraft((prev) => defaultBudgetDraft(cc) === prev ? prev : defaultBudgetDraft(cc));
+      })
+      .catch(() => {
+        // Stays on USD default, non-blocking.
+      })
+      .finally(() => setDraftLoaded(true));
   }, []);
 
   // Save draft on changes
   const saveDraftDebounced = useCallback(() => {
     const timer = setTimeout(() => {
       if (phase === "done" || phase === "playbook") return;
-      saveDraft({ version: DRAFT_VERSION, step, formData, tiers, budgetInput, budgetResult, phase });
+      saveDraft({ version: DRAFT_VERSION, step, formData, tiers, budgetDraft, budgetResult, phase });
     }, 500);
     return timer;
-  }, [step, formData, tiers, budgetInput, budgetResult, phase]);
+  }, [step, formData, tiers, budgetDraft, budgetResult, phase]);
 
   useEffect(() => {
     const timer = saveDraftDebounced();
@@ -1322,12 +1899,11 @@ export default function NewEventPage() {
     if (currentIdx > 0) goTo(activeSteps[currentIdx - 1]);
   }
 
-  // Total expenses from budget input (bar minimum is a threshold, not a direct expense — matches server logic)
-  const totalExpenses =
-    (budgetInput.talentFee || 0) +
-    (budgetInput.venueCost || 0) +
-    (budgetInput.deposit || 0) +
-    (budgetInput.otherExpenses || 0);
+  // Total expenses in the event's currency. Only reflects values *after* the
+  // Calculate Budget button has been tapped — before that, FX conversion hasn't
+  // happened and summing native-currency numbers would mix units.
+  // Bar minimum is a revenue threshold, not an expense (matches server logic).
+  const totalExpenses = budgetResult?.totalExpenses ?? 0;
 
   // Validation per step
   function canAdvance(): boolean {
@@ -1422,37 +1998,61 @@ export default function NewEventPage() {
     }
   }
 
-  // Calculate budget
+  // Calculate budget. Walks the BudgetDraft into flat ExpenseItems, sends to
+  // the server action which performs FX conversion and returns a resolved
+  // list + suggested tier prices.
   async function handleCalculateBudget() {
     setCalculatingBudget(true);
     setError(null);
     try {
       const input: BudgetInput = {
-        headlinerType: budgetInput.headlinerType || "none",
-        headlinerOrigin: budgetInput.headlinerOrigin,
-        talentFee: budgetInput.talentFee,
-        venueCost: budgetInput.venueCost,
-        barMinimum: budgetInput.barMinimum,
-        deposit: budgetInput.deposit,
-        otherExpenses: budgetInput.otherExpenses,
+        eventCurrency: budgetDraft.eventCurrency,
+        headlinerType: budgetDraft.headliner.type,
+        headlinerOrigin: budgetDraft.headliner.origin || undefined,
+        stayNights: budgetDraft.headliner.stayNights,
+        items: flattenBudget(budgetDraft),
+        barMinimum: budgetDraft.barMinimum || undefined,
         venueCity: formData.venueCity,
         venueCapacity: typeof formData.venueCapacity === "number" ? formData.venueCapacity : undefined,
         date: formData.date,
-        stayNights: budgetInput.stayNights,
       };
       const result = await calculateBudget(input);
       setBudgetResult(result);
 
       // Auto-update tiers if budget suggests them and user has no tiers yet
       if (result.suggestedTiers.length > 0 && tiers.length === 0) {
-        const firstTierPrice = tiers.length > 0 ? tiers[0].price : undefined;
-        const scaled = scaleBudgetTiers(result.suggestedTiers, firstTierPrice);
+        const scaled = scaleBudgetTiers(result.suggestedTiers, undefined);
         setTiers(scaled);
       }
     } catch {
       setError("Could not calculate budget — try again or skip this step.");
     } finally {
       setCalculatingBudget(false);
+    }
+  }
+
+  // Auto-fill the four travel rows (flights/hotel/transport/per-diem) from
+  // origin + venue city + nights. Server converts estimates to event currency.
+  async function handleSuggestTravel() {
+    if (!budgetDraft.headliner.origin || !formData.venueCity) return;
+    try {
+      const s = await suggestTravel({
+        headlinerOrigin: budgetDraft.headliner.origin,
+        venueCity: formData.venueCity,
+        stayNights: budgetDraft.headliner.stayNights,
+        eventCurrency: budgetDraft.eventCurrency,
+      });
+      setBudgetDraft(prev => ({
+        ...prev,
+        travel: {
+          flights:   { amount: s.flights,   currency: s.currency },
+          hotel:     { amount: s.hotel,     currency: s.currency },
+          transport: { amount: s.transport, currency: s.currency },
+          perDiem:   { amount: s.perDiem,   currency: s.currency },
+        },
+      }));
+    } catch {
+      // Silent: operator can still type numbers manually
     }
   }
 
@@ -1502,17 +2102,16 @@ export default function NewEventPage() {
         tiers: validTiers,
         eventMode: formData.isFree ? "rsvp" : "ticketed",
         isFree: formData.isFree,
-        // Persist the wizard's budget step. Without these, the P&L page
-        // shows $0 expenses and the edit form's Venue Financials section
-        // renders empty — even though the user already typed all of it.
-        // The wizard uses `deposit` as the field name for venue deposit;
-        // travel cost comes from the AI budget calculation, not user input.
-        talentFee: budgetInput.talentFee ?? null,
-        venueCost: budgetInput.venueCost ?? null,
-        venueDeposit: budgetInput.deposit ?? null,
-        barMinimum: budgetInput.barMinimum ?? null,
-        otherExpenses: budgetInput.otherExpenses ?? null,
-        travelCost: budgetResult?.travelEstimate?.total ?? null,
+        // Event currency = per-event override; createEvent falls back to the
+        // collective's default_currency if null.
+        currency: budgetDraft.eventCurrency,
+        // Persist the wizard's itemized budget so the P&L page and finance
+        // screens have the line-item breakdown with FX snapshots. Bar minimum
+        // is a threshold (revenue target), not an expense, so it rides along
+        // as a scalar.
+        barMinimum: budgetDraft.barMinimum || null,
+        venueCost: budgetDraft.venueRental || null,
+        expenseItems: budgetResult?.resolvedItems ?? null,
       });
 
       if (result.error) {
@@ -1825,7 +2424,7 @@ export default function NewEventPage() {
                   clearDraft();
                   setFormData(DEFAULT_FORM);
                   setTiers([]);
-                  setBudgetInput({});
+                  setBudgetDraft(defaultBudgetDraft(budgetDraft.eventCurrency));
                   setBudgetResult(null);
                   setStep("details");
                   setError(null);
@@ -2206,224 +2805,25 @@ export default function NewEventPage() {
 
         {/* ── STEP 4: Budget (Optional) ── */}
         {step === "budget" && (
-          <div className="space-y-5 animate-fade-in">
-            <div className="text-center space-y-1 pb-2">
-              <h2 className="text-lg font-bold font-heading bg-gradient-to-r from-[#7B2FF7] to-[#9D5CFF] bg-clip-text text-transparent">
-                Budget Planning
-              </h2>
-              <p className="text-sm text-muted-foreground">Optional — helps forecast profit</p>
-            </div>
-
-            {/* Skip button */}
-            <button
-              onClick={goNext}
-              className="w-full flex items-center justify-center gap-2 rounded-2xl border border-white/[0.06] bg-card p-4 text-sm text-zinc-400 hover:text-zinc-200 hover:border-nocturn/30 transition-all duration-200 active:scale-[0.98]"
-            >
-              <SkipForward className="h-4 w-4" />
-              Skip — I&apos;ll figure out costs later
-            </button>
-
-            <div className="rounded-2xl border border-white/[0.06] bg-card p-5 space-y-5">
-              {/* Headliner type */}
-              <div className="space-y-2">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
-                  <Music className="h-3.5 w-3.5 text-nocturn" />
-                  Headliner
-                </span>
-                <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Headliner type">
-                  {([
-                    { value: "international" as const, label: "International", icon: Plane },
-                    { value: "local" as const, label: "Local", icon: Music },
-                    { value: "none" as const, label: "No headliner", icon: Users },
-                  ]).map((opt) => (
-                    <button
-                      key={opt.value}
-                      role="radio"
-                      aria-checked={budgetInput.headlinerType === opt.value}
-                      onClick={() => setBudgetInput(prev => ({ ...prev, headlinerType: opt.value }))}
-                      className={`flex flex-col items-center gap-1.5 rounded-xl border p-3 text-center transition-all duration-200 active:scale-[0.98] min-h-[72px] ${
-                        budgetInput.headlinerType === opt.value
-                          ? "border-nocturn/40 bg-nocturn/5 text-white"
-                          : "border-white/[0.06] bg-zinc-900 text-zinc-400 hover:border-nocturn/30 hover:text-zinc-200"
-                      }`}
-                    >
-                      <opt.icon className="h-4 w-4" />
-                      <span className="text-xs font-medium">{opt.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Conditional headliner fields */}
-              {budgetInput.headlinerType === "international" && (
-                <div className="space-y-3 animate-fade-in">
-                  <FormField label="Flying from" icon={Plane}>
-                    <Input
-                      placeholder="London, UK"
-                      value={budgetInput.headlinerOrigin || ""}
-                      onChange={(e) => setBudgetInput(prev => ({ ...prev, headlinerOrigin: e.target.value }))}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
-                    />
-                  </FormField>
-                  <FormField label="Talent Fee" icon={DollarSign}>
-                    <Input
-                      type="number"
-                      placeholder="2000"
-                      value={budgetInput.talentFee || ""}
-                      onChange={(e) => setBudgetInput(prev => ({ ...prev, talentFee: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
-                    />
-                  </FormField>
-                  <FormField label="Stay (nights)" icon={Clock}>
-                    <Input
-                      type="number"
-                      placeholder="2"
-                      value={budgetInput.stayNights || ""}
-                      onChange={(e) => setBudgetInput(prev => ({ ...prev, stayNights: parseInt(e.target.value) || 0 }))}
-                      min={0}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
-                    />
-                  </FormField>
-                </div>
-              )}
-
-              {budgetInput.headlinerType === "local" && (
-                <div className="animate-fade-in">
-                  <FormField label="Talent Fee" icon={DollarSign}>
-                    <Input
-                      type="number"
-                      placeholder="500"
-                      value={budgetInput.talentFee || ""}
-                      onChange={(e) => setBudgetInput(prev => ({ ...prev, talentFee: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
-                    />
-                  </FormField>
-                </div>
-              )}
-
-              {/* Venue costs */}
-              <div className="space-y-3 border-t border-white/5 pt-4">
-                <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
-                  <DollarSign className="h-3.5 w-3.5 text-nocturn" />
-                  Venue Costs
-                </span>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Room Rental</label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={budgetInput.venueCost || ""}
-                      onChange={(e) => setBudgetInput(prev => ({ ...prev, venueCost: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Bar Minimum</label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={budgetInput.barMinimum || ""}
-                      onChange={(e) => setBudgetInput(prev => ({ ...prev, barMinimum: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Deposit</label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={budgetInput.deposit || ""}
-                      onChange={(e) => setBudgetInput(prev => ({ ...prev, deposit: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Other (sound, lights, etc.)</label>
-                    <Input
-                      type="number"
-                      placeholder="0"
-                      value={budgetInput.otherExpenses || ""}
-                      onChange={(e) => setBudgetInput(prev => ({ ...prev, otherExpenses: parseInt(e.target.value) || 0 }))}
-                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Calculate button */}
-              <Button
-                onClick={handleCalculateBudget}
-                disabled={calculatingBudget || totalExpenses === 0}
-                className="w-full bg-nocturn hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px] transition-all duration-200 active:scale-[0.98]"
-              >
-                {calculatingBudget ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : (
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                )}
-                Calculate Budget
-              </Button>
-
-              {/* Budget result */}
-              {budgetResult && (
-                <div className="rounded-xl bg-zinc-800/50 p-4 space-y-3 animate-fade-in">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Budget Summary</span>
-                    <span className="text-sm font-bold text-white">${budgetResult.totalExpenses.toLocaleString()}</span>
-                  </div>
-
-                  {budgetResult.travelEstimate && (
-                    <p className="text-xs text-zinc-400">
-                      Travel: ~${budgetResult.travelEstimate.total.toLocaleString()} ({budgetResult.travelEstimate.breakdown})
-                    </p>
-                  )}
-
-                  <p className="text-xs text-zinc-400">
-                    Break-even: <span className="text-white font-medium">{budgetResult.breakEven.ticketsNeeded} tickets</span> at ${budgetResult.breakEven.atPrice}
-                  </p>
-
-                  <div className="space-y-1">
-                    {budgetResult.scenarios.map((s, i) => (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">{s.label}</span>
-                        <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
-                          {s.profit >= 0 ? "+" : ""}${s.profit.toLocaleString()}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Apply suggested tiers button if user already has tiers */}
-                  {budgetResult.suggestedTiers.length > 0 && tiers.length > 0 && (
-                    <button
-                      onClick={() => {
-                        const firstPrice = tiers[0]?.price;
-                        const scaled = scaleBudgetTiers(budgetResult.suggestedTiers, firstPrice);
-                        setTiers(scaled);
-                      }}
-                      className="text-xs text-nocturn hover:text-nocturn-light transition-colors"
-                    >
-                      Apply suggested tiers ({budgetResult.suggestedTiers.length} tiers)
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Market pricing sanity-check — sits next to the cost-plus suggestion
-                  so operators don't anchor on expense-driven prices without seeing
-                  what the local market is actually charging. */}
-              {budgetResult && formData.venueCity && formData.date && budgetResult.suggestedTiers.length > 0 && (
-                <PricingInsight
-                  city={formData.venueCity}
-                  date={formData.date}
-                  venueCapacity={typeof formData.venueCapacity === "number" ? formData.venueCapacity : undefined}
-                  tiers={budgetResult.suggestedTiers.map(t => ({ name: t.name, price: t.price, capacity: t.capacity }))}
-                />
-              )}
-            </div>
-          </div>
+          <BudgetStep
+            draft={budgetDraft}
+            setDraft={setBudgetDraft}
+            result={budgetResult}
+            calculating={calculatingBudget}
+            venueCity={formData.venueCity}
+            eventDate={formData.date}
+            venueCapacity={typeof formData.venueCapacity === "number" ? formData.venueCapacity : undefined}
+            onSkip={goNext}
+            onCalculate={handleCalculateBudget}
+            onSuggestTravel={handleSuggestTravel}
+            tiers={tiers}
+            onApplySuggestedTiers={() => {
+              if (!budgetResult) return;
+              const firstPrice = tiers[0]?.price;
+              const scaled = scaleBudgetTiers(budgetResult.suggestedTiers, firstPrice);
+              setTiers(scaled);
+            }}
+          />
         )}
 
         {/* ── STEP 5: Review & Forecast ── */}
