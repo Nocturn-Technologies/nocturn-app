@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { convertBetween } from "@/lib/currency";
+import { cascadeScenario, cascadeBreakEven } from "@/lib/ticket-forecast";
 
 // ─── Expense categories ─────────────────────────────────────────────────────
 // Organizers think about expenses in buckets, not a flat list. These categories
@@ -113,19 +114,29 @@ function estimateHotelPerNightUSD(city: string): number {
  * USD, then convert to the event's currency at today's rate. Caller decides
  * whether to populate these as ExpenseItems (client auto-fill) or display as
  * a non-binding hint.
+ *
+ * `groupSize` (default 1) covers artist + crew. Multipliers:
+ *   - flights: × group (every person needs a seat)
+ *   - hotel: × ceil(group / 2) (assume 2 per room)
+ *   - transport: single airport pickup, no multiplier
+ *   - per diem: × group (every person eats)
  */
 export async function suggestTravel(input: {
   headlinerOrigin: string;
   venueCity: string;
   stayNights?: number;
   eventCurrency: string;
+  groupSize?: number;
 }): Promise<TravelSuggestion> {
   const nights = input.stayNights ?? 2;
-  const flightsUSD = estimateFlightCostUSD(input.headlinerOrigin);
+  const group = Math.max(1, Math.min(20, Math.floor(input.groupSize ?? 1)));
+  const rooms = Math.ceil(group / 2);
+
+  const flightsUSD = estimateFlightCostUSD(input.headlinerOrigin) * group;
   const hotelPerNightUSD = estimateHotelPerNightUSD(input.venueCity);
-  const hotelUSD = hotelPerNightUSD * nights;
+  const hotelUSD = hotelPerNightUSD * nights * rooms;
   const transportUSD = 150;
-  const perDiemUSD = 75 * nights;
+  const perDiemUSD = 75 * nights * group;
 
   const target = input.eventCurrency.toLowerCase();
   const [flights, hotel, transport, perDiem] = await Promise.all([
@@ -141,7 +152,7 @@ export async function suggestTravel(input: {
     transport: Math.round(transport.amount),
     perDiem: Math.round(perDiem.amount),
     currency: target,
-    breakdown: `Flights from ${input.headlinerOrigin} · Hotel (${nights} nights × ~$${hotelPerNightUSD} USD/night) · Transport · Per diem (${nights} nights × $75 USD/day) — converted to ${target.toUpperCase()}`,
+    breakdown: `${group} traveler${group > 1 ? "s" : ""} from ${input.headlinerOrigin} · Hotel (${nights} nights × ${rooms} room${rooms > 1 ? "s" : ""} × ~$${hotelPerNightUSD} USD/night) · Transport · Per diem (${nights} nights × ${group}p × $75 USD) — converted to ${target.toUpperCase()}`,
   };
 }
 
@@ -202,37 +213,84 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
     const totalExpenses = resolvedItems.reduce((s, it) => s + it.local_amount, 0);
     const capacity = input.venueCapacity ?? 200;
 
-    // Organizer keeps 100% of ticket price — buyer pays Nocturn's 7%+$0.50
-    // at checkout and Nocturn absorbs Stripe. No fee gross-up here.
-    const targetTickets = Math.round(capacity * 0.75);
-    const breakEvenPrice = targetTickets > 0 ? Math.ceil(totalExpenses / targetTickets) : 0;
+    // Suggested tier structure — capacity allocation is fixed, prices are
+    // back-solved below so that cumulative revenue at 75% cascade sell-through
+    // covers total expenses. Earlier flat-math version used a single blended
+    // break-even price that didn't match the cascade reality (marginal buyer
+    // at the 75% threshold is inside Tier 2, not paying the average).
+    const tierShape = [
+      { name: "Early Bird",  share: 0.15 },
+      { name: "Tier 1",      share: 0.35 },
+      { name: "Tier 2",      share: 0.30 },
+      { name: "Tier 3",      share: 0.20 },
+    ];
+    const tierCapacities = tierShape.map((t) => Math.round(capacity * t.share));
 
-    // Round marketed prices up to the nearest $5 (flat numbers promote better).
+    // Seed T1 at a price that, combined with EB+T1+partial-T2 at cascade
+    // 75% target, covers totalExpenses. Walk the cascade: EB fills first,
+    // then T1, then T2 up to 75% of total. Solve for T1 price (with EB
+    // priced at 75% of T1 and T2 at 125% of T1, T3 at 150%).
+    //
+    // target75 tickets = round(capacity * 0.75)
+    // EB sells out first (tierCapacities[0])
+    // Remaining = target75 - EB capacity
+    // If remaining <= T1 capacity: T1 sells `remaining` tickets at T1 price.
+    //   Total revenue at 75% = EB_cap * 0.75*T1 + remaining * T1 = T1 * (0.75*EB_cap + remaining)
+    //   Solve T1 = expenses / (0.75*EB_cap + remaining)
+    // If remaining > T1 capacity: T1 fully, T2 picks up the slack.
+    //   Revenue = 0.75*T1*EB_cap + T1*T1_cap + 1.25*T1*(remaining - T1_cap)
+    //   = T1 * (0.75*EB_cap + T1_cap + 1.25*(remaining - T1_cap))
+    //   Solve T1 = expenses / that denominator.
+    const target75 = Math.round(capacity * 0.75);
+    const ebCap = tierCapacities[0];
+    const t1Cap = tierCapacities[1];
+    let t1Denominator: number;
+    if (target75 <= ebCap) {
+      // All expenses covered by EB alone — rare but possible with tiny expenses + big EB share.
+      t1Denominator = 0.75 * target75;
+    } else if (target75 - ebCap <= t1Cap) {
+      const remaining = target75 - ebCap;
+      t1Denominator = 0.75 * ebCap + remaining;
+    } else {
+      const overflow = target75 - ebCap - t1Cap;
+      t1Denominator = 0.75 * ebCap + t1Cap + 1.25 * overflow;
+    }
+    const tier1PriceRaw = t1Denominator > 0 ? totalExpenses / t1Denominator : 15;
+
+    // Round marketed prices up to the nearest $5 so flyers look clean.
     const roundUpToFive = (n: number) => Math.ceil(n / 5) * 5;
-    const gaPriceRaw = Math.max(breakEvenPrice, 15);
-    const tier1Price = roundUpToFive(gaPriceRaw);
+    const tier1Price = Math.max(roundUpToFive(Math.max(tier1PriceRaw, 15)), 15);
     const tier2Price = roundUpToFive(tier1Price * 1.25);
     const tier3Price = roundUpToFive(tier1Price * 1.5);
     const earlyBirdRounded = Math.round((tier1Price * 0.75) / 5) * 5;
     const earlyBirdPrice = Math.max(Math.min(earlyBirdRounded, tier1Price - 5), 5);
 
     const suggestedTiers = [
-      { name: "Early Bird",  price: earlyBirdPrice, capacity: Math.round(capacity * 0.15), reasoning: "Limited release at a discount to build early momentum and social proof" },
-      { name: "Tier 1",      price: tier1Price,     capacity: Math.round(capacity * 0.35), reasoning: `Main release — priced to cover costs at 75% sell-through (${breakEvenPrice} ${eventCurrency.toUpperCase()} break-even)` },
-      { name: "Tier 2",      price: tier2Price,     capacity: Math.round(capacity * 0.30), reasoning: "Price bump for later buyers — 25% above Tier 1" },
-      { name: "Tier 3",      price: tier3Price,     capacity: Math.round(capacity * 0.20), reasoning: "Final release / door price — 50% above Tier 1 for maximum margin" },
+      { name: "Early Bird",  price: earlyBirdPrice, capacity: tierCapacities[0], reasoning: "Limited release at a discount to build early momentum and social proof" },
+      { name: "Tier 1",      price: tier1Price,     capacity: tierCapacities[1], reasoning: `Main release — priced so cascade sell-through at 75% covers ${totalExpenses.toLocaleString()} ${eventCurrency.toUpperCase()} in expenses` },
+      { name: "Tier 2",      price: tier2Price,     capacity: tierCapacities[2], reasoning: "Price bump for later buyers — 25% above Tier 1" },
+      { name: "Tier 3",      price: tier3Price,     capacity: tierCapacities[3], reasoning: "Final release / door price — 50% above Tier 1 for maximum margin" },
     ];
 
-    const calcScenario = (soldPct: number) => {
-      let revenue = 0;
-      for (const tier of suggestedTiers) revenue += Math.round(tier.capacity * soldPct) * tier.price;
-      return { revenue, profit: revenue - totalExpenses };
-    };
+    // Cascade scenarios using the shared helper (matches InlinePnL + LiveForecast).
     const scenarios = [
       { label: "50% sold", soldPct: 0.5 },
       { label: "75% sold", soldPct: 0.75 },
       { label: "Sell-out", soldPct: 1.0 },
-    ].map(s => ({ ...s, ...calcScenario(s.soldPct) }));
+    ].map((s) => {
+      const r = cascadeScenario(
+        suggestedTiers.map((t, i) => ({ name: t.name, price: t.price, capacity: t.capacity, sort_order: i })),
+        s.soldPct,
+      );
+      return { label: s.label, soldPct: s.soldPct, revenue: r.revenue, profit: r.revenue - totalExpenses, ticketsSold: r.ticketsSold };
+    });
+
+    // Cascade break-even: the actual tier + ticket count at which revenue
+    // first covers expenses. More honest than the old flat formula.
+    const be = cascadeBreakEven(
+      suggestedTiers.map((t, i) => ({ name: t.name, price: t.price, capacity: t.capacity, sort_order: i })),
+      totalExpenses,
+    );
 
     const barMinimum = input.barMinimum ?? 0;
     const deposit = resolvedItems.find(i => i.category === "deposit")?.local_amount ?? 0;
@@ -240,15 +298,15 @@ export async function calculateBudget(input: BudgetInput): Promise<BudgetResult>
     const profitAt75 = scenarios[1].profit;
     const summary = profitAt75 >= 0
       ? `Total expenses: ${totalExpenses.toLocaleString()} ${eventCurrency.toUpperCase()}. At 75% capacity you'd make ${profitAt75.toLocaleString()} ${eventCurrency.toUpperCase()} profit.${barMinimum > 0 ? ` Bar minimum of ${barMinimum.toLocaleString()}${deposit > 0 ? ` — if you don't hit it, you lose your ${deposit.toLocaleString()} deposit.` : "."}` : ""}`
-      : `Total expenses: ${totalExpenses.toLocaleString()} ${eventCurrency.toUpperCase()}. You'd need to sell ${Math.ceil(capacity * 0.75)} tickets at ${tier1Price} ${eventCurrency.toUpperCase()} to break even.${barMinimum > 0 ? ` Bar minimum of ${barMinimum.toLocaleString()} adds risk.` : ""} Consider reducing costs or raising ticket prices.`;
+      : `Total expenses: ${totalExpenses.toLocaleString()} ${eventCurrency.toUpperCase()}. You'd need to sell ${be.ticketsNeeded} tickets${be.breakEvenTier ? ` (hits break-even inside ${be.breakEvenTier} at ${be.atPrice} ${eventCurrency.toUpperCase()})` : ""} to cover costs.${barMinimum > 0 ? ` Bar minimum of ${barMinimum.toLocaleString()} adds risk.` : ""} Consider reducing costs or raising ticket prices.`;
 
     return {
       eventCurrency,
       totalExpenses,
       resolvedItems,
       suggestedTiers,
-      breakEven: { ticketsNeeded: targetTickets, atPrice: breakEvenPrice },
-      scenarios,
+      breakEven: { ticketsNeeded: be.ticketsNeeded, atPrice: be.atPrice },
+      scenarios: scenarios.map((s) => ({ label: s.label, soldPct: s.soldPct, revenue: s.revenue, profit: s.profit })),
       summary,
     };
   } catch (err) {

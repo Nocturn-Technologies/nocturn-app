@@ -80,14 +80,14 @@ export async function generateSettlement(eventId: string) {
     0
   );
 
-  // Stripe processing fees (~2.9% + $0.30 per transaction, estimated)
+  // Nocturn is merchant of record — buyer pays the 7%+$0.50 service fee on
+  // top, and Nocturn absorbs Stripe (2.9% + $0.30). Neither is deducted from
+  // the organizer's net. Stripe + Nocturn revenue lines are kept on the
+  // settlement record for Nocturn-side reporting only; they do not flow into
+  // `netRevenue` or `profit`.
   const ticketCount = tickets?.length ?? 0;
   const stripeFees = Math.round((grossRevenue * 0.029 + ticketCount * 0.30) * 100) / 100;
-
-  // Platform fee: 7% + $0.50/ticket — BUT buyer pays this as a surcharge
-  // So the platform fee does NOT reduce the collective's revenue
-  // We track it for reporting but it comes from the service fee, not ticket revenue
-  const platformFee = 0; // Collective keeps 100% of ticket price
+  const platformFee = 0; // Organizer keeps 100% of ticket price
   const nocturnRevenue = Math.round((grossRevenue * (PLATFORM_FEE_PERCENT / 100) + ticketCount * (PLATFORM_FEE_FLAT_CENTS / 100)) * 100) / 100;
 
   const totalArtistFees = (bookings ?? []).reduce(
@@ -100,8 +100,9 @@ export async function generateSettlement(eventId: string) {
     0
   );
 
-  // Calculate net and profit (subtract refunds from gross revenue)
-  const netRevenue = grossRevenue - refundsTotal - stripeFees - platformFee;
+  // Organizer-side net = gross − refunds only. No Stripe deduction (was the
+  // old bug — phantom $400+ phantom subtraction on a typical event).
+  const netRevenue = grossRevenue - refundsTotal;
   const profit = netRevenue - totalArtistFees - totalExpenses;
 
   // Create settlement

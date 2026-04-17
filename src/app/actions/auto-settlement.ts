@@ -14,10 +14,13 @@ export async function generateAutoSettlement(eventId: string) {
   if (!user) return { error: "Not authenticated" };
 
   const admin = createAdminClient();
-    // 1. Get event + collective_id
+    // 1. Get event + collective_id + financial columns. The bar-minimum
+    // shortfall and venue-cost/deposit columns are part of profit math per
+    // the finance UI — must be fetched here so the settlement record
+    // matches what getEventFinancials shows.
     const { data: event, error: eventError } = await admin
       .from("events")
-      .select("id, collective_id, status")
+      .select("id, collective_id, status, venue_cost, venue_deposit, bar_minimum, actual_bar_revenue")
       .eq("id", eventId)
       .maybeSingle();
 
@@ -100,10 +103,17 @@ export async function generateAutoSettlement(eventId: string) {
       0
     );
 
-    // 5. Fetch expenses
+    // 5. Fetch expenses, filtering out categories that are accounted for
+    //    elsewhere to prevent double-count:
+    //    - venue_rental + deposit → authoritative in events.venue_cost /
+    //      events.venue_deposit columns (subtracted separately below).
+    //    - talent + flights + hotel + transport + per_diem → headliner-
+    //      related, accounted for via `event_artists.fee` (subtracted as
+    //      artistFeesTotal). Wizard-added rows for these would otherwise
+    //      double-count against the lineup fee.
     const { data: expenses, error: expensesError } = await admin
       .from("expenses")
-      .select("amount")
+      .select("amount, category")
       .eq("event_id", eventId);
 
     if (expensesError) {
@@ -111,24 +121,50 @@ export async function generateAutoSettlement(eventId: string) {
       return { error: "Failed to calculate expenses" };
     }
 
-    const totalExpenses = (expenses ?? []).reduce(
-      (sum, e) => sum + (Number(e.amount) || 0),
-      0
-    );
+    const HEADLINER_CATEGORIES = new Set(["talent", "flights", "hotel", "transport", "per_diem"]);
+    const VENUE_CATEGORIES = new Set(["venue_rental", "deposit"]);
 
-    // 6. Calculate fees (matching manual settlement formula)
+    // Artist fees have double storage paths (event_artists + expenses.talent).
+    // Only filter the headliner categories out of expenses when event_artists
+    // actually has fees; otherwise we'd under-count events where the operator
+    // only entered fees via the wizard.
+    const filterHeadliner = artistFeesTotal > 0;
+    const totalExpenses = (expenses ?? []).reduce((sum, e) => {
+      const category = e.category ?? "";
+      if (VENUE_CATEGORIES.has(category)) return sum;
+      if (filterHeadliner && HEADLINER_CATEGORIES.has(category)) return sum;
+      return sum + (Number(e.amount) || 0);
+    }, 0);
+
+    // Event-column venue costs (authoritative source for those values).
+    const venueCostNum = event.venue_cost ? Number(event.venue_cost) : 0;
+    const venueDepositNum = event.venue_deposit ? Number(event.venue_deposit) : 0;
+
+    // Bar-minimum shortfall: actual deficit the operator eats if bar sales
+    // fall below the venue's contracted minimum. Matches getEventFinancials.
+    const barMin = event.bar_minimum ? Number(event.bar_minimum) : 0;
+    const actualBar = event.actual_bar_revenue != null ? Number(event.actual_bar_revenue) : null;
+    const barShortfall =
+      barMin > 0 && actualBar != null && actualBar < barMin
+        ? Math.round((barMin - actualBar) * 100) / 100
+        : 0;
+
+    // 6. Nocturn is merchant of record — buyer pays the 7%+$0.50 service
+    // fee on top, and Nocturn absorbs Stripe (2.9% + $0.30). Neither is
+    // deducted from the organizer's net. Keeping the columns in the
+    // settlement record for historical reporting / Nocturn revenue view.
+    const platformFee = 0;
+    // Informational only: what Stripe actually took, for Nocturn's P&L.
+    // NOT subtracted from netRevenue (was the old bug).
     const stripeFees =
       grossRevenue > 0
         ? grossRevenue * 0.029 + 0.30 * ticketCount
         : 0;
-    // Platform fee: buyer pays, organizer keeps 100%
-    const platformFee = 0;
 
-    // Nocturn revenue reporting (not deducted from organizer)
-
-    // 7. Net revenue = gross - refunds - stripe fees - platform fee (matches manual settlement)
-    const netRevenue = grossRevenue - refundsTotal - stripeFees - platformFee;
-    const profit = netRevenue - artistFeesTotal - totalExpenses;
+    // 7. Net revenue and profit — match getEventFinancials formula.
+    const netRevenue = grossRevenue - refundsTotal;
+    const profit =
+      netRevenue - artistFeesTotal - totalExpenses - venueCostNum - venueDepositNum - barShortfall;
 
     // 8. Insert settlement record (matching manual settlement structure)
     const { data: settlement, error: settlementError } = await admin

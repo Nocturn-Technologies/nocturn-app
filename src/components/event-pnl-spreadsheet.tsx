@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import type { EventFinancials } from "@/app/actions/event-financials";
+import { cascadeScenario } from "@/lib/ticket-forecast";
 import {
   addExpense,
   updateExpense,
@@ -613,9 +614,12 @@ export function EventPnlSpreadsheet({ financials }: Props) {
 
   const isProfitable = financials.profitLoss >= 0;
 
-  // ── Forecast scenarios ──────────────────────────────────────────────
+  // ── Forecast scenarios (cascade sell-through) ───────────────────────
+  // Tiers drain in sort order — Early Bird fills first, then T1, then T2,
+  // then Door. The 125% column caps at inventory and surfaces waitlist
+  // demand as a secondary signal (was previously fake "over-sold" revenue).
   const fRates = [0.5, 0.75, 1.0, 1.25];
-  const fLabels = ["50%", "75%", "100%", "125%"];
+  const fLabels = ["50%", "75%", "Sell-out", "Waitlist"];
   const totalFixedCosts =
     (financials.venueCost ?? 0) +
     (financials.venueDeposit ?? 0) +
@@ -624,14 +628,26 @@ export function EventPnlSpreadsheet({ financials }: Props) {
     financials.barShortfall;
 
   const forecasts = fRates.map((rate) => {
-    const tierRevs = financials.ticketTiers.map((t) => {
-      const sold = Math.min(Math.round(t.capacity * rate), Math.round(t.capacity * 1.25));
-      return t.price * sold;
-    });
-    const ticketRev = tierRevs.reduce((s, r) => s + r, 0);
+    const result = cascadeScenario(
+      financials.ticketTiers.map((t, i) => ({
+        name: t.name,
+        price: t.price,
+        capacity: t.capacity,
+        sort_order: i,
+      })),
+      rate,
+    );
+    const ticketRev = result.revenue;
     const gross = ticketRev + financials.additionalRevenue;
     const profit = gross - totalFixedCosts;
-    return { tierRevs, gross, profit };
+    return {
+      tierRevs: result.perTier.map((p) => p.revenue),
+      tierSold: result.perTier.map((p) => p.sold),
+      ticketsSold: result.ticketsSold,
+      waitlist: result.waitlistCount,
+      gross,
+      profit,
+    };
   });
 
   return (
@@ -784,7 +800,16 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       i === 2 ? "text-nocturn" : "text-muted-foreground/60"
                     }`}
                   >
-                    {label}
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span>{label}</span>
+                      {/* Ticket-count cue per scenario — shows the cascade math */}
+                      <span className="text-[10px] font-normal text-muted-foreground/60 tabular-nums normal-case">
+                        {forecasts[i].ticketsSold} tix
+                        {forecasts[i].waitlist > 0 && (
+                          <span className="text-nocturn/70 ml-0.5">+{forecasts[i].waitlist}</span>
+                        )}
+                      </span>
+                    </div>
                   </th>
                 ))}
                 <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[60px]">

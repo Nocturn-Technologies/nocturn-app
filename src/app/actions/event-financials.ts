@@ -169,17 +169,26 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
 
     const tiers = tiersRes.data ?? [];
     const tickets = ticketsRes.data ?? [];
-    // Exclude venue_rental + deposit from the itemized expenses view. Those
-    // values live authoritatively on events.venue_cost / events.venue_deposit
-    // columns and get subtracted from profitLoss separately below — including
-    // them here would double-count. (The wizard's multi-currency intake
-    // produces these rows so the operator can edit them by category; the
-    // columns remain the single source of truth for the P&L.)
-    const expenses = (expensesRes.data ?? []).filter(
-      (e) => e.category !== "venue_rental" && e.category !== "deposit",
-    );
     const revenueLinesData = revenueRes.data ?? [];
     const eventArtists = artistsRes.data ?? [];
+    // Filter expenses to prevent double-counts.
+    //   - venue_rental + deposit are always excluded — authoritative on
+    //     events.venue_cost / events.venue_deposit columns.
+    //   - talent + flights + hotel + transport + per_diem are excluded
+    //     ONLY when event_artists has recorded fees, because the wizard
+    //     writes headliner costs as expense rows AND the lineup step
+    //     writes them to event_artists. Subtracting both is the old bug.
+    //     If an operator only tracks talent via the wizard (never uses
+    //     the lineup step), we still count those rows.
+    const VENUE_CATEGORIES = new Set(["venue_rental", "deposit"]);
+    const HEADLINER_CATEGORIES = new Set(["talent", "flights", "hotel", "transport", "per_diem"]);
+    const hasEventArtists = eventArtists.length > 0;
+    const expenses = (expensesRes.data ?? []).filter((e) => {
+      const cat = e.category ?? "";
+      if (VENUE_CATEGORIES.has(cat)) return false;
+      if (hasEventArtists && HEADLINER_CATEGORIES.has(cat)) return false;
+      return true;
+    });
 
     // Build ticket tier rows with sold counts
     const ticketTiers: TicketTierRow[] = tiers.map((tier) => {

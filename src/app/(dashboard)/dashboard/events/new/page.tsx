@@ -14,6 +14,7 @@ import {
   type ExpenseCategory,
 } from "@/app/actions/budget-planner";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { cascadeScenario, cascadeBreakEven, type TicketTierInput } from "@/lib/ticket-forecast";
 import { getMyCollectiveDefaults } from "@/app/actions/collective-settings";
 import { applyLaunchPlaybook } from "@/app/actions/launch-playbook";
 import { createClient } from "@/lib/supabase/client";
@@ -91,6 +92,9 @@ interface BudgetDraft {
     type: "local" | "international" | "none";
     origin: string;
     stayNights: number;
+    // Number of people traveling (artist + crew). Drives flights / per diem
+    // multipliers in the travel estimator. Defaults to 1.
+    groupSize: number;
   };
   talentFee: AmountInCurrency;
   // Travel rows only shown for international; amounts may be zero when skipped
@@ -116,7 +120,7 @@ interface BudgetDraft {
 function defaultBudgetDraft(eventCurrency = "usd"): BudgetDraft {
   return {
     eventCurrency,
-    headliner: { type: "none", origin: "", stayNights: 2 },
+    headliner: { type: "none", origin: "", stayNights: 2, groupSize: 1 },
     talentFee: { amount: 0, currency: eventCurrency },
     travel: {
       flights: { amount: 0, currency: eventCurrency },
@@ -780,25 +784,29 @@ function fmtCurrency(n: number, compact?: boolean): string {
 
 function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExpenses?: number }) {
   const rates = [0.5, 0.75, 1.0, 1.25];
-  const rateLabels = ["50%", "75%", "100%", "125%"];
+  const rateLabels = ["50%", "75%", "Sell-out", "Waitlist"];
 
   const totalCapacity = tiers.reduce((s, t) => s + t.capacity, 0);
 
-  // Compute all scenarios. Organizer keeps 100% of ticket price — Nocturn's 7% + $0.50
-  // is added to the buyer's total at checkout, and Nocturn absorbs Stripe processing.
-  // So Profit = Gross − Expenses (no fee deductions on the organizer's side).
+  // Cascade sell-through via the shared helper: Early Bird sells out first,
+  // spillover into Tier 1, then Tier 2, then Door. The "Waitlist" column caps
+  // at total inventory and surfaces excess demand so operators can see
+  // whether they left money on the table.
   const scenarios = rates.map((rate) => {
-    const tierLines = tiers.map((t) => {
-      const sold = Math.min(Math.round(t.capacity * rate), Math.round(t.capacity * 1.25)); // cap at 125%
-      return { name: t.name, sold, capacity: t.capacity, gross: t.price * sold };
-    });
-    const gross = tierLines.reduce((s, t) => s + t.gross, 0);
-    const totalSold = tierLines.reduce((s, t) => s + t.sold, 0);
-    const profit = gross - totalExpenses;
-    return { rate, tierLines, gross, totalSold, profit };
+    const result = cascadeScenario(
+      tiers.map((t, i) => ({ name: t.name, price: t.price, capacity: t.capacity, sort_order: i })),
+      rate,
+    );
+    return {
+      rate,
+      tierLines: result.perTier,
+      gross: result.revenue,
+      totalSold: result.ticketsSold,
+      waitlist: result.waitlistCount,
+      profit: result.revenue - totalExpenses,
+    };
   });
 
-  // Find break-even scenario index (first where profit >= 0)
   const breakEvenIdx = totalExpenses > 0 ? scenarios.findIndex((s) => s.profit >= 0) : 0;
 
   return (
@@ -828,6 +836,21 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
                 </th>
               ))}
             </tr>
+            {/* Tickets-sold sub-header — cues the operator to the cascade math
+                before they read revenue numbers. For the Waitlist column,
+                tickets cap at total inventory and we surface waitlist demand
+                as a secondary "+N waitlist" note. */}
+            <tr className="border-b border-white/[0.06] bg-white/[0.01]">
+              <td className="px-4 py-1 text-[10px] text-muted-foreground/60 uppercase tracking-wider">Tickets sold</td>
+              {scenarios.map((s, i) => (
+                <td key={i} className="text-right px-3 py-1 text-[11px] text-muted-foreground tabular-nums">
+                  {s.totalSold}
+                  {s.waitlist > 0 && (
+                    <span className="text-nocturn/70 ml-1">+{s.waitlist}</span>
+                  )}
+                </td>
+              ))}
+            </tr>
           </thead>
 
           <tbody className="divide-y divide-white/[0.03]">
@@ -841,18 +864,25 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
               </td>
             </tr>
 
-            {/* Per-tier rows */}
+            {/* Per-tier rows — now showing per-tier sold count for each scenario
+                so the cascade behavior is visible (Early Bird fills first, etc.). */}
             {tiers.map((tier, ti) => (
               <tr key={ti} className="hover:bg-white/[0.02] transition-colors">
                 <td className="px-4 py-2">
                   <p className="text-sm font-medium text-foreground truncate">{tier.name}</p>
                   <p className="text-[11px] text-muted-foreground/60">{tier.capacity} tix @ ${tier.price}</p>
                 </td>
-                {scenarios.map((s, si) => (
-                  <td key={si} className="text-right px-3 py-2 text-sm text-green-400">
-                    {fmtCurrency(s.tierLines[ti].gross)}
-                  </td>
-                ))}
+                {scenarios.map((s, si) => {
+                  const line = s.tierLines[ti];
+                  return (
+                    <td key={si} className="text-right px-3 py-2 text-sm text-green-400">
+                      {fmtCurrency(line.revenue)}
+                      <span className="block text-[10px] text-muted-foreground/60 tabular-nums">
+                        {line.sold}/{line.capacity}
+                      </span>
+                    </td>
+                  );
+                })}
               </tr>
             ))}
 
@@ -920,13 +950,24 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
         </table>
       </div>
 
-      {/* Footer with break-even + note */}
+      {/* Footer with break-even + note. Using the shared cascade break-even
+          helper so "145 tickets into Tier 2" shows up instead of the old
+          "~75% capacity" which hid which tier's price actually matters. */}
+      {(() => {
+        const be = totalExpenses > 0
+          ? cascadeBreakEven(
+              tiers.map((t, i) => ({ name: t.name, price: t.price, capacity: t.capacity, sort_order: i })),
+              totalExpenses,
+            )
+          : null;
+        return (
       <div className="px-4 py-2.5 border-t border-white/[0.06] flex items-center justify-between gap-2">
-        {totalExpenses > 0 && breakEvenIdx >= 0 ? (
+        {be && be.achievable ? (
           <p className="text-[11px] text-green-400">
-            Break-even at ~{rateLabels[breakEvenIdx]} capacity
+            Break-even at {be.ticketsNeeded} tix
+            {be.breakEvenTier && <span className="text-muted-foreground/70"> (inside {be.breakEvenTier} @ ${be.atPrice})</span>}
           </p>
-        ) : totalExpenses > 0 ? (
+        ) : be && !be.achievable ? (
           <p className="text-[11px] text-red-400">
             Does not break even — raise prices or cut expenses
           </p>
@@ -939,6 +980,8 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
           {totalCapacity} capacity
         </p>
       </div>
+        );
+      })()}
     </div>
   );
 }
@@ -970,12 +1013,17 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
     }
   }
 
+  // Cascade scenarios — tiers drain in order so Early Bird fills first.
+  // Matches the InlinePnL math; was previously flat per-tier which
+  // over-forecasted revenue at the 50% scenario by ~25%.
   function calcNet(rate: number) {
-    const ticketsSold = Math.round(totalCapacity * rate);
-    const gross = tiers.reduce((s, t) => s + t.price * Math.round(t.capacity * rate), 0);
-    // Organizer keeps 100% of ticket price — buyer covers platform fees, Nocturn absorbs Stripe.
+    const result = cascadeScenario(
+      tiers.map((t, i) => ({ name: t.name, price: t.price, capacity: t.capacity, sort_order: i })),
+      rate,
+    );
+    const gross = result.revenue;
     const profit = gross - totalExpenses;
-    return { ticketsSold, gross, net: gross, profit };
+    return { ticketsSold: result.ticketsSold, gross, net: gross, profit };
   }
 
   const scenarios = [
@@ -1068,7 +1116,10 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
               <span className="text-sm">{p.emoji}</span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-[11px] text-muted-foreground">{p.label}</span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {p.label}
+                    <span className="text-muted-foreground/60 ml-1">({p.ticketsSold} tix)</span>
+                  </span>
                   <span className={`text-xs font-bold ${totalExpenses > 0 ? (isLoss ? "text-red-400" : "text-green-400") : "text-white"}`}>
                     {isLoss ? "-" : ""}${Math.abs(displayValue).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     {totalExpenses > 0 && <span className="text-[11px] text-muted-foreground ml-1">{isLoss ? "loss" : "profit"}</span>}
@@ -1442,6 +1493,10 @@ function BudgetStep({
   tiers, onApplySuggestedTiers,
 }: BudgetStepProps) {
   const ec = draft.eventCurrency;
+  // Local "just applied" announcement for the suggested-tiers button. Spells
+  // out the prices that landed so the operator doesn't have to bounce to the
+  // Tickets step to confirm what changed.
+  const [appliedNote, setAppliedNote] = useState<string | null>(null);
   const hasAnyExpense =
     draft.talentFee.amount > 0 ||
     draft.venueRental > 0 ||
@@ -1563,15 +1618,29 @@ function BudgetStep({
                       className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
                     />
                   </FormField>
-                  <FormField label="Stay (nights)" icon={Clock}>
-                    <Input
-                      type="number"
-                      min={0}
-                      value={draft.headliner.stayNights || ""}
-                      onChange={(e) => setDraft(prev => ({ ...prev, headliner: { ...prev.headliner, stayNights: parseInt(e.target.value) || 0 } }))}
-                      className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
-                    />
-                  </FormField>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField label="Stay (nights)" icon={Clock}>
+                      <NumberInput
+                        value={draft.headliner.stayNights}
+                        onChange={(n) => setDraft(prev => ({ ...prev, headliner: { ...prev.headliner, stayNights: n } }))}
+                        className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
+                      />
+                    </FormField>
+                    <FormField label="Group size" icon={Users}>
+                      <NumberInput
+                        value={draft.headliner.groupSize}
+                        onChange={(n) => setDraft(prev => ({
+                          ...prev,
+                          headliner: { ...prev.headliner, groupSize: Math.max(1, Math.min(20, Math.floor(n) || 1)) },
+                        }))}
+                        placeholder="1"
+                        className="bg-zinc-900 border-white/10 rounded-xl min-h-[44px] focus:border-nocturn/50"
+                      />
+                    </FormField>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60 -mt-1">
+                    Artist + crew. Drives flights / per-diem multipliers in the auto-fill estimate.
+                  </p>
                 </>
               )}
 
@@ -1782,11 +1851,24 @@ function BudgetStep({
 
             {result.suggestedTiers.length > 0 && tiers.length > 0 && (
               <button
-                onClick={onApplySuggestedTiers}
+                onClick={() => {
+                  const note = result.suggestedTiers
+                    .map((t) => `${t.name} ${result.eventCurrency.toUpperCase()} ${t.price} (${t.capacity} tix)`)
+                    .join(" · ");
+                  onApplySuggestedTiers();
+                  setAppliedNote(note);
+                  setTimeout(() => setAppliedNote(null), 7000);
+                }}
                 className="text-xs text-nocturn hover:text-nocturn-light transition-colors"
               >
                 Apply suggested tiers ({result.suggestedTiers.length} tiers)
               </button>
+            )}
+
+            {appliedNote && (
+              <div className="rounded-xl bg-nocturn/10 border border-nocturn/30 px-3 py-2 text-[11px] text-nocturn animate-fade-in">
+                <span className="font-semibold">Applied:</span> {appliedNote}
+              </div>
             )}
           </div>
         )}
@@ -2077,6 +2159,7 @@ export default function NewEventPage() {
         venueCity: formData.venueCity,
         stayNights: budgetDraft.headliner.stayNights,
         eventCurrency: budgetDraft.eventCurrency,
+        groupSize: budgetDraft.headliner.groupSize,
       });
       setBudgetDraft(prev => ({
         ...prev,
