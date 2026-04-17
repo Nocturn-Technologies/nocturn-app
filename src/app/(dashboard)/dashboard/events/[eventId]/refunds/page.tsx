@@ -174,7 +174,7 @@ export default function RefundsPage() {
       {tickets.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-            <Check className="h-10 w-10 text-green-400" />
+            <Check className="h-10 w-10 text-emerald-400" />
             <p className="font-medium">No refundable tickets</p>
             <p className="text-sm text-muted-foreground">All tickets for this event are either free or already refunded.</p>
           </CardContent>
@@ -190,7 +190,7 @@ export default function RefundsPage() {
                 key={ticket.id}
                 className={`rounded-lg border p-3 flex items-center justify-between transition-all ${
                   isRefunded
-                    ? "border-green-500/30 bg-green-500/5"
+                    ? "border-emerald-500/30 bg-emerald-500/5"
                     : "border-border"
                 }`}
               >
@@ -201,7 +201,7 @@ export default function RefundsPage() {
                   </p>
                 </div>
                 {isRefunded ? (
-                  <span className="text-xs text-green-400 font-medium flex items-center gap-1">
+                  <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
                     <Check className="h-3 w-3" /> Refunded
                   </span>
                 ) : (

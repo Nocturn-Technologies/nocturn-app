@@ -1118,7 +1118,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[11px] text-muted-foreground">
                     {p.label}
-                    <span className="text-muted-foreground/60 ml-1">({p.ticketsSold} tix)</span>
+                    <span className="text-muted-foreground/70 ml-1">({p.ticketsSold} tix)</span>
                   </span>
                   <span className={`text-xs font-bold ${totalExpenses > 0 ? (isLoss ? "text-red-400" : "text-green-400") : "text-white"}`}>
                     {isLoss ? "-" : ""}${Math.abs(displayValue).toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -1454,7 +1454,7 @@ function MoneyRow({ label, placeholder, value, onChange, eventCurrency, Icon, on
         </select>
       </div>
       {showFxHint && (
-        <p className="text-[11px] text-muted-foreground/60">
+        <p className="text-[11px] text-muted-foreground/70">
           Converts to {eventCurrency.toUpperCase()} when you tap Calculate
         </p>
       )}
@@ -1572,7 +1572,7 @@ function BudgetStep({
               <option key={c.code} value={c.code}>{c.label}</option>
             ))}
           </select>
-          <p className="text-[11px] text-muted-foreground/60">
+          <p className="text-[11px] text-muted-foreground/70">
             Totals and profit display in this currency. Individual rows can be entered in any currency.
           </p>
         </div>
@@ -1638,7 +1638,7 @@ function BudgetStep({
                       />
                     </FormField>
                   </div>
-                  <p className="text-[11px] text-muted-foreground/60 -mt-1">
+                  <p className="text-[11px] text-muted-foreground/70 -mt-1">
                     Artist + crew. Drives flights / per-diem multipliers in the auto-fill estimate.
                   </p>
                 </>
@@ -1709,7 +1709,7 @@ function BudgetStep({
               />
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground/60">All in {ec.toUpperCase()} — venue is paid locally.</p>
+          <p className="text-[11px] text-muted-foreground/70">All in {ec.toUpperCase()} — venue is paid locally.</p>
         </div>
 
         {/* ── Production & Marketing (chip-add) ── */}
@@ -1786,7 +1786,7 @@ function BudgetStep({
           )}
 
           {draft.prodItems.length === 0 && (
-            <p className="text-[11px] text-muted-foreground/60">Tap a chip to add — ads, photographer, flyer designer, etc.</p>
+            <p className="text-[11px] text-muted-foreground/70">Tap a chip to add — ads, photographer, flyer designer, etc.</p>
           )}
         </div>
 
@@ -2357,8 +2357,8 @@ export default function NewEventPage() {
             {error}
           </div>
         )}
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10 animate-pulse">
-          <Check className="h-8 w-8 text-green-500" />
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-500/10 animate-pulse">
+          <Check className="h-8 w-8 text-emerald-500" />
         </div>
         <div className="text-center">
           <h2 className="text-lg font-bold font-heading truncate max-w-full px-4">
@@ -2835,7 +2835,7 @@ export default function NewEventPage() {
                     <Ticket className="h-3.5 w-3.5 text-nocturn" />
                     <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ticket Tiers</span>
                   </div>
-                  <span className="text-[11px] text-muted-foreground/60">Tap any field to edit</span>
+                  <span className="text-[11px] text-muted-foreground/70">Tap any field to edit</span>
                 </div>
                 <div className="space-y-2">
                   {tiers.map((tier, i) => (
@@ -2908,7 +2908,7 @@ export default function NewEventPage() {
                       className="bg-card border-white/[0.06] rounded-xl min-h-[40px] focus:border-nocturn/50"
                     />
                   </div>
-                  <p className="text-[11px] text-muted-foreground/60">
+                  <p className="text-[11px] text-muted-foreground/70">
                     Enter a price or range to regenerate all tiers
                   </p>
                 </div>
@@ -2968,10 +2968,10 @@ export default function NewEventPage() {
             {/* Review card */}
             <div className="rounded-2xl border border-nocturn/20 bg-zinc-900 p-5 space-y-3">
               <div className="flex items-center gap-2">
-                <div className="w-5 h-5 rounded-full bg-green-500/20 flex items-center justify-center">
-                  <Check className="h-3 w-3 text-green-400" />
+                <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                  <Check className="h-3 w-3 text-emerald-400" />
                 </div>
-                <span className="text-xs text-green-400 font-medium uppercase tracking-wider">
+                <span className="text-xs text-emerald-400 font-medium uppercase tracking-wider">
                   Ready to create
                 </span>
               </div>
