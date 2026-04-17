@@ -736,7 +736,7 @@ const MessageBubble = memo(function MessageBubble({
   if (msg.type === "system") {
     return (
       <div className="flex justify-center py-1 animate-in fade-in duration-200">
-        <span className="text-[12px] text-muted-foreground/60 text-center px-3">
+        <span className="text-[12px] text-muted-foreground/70 text-center px-3">
           {msg.content}
         </span>
       </div>
