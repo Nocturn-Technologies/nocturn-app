@@ -50,6 +50,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [isPaidEvent, setIsPaidEvent] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Live name availability check (debounced).
   // "idle" = nothing typed yet or just changed; "checking" = request in flight;
@@ -148,6 +149,7 @@ export default function OnboardingPage() {
   }
 
   async function handleCreate(skipEventOverride?: boolean) {
+    setIsSubmitting(true);
     setStep("creating");
     setError(null);
 
@@ -173,6 +175,7 @@ export default function OnboardingPage() {
 
     if (result.error) {
       setError(result.error);
+      setIsSubmitting(false);
       const isNameConflict = result.error.toLowerCase().includes("already taken");
       // Name conflict → back to Screen 1 to edit the name.
       // Anything else → back to wherever they were so they can retry.
@@ -400,7 +403,7 @@ export default function OnboardingPage() {
 
               <Button
                 onClick={() => handleCreate()}
-                disabled={step === "creating"}
+                disabled={isSubmitting}
                 className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base min-h-[48px]"
               >
                 <Sparkles className="mr-2 h-4 w-4" />
