@@ -49,6 +49,13 @@ export interface ArtistFeeRow {
 export interface EventFinancials {
   eventId: string;
   eventTitle: string;
+  /**
+   * ISO 4217 lowercase (e.g. "usd", "cad"). Resolved as:
+   * event.currency → collective.default_currency → "usd".
+   * Consumer UIs should format amounts in this currency — they used to
+   * hardcode USD which misled operators whose event was denominated in CAD.
+   */
+  currency: string;
   ticketTiers: TicketTierRow[];
   expenses: ExpenseRow[];
   revenueLines: RevenueLineRow[];
@@ -101,7 +108,7 @@ async function verifyOwnership(userId: string, eventId: string) {
 
   const { data: event, error: eventError } = await admin
     .from("events")
-    .select("id, collective_id, title, venue_cost, venue_deposit, bar_minimum, estimated_bar_revenue, actual_bar_revenue")
+    .select("id, collective_id, title, venue_cost, venue_deposit, bar_minimum, estimated_bar_revenue, actual_bar_revenue, currency")
     .eq("id", eventId)
     .maybeSingle();
 
@@ -133,6 +140,19 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
 
     const admin = createAdminClient();
     const event = ownership.event;
+
+    // Resolve the event's reporting currency: per-event override → collective
+    // default → "usd". Consumers format amounts in this unit so a CAD event
+    // doesn't render as "$" (ambiguous USD).
+    let reportingCurrency = (event.currency ?? "").toLowerCase();
+    if (!reportingCurrency) {
+      const { data: collective } = await admin
+        .from("collectives")
+        .select("default_currency")
+        .eq("id", event.collective_id)
+        .maybeSingle();
+      reportingCurrency = (collective?.default_currency ?? "usd").toLowerCase();
+    }
 
     // Parallel queries
     const [tiersRes, ticketsRes, expensesRes, revenueRes, artistsRes] = await Promise.all([
@@ -285,6 +305,7 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
       data: {
         eventId,
         eventTitle: event.title,
+        currency: reportingCurrency,
         ticketTiers,
         expenses: expenseRows,
         revenueLines: revenueLineRows,
