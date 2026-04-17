@@ -320,7 +320,7 @@ export default function VenuesPage() {
         <div className="space-y-4">
           {/* Search bar */}
           <div className="px-4 md:px-0">
-            <div className="relative">
+            <div className="relative md:max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"

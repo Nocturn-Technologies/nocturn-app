@@ -504,7 +504,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                       </select>
                     </div>
                     {showFxHint && (
-                      <p className="text-[10px] text-muted-foreground/60">
+                      <p className="text-[11px] text-muted-foreground/60">
                         Converts to {eventCurrency.toUpperCase()} on save
                       </p>
                     )}

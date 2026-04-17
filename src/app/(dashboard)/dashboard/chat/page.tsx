@@ -743,7 +743,7 @@ export default function ChatPage() {
               <span className="min-w-0 break-words">{inquiryError}</span>
               <button
                 onClick={() => setInquiryError(null)}
-                className="text-destructive/70 hover:text-destructive active:scale-90 transition-all duration-200 shrink-0 min-h-[32px] min-w-[32px] flex items-center justify-center -mr-1 -mt-1"
+                className="text-destructive/70 hover:text-destructive active:scale-90 transition-all duration-200 shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center -mr-1 -mt-1"
                 aria-label="Dismiss error"
               >
                 <X className="h-4 w-4" />

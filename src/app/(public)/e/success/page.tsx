@@ -165,7 +165,7 @@ function SuccessContent() {
   }
 
   return (
-    <div className="min-h-dvh flex items-center justify-center bg-background px-4">
+    <div className="min-h-dvh flex items-center justify-center bg-background px-4 overflow-x-hidden">
       <div className="max-w-md w-full text-center space-y-6">
         {/* Confetti-style decorative element */}
         <div className="text-6xl mb-2">

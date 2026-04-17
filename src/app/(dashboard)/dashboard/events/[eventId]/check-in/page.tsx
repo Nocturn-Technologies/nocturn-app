@@ -413,7 +413,7 @@ export default function CheckInScannerPage() {
       : 0;
 
   return (
-    <div className="mx-auto max-w-lg space-y-4 pb-8 overflow-x-hidden">
+    <div className="mx-auto max-w-3xl space-y-4 pb-8 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>

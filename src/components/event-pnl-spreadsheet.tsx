@@ -852,7 +852,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                     <div className="flex flex-col items-end gap-0.5">
                       <span>{label}</span>
                       {/* Ticket-count cue per scenario — shows the cascade math */}
-                      <span className="text-[10px] font-normal text-muted-foreground/60 tabular-nums normal-case">
+                      <span className="text-[11px] font-normal text-muted-foreground/60 tabular-nums normal-case">
                         {forecasts[i].ticketsSold} tix
                         {forecasts[i].waitlist > 0 && (
                           <span className="text-nocturn/70 ml-0.5">+{forecasts[i].waitlist}</span>
@@ -1108,7 +1108,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                       />
                       {hasFxSnapshot && (
                         <p
-                          className="text-[10px] text-muted-foreground/70 mt-0.5"
+                          className="text-[11px] text-muted-foreground/70 mt-0.5"
                           title={`Entered ${expense.originalAmount?.toLocaleString()} ${expense.originalCurrency?.toUpperCase()} at rate ${expense.fxRate?.toFixed(4)}${expense.fxLockedAt ? ` on ${new Date(expense.fxLockedAt).toISOString().slice(0, 10)}` : ""}`}
                         >
                           {expense.originalAmount?.toLocaleString()} {expense.originalCurrency?.toUpperCase()}

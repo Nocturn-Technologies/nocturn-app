@@ -260,7 +260,7 @@ export function VoicePlayback({ voiceUrl, voiceDuration, isOwn }: VoicePlaybackP
         onClick={togglePlay}
         disabled={!hasRealAudio}
         aria-label={playing ? "Pause voice message" : "Play voice message"}
-        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-opacity ${
+        className={`w-8 h-8 min-h-[44px] min-w-[44px] rounded-full flex items-center justify-center shrink-0 transition-opacity ${
           !hasRealAudio ? "opacity-40 cursor-not-allowed" : ""
         }`}
         style={{

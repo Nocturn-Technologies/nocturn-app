@@ -564,7 +564,7 @@ function EditableTierRow({ tier, onSave }: { tier: TicketTier; onSave: (tier: Ti
             <Pencil className="h-2.5 w-2.5 text-muted-foreground opacity-0 group-hover/price:opacity-100 transition-opacity" />
           </span>
           {tier.price > 0 && (
-            <span className="text-[10px] text-muted-foreground/70 leading-tight">
+            <span className="text-[11px] text-muted-foreground/70 leading-tight">
               buyer pays ${buyerTotal(tier.price).toFixed(2)}
             </span>
           )}
@@ -841,7 +841,7 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
                 tickets cap at total inventory and we surface waitlist demand
                 as a secondary "+N waitlist" note. */}
             <tr className="border-b border-white/[0.06] bg-white/[0.01]">
-              <td className="px-4 py-1 text-[10px] text-muted-foreground/60 uppercase tracking-wider">Tickets sold</td>
+              <td className="px-4 py-1 text-[11px] text-muted-foreground/60 uppercase tracking-wider">Tickets sold</td>
               {scenarios.map((s, i) => (
                 <td key={i} className="text-right px-3 py-1 text-[11px] text-muted-foreground tabular-nums">
                   {s.totalSold}
@@ -877,7 +877,7 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
                   return (
                     <td key={si} className="text-right px-3 py-2 text-sm text-green-400">
                       {fmtCurrency(line.revenue)}
-                      <span className="block text-[10px] text-muted-foreground/60 tabular-nums">
+                      <span className="block text-[11px] text-muted-foreground/60 tabular-nums">
                         {line.sold}/{line.capacity}
                       </span>
                     </td>
@@ -1454,7 +1454,7 @@ function MoneyRow({ label, placeholder, value, onChange, eventCurrency, Icon, on
         </select>
       </div>
       {showFxHint && (
-        <p className="text-[10px] text-muted-foreground/60">
+        <p className="text-[11px] text-muted-foreground/60">
           Converts to {eventCurrency.toUpperCase()} when you tap Calculate
         </p>
       )}

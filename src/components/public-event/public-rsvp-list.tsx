@@ -211,7 +211,7 @@ export function PublicRsvpList({ eventId, accentColor, initialRsvps }: Props) {
         <button
           type="button"
           onClick={() => setTab("yes")}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[36px] ${
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[44px] ${
             tab === "yes"
               ? "bg-white/10 text-white"
               : "bg-transparent text-white/50 hover:text-white/80"
@@ -222,7 +222,7 @@ export function PublicRsvpList({ eventId, accentColor, initialRsvps }: Props) {
         <button
           type="button"
           onClick={() => setTab("maybe")}
-          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[36px] ${
+          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all min-h-[44px] ${
             tab === "maybe"
               ? "bg-white/10 text-white"
               : "bg-transparent text-white/50 hover:text-white/80"
