@@ -31,15 +31,9 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, isPaidEvent
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for mobile
-      const input = document.createElement("input");
-      input.value = shareUrl;
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand("copy");
-      document.body.removeChild(input);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      // Clipboard API unavailable (non-secure context or browser restriction).
+      // document.execCommand("copy") is deprecated and unreliable — don't use it.
+      // Leave copied=false so the user sees the URL to long-press/copy manually.
     }
   }
 
