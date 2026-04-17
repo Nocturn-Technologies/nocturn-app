@@ -161,8 +161,15 @@ export async function generateAutoSettlement(eventId: string) {
         ? grossRevenue * 0.029 + 0.30 * ticketCount
         : 0;
 
-    // 7. Net revenue and profit — match getEventFinancials formula.
-    const netRevenue = grossRevenue - refundsTotal;
+    // 7. Net revenue and profit — match getEventFinancials exactly.
+    // `grossRevenue` above already excluded refunded tickets (we queried
+    // only paid + checked_in), so there's no additional refunds subtraction
+    // on the organizer's net. `refundsTotal` is still written to the
+    // settlement record for historical reporting but does NOT flow into
+    // netRevenue — otherwise we'd double-count the refunds removal.
+    // Previously the settlement's gross_revenue disagreed with the finance
+    // page by exactly refundsTotal; now both show the same number.
+    const netRevenue = grossRevenue;
     const profit =
       netRevenue - artistFeesTotal - totalExpenses - venueCostNum - venueDepositNum - barShortfall;
 
