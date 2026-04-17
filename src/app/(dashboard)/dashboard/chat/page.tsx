@@ -978,7 +978,7 @@ export default function ChatPage() {
                 )}
 
                 {inq.status === "rejected" && (
-                  <p className="text-xs text-muted-foreground/60 italic">They passed on this one</p>
+                  <p className="text-xs text-muted-foreground/70 italic">They passed on this one</p>
                 )}
               </div>
             ))
@@ -1117,7 +1117,7 @@ export default function ChatPage() {
                   <p className="text-sm text-muted-foreground mb-1">
                     No collectives found
                   </p>
-                  <p className="text-xs text-muted-foreground/60">
+                  <p className="text-xs text-muted-foreground/70">
                     Type an email address to invite someone
                   </p>
                 </div>
