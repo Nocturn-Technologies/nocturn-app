@@ -75,11 +75,18 @@ export default async function EditEventPage({ params }: Props) {
   // carries the FX snapshot from when each row was first entered — we pass
   // the original amount+currency back so the operator edits in the currency
   // they typed, not the converted local value.
+  //
+  // Excluding venue_rental + deposit: those live on the Venue Financials
+  // scalar card and map to events.venue_cost / venue_deposit columns. Any
+  // existing rows with those categories (from the brief window where the
+  // wizard double-wrote) are invisible here, since the scalar card is the
+  // canonical editor for those costs.
   const { data: expenseRows } = await admin
     .from("expenses")
     .select("id, category, description, amount, metadata")
     .eq("event_id", eventId)
     .is("deleted_at", null)
+    .not("category", "in", '("venue_rental","deposit")')
     .order("created_at");
 
   const venue = event.venues as unknown as {

@@ -1003,54 +1003,77 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                 </tr>
               )}
 
-              {/* Custom Expenses (Editable) */}
-              {financials.expenses.map((expense) => (
-                <tr
-                  key={expense.id}
-                  className="border-b border-border/50 hover:bg-muted/20 transition-colors group"
-                >
-                  <td className="px-4 py-1.5 text-muted-foreground text-xs">
-                    {categoryLabel(expense.category)}
-                  </td>
-                  <td className="px-4 py-1.5">
-                    <EditableTextCell
-                      value={expense.description}
-                      onSave={async (v) => {
-                        await handleUpdateExpense(expense.id, "description", v);
-                      }}
-                    />
-                  </td>
-                  <td className="px-4 py-1.5 text-right">
-                    <div className="flex items-center justify-end">
-                      <span className="text-red-400 mr-1">(</span>
-                      <EditableAmountCell
-                        value={expense.amount}
+              {/* Custom Expenses (Editable). When a row was entered in a
+                  different currency than the event's reporting currency, a
+                  small secondary line surfaces the original amount + the FX
+                  rate captured at entry so operators can reconcile against
+                  the DJ invoice / bank statement without mental math. */}
+              {financials.expenses.map((expense) => {
+                const hasFxSnapshot =
+                  expense.originalAmount != null &&
+                  expense.originalCurrency != null &&
+                  expense.fxRate != null &&
+                  // Only flag when the origin actually diverged from the event currency.
+                  // Rows entered natively in the event currency carry a rate of 1.
+                  expense.fxRate !== 1;
+                return (
+                  <tr
+                    key={expense.id}
+                    className="border-b border-border/50 hover:bg-muted/20 transition-colors group"
+                  >
+                    <td className="px-4 py-1.5 text-muted-foreground text-xs align-top">
+                      {categoryLabel(expense.category)}
+                    </td>
+                    <td className="px-4 py-1.5">
+                      <EditableTextCell
+                        value={expense.description}
                         onSave={async (v) => {
-                          await handleUpdateExpense(expense.id, "amount", v);
+                          await handleUpdateExpense(expense.id, "description", v);
                         }}
                       />
-                      <span className="text-red-400 ml-0.5">)</span>
-                    </div>
-                  </td>
-                  {fLabels.map((_, i) => (
-                    <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-red-400/30">
-                      ({formatCurrency(expense.amount)})
+                      {hasFxSnapshot && (
+                        <p
+                          className="text-[10px] text-muted-foreground/70 mt-0.5"
+                          title={`Entered ${expense.originalAmount?.toLocaleString()} ${expense.originalCurrency?.toUpperCase()} at rate ${expense.fxRate?.toFixed(4)}${expense.fxLockedAt ? ` on ${new Date(expense.fxLockedAt).toISOString().slice(0, 10)}` : ""}`}
+                        >
+                          {expense.originalAmount?.toLocaleString()} {expense.originalCurrency?.toUpperCase()}
+                          {" · "}
+                          @ {expense.fxRate?.toFixed(3)}
+                        </p>
+                      )}
                     </td>
-                  ))}
-                  <td className="px-4 py-1.5 text-center">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Delete expense"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all"
-                      onClick={() => handleDeleteExpense(expense.id)}
-                      disabled={isPending}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-4 py-1.5 text-right align-top">
+                      <div className="flex items-center justify-end">
+                        <span className="text-red-400 mr-1">(</span>
+                        <EditableAmountCell
+                          value={expense.amount}
+                          onSave={async (v) => {
+                            await handleUpdateExpense(expense.id, "amount", v);
+                          }}
+                        />
+                        <span className="text-red-400 ml-0.5">)</span>
+                      </div>
+                    </td>
+                    {fLabels.map((_, i) => (
+                      <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-red-400/30 align-top">
+                        ({formatCurrency(expense.amount)})
+                      </td>
+                    ))}
+                    <td className="px-4 py-1.5 text-center align-top">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Delete expense"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all"
+                        onClick={() => handleDeleteExpense(expense.id)}
+                        disabled={isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {/* Add Expense Row */}
               <AddExpenseRow eventId={financials.eventId} />

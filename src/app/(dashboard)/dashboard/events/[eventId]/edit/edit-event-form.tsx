@@ -41,14 +41,18 @@ interface ExpenseRow {
 // Chip tray for common expense categories. Tapping a chip adds a row with
 // the label + category prefilled. Keeps the empty form short; operators only
 // see rows for categories they actually use.
+//
+// Venue rental + deposit are intentionally NOT here — they live on the
+// Venue Financials card above (scalar inputs writing directly to
+// events.venue_cost / events.venue_deposit). Keeping them on the scalar
+// card prevents the double-count that exists when the same cost shows up
+// both as an expense row AND as an events column value.
 const EXPENSE_CHIPS: Array<{ category: string; label: string }> = [
   { category: "talent",         label: "Talent fee" },
   { category: "flights",        label: "Flights" },
   { category: "hotel",          label: "Hotel" },
   { category: "transport",      label: "Transport" },
   { category: "per_diem",       label: "Per diem" },
-  { category: "venue_rental",   label: "Venue rental" },
-  { category: "deposit",        label: "Deposit" },
   { category: "ads",            label: "Ads" },
   { category: "graphic_design", label: "Graphic design" },
   { category: "photo",          label: "Photo" },
