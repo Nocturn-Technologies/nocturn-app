@@ -434,6 +434,7 @@ export type Database = {
           bio: string | null
           city: string | null
           created_at: string
+          default_currency: string
           deleted_at: string | null
           description: string | null
           id: string
@@ -451,6 +452,7 @@ export type Database = {
           bio?: string | null
           city?: string | null
           created_at?: string
+          default_currency?: string
           deleted_at?: string | null
           description?: string | null
           id?: string
@@ -468,6 +470,7 @@ export type Database = {
           bio?: string | null
           city?: string | null
           created_at?: string
+          default_currency?: string
           deleted_at?: string | null
           description?: string | null
           id?: string
@@ -1272,6 +1275,7 @@ export type Database = {
           bar_minimum: number | null
           collective_id: string
           created_at: string
+          currency: string | null
           deleted_at: string | null
           description: string | null
           doors_at: string | null
@@ -1300,6 +1304,7 @@ export type Database = {
           bar_minimum?: number | null
           collective_id: string
           created_at?: string
+          currency?: string | null
           deleted_at?: string | null
           description?: string | null
           doors_at?: string | null
@@ -1328,6 +1333,7 @@ export type Database = {
           bar_minimum?: number | null
           collective_id?: string
           created_at?: string
+          currency?: string | null
           deleted_at?: string | null
           description?: string | null
           doors_at?: string | null
@@ -3626,4 +3632,3 @@ export const Constants = {
     },
   },
 } as const
-

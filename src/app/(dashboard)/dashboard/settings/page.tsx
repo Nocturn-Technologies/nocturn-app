@@ -14,7 +14,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Check } from "lucide-react";
+import { SUPPORTED_CURRENCIES } from "@/lib/currency";
+import { getMyCollectiveDefaults, updateCollectiveCurrency } from "@/app/actions/collective-settings";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -359,6 +361,9 @@ export default function SettingsPage() {
           </form>
         </CardContent>
       </Card>
+
+      {/* Default currency — set once, applies to every new event's budget P&L */}
+      <CurrencyCard />
       </div>
 
       <Separator />
@@ -401,5 +406,92 @@ export default function SettingsPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+
+// ─── Currency Card ──────────────────────────────────────────────────────────
+// Sets the collective's default reporting currency for event budget P&L.
+// Per-event override still lives in the event-creation wizard; this is just
+// the starting value so Toronto collectives don't have to flip to CAD on
+// every new event.
+
+function CurrencyCard() {
+  const [currency, setCurrency] = useState<string>("usd");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    getMyCollectiveDefaults()
+      .then(d => { if (d) setCurrency(d.defaultCurrency); })
+      .catch(() => { /* keep USD default */ })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function onSave() {
+    setSaving(true);
+    setErr(null);
+    setSaved(false);
+    const res = await updateCollectiveCurrency({ currency });
+    if (res.error) setErr(res.error);
+    else {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    }
+    setSaving(false);
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Default currency</CardTitle>
+        <CardDescription>
+          The currency your event budgets report in. Each event can still override this
+          in the Budget step — handy when you throw in a different country.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-2 max-w-sm">
+          <Label htmlFor="defaultCurrency">Currency</Label>
+          <select
+            id="defaultCurrency"
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            disabled={loading || saving}
+            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px] disabled:opacity-50"
+          >
+            {SUPPORTED_CURRENCIES.map(c => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {err && (
+          <p className="text-sm text-red-500 flex items-center gap-1.5">
+            <AlertCircle className="h-4 w-4" />
+            {err}
+          </p>
+        )}
+
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={onSave}
+            disabled={loading || saving}
+            className="bg-nocturn hover:bg-nocturn-light min-h-[44px] transition-all duration-200 active:scale-[0.98] disabled:active:scale-100"
+          >
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {saving ? "Saving..." : "Save currency"}
+          </Button>
+          {saved && (
+            <span className="text-sm text-emerald-500 flex items-center gap-1.5 animate-fade-in">
+              <Check className="h-4 w-4" />
+              Saved
+            </span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
