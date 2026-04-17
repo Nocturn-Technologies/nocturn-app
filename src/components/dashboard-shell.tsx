@@ -394,7 +394,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => router.push("/dashboard/members")}>
                 <Users className="mr-2 h-4 w-4" />
-                Team
+                Members
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
                 <Settings className="mr-2 h-4 w-4" />
@@ -418,7 +418,10 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
             <NocturnLogo size="sm" />
           </Link>
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center min-h-[44px] min-w-[44px] justify-center">
+            <DropdownMenuTrigger
+              aria-label="Open account menu"
+              className="flex items-center min-h-[44px] min-w-[44px] justify-center"
+            >
               <div className="relative">
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="bg-gradient-to-br from-nocturn to-nocturn-light text-xs text-white">
@@ -444,7 +447,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => router.push("/dashboard/members")}>
                 <Users className="mr-2 h-4 w-4" />
-                Team
+                Members
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push("/dashboard/settings")}>
                 <Settings className="mr-2 h-4 w-4" />
@@ -460,7 +463,7 @@ export function DashboardShell({ user, collectives, userType, children }: Dashbo
         </header>
 
         {/* Page content — pb-24 on mobile for bottom tab bar + safe area clearance */}
-        <main className="flex-1 overflow-y-auto p-4 pb-24 md:p-6 md:pb-6">{children}</main>
+        <main id="main" className="flex-1 overflow-y-auto p-4 pb-24 md:p-6 md:pb-6">{children}</main>
 
         {/* ── Mobile bottom tab bar (hidden on desktop) ── */}
         <nav className="fixed inset-x-0 bottom-0 z-50 flex items-center justify-around border-t border-white/[0.06] bg-background/90 backdrop-blur-xl px-2 pt-2 pb-[max(env(safe-area-inset-bottom),8px)] md:hidden">

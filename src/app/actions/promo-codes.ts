@@ -137,6 +137,18 @@ export async function createPromoCode(input: {
       return { error: "Promo code must be alphanumeric and under 50 characters" };
     }
 
+    // Status guard — creating promo codes on completed/archived events
+    // doesn't make sense (event already happened, no tickets to discount)
+    // and could confuse settlement reconciliation.
+    const { data: eventRow } = await supabase
+      .from("events")
+      .select("status")
+      .eq("id", input.eventId)
+      .maybeSingle();
+    if (eventRow && eventRow.status !== "draft" && eventRow.status !== "published") {
+      return { error: "Can't create promo codes for a completed or archived event." };
+    }
+
     // Look up the event's collective_id for the required FK
     const { data: eventRow } = await supabase
       .from("events")

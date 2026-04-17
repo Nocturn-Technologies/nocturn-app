@@ -1017,11 +1017,16 @@ function TaskCard({
         >
           {statusIcons[task.status as string]}
         </button>
-        <div className="flex-1 min-w-0" onClick={() => setShowActions(!showActions)}>
-          <p className={`text-sm font-medium cursor-pointer ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}>
+        <button
+          type="button"
+          className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
+          onClick={() => setShowActions(!showActions)}
+          aria-expanded={showActions}
+        >
+          <span className={`block text-sm font-medium ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}>
             {String(task.title)}
-          </p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
+          </span>
+          <span className="flex items-center gap-2 mt-1 flex-wrap">
             {dueLabel && (
               <span className={`text-[11px] font-medium ${overdue ? "text-red-400" : "text-muted-foreground"}`}>
                 {overdue ? "🔴 " : ""}{dueLabel}
@@ -1037,8 +1042,8 @@ function TaskCard({
                 <StickyNote className="h-2.5 w-2.5 inline" /> {String(task.description)}
               </span>
             )}
-          </div>
-        </div>
+          </span>
+        </button>
       </div>
 
       {/* Inline actions — assign + due date + note */}
@@ -1170,11 +1175,16 @@ function ContentTaskCard({
       {/* Top row */}
       <div className="flex items-start gap-3">
         <span className="text-lg shrink-0 mt-0.5">{emoji}</span>
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setShowActions(!showActions)}>
-          <p className={`text-sm font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
+        <button
+          type="button"
+          className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
+          onClick={() => setShowActions(!showActions)}
+          aria-expanded={showActions}
+        >
+          <span className={`block text-sm font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
             {String(task.title)}
-          </p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
+          </span>
+          <span className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="rounded-full bg-white/5 border border-white/10 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
               {phase}
             </span>
@@ -1186,8 +1196,8 @@ function ContentTaskCard({
             {assignee && (
               <span className="text-[11px] text-muted-foreground">→ {assignee.full_name ?? assignee.email}</span>
             )}
-          </div>
-        </div>
+          </span>
+        </button>
         <Button
           size="sm"
           variant={isDone ? "default" : "outline"}

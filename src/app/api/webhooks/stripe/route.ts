@@ -67,6 +67,27 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Dedup via webhook_events table — INSERT-first, rely on unique PK.
+  // Handles Stripe retries + our own at-least-once processing so a replayed
+  // event doesn't re-fulfill tickets, re-decrement promo counters, or
+  // re-notify the waitlist. The table is service-role-only; no RLS exposure.
+  // Code 23505 = unique_violation. Any other error we log and continue
+  // (dedup is defense in depth — body-level idempotency still protects).
+  try {
+    const { error: dedupErr } = await createAdminClient()
+      .from("webhook_events")
+      .insert({ id: event.id, source: "stripe" });
+    if (dedupErr) {
+      if (dedupErr.code === "23505") {
+        console.info(`[stripe-webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+      console.warn(`[stripe-webhook] webhook_events insert failed (non-fatal): ${dedupErr.message}`);
+    }
+  } catch (dedupErr) {
+    console.warn("[stripe-webhook] Dedup pre-check failed (non-fatal):", dedupErr);
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -163,20 +184,74 @@ export async function POST(request: NextRequest) {
           console.info(`[stripe-webhook] Charge ${isFullRefund ? "fully" : "partially"} refunded for PI ${refundPiId}`);
           const supabase = createAdminClient();
           if (isFullRefund) {
-            // Full refund — mark all tickets
+            // Full refund — mark all tickets, release their promo slots, and
+            // promote the next entry on each event's waitlist. This handler
+            // runs for Stripe-dashboard-initiated refunds (where our
+            // `refundTicket` server action never fires), so all the side
+            // effects that action would trigger have to happen here too —
+            // otherwise promo codes lock at `max_uses` forever and waitlisted
+            // fans never get the "we saved you a ticket" email.
             const { data: refundedTickets, error: refundErr } = await supabase
               .from("tickets")
               .update({ status: "refunded" })
               .eq("stripe_payment_intent_id", refundPiId)
               .in("status", ["paid", "checked_in"])
-              .select("id");
+              .select("id, event_id, promo_code_id");
             if (refundErr) {
               console.error("[stripe-webhook] Failed to update tickets to refunded:", refundErr);
             } else if (refundedTickets && refundedTickets.length > 0) {
               console.info(`[stripe-webhook] Marked ${refundedTickets.length} ticket(s) as refunded for PI ${refundPiId}`);
+
+              // Count how many tickets were released per promo_code_id, then
+              // decrement. Grouping avoids N round-trips for a PI with many
+              // tickets sharing one promo.
+              const byPromo = new Map<string, number>();
+              const affectedEvents = new Set<string>();
+              for (const t of refundedTickets) {
+                if (t.event_id) affectedEvents.add(t.event_id);
+                if (t.promo_code_id) byPromo.set(t.promo_code_id, (byPromo.get(t.promo_code_id) ?? 0) + 1);
+              }
+              for (const [promoId, count] of byPromo.entries()) {
+                const { data: promoRow } = await supabase
+                  .from("promo_codes")
+                  .select("current_uses")
+                  .eq("id", promoId)
+                  .maybeSingle();
+                if (promoRow) {
+                  await supabase
+                    .from("promo_codes")
+                    .update({ current_uses: Math.max((promoRow.current_uses ?? 0) - count, 0) })
+                    .eq("id", promoId);
+                }
+              }
+
+              // Promote waitlist — best-effort, don't block the webhook ack.
+              for (const eventId of affectedEvents) {
+                try {
+                  const { notifyNextOnWaitlist } = await import("@/app/actions/ticket-waitlist");
+                  await notifyNextOnWaitlist(eventId, refundedTickets.filter((t) => t.event_id === eventId).length);
+                } catch (err) {
+                  console.error("[stripe-webhook] waitlist notify failed (non-fatal):", err);
+                }
+              }
             }
           } else {
-            // Partial refund — calculate how many tickets to refund based on amount
+            // Partial refund — only flip ticket status when the refund amount
+            // matches an EXACT subset of ticket prices (newest-first scan).
+            //
+            // The previous greedy implementation had a fraud vector:
+            // - PI with tickets [$30, $20], partial refund $25
+            //   → old code skipped $30 (doesn't fit in $25), refunded the $20
+            //   → Stripe sent the buyer $25, but ticket ledger says one $20
+            //   ticket refunded. Buyer keeps a "paid" QR for the $30 and $5 is
+            //   in limbo. Door staff + P&L both misbehave.
+            // - PI with tickets [$20, $20], partial refund $15 → zero matched
+            //   but buyer got $15 anyway.
+            //
+            // Correct behavior: leave status untouched when the amount doesn't
+            // cleanly map to a ticket subset. Operator reconciles manually via
+            // the refunds page. Stripe dashboard remains the source of truth
+            // for the money movement; ticket status shouldn't lie.
             const refundAmount = charge.amount_refunded ?? 0;
             const { data: allTickets } = await supabase
               .from("tickets")
@@ -185,28 +260,32 @@ export async function POST(request: NextRequest) {
               .in("status", ["paid", "checked_in"])
               .order("created_at", { ascending: false });
             if (allTickets && allTickets.length > 0) {
-              // Refund tickets from most recent first, up to the refunded amount
-              let remainingRefundCents = refundAmount;
-              const ticketsToRefund: string[] = [];
+              // Newest-first running sum — exit on exact hit or overshoot.
+              let running = 0;
+              const candidate: string[] = [];
               for (const t of allTickets) {
                 const ticketCents = Math.round(Number(t.price_paid ?? 0) * 100);
-                if (ticketCents > 0 && remainingRefundCents >= ticketCents) {
-                  ticketsToRefund.push(t.id);
-                  remainingRefundCents -= ticketCents;
-                }
+                if (ticketCents === 0) continue;
+                running += ticketCents;
+                candidate.push(t.id);
+                if (running >= refundAmount) break;
               }
-              if (ticketsToRefund.length > 0) {
+              if (running === refundAmount && candidate.length > 0) {
                 const { error: partialErr } = await supabase
                   .from("tickets")
                   .update({ status: "refunded" })
-                  .in("id", ticketsToRefund);
+                  .in("id", candidate);
                 if (partialErr) {
                   console.error("[stripe-webhook] Partial refund update failed:", partialErr);
                 } else {
-                  console.info(`[stripe-webhook] Partially refunded ${ticketsToRefund.length}/${allTickets.length} ticket(s) for PI ${refundPiId}`);
+                  console.info(`[stripe-webhook] Partially refunded ${candidate.length}/${allTickets.length} ticket(s) for PI ${refundPiId}`);
                 }
               } else {
-                console.warn(`[stripe-webhook] Partial refund amount ${refundAmount} didn't match any ticket prices for PI ${refundPiId}`);
+                // No clean subset sum to the refund amount. Don't guess.
+                // Log loudly so an admin can reconcile.
+                console.warn(
+                  `[stripe-webhook] Partial refund ${refundAmount}¢ for PI ${refundPiId} does not match any exact ticket-subset sum (${allTickets.length} tickets, tried newest-first). Leaving ticket status untouched — manual reconciliation needed.`,
+                );
               }
             }
           }

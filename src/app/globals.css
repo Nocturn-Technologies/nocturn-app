@@ -11,7 +11,7 @@
   --font-heading: var(--font-heading);
   --font-mono: var(--font-body);
   --color-nocturn: #7B2FF7;
-  --color-nocturn-light: #A855F7;
+  --color-nocturn-light: #9D5CFF;
   --color-nocturn-glow: #C084FC;
   --color-nocturn-teal: #2DD4BF;
   --color-nocturn-coral: #FB7185;
@@ -543,5 +543,6 @@ a[role="button"]:active {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

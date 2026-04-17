@@ -61,7 +61,7 @@ const SEGMENT_BADGE_STYLES: Record<string, string> = {
 };
 
 const ROLE_BADGE_STYLES: Record<string, string> = {
-  artist: "bg-[#7B2FF7]/15 text-[#9D5CFF] border-[#7B2FF7]/25",
+  artist: "bg-nocturn/15 text-nocturn-light border-nocturn/25",
   venue: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   photographer: "bg-pink-500/10 text-pink-400 border-pink-500/20",
   videographer: "bg-orange-500/10 text-orange-400 border-orange-500/20",

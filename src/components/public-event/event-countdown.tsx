@@ -50,22 +50,22 @@ export function EventCountdown({ targetDate }: { targetDate: string }) {
   return (
     <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${
       urgent
-        ? "bg-gradient-to-r from-[#7B2FF7]/20 to-[#E040FB]/20 border border-[#7B2FF7]/30"
+        ? "bg-gradient-to-r from-nocturn/20 to-[#E040FB]/20 border border-nocturn/30"
         : "bg-white/5 border border-white/5"
     }`}>
       <div className={`text-lg font-mono font-bold tracking-wider ${
-        urgent ? "text-[#7B2FF7]" : "text-white"
+        urgent ? "text-nocturn" : "text-white"
       }`}>
         {timeLeft}
       </div>
       <div className="h-4 w-px bg-white/10" />
       <span className={`text-xs font-medium ${
-        urgent ? "text-[#7B2FF7]" : "text-white/50"
+        urgent ? "text-nocturn" : "text-white/50"
       }`}>
         {label}
       </span>
       {urgent && (
-        <span className="ml-auto inline-block w-2 h-2 rounded-full bg-[#7B2FF7] animate-pulse" />
+        <span className="ml-auto inline-block w-2 h-2 rounded-full bg-nocturn animate-pulse" />
       )}
     </div>
   );
