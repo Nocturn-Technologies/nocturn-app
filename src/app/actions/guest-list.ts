@@ -86,6 +86,17 @@ export async function addGuest(input: {
 
     if (input.notes && input.notes.length > 500) return { error: "Notes must be under 500 characters" };
 
+    // Status guard — guest-list edits on completed/archived events shouldn't
+    // silently change attendance records after the fact. Draft/published only.
+    const { data: eventRow } = await supabase
+      .from("events")
+      .select("status")
+      .eq("id", input.eventId)
+      .maybeSingle();
+    if (eventRow && eventRow.status !== "draft" && eventRow.status !== "published") {
+      return { error: "Can't add guests to a completed or archived event." };
+    }
+
     const { error } = await supabase.from("guest_list").insert({
       event_id: input.eventId,
       name: input.name.trim(),

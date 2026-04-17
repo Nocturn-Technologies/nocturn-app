@@ -77,8 +77,21 @@ export async function POST(request: NextRequest) {
     clientVibeTags = Array.isArray(body.vibeTags)
       ? (body.vibeTags as unknown[]).filter((t): t is string => typeof t === "string").slice(0, 10)
       : undefined;
-    clientVenueName = typeof body.venueName === "string" ? body.venueName.slice(0, 100) : undefined;
-    clientStyleDirection = typeof body.styleDirection === "string" ? body.styleDirection.slice(0, 200) : undefined;
+    // Prompt-injection defense: these fields get concatenated into the LLM
+    // prompt sent to Replicate. Strip control chars + common instruction-
+    // override patterns before interpolation so an authenticated operator
+    // can't burn Replicate credits on off-brand or policy-violating output.
+    const sanitizePromptString = (s: string): string =>
+      s
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\x00-\x1f\x7f]/g, " ")
+        .replace(/(?:^|\s)(ignore\s+(?:previous|above|prior)|system\s*:|assistant\s*:|###|<\|im_start\|>|<\|im_end\|>)/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    clientVenueName =
+      typeof body.venueName === "string" ? sanitizePromptString(body.venueName).slice(0, 100) : undefined;
+    clientStyleDirection =
+      typeof body.styleDirection === "string" ? sanitizePromptString(body.styleDirection).slice(0, 200) : undefined;
   } catch {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }

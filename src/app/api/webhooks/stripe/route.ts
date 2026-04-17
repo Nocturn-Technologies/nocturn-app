@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
               .update({ status: "refunded" })
               .eq("stripe_payment_intent_id", refundPiId)
               .in("status", ["paid", "checked_in"])
-              .select("id, event_id, promo_code_id");
+              .select("id, event_id, ticket_tier_id, promo_code_id");
             if (refundErr) {
               console.error("[stripe-webhook] Failed to update tickets to refunded:", refundErr);
             } else if (refundedTickets && refundedTickets.length > 0) {
@@ -204,12 +204,18 @@ export async function POST(request: NextRequest) {
 
               // Count how many tickets were released per promo_code_id, then
               // decrement. Grouping avoids N round-trips for a PI with many
-              // tickets sharing one promo.
+              // tickets sharing one promo. Also bucket by (event_id, tier_id)
+              // so we can call notifyNextOnWaitlist once per tier slot freed.
               const byPromo = new Map<string, number>();
-              const affectedEvents = new Set<string>();
+              const byEventTier = new Map<string, { eventId: string; tierId: string; count: number }>();
               for (const t of refundedTickets) {
-                if (t.event_id) affectedEvents.add(t.event_id);
                 if (t.promo_code_id) byPromo.set(t.promo_code_id, (byPromo.get(t.promo_code_id) ?? 0) + 1);
+                if (t.event_id && t.ticket_tier_id) {
+                  const key = `${t.event_id}::${t.ticket_tier_id}`;
+                  const existing = byEventTier.get(key);
+                  if (existing) existing.count += 1;
+                  else byEventTier.set(key, { eventId: t.event_id, tierId: t.ticket_tier_id, count: 1 });
+                }
               }
               for (const [promoId, count] of byPromo.entries()) {
                 const { data: promoRow } = await supabase
@@ -225,11 +231,11 @@ export async function POST(request: NextRequest) {
                 }
               }
 
-              // Promote waitlist — best-effort, don't block the webhook ack.
-              for (const eventId of affectedEvents) {
+              // Promote waitlist per tier — best-effort, don't block webhook ack.
+              const { notifyNextOnWaitlist } = await import("@/app/actions/ticket-waitlist");
+              for (const { eventId, tierId, count } of byEventTier.values()) {
                 try {
-                  const { notifyNextOnWaitlist } = await import("@/app/actions/ticket-waitlist");
-                  await notifyNextOnWaitlist(eventId, refundedTickets.filter((t) => t.event_id === eventId).length);
+                  await notifyNextOnWaitlist(eventId, tierId, count);
                 } catch (err) {
                   console.error("[stripe-webhook] waitlist notify failed (non-fatal):", err);
                 }

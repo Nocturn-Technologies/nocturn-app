@@ -124,17 +124,41 @@ export async function generateAutoSettlement(eventId: string) {
     const HEADLINER_CATEGORIES = new Set(["talent", "flights", "hotel", "transport", "per_diem"]);
     const VENUE_CATEGORIES = new Set(["venue_rental", "deposit"]);
 
-    // Artist fees have double storage paths (event_artists + expenses.talent).
-    // Only filter the headliner categories out of expenses when event_artists
-    // actually has fees; otherwise we'd under-count events where the operator
-    // only entered fees via the wizard.
-    const filterHeadliner = artistFeesTotal > 0;
-    const totalExpenses = (expenses ?? []).reduce((sum, e) => {
+    // Pair-wise talent double-count prevention.
+    //
+    // A single event can legitimately have BOTH:
+    //   (a) `event_artists.fee` — structured per-artist records
+    //   (b) `expenses` with headliner categories — wizard-entered
+    // The previous blanket filter ("drop all headliner expenses when any
+    // event_artists.fee > 0") silently dropped unrelated talent expenses.
+    // Example: artist A booked via lineup at $50, artist B tracked only as
+    // a wizard expense at $500 → old filter dropped B's $500 entirely,
+    // overstating profit.
+    //
+    // New approach: for each headliner-category expense, try to match it
+    // against an event_artists.fee row of the same amount. Matched → skip
+    // (avoid double-count). Unmatched → include (real separate cost).
+    // Cents-based to avoid FP drift on the pairing key.
+    const availableArtistFeeCents = (eventArtists ?? [])
+      .map((a) => Math.round((Number(a.fee) || 0) * 100))
+      .filter((c) => c > 0);
+    let totalExpenses = 0;
+    for (const e of expenses ?? []) {
       const category = e.category ?? "";
-      if (VENUE_CATEGORIES.has(category)) return sum;
-      if (filterHeadliner && HEADLINER_CATEGORIES.has(category)) return sum;
-      return sum + (Number(e.amount) || 0);
-    }, 0);
+      const amount = Number(e.amount) || 0;
+      if (VENUE_CATEGORIES.has(category)) continue;
+      if (HEADLINER_CATEGORIES.has(category)) {
+        const cents = Math.round(amount * 100);
+        const matchIdx = availableArtistFeeCents.indexOf(cents);
+        if (matchIdx >= 0) {
+          // Consume the matched artist-fee slot so multiple equal-fee
+          // artists don't all match the same expense row.
+          availableArtistFeeCents.splice(matchIdx, 1);
+          continue;
+        }
+      }
+      totalExpenses += amount;
+    }
 
     // Event-column venue costs (authoritative source for those values).
     const venueCostNum = event.venue_cost ? Number(event.venue_cost) : 0;

@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { isValidUUID } from "@/lib/utils";
 import { revalidatePath } from "next/cache";
 
 export interface InquiryItem {
@@ -240,7 +241,14 @@ export async function acceptInquiry(inquiryId: string): Promise<{
   let channelId: string | null = null;
 
   if (senderMembership?.collective_id) {
-    // Sender is in a collective — check for existing collab channel
+    // Sender is in a collective — check for existing collab channel.
+    // UUID validation defense-in-depth: the collective_ids are DB-sourced
+    // today, but a future caller or corrupted row could let crafted input
+    // reach .or() and break out of the operator string with PostgREST
+    // metacharacters. Reject non-UUIDs before interpolation.
+    if (!isValidUUID(myMembership.collective_id) || !isValidUUID(senderMembership.collective_id)) {
+      return { error: "Invalid collective id on membership record", channelId: null };
+    }
     const { data: existing } = await sb
       .from("channels")
       .select("id")
