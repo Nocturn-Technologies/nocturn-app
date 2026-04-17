@@ -1,5 +1,6 @@
 "use server";
 
+import { cache } from "react";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
@@ -49,13 +50,19 @@ export type RevenueForecastItem = {
   projectedProfit: number;
 };
 
-async function getCollectiveIds() {
+// Wrapped in `React.cache()` so the Finance page's 4 calls
+// (getCompanyFinancials + getEventFinancialSummaries + getRevenueForecast
+//  + anything else upstream) share a single auth.getUser() + membership
+// lookup per render. Was previously 4× round-trips per page load for a
+// query that never changes within one request. `cache()` memoizes on the
+// per-request basis, so cross-request isolation is preserved.
+const getCollectiveIds = cache(async () => {
   try {
     const supabase = await createServerClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (!user) return { user: null, collectiveIds: [] };
+    if (!user) return { user: null, collectiveIds: [] as string[] };
 
     const admin = createAdminClient();
     const { data: memberships, error } = await admin
@@ -66,7 +73,7 @@ async function getCollectiveIds() {
 
     if (error) {
       console.error("[getCollectiveIds] query error:", error.message);
-      return { user, collectiveIds: [] };
+      return { user, collectiveIds: [] as string[] };
     }
 
     const collectiveIds =
@@ -77,9 +84,9 @@ async function getCollectiveIds() {
     return { user, collectiveIds };
   } catch (err) {
     console.error("[getCollectiveIds] Unexpected error:", err);
-    return { user: null, collectiveIds: [] };
+    return { user: null, collectiveIds: [] as string[] };
   }
-}
+});
 
 export async function getCompanyFinancials(): Promise<{
   error: string | null;

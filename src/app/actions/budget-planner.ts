@@ -3,25 +3,11 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { convertBetween } from "@/lib/currency";
 import { cascadeScenario, cascadeBreakEven } from "@/lib/ticket-forecast";
-
-// ─── Expense categories ─────────────────────────────────────────────────────
-// Organizers think about expenses in buckets, not a flat list. These categories
-// drive the UI (chip-add for production/marketing) and the suggested-expense
-// auto-fill for international headliners (flights/hotel/transport/per_diem).
-export type ExpenseCategory =
-  | "talent"
-  | "flights"
-  | "hotel"
-  | "transport"
-  | "per_diem"
-  | "venue_rental"
-  | "bar_minimum"
-  | "deposit"
-  | "ads"
-  | "graphic_design"
-  | "photo"
-  | "video"
-  | "other";
+// Expense category union — canonical source is `src/lib/expense-categories.ts`
+// so budget-planner, event-financials, settlements, and the wizard chip tray
+// never drift. Re-exported here for callers still importing from this file.
+import type { ExpenseCategory } from "@/lib/expense-categories";
+export type { ExpenseCategory };
 
 export interface ExpenseItem {
   category: ExpenseCategory;
