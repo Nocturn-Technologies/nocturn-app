@@ -1126,7 +1126,7 @@ export default function ChatPage() {
             {/* Default state */}
             {collabQuery.length < 2 && (
               <div className="py-8 text-center">
-                <p className="text-sm text-muted-foreground/60">
+                <p className="text-sm text-muted-foreground/70">
                   Search for a collective name or enter an email
                 </p>
               </div>

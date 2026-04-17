@@ -846,13 +846,13 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   <th
                     key={i}
                     className={`px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider w-[100px] ${
-                      i === 2 ? "text-nocturn" : "text-muted-foreground/60"
+                      i === 2 ? "text-nocturn" : "text-muted-foreground/70"
                     }`}
                   >
                     <div className="flex flex-col items-end gap-0.5">
                       <span>{label}</span>
                       {/* Ticket-count cue per scenario — shows the cascade math */}
-                      <span className="text-[11px] font-normal text-muted-foreground/60 tabular-nums normal-case">
+                      <span className="text-[11px] font-normal text-muted-foreground/70 tabular-nums normal-case">
                         {forecasts[i].ticketsSold} tix
                         {forecasts[i].waitlist > 0 && (
                           <span className="text-nocturn/70 ml-0.5">+{forecasts[i].waitlist}</span>

@@ -237,7 +237,7 @@ function ContactCard({
               <span className="text-muted-foreground/40">·</span>
             )}
             {lastDate && (
-              <span className="text-muted-foreground/60">Last: {lastDate}</span>
+              <span className="text-muted-foreground/70">Last: {lastDate}</span>
             )}
           </div>
         )}

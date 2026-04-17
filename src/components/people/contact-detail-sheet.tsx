@@ -664,7 +664,7 @@ export function ContactDetailSheet({
                               </p>
                             )}
                           </div>
-                          <span className="text-[11px] text-muted-foreground/60 shrink-0 mt-0.5">
+                          <span className="text-[11px] text-muted-foreground/70 shrink-0 mt-0.5">
                             {relativeDate(entry.date)}
                           </span>
                         </div>
