@@ -77,7 +77,6 @@ function toPromoCode(row: Record<string, unknown>): PromoCode {
   };
 }
 
-// TODO(audit): bound maxUses 1-100000, validate expiresAt as real date
 export async function createPromoCode(input: {
   eventId: string;
   code: string;
@@ -94,6 +93,25 @@ export async function createPromoCode(input: {
 
     const access = await verifyEventAccess(input.eventId);
     if (access.error) return { error: access.error };
+    if (input.maxUses !== null && input.maxUses !== undefined) {
+      if (!Number.isInteger(input.maxUses) || input.maxUses < 1 || input.maxUses > 100_000) {
+        return { error: "maxUses must be an integer between 1 and 100,000" };
+      }
+    }
+    if (input.expiresAt !== null && input.expiresAt !== undefined) {
+      if (isNaN(Date.parse(input.expiresAt))) {
+        return { error: "expiresAt must be a valid ISO date" };
+      }
+      const expiresDate = new Date(input.expiresAt);
+      const now = new Date();
+      const twoYearsOut = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate());
+      if (expiresDate <= now) {
+        return { error: "expiresAt must be in the future" };
+      }
+      if (expiresDate > twoYearsOut) {
+        return { error: "expiresAt cannot be more than 2 years in the future" };
+      }
+    }
 
     // Rate limit: 10 promo code operations per minute per user
     const { success: rlOk } = await rateLimitStrict(`promo:${access.userId}`, 10, 60_000);

@@ -94,51 +94,71 @@ export default function CheckInScannerPage() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("nocturn_checkin_muted") === "true";
   });
+  // Ref mirrors muted so handleScan (a useCallback) always reads the current
+  // value without needing muted in its dependency array (which would recreate
+  // the callback and break the QrScanner's stable onScan prop).
+  const mutedRef = useRef(muted);
+  useEffect(() => {
+    mutedRef.current = muted;
+  }, [muted]);
 
   // Unified door list: ticket holders + guest list entries (#25)
   const [guests, setGuests] = useState<{ name: string; status: string; type: "ticket" | "guest"; email?: string }[]>([]);
+  const [doorListError, setDoorListError] = useState<string | null>(null);
 
-  async function loadDoorList() {
-    const supabase = createClient();
-    const [{ data: ticketHolders }, { data: guestEntries }] = await Promise.all([
-      supabase
-        .from("tickets")
-        .select("id, status, metadata, ticket_tiers(name)")
-        .eq("event_id", eventId)
-        .in("status", ["paid", "checked_in"])
-        .order("created_at", { ascending: false })
-        .limit(200),
-      supabase
-        .from("guest_list")
-        .select("id, name, status, email, plus_ones")
-        .eq("event_id", eventId)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(200),
-    ]);
+  const loadDoorList = useCallback(async () => {
+    try {
+      setDoorListError(null);
+      const supabase = createClient();
+      const [{ data: ticketHolders, error: ticketErr }, { data: guestEntries, error: guestErr }] = await Promise.all([
+        supabase
+          .from("tickets")
+          .select("id, status, metadata, ticket_tiers(name)")
+          .eq("event_id", eventId)
+          .in("status", ["paid", "checked_in"])
+          .order("created_at", { ascending: false })
+          .limit(200),
+        supabase
+          .from("guest_list")
+          .select("id, name, status, email, plus_ones")
+          .eq("event_id", eventId)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .limit(200),
+      ]);
 
-    const combined: typeof guests = [];
-    for (const t of ticketHolders || []) {
-      const meta = t.metadata as Record<string, unknown> | null;
-      const email = (meta?.customer_email ?? meta?.buyer_email ?? "") as string;
-      const tier = t.ticket_tiers as unknown as { name: string } | null;
-      combined.push({
-        name: email || tier?.name || "Ticket holder",
-        status: t.status,
-        type: "ticket",
-        email: email || undefined,
-      });
+      if (ticketErr || guestErr) {
+        console.error("[check-in] loadDoorList error:", ticketErr ?? guestErr);
+        setDoorListError("Could not load door list");
+        return;
+      }
+
+      const combined: typeof guests = [];
+      for (const t of ticketHolders || []) {
+        const meta = t.metadata as Record<string, unknown> | null;
+        const email = (meta?.customer_email ?? meta?.buyer_email ?? "") as string;
+        const tier = t.ticket_tiers as unknown as { name: string } | null;
+        combined.push({
+          name: email || tier?.name || "Ticket holder",
+          status: t.status,
+          type: "ticket",
+          email: email || undefined,
+        });
+      }
+      for (const g of guestEntries || []) {
+        combined.push({
+          name: g.name + ((g.plus_ones ?? 0) > 0 ? ` +${g.plus_ones}` : ""),
+          status: g.status ?? "pending",
+          type: "guest",
+          email: g.email || undefined,
+        });
+      }
+      setGuests(combined);
+    } catch (err) {
+      console.error("[check-in] loadDoorList unexpected error:", err);
+      setDoorListError("Could not load door list");
     }
-    for (const g of guestEntries || []) {
-      combined.push({
-        name: g.name + ((g.plus_ones ?? 0) > 0 ? ` +${g.plus_ones}` : ""),
-        status: g.status ?? "pending",
-        type: "guest",
-        email: g.email || undefined,
-      });
-    }
-    setGuests(combined);
-  }
+  }, [eventId]);
 
   // Load initial stats + door list
   useEffect(() => {
@@ -273,7 +293,7 @@ export default function CheckInScannerPage() {
           type: "error",
           message: "Invalid QR code — not a valid ticket",
         });
-        if (!muted) playErrorTone();
+        if (!mutedRef.current) playErrorTone();
         setProcessing(false);
         clearAfterDelay();
         return;
@@ -282,9 +302,11 @@ export default function CheckInScannerPage() {
       // If offline, queue for later (#35)
       if (!navigator.onLine) {
         setOfflineQueue(prev => [...prev, ticketToken]);
-        setScanResult({ type: "queued", message: `Queued for check-in (offline). ${offlineQueue.length + 1} in queue.` });
+        // Don't read offlineQueue.length from stale closure — the offline banner
+        // already shows the live count, so keep the message simple.
+        setScanResult({ type: "queued", message: "Queued for check-in (offline). Will sync when back online." });
         haptic("light");
-        if (!muted) playQueuedTone();
+        if (!mutedRef.current) playQueuedTone();
         setProcessing(false);
         clearAfterDelay();
         return;
@@ -295,7 +317,7 @@ export default function CheckInScannerPage() {
 
       if (result.success) {
         haptic('success');
-        if (!muted) playSuccessTone();
+        if (!mutedRef.current) playSuccessTone();
         setScanResult({
           type: "success",
           message: "Checked in!",
@@ -316,9 +338,9 @@ export default function CheckInScannerPage() {
         const isNetworkError = !result.error || result.error === "Something went wrong" || result.error === "Failed to check in ticket. Please try again.";
         if (!navigator.onLine && isNetworkError) {
           setOfflineQueue(prev => [...prev, ticketToken]);
-          setScanResult({ type: "queued", message: `Queued for check-in (offline). ${offlineQueue.length + 1} in queue.` });
+          setScanResult({ type: "queued", message: "Queued for check-in (offline). Will sync when back online." });
           haptic("light");
-          if (!muted) playQueuedTone();
+          if (!mutedRef.current) playQueuedTone();
           scannedTokensRef.current.delete(decodedText);
         } else {
           // Detect "already checked in" vs real error
@@ -327,7 +349,7 @@ export default function CheckInScannerPage() {
 
           if (isDuplicate) {
             haptic('medium');
-            if (!muted) playDuplicateTone();
+            if (!mutedRef.current) playDuplicateTone();
             setScanResult({
               type: "duplicate",
               message: errorMsg,
@@ -336,7 +358,7 @@ export default function CheckInScannerPage() {
             });
           } else {
             haptic('heavy');
-            if (!muted) playErrorTone();
+            if (!mutedRef.current) playErrorTone();
             // Include the failed token so user can retry
             setScanResult({
               type: "error",
@@ -597,6 +619,11 @@ export default function CheckInScannerPage() {
       )}
 
       {/* Unified Door List (#25) */}
+      {doorListError && (
+        <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-400">
+          {doorListError}
+        </div>
+      )}
       {guests.length > 0 && (
         <div className="mt-6 space-y-3">
           <div className="flex items-center justify-between">
