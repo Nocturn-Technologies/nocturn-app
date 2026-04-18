@@ -107,7 +107,7 @@ const marketplaceRoles = [
 const stats = [
   { value: "16", label: "Professional roles" },
   { value: "100%", label: "Mobile-first" },
-  { value: "7% + $0.50", label: "Per ticket · buyer pays" },
+  { value: "7%", label: "+ $0.50 · buyer pays fee" },
 ];
 
 export default function HomePage() {
@@ -192,7 +192,7 @@ export default function HomePage() {
                 key={stat.label}
                 className="bg-background px-6 py-7 flex flex-col gap-2 transition-colors hover:bg-white/[0.02]"
               >
-                <p className="stat-cell-align text-[clamp(32px,4vw,44px)] font-semibold text-nocturn-glow leading-none">
+                <p className="stat-cell-align text-[clamp(32px,4vw,44px)] font-semibold text-nocturn-glow leading-none whitespace-nowrap">
                   {stat.value}
                 </p>
                 <p className="text-[11px] font-mono text-muted-foreground uppercase tracking-[0.14em]">

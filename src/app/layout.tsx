@@ -39,7 +39,7 @@ export const metadata: Metadata = {
   description:
     "You run the night. Nocturn runs the business.",
   icons: {
-    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌙</text></svg>",
+    icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='12' fill='%237B2FF7'/><circle cx='20' cy='14' r='10' fill='%2309090B'/></svg>",
   },
   openGraph: {
     title: "Nocturn — AI for Music Collectives and Promoters",
