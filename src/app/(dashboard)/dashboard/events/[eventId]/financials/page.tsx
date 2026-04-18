@@ -7,6 +7,8 @@ import { getEventFinancials } from "@/app/actions/event-financials";
 import { generateEventForecast, getTicketSalesTrajectory } from "@/app/actions/ai-finance";
 import { EventPnlSpreadsheet } from "@/components/event-pnl-spreadsheet";
 import { EventFinancialsDashboard } from "@/components/event-financials-dashboard";
+import { SettlementActions } from "@/components/finance/settlement-actions";
+import { createAdminClient } from "@/lib/supabase/config";
 
 interface Props {
   params: Promise<{ eventId: string }>;
@@ -24,10 +26,19 @@ export default async function EventFinancialsPage({ params }: Props) {
   // Parallel fetch — financials is the source of truth for the spreadsheet,
   // forecast powers the scenario projections. skipNarrative avoids the slow
   // Claude call on SSR since we only render the rule-based insights.
-  const [financialsResult, forecastResult, trajectoryResult] = await Promise.all([
+  // Settlement lookup is a direct DB read — no dedicated action exists for
+  // "settlement by event id" and spinning one up just for this path is not
+  // worth it.
+  const admin = createAdminClient();
+  const [financialsResult, forecastResult, trajectoryResult, settlementResult] = await Promise.all([
     getEventFinancials(eventId),
     generateEventForecast(eventId, { skipNarrative: true }),
     getTicketSalesTrajectory(eventId),
+    admin
+      .from("settlements")
+      .select("id, status, collective_id, profit")
+      .eq("event_id", eventId)
+      .maybeSingle(),
   ]);
 
   if (financialsResult.error || !financialsResult.data) {
@@ -37,6 +48,7 @@ export default async function EventFinancialsPage({ params }: Props) {
   const financials = financialsResult.data;
   const forecast = forecastResult.error ? null : forecastResult.forecast ?? null;
   const trajectory = trajectoryResult.error ? null : trajectoryResult.trajectory ?? null;
+  const settlement = settlementResult.data;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 animate-in fade-in duration-500 overflow-x-hidden">
@@ -68,6 +80,17 @@ export default async function EventFinancialsPage({ params }: Props) {
 
       {/* Full editable spreadsheet for line-item management */}
       <EventPnlSpreadsheet financials={financials} />
+
+      {/* Settlement actions — approve + payout via Stripe Connect */}
+      {settlement && (
+        <SettlementActions
+          settlementId={settlement.id}
+          collectiveId={settlement.collective_id}
+          eventId={eventId}
+          status={settlement.status as "draft" | "pending_approval" | "approved" | "paid_out"}
+          profit={Number(settlement.profit) || 0}
+        />
+      )}
     </div>
   );
 }

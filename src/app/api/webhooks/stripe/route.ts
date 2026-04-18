@@ -2,6 +2,8 @@
  * Stripe Webhook Handler
  *
  * Handled events (configure in Stripe Dashboard → Webhooks):
+ *
+ * Platform webhook endpoint (STRIPE_WEBHOOK_SECRET):
  *   - checkout.session.completed    — Fulfill tickets from Checkout Sessions
  *   - payment_intent.succeeded      — Fulfill tickets from embedded/direct PaymentIntents
  *   - payment_intent.payment_failed — Delete pending tickets to release capacity
@@ -9,6 +11,15 @@
  *   - charge.failed                  — Clean up pending tickets on charge failure
  *   - charge.dispute.created         — Mark tickets as disputed
  *   - charge.dispute.closed          — Restore tickets if dispute won
+ *
+ * Connect webhook endpoint (STRIPE_CONNECT_WEBHOOK_SECRET) — events scoped
+ * to a connected account, delivered separately by Stripe:
+ *   - account.updated                — Onboarding state changed (read-only log)
+ *   - transfer.created / transfer.failed / transfer.reversed — transfer lifecycle
+ *   - payout.paid / payout.failed   — funds hit (or failed to hit) operator's bank
+ *
+ * Both endpoints POST to this same route; we try both signatures in turn
+ * and branch on event.type.
  *
  * NOTE: Webhook dedup relies on ticket-level idempotency checks (paid ticket counts
  * per PI/session). A dedicated webhook_events table for event.id dedup would be more
@@ -23,12 +34,196 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
-import { getStripe, STRIPE_WEBHOOK_SECRET } from "@/lib/stripe";
+import {
+  getStripe,
+  STRIPE_WEBHOOK_SECRET,
+  STRIPE_CONNECT_WEBHOOK_SECRET,
+} from "@/lib/stripe";
 import Stripe from "stripe";
 import { randomUUID } from "crypto";
 import QRCode from "qrcode";
 import { createAdminClient } from "@/lib/supabase/config";
 import { logPaymentEvent } from "@/lib/payment-events";
+import { isZeroDecimal } from "@/lib/currency";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+/**
+ * Reverse a settlement payout when a ticket is refunded after the operator
+ * has already been paid out. Pulls the refunded ticket value back from the
+ * connected account's Stripe balance into the platform balance.
+ *
+ * Currency model: transfers and reversals are in the EVENT currency (the
+ * currency tickets were charged in). We read the original payout row for
+ * the transfer to find its currency, and reverse in that same currency
+ * with the sum of refunded ticket `price_paid` values.
+ *
+ * Behavior:
+ *   - Looks up the settlement for the event.
+ *   - If the settlement is NOT paid_out: no-op (refunds auto-deduct from the
+ *     next settlement's gross revenue, so nothing to do).
+ *   - If paid_out: calls transfers.createReversal in the transfer's own
+ *     currency. Idempotency key ties to the refund id so Stripe de-dups
+ *     on webhook retries.
+ *   - Inserts a negative-amount payouts row (status=completed, metadata.kind=
+ *     'reversal') so operators see the pull-back in their payout history.
+ *
+ * Silent on failure — best-effort background reconciliation; worst case
+ * Shawn reverses manually from the Stripe dashboard.
+ */
+async function reverseTransferForRefund(
+  supabase: SupabaseClient,
+  opts: {
+    eventId: string;
+    refundedAmountDollars: number; // sum of refunded ticket price_paid, in event currency
+    refundId: string;
+    chargeId: string;
+  }
+) {
+  const { eventId, refundedAmountDollars, refundId, chargeId } = opts;
+  if (refundedAmountDollars <= 0) return;
+
+  // Find the settlement and the associated payouts row so we can read the
+  // original transfer's currency. The payouts row is our source of truth
+  // for what currency the transfer was sent in (same as the event
+  // currency, but resilient to later schema changes).
+  const { data: settlement } = await supabase
+    .from("settlements")
+    .select("id, status, collective_id, metadata")
+    .eq("event_id", eventId)
+    .maybeSingle();
+
+  if (!settlement || settlement.status !== "paid_out") {
+    // Either no settlement yet (refund pre-settlement — deducted from
+    // gross math) or still draft/approved (refund deducted from gross
+    // before transfer). Nothing to reverse.
+    return;
+  }
+
+  const settlementMeta = (settlement.metadata ?? {}) as Record<string, unknown>;
+  const transferId =
+    typeof settlementMeta.stripe_transfer_id === "string"
+      ? settlementMeta.stripe_transfer_id
+      : null;
+
+  if (!transferId) {
+    console.warn(
+      `[stripe-webhook] Settlement ${settlement.id} is paid_out but has no stripe_transfer_id in metadata — can't auto-reverse refund ${refundId}. Manual reconciliation needed.`
+    );
+    return;
+  }
+
+  // Read the original payout row for its currency. The payout's currency
+  // is what the transfer was denominated in.
+  const { data: originalPayout } = await supabase
+    .from("payouts")
+    .select("currency")
+    .eq("stripe_transfer_id", transferId)
+    .maybeSingle();
+
+  const transferCurrency = (originalPayout?.currency || "usd").toLowerCase();
+
+  // Convert dollar amount to Stripe's smallest-unit integer for the
+  // transfer's currency (cents for 2-decimal, whole unit for zero-decimal).
+  const desiredReversalStripe = isZeroDecimal(transferCurrency)
+    ? Math.round(refundedAmountDollars)
+    : Math.round(refundedAmountDollars * 100);
+
+  if (desiredReversalStripe <= 0) return;
+
+  // Clamp to the transfer's remaining reversible amount. Stripe rejects
+  // reversals that exceed transfer.amount - transfer.amount_reversed
+  // (already-reversed amounts can't be reversed again). This matters when
+  // multiple refunds stack on one transfer, or a refund's value exceeds
+  // what was transferred (e.g. chargeback on top of refund). Retrieve the
+  // current transfer state and cap accordingly.
+  let reversalAmountStripe: number;
+  try {
+    const currentTransfer = await getStripe().transfers.retrieve(transferId);
+    const remaining =
+      (currentTransfer.amount ?? 0) - (currentTransfer.amount_reversed ?? 0);
+    if (remaining <= 0) {
+      console.warn(
+        `[stripe-webhook] Transfer ${transferId} already fully reversed (amount=${currentTransfer.amount}, reversed=${currentTransfer.amount_reversed}). Skipping reversal for refund ${refundId}.`
+      );
+      return;
+    }
+    reversalAmountStripe = Math.min(desiredReversalStripe, remaining);
+    if (reversalAmountStripe < desiredReversalStripe) {
+      console.warn(
+        `[stripe-webhook] Reversal clamped from ${desiredReversalStripe} to ${reversalAmountStripe} (transfer ${transferId} has only ${remaining} left). Residual ${desiredReversalStripe - reversalAmountStripe} needs manual reconciliation.`
+      );
+    }
+  } catch (retrieveErr) {
+    console.error(
+      `[stripe-webhook] Failed to retrieve transfer ${transferId} for clamping:`,
+      retrieveErr
+    );
+    // Proceed with the uncapped amount — Stripe will reject if over the
+    // limit, which we catch below.
+    reversalAmountStripe = desiredReversalStripe;
+  }
+
+  // Stripe reversal — idempotency key (transfer + refund) de-dups webhook
+  // retries.
+  try {
+    const reversal = await getStripe().transfers.createReversal(
+      transferId,
+      {
+        amount: reversalAmountStripe,
+        metadata: {
+          refund_charge_id: chargeId,
+          event_id: eventId,
+          settlement_id: settlement.id,
+          reason: "ticket_refund",
+        },
+        description: `Ticket refund reversal (charge ${chargeId})`,
+      },
+      {
+        idempotencyKey: `reversal_${transferId}_${refundId}`,
+      }
+    );
+
+    // Negative-amount payouts row for audit trail. Amount reflects the
+    // ACTUAL reversed value (post-clamping), not the requested one, so
+    // the sum of payouts rows nets to what the collective actually kept.
+    const actualReversedDollars = isZeroDecimal(transferCurrency)
+      ? reversalAmountStripe
+      : reversalAmountStripe / 100;
+    await supabase.from("payouts").insert({
+      collective_id: settlement.collective_id,
+      settlement_id: settlement.id,
+      // kind='reversal' keeps this row outside the
+      // payouts_one_active_per_settlement unique index (which scopes to
+      // kind='payout'), so it can coexist with the original payout row.
+      kind: "reversal",
+      amount: -actualReversedDollars,
+      currency: transferCurrency,
+      status: "completed",
+      stripe_transfer_id: reversal.id,
+      initiated_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+      metadata: {
+        source_transfer_id: transferId,
+        refund_charge_id: chargeId,
+        reason: "ticket_refund",
+        requested_amount_dollars: refundedAmountDollars,
+        clamped: actualReversedDollars < refundedAmountDollars,
+      },
+    });
+
+    console.info(
+      `[stripe-webhook] Auto-reversed ${actualReversedDollars.toFixed(2)} ${transferCurrency.toUpperCase()} from transfer ${transferId} for refund on charge ${chargeId} (reversal ${reversal.id})`
+    );
+  } catch (err) {
+    // Common cause: connected account's Stripe balance is below the
+    // reversal amount because they already paid out to their bank. Stripe
+    // allows balance to go negative — subsequent payouts absorb the debt.
+    const msg = err instanceof Error ? err.message : "unknown";
+    console.error(
+      `[stripe-webhook] Transfer reversal failed for transfer ${transferId}, refund ${refundId}: ${msg}`
+    );
+  }
+}
 
 export async function POST(request: NextRequest) {
   // TODO(audit): add replay-window check on event timestamp (reject events older than 5min) as defense-in-depth alongside signature verification
@@ -42,8 +237,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!STRIPE_WEBHOOK_SECRET) {
-    console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not configured");
+  if (!STRIPE_WEBHOOK_SECRET && !STRIPE_CONNECT_WEBHOOK_SECRET) {
+    console.error(
+      "[stripe-webhook] No webhook secrets configured (STRIPE_WEBHOOK_SECRET and STRIPE_CONNECT_WEBHOOK_SECRET both empty)"
+    );
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -52,18 +249,75 @@ export async function POST(request: NextRequest) {
 
   let event: Stripe.Event;
 
-  try {
-    event = getStripe().webhooks.constructEvent(
-      body,
-      signature,
-      STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+  // Try platform signature first, then Connect. Stripe signs each webhook
+  // with exactly one of the two secrets — the one from the endpoint that
+  // delivered the event. We accept both so we can register both endpoints
+  // against this single route.
+  const allSecrets: { key: "platform" | "connect"; value: string }[] = [
+    { key: "platform", value: STRIPE_WEBHOOK_SECRET },
+    { key: "connect", value: STRIPE_CONNECT_WEBHOOK_SECRET },
+  ];
+  const secretsToTry = allSecrets.filter((s) => s.value.length > 0);
+
+  let lastErr: unknown = null;
+  let verified: Stripe.Event | null = null;
+  let matchedSecretKey: "platform" | "connect" | null = null;
+  for (const { key, value } of secretsToTry) {
+    try {
+      verified = getStripe().webhooks.constructEvent(body, signature, value);
+      matchedSecretKey = key;
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  if (!verified) {
+    const message =
+      lastErr instanceof Error ? lastErr.message : "Unknown error";
     console.error("[stripe-webhook] Signature verification failed:", message);
+
+    // Diagnostic: if only ONE of the two secrets is configured, the event
+    // might be legit but addressed to the OTHER endpoint we forgot to
+    // register. Alert via Sentry so the misconfig surfaces instead of
+    // silently dropping Connect events (or platform events).
+    const hasPlatform = STRIPE_WEBHOOK_SECRET.length > 0;
+    const hasConnect = STRIPE_CONNECT_WEBHOOK_SECRET.length > 0;
+    if (!hasPlatform || !hasConnect) {
+      try {
+        const Sentry = await import("@sentry/nextjs");
+        Sentry.captureMessage(
+          `Stripe webhook signature rejected — only ${hasPlatform ? "platform" : "connect"} secret is configured. If the event is a Connect (or platform) event, set the other secret in Vercel env.`,
+          {
+            level: "warning",
+            tags: {
+              area: "stripe-webhook",
+              has_platform_secret: String(hasPlatform),
+              has_connect_secret: String(hasConnect),
+            },
+          }
+        );
+      } catch {
+        // Non-fatal — don't block the 400 response on Sentry failure.
+      }
+    }
+
     return NextResponse.json(
       { error: "Webhook signature verification failed" },
       { status: 400 }
+    );
+  }
+
+  event = verified;
+
+  // Cross-check: Connect-scoped events (envelope has `account`) should
+  // have been signed with the Connect secret. If they verified with the
+  // platform secret, either (a) Shawn set up the platform endpoint to
+  // receive Connect events too (valid but unusual), or (b) the Connect
+  // endpoint has the wrong URL. Log a warning to catch misconfig early.
+  if (event.account && matchedSecretKey === "platform") {
+    console.warn(
+      `[stripe-webhook] Connect-scoped event ${event.type} (${event.id}) verified via PLATFORM secret. If you intended to separate endpoints, check your Stripe Dashboard webhook config.`
     );
   }
 
@@ -202,6 +456,39 @@ export async function POST(request: NextRequest) {
             } else if (refundedTickets && refundedTickets.length > 0) {
               console.info(`[stripe-webhook] Marked ${refundedTickets.length} ticket(s) as refunded for PI ${refundPiId}`);
 
+              // Auto-reversal: if the settlement for these tickets' event has
+              // already been paid out, pull the refunded amount back from the
+              // connected account's Stripe balance. We need the actual USD
+              // price_paid on each refunded ticket — re-query so we can bucket
+              // by event (a PI's tickets are always same event, but we're
+              // defensive) and sum accurately.
+              const { data: refundedWithPrices } = await supabase
+                .from("tickets")
+                .select("event_id, price_paid")
+                .eq("stripe_payment_intent_id", refundPiId)
+                .eq("status", "refunded");
+
+              // Sum refunded ticket `price_paid` per event. price_paid is
+              // in the ticket's charge currency (event currency) — same
+              // currency the transfer was in, so no conversion needed.
+              const byEventDollars = new Map<string, number>();
+              for (const t of refundedWithPrices ?? []) {
+                if (!t.event_id) continue;
+                const dollars = Number(t.price_paid) || 0;
+                byEventDollars.set(
+                  t.event_id,
+                  (byEventDollars.get(t.event_id) ?? 0) + dollars
+                );
+              }
+              for (const [eventId, refundedAmountDollars] of byEventDollars.entries()) {
+                await reverseTransferForRefund(supabase, {
+                  eventId,
+                  refundedAmountDollars,
+                  refundId: charge.id,
+                  chargeId: charge.id,
+                });
+              }
+
               // Count how many tickets were released per promo_code_id, then
               // decrement. Grouping avoids N round-trips for a PI with many
               // tickets sharing one promo. Also bucket by (event_id, tier_id)
@@ -285,6 +572,34 @@ export async function POST(request: NextRequest) {
                   console.error("[stripe-webhook] Partial refund update failed:", partialErr);
                 } else {
                   console.info(`[stripe-webhook] Partially refunded ${candidate.length}/${allTickets.length} ticket(s) for PI ${refundPiId}`);
+
+                  // Auto-reversal for the partial subset. We know the exact
+                  // candidate ticket ids, so pull their prices + events and
+                  // sum per event. refundAmount above is the buyer's refund
+                  // in the charge currency; `running` is the USD-cent sum
+                  // we just matched — use `running` for reversal so we
+                  // reverse the USD-equivalent that was transferred.
+                  const { data: partialWithMeta } = await supabase
+                    .from("tickets")
+                    .select("event_id, price_paid")
+                    .in("id", candidate);
+                  const partialByEvent = new Map<string, number>();
+                  for (const t of partialWithMeta ?? []) {
+                    if (!t.event_id) continue;
+                    const dollars = Number(t.price_paid) || 0;
+                    partialByEvent.set(
+                      t.event_id,
+                      (partialByEvent.get(t.event_id) ?? 0) + dollars
+                    );
+                  }
+                  for (const [eventId, refundedAmountDollars] of partialByEvent.entries()) {
+                    await reverseTransferForRefund(supabase, {
+                      eventId,
+                      refundedAmountDollars,
+                      refundId: charge.id,
+                      chargeId: charge.id,
+                    });
+                  }
                 }
               } else {
                 // No clean subset sum to the refund amount. Don't guess.
@@ -424,6 +739,383 @@ export async function POST(request: NextRequest) {
         }
         break;
       }
+      // ──────────────── Connect events ────────────────
+      // These arrive from the Connect webhook endpoint. The event envelope
+      // includes `account: "acct_..."` identifying the connected account;
+      // we look up our collective by that id to correlate.
+      case "account.updated": {
+        const account = event.data.object as Stripe.Account;
+        console.info(
+          `[stripe-webhook] account.updated: ${account.id} charges=${account.charges_enabled} payouts=${account.payouts_enabled} details_submitted=${account.details_submitted}`
+        );
+        if (!account.id) break;
+
+        const supabase = createAdminClient();
+
+        // Read previous denormalized status so we can detect TRANSITIONS
+        // (payouts_enabled flipping from true → false) rather than just
+        // the current state. Without this, we'd email the operator on
+        // every webhook firing (Stripe sends many for account changes).
+        const { data: prevCollective } = await supabase
+          .from("collectives")
+          .select("id, name, stripe_payouts_enabled, stripe_charges_enabled")
+          .eq("stripe_account_id", account.id)
+          .is("deleted_at", null)
+          .maybeSingle();
+
+        if (!prevCollective) {
+          // No collective bound to this account. Happens if the account
+          // was deauthorized; ignore.
+          break;
+        }
+
+        const newChargesEnabled = account.charges_enabled ?? false;
+        const newPayoutsEnabled = account.payouts_enabled ?? false;
+        const newDetailsSubmitted = account.details_submitted ?? false;
+        const requirements = account.requirements?.currently_due ?? [];
+        const disabledReason = account.requirements?.disabled_reason ?? null;
+
+        // Update denormalized columns. List views + the PayoutsCard can
+        // read from the DB instead of hitting Stripe on every mount.
+        const { error: updErr } = await supabase
+          .from("collectives")
+          .update({
+            stripe_charges_enabled: newChargesEnabled,
+            stripe_payouts_enabled: newPayoutsEnabled,
+            stripe_details_submitted: newDetailsSubmitted,
+            stripe_requirements_currently_due: requirements,
+            stripe_disabled_reason: disabledReason,
+            stripe_status_updated_at: new Date().toISOString(),
+          })
+          .eq("id", prevCollective.id);
+        if (updErr) {
+          console.error(
+            "[stripe-webhook] Failed to denormalize account status:",
+            updErr.message
+          );
+        }
+
+        // Alert on the specific TRANSITION from enabled → disabled.
+        const payoutsJustDisabled =
+          prevCollective.stripe_payouts_enabled === true &&
+          newPayoutsEnabled === false;
+
+        if (payoutsJustDisabled) {
+          const { data: admins } = await supabase
+            .from("collective_members")
+            .select("user_id, users(email, full_name)")
+            .eq("collective_id", prevCollective.id)
+            .in("role", ["owner", "admin"])
+            .is("deleted_at", null);
+
+          const dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/dashboard/settings`;
+          const reasonText = (disabledReason ?? "requirements not met").replace(/_/g, " ");
+          const missingList = requirements.slice(0, 10);
+
+          try {
+            const { sendEmail } = await import("@/lib/email/send");
+            for (const admin of admins ?? []) {
+              const userRow = admin.users as unknown as {
+                email: string | null;
+                full_name: string | null;
+              } | null;
+              if (!userRow?.email) continue;
+              await sendEmail({
+                to: userRow.email,
+                subject: `Stripe has paused payouts for ${prevCollective.name}`,
+                html: `
+                  <div style="font-family:-apple-system,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;background:#09090B;color:#FAFAFA">
+                    <h1 style="font-size:20px;margin:0 0 16px">Stripe has paused your payouts</h1>
+                    <p style="color:#B4B4B8;line-height:1.5">Hi${userRow.full_name ? " " + userRow.full_name.split(" ")[0] : ""},</p>
+                    <p style="color:#B4B4B8;line-height:1.5">Stripe has temporarily disabled payouts for <strong>${prevCollective.name}</strong>. Reason: <em>${reasonText}</em>.</p>
+                    ${missingList.length > 0 ? `<p style="color:#B4B4B8;line-height:1.5">To restore payouts, Stripe needs:</p><ul style="color:#B4B4B8;line-height:1.5">${missingList.map(r => `<li>${r.replace(/_/g, " ")}</li>`).join("")}</ul>` : ""}
+                    <p style="margin:24px 0"><a href="${dashboardUrl}" style="background:#7B2FF7;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Open Settings</a></p>
+                    <p style="color:#7A7A80;font-size:12px">— Nocturn</p>
+                  </div>
+                `,
+              });
+            }
+          } catch (emailErr) {
+            console.error(
+              "[stripe-webhook] Failed to send payouts-disabled email:",
+              emailErr
+            );
+          }
+        }
+        break;
+      }
+      case "account.application.deauthorized": {
+        // Fires if the operator revokes Nocturn's access (rare for
+        // Express, where Nocturn owns the account, but can happen via
+        // Stripe support). The deauthorized-account id comes on the
+        // event envelope's `account` field, NOT on data.object (which is
+        // the Application). Clear stripe_account_id so future Pay Out
+        // attempts fail loudly with "set up Stripe Connect" instead of
+        // sending transfers to a dead account.
+        const deauthorizedAccountId = event.account;
+        if (deauthorizedAccountId) {
+          const supabase = createAdminClient();
+          const { error: unlinkErr } = await supabase
+            .from("collectives")
+            .update({ stripe_account_id: null })
+            .eq("stripe_account_id", deauthorizedAccountId);
+          if (unlinkErr) {
+            console.error(
+              `[stripe-webhook] Failed to unlink deauthorized account ${deauthorizedAccountId}:`,
+              unlinkErr.message
+            );
+          } else {
+            console.warn(
+              `[stripe-webhook] Cleared stripe_account_id for deauthorized account ${deauthorizedAccountId}`
+            );
+          }
+        }
+        break;
+      }
+      case "transfer.created": {
+        const transfer = event.data.object as Stripe.Transfer;
+        const supabase = createAdminClient();
+        const { error: tUpdErr } = await supabase
+          .from("payouts")
+          .update({
+            status: "processing",
+            stripe_transfer_id: transfer.id,
+            initiated_at: new Date(transfer.created * 1000).toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_transfer_id", transfer.id);
+        if (tUpdErr) {
+          // Likely because markSettlementPaid already set status=processing
+          // AND stripe_transfer_id before this event landed (race) — try by
+          // metadata.settlement_id as a fallback.
+          const settlementId = transfer.metadata?.settlement_id;
+          if (settlementId) {
+            await supabase
+              .from("payouts")
+              .update({
+                status: "processing",
+                stripe_transfer_id: transfer.id,
+                initiated_at: new Date(transfer.created * 1000).toISOString(),
+                updated_at: new Date().toISOString(),
+              })
+              .eq("settlement_id", settlementId)
+              .is("stripe_transfer_id", null);
+          }
+        }
+        console.info(
+          `[stripe-webhook] transfer.created ${transfer.id} -> ${transfer.destination}`
+        );
+        break;
+      }
+      case "transfer.reversed": {
+        // Distinguish PARTIAL (typically our own auto-reversal for a
+        // refund) from FULL reversal. A partial reversal should NOT regress
+        // the settlement to "approved" — that would cause the operator to
+        // re-click Pay Out and double-pay. Only a full reversal (the whole
+        // transfer was pulled back) indicates the payout failed and needs
+        // retry.
+        //
+        // Stripe emits this event on the original Transfer object with an
+        // updated `amount_reversed`. Partial → amount_reversed < amount.
+        // Full → amount_reversed === amount.
+        const transfer = event.data.object as Stripe.Transfer;
+        const isFullReversal =
+          (transfer.amount_reversed ?? 0) >= (transfer.amount ?? 0);
+        const supabase = createAdminClient();
+
+        if (!isFullReversal) {
+          // Partial — the auto-reversal flow already inserted a negative
+          // payouts row separately. Nothing to do here.
+          console.info(
+            `[stripe-webhook] Transfer ${transfer.id} partially reversed ${transfer.amount_reversed}/${transfer.amount} — no settlement regression`
+          );
+          break;
+        }
+
+        // Full reversal. Mark the original payout row as failed and bump
+        // the settlement back to approved so the operator can retry. This
+        // path fires when Shawn (or a Stripe admin) manually reverses the
+        // whole transfer — not from our auto-reversal code.
+        await supabase
+          .from("payouts")
+          .update({
+            status: "failed",
+            failed_at: new Date().toISOString(),
+            failure_reason: "Transfer fully reversed",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("stripe_transfer_id", transfer.id)
+          .in("status", ["pending", "processing", "completed"]);
+
+        const { data: payoutRow } = await supabase
+          .from("payouts")
+          .select("settlement_id")
+          .eq("stripe_transfer_id", transfer.id)
+          .maybeSingle();
+        if (payoutRow?.settlement_id) {
+          await supabase
+            .from("settlements")
+            .update({
+              status: "approved",
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", payoutRow.settlement_id)
+            .eq("status", "paid_out");
+        }
+        console.warn(
+          `[stripe-webhook] Transfer ${transfer.id} FULLY reversed — settlement regressed to approved`
+        );
+        break;
+      }
+      case "payout.paid": {
+        // Connect `payout.*` events are scoped to the connected account
+        // (fire when funds hit the operator's bank). A single Stripe
+        // payout can bundle multiple transfers, so we list the payout's
+        // balance_transactions (scoped to the connected account) and
+        // match each `type: "transfer"` entry back to one of OUR
+        // payouts rows by stripe_transfer_id. This is precise — a payout
+        // that only includes 2 of a collective's 3 processing transfers
+        // will only flip those 2 to completed, not all 3.
+        const payout = event.data.object as Stripe.Payout;
+        const accountId = event.account;
+        if (!accountId) {
+          console.warn(
+            `[stripe-webhook] payout.paid event without account id, skipping`
+          );
+          break;
+        }
+        const supabase = createAdminClient();
+        const { data: collective } = await supabase
+          .from("collectives")
+          .select("id")
+          .eq("stripe_account_id", accountId)
+          .maybeSingle();
+        if (!collective) {
+          console.warn(
+            `[stripe-webhook] payout.paid — no collective for account ${accountId}`
+          );
+          break;
+        }
+
+        const completedAtIso = new Date(
+          payout.arrival_date * 1000
+        ).toISOString();
+
+        // List balance transactions that composed this payout. Scoped to
+        // the connected account via stripeAccount option. Each transaction
+        // of type "transfer" represents an incoming transfer from the
+        // platform — its `source` is the transfer id (matches our
+        // payouts.stripe_transfer_id).
+        try {
+          const stripe = getStripe();
+          const transferIdsInPayout: string[] = [];
+
+          // Paginate defensively — most payouts have a handful of
+          // transactions but Stripe returns up to 100 per page.
+          let hasMore = true;
+          let startingAfter: string | undefined = undefined;
+          while (hasMore) {
+            const txPage: Stripe.ApiList<Stripe.BalanceTransaction> =
+              await stripe.balanceTransactions.list(
+                {
+                  payout: payout.id,
+                  limit: 100,
+                  starting_after: startingAfter,
+                },
+                { stripeAccount: accountId }
+              );
+            for (const tx of txPage.data) {
+              if (tx.type === "transfer" && typeof tx.source === "string") {
+                transferIdsInPayout.push(tx.source);
+              }
+            }
+            hasMore = txPage.has_more;
+            startingAfter = txPage.data.length
+              ? txPage.data[txPage.data.length - 1].id
+              : undefined;
+            if (!startingAfter) break;
+          }
+
+          if (transferIdsInPayout.length === 0) {
+            console.info(
+              `[stripe-webhook] payout.paid ${payout.id} contained no transfer-typed balance transactions — nothing to reconcile`
+            );
+            break;
+          }
+
+          const { data: updatedRows, error: updErr } = await supabase
+            .from("payouts")
+            .update({
+              status: "completed",
+              stripe_payout_id: payout.id,
+              completed_at: completedAtIso,
+              updated_at: new Date().toISOString(),
+            })
+            .in("stripe_transfer_id", transferIdsInPayout)
+            .eq("collective_id", collective.id)
+            .eq("status", "processing")
+            .select("id");
+
+          if (updErr) {
+            console.error(
+              `[stripe-webhook] payout.paid update failed:`,
+              updErr.message
+            );
+          } else {
+            console.info(
+              `[stripe-webhook] payout.paid ${payout.id} for collective ${collective.id}: reconciled ${updatedRows?.length ?? 0}/${transferIdsInPayout.length} transfers`
+            );
+          }
+        } catch (listErr) {
+          // If balanceTransactions.list fails (rate limit, transient),
+          // fall back to the imprecise mass-update so the operator still
+          // sees payouts flip to completed rather than getting stuck in
+          // "processing" forever. Log so we notice.
+          console.error(
+            `[stripe-webhook] Failed to list balance_transactions for payout ${payout.id}, falling back to mass-update:`,
+            listErr
+          );
+          await supabase
+            .from("payouts")
+            .update({
+              status: "completed",
+              stripe_payout_id: payout.id,
+              completed_at: completedAtIso,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("collective_id", collective.id)
+            .eq("status", "processing");
+        }
+        break;
+      }
+      case "payout.failed": {
+        const payout = event.data.object as Stripe.Payout;
+        const accountId = event.account;
+        if (!accountId) break;
+        const supabase = createAdminClient();
+        const { data: collective } = await supabase
+          .from("collectives")
+          .select("id")
+          .eq("stripe_account_id", accountId)
+          .maybeSingle();
+        if (!collective) break;
+        await supabase
+          .from("payouts")
+          .update({
+            status: "failed",
+            stripe_payout_id: payout.id,
+            failed_at: new Date().toISOString(),
+            failure_reason:
+              payout.failure_message ?? payout.failure_code ?? "Payout failed",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("collective_id", collective.id)
+          .eq("status", "processing");
+        console.warn(
+          `[stripe-webhook] payout.failed ${payout.id} for collective ${collective.id}: ${payout.failure_message ?? payout.failure_code}`
+        );
+        break;
+      }
       default:
         console.info(`[stripe-webhook] Unhandled event type: ${event.type}`);
     }
@@ -492,6 +1184,13 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id ?? null;
+
+  // Ticket currency = what the buyer was charged in = the event currency.
+  // Checkout stores this in metadata.chargeCurrency. Legacy tickets created
+  // before this change default to USD.
+  const ticketCurrency = (
+    (metadata.chargeCurrency || session.currency || "usd") as string
+  ).toLowerCase();
 
   const supabase = createAdminClient();
 
@@ -597,7 +1296,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     user_id: null, // Guest purchase — no user linked
     status: "paid" as const,
     price_paid: pricePaid,
-    currency: "usd",
+    currency: ticketCurrency,
     stripe_payment_intent_id: paymentIntentId,
     ticket_token: randomUUID(),
     referred_by: referrerToken,
@@ -634,7 +1333,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       .update({
         status: "paid",
         price_paid: pricePaid,
-        currency: "usd",
+        currency: ticketCurrency,
         stripe_payment_intent_id: paymentIntentId,
         metadata: {
           checkout_session_id: session.id,
@@ -669,7 +1368,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         p_tier_id: tierId,
         p_quantity: quantity,
         p_price_paid: pricePaid,
-        p_currency: "usd",
+        p_currency: ticketCurrency,
         p_buyer_email: session.customer_email ?? session.customer_details?.email ?? undefined,
         p_referrer_token: referrerToken ?? undefined,
         p_metadata: {
@@ -1061,8 +1760,15 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     const { data: referrerUser } = await supabase.from("users").select("id").eq("id", referrerToken).maybeSingle();
     if (!referrerUser) referrerToken = null;
   }
-  // Store base currency (USD) for organizer reporting, not the buyer's charge currency
-  const ticketCurrency = metadata.baseCurrency || "usd";
+  // Ticket currency = the PaymentIntent's charge currency = the event
+  // currency. Legacy tickets created before the multi-currency pivot
+  // stored baseCurrency (always USD); fall back for those.
+  const ticketCurrency = (
+    metadata.chargeCurrency ||
+    metadata.baseCurrency ||
+    paymentIntent.currency ||
+    "usd"
+  ).toLowerCase();
 
   const ticketMetadata = {
     payment_intent_id: paymentIntent.id,

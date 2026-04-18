@@ -445,6 +445,12 @@ export type Database = {
           referral_code: string | null
           slug: string
           stripe_account_id: string | null
+          stripe_charges_enabled: boolean
+          stripe_details_submitted: boolean
+          stripe_disabled_reason: string | null
+          stripe_payouts_enabled: boolean
+          stripe_requirements_currently_due: string[]
+          stripe_status_updated_at: string | null
           updated_at: string
           website: string | null
         }
@@ -463,6 +469,12 @@ export type Database = {
           referral_code?: string | null
           slug: string
           stripe_account_id?: string | null
+          stripe_charges_enabled?: boolean
+          stripe_details_submitted?: boolean
+          stripe_disabled_reason?: string | null
+          stripe_payouts_enabled?: boolean
+          stripe_requirements_currently_due?: string[]
+          stripe_status_updated_at?: string | null
           updated_at?: string
           website?: string | null
         }
@@ -481,6 +493,12 @@ export type Database = {
           referral_code?: string | null
           slug?: string
           stripe_account_id?: string | null
+          stripe_charges_enabled?: boolean
+          stripe_details_submitted?: boolean
+          stripe_disabled_reason?: string | null
+          stripe_payouts_enabled?: boolean
+          stripe_requirements_currently_due?: string[]
+          stripe_status_updated_at?: string | null
           updated_at?: string
           website?: string | null
         }
@@ -1002,43 +1020,43 @@ export type Database = {
       }
       event_expenses: {
         Row: {
-          amount: number
-          category: string
+          amount: number | null
+          category: string | null
           created_at: string
+          currency: string | null
           deleted_at: string | null
           description: string | null
           event_id: string
           id: string
           metadata: Json | null
           receipt_url: string | null
-          updated_at: string
-          vendor: string | null
+          updated_at: string | null
         }
         Insert: {
-          amount?: number
-          category: string
+          amount?: number | null
+          category?: string | null
           created_at?: string
+          currency?: string | null
           deleted_at?: string | null
           description?: string | null
           event_id: string
           id?: string
           metadata?: Json | null
           receipt_url?: string | null
-          updated_at?: string
-          vendor?: string | null
+          updated_at?: string | null
         }
         Update: {
-          amount?: number
-          category?: string
+          amount?: number | null
+          category?: string | null
           created_at?: string
+          currency?: string | null
           deleted_at?: string | null
           description?: string | null
           event_id?: string
           id?: string
           metadata?: Json | null
           receipt_url?: string | null
-          updated_at?: string
-          vendor?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -1380,6 +1398,7 @@ export type Database = {
           category: string
           collective_id: string
           created_at: string
+          currency: string | null
           deleted_at: string | null
           description: string | null
           event_id: string
@@ -1394,6 +1413,7 @@ export type Database = {
           category: string
           collective_id: string
           created_at?: string
+          currency?: string | null
           deleted_at?: string | null
           description?: string | null
           event_id: string
@@ -1408,6 +1428,7 @@ export type Database = {
           category?: string
           collective_id?: string
           created_at?: string
+          currency?: string | null
           deleted_at?: string | null
           description?: string | null
           event_id?: string
@@ -1925,6 +1946,7 @@ export type Database = {
           failure_reason: string | null
           id: string
           initiated_at: string | null
+          kind: string
           metadata: Json | null
           recipient_user_id: string | null
           recipient_venue_id: string | null
@@ -1944,6 +1966,7 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           initiated_at?: string | null
+          kind?: string
           metadata?: Json | null
           recipient_user_id?: string | null
           recipient_venue_id?: string | null
@@ -1963,6 +1986,7 @@ export type Database = {
           failure_reason?: string | null
           id?: string
           initiated_at?: string | null
+          kind?: string
           metadata?: Json | null
           recipient_user_id?: string | null
           recipient_venue_id?: string | null
@@ -2822,58 +2846,6 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ticket_waitlist: {
-        Row: {
-          created_at: string
-          email: string
-          event_id: string
-          id: string
-          name: string | null
-          notified_at: string | null
-          tier_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          email: string
-          event_id: string
-          id?: string
-          name?: string | null
-          notified_at?: string | null
-          tier_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          email?: string
-          event_id?: string
-          id?: string
-          name?: string | null
-          notified_at?: string | null
-          tier_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ticket_waitlist_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "ticket_waitlist_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "ticket_waitlist_tier_id_fkey"
-            columns: ["tier_id"]
-            isOneToOne: false
-            referencedRelation: "ticket_tiers"
             referencedColumns: ["id"]
           },
         ]

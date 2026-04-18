@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
+import { currencyForCity } from "@/lib/currency";
 
 const VALID_USER_TYPES = [
   "collective",
@@ -339,6 +340,12 @@ export async function createCollective(formData: {
     return { error: "That collective name is already taken. Try a different one." };
   }
 
+  // Auto-derive default_currency from city (Toronto → CAD, NYC → USD,
+  // London → GBP, etc.). Operators can change it later in Settings. This
+  // ensures the collective starts out with the right currency for their
+  // first event, so checkout charges and payouts match.
+  const defaultCurrency = currencyForCity(formData.city);
+
   // Create collective
   const { data: collective, error: collectiveError } = await admin
     .from("collectives")
@@ -348,6 +355,7 @@ export async function createCollective(formData: {
       description: formData.description,
       instagram: formData.instagram,
       website: formData.website,
+      default_currency: defaultCurrency,
       metadata: { city: formData.city },
     })
     .select("id")

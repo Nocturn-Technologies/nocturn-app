@@ -6,6 +6,7 @@ import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { isValidUUID } from "@/lib/utils";
 import { isAcceptedExpenseCategory } from "@/lib/expense-categories";
+import { convertBetween } from "@/lib/currency";
 
 // Generate a settlement for a completed event
 export async function generateSettlement(eventId: string) {
@@ -19,15 +20,24 @@ export async function generateSettlement(eventId: string) {
 
   const admin = createAdminClient();
 
-  // Get event with collective
+  // Get event with collective + the event's charge currency, so we can
+  // normalize any cross-currency inputs (artist fees entered in USD when
+  // the event charges in CAD, etc.) before the profit math.
   const { data: event } = await admin
     .from("events")
-    .select("id, title, collective_id, status")
+    .select("id, title, collective_id, status, currency, collectives(default_currency)")
     .eq("id", eventId)
     .maybeSingle();
 
   if (!event) return { error: "Event not found" };
   if (event.status !== "completed") return { error: "Event must be completed before settlement" };
+
+  const eventCurrency = (
+    event.currency ||
+    (event.collectives as unknown as { default_currency: string | null } | null)
+      ?.default_currency ||
+    "usd"
+  ).toLowerCase();
 
   // Verify user is a member of this collective
   const { count: memberCount } = await admin
@@ -62,12 +72,12 @@ export async function generateSettlement(eventId: string) {
       .eq("status", "refunded"),
     admin
       .from("event_artists")
-      .select("artist_id, fee, artists(name)")
+      .select("artist_id, fee, fee_currency, artists(name)")
       .eq("event_id", eventId)
       .eq("status", "confirmed"),
     admin
       .from("event_expenses")
-      .select("id, description, amount, category")
+      .select("id, description, amount, category, currency")
       .eq("event_id", eventId),
   ]);
 
@@ -91,15 +101,43 @@ export async function generateSettlement(eventId: string) {
   const platformFee = 0; // Organizer keeps 100% of ticket price
   const nocturnRevenue = Math.round((grossRevenue * (PLATFORM_FEE_PERCENT / 100) + ticketCount * (PLATFORM_FEE_FLAT_CENTS / 100)) * 100) / 100;
 
-  const totalArtistFees = (bookings ?? []).reduce(
-    (sum, b) => sum + (Number(b.fee) || 0),
+  // Normalize artist fees to the event currency. `event_artists.fee_currency`
+  // lets operators enter fees in the artist's contract currency (e.g. USD
+  // for an international DJ) even when the event charges in CAD. If
+  // fee_currency is null/blank we assume the fee is already in the event
+  // currency (common case). convertBetween() uses cross-rate via USD and
+  // falls back to the raw amount if a rate is unavailable.
+  const artistFeeConversions = await Promise.all(
+    (bookings ?? []).map(async (b) => {
+      const raw = Number(b.fee) || 0;
+      const from = (b.fee_currency || eventCurrency).toLowerCase();
+      if (raw === 0 || from === eventCurrency) {
+        return { converted: raw, from };
+      }
+      const { amount: converted } = await convertBetween(raw, from, eventCurrency);
+      return { converted, from };
+    })
+  );
+  const totalArtistFees = artistFeeConversions.reduce(
+    (sum, c) => sum + c.converted,
     0
   );
 
-  const totalExpenses = (expenses ?? []).reduce(
-    (sum, e) => sum + (Number(e.amount) || 0),
-    0
+  // Normalize expenses to the event currency. Each expense stores its
+  // own currency (defaulted to event currency at insert time in
+  // addEventExpense, but operators can override for e.g. a USD hotel
+  // booking on a CAD event). Convert anything mismatched via ECB cross-
+  // rates.
+  const expenseConversions = await Promise.all(
+    (expenses ?? []).map(async (e) => {
+      const raw = Number(e.amount) || 0;
+      const from = (e.currency || eventCurrency).toLowerCase();
+      if (raw === 0 || from === eventCurrency) return raw;
+      const { amount } = await convertBetween(raw, from, eventCurrency);
+      return amount;
+    })
   );
+  const totalExpenses = expenseConversions.reduce((sum, v) => sum + v, 0);
 
   // Organizer-side net = gross − refunds only. No Stripe deduction (was the
   // old bug — phantom $400+ phantom subtraction on a typical event).
@@ -242,14 +280,21 @@ export async function approveSettlement(settlementId: string) {
 
   if (!settlement) return { error: "Settlement not found" };
 
-  const { count } = await admin
+  // Role check: only owners/admins can approve a settlement. Approval is
+  // the gate to payout — letting any collective member approve would let
+  // a regular member trigger a transfer on bad P&L numbers.
+  const { data: membership } = await admin
     .from("collective_members")
-    .select("*", { count: "exact", head: true })
+    .select("role")
     .eq("collective_id", settlement.collective_id)
     .eq("user_id", user.id)
-    .is("deleted_at", null);
+    .in("role", ["owner", "admin"])
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  if (!count || count === 0) return { error: "You don't have permission to approve this settlement" };
+  if (!membership) {
+    return { error: "Only collective owners and admins can approve settlements" };
+  }
 
   const { data: updated, error } = await admin
     .from("settlements")
@@ -345,6 +390,8 @@ export async function addEventExpense(input: {
   category: string;
   description: string;
   amount: number;
+  /** ISO 4217 code, e.g. "usd", "cad". Defaults to the event's currency. */
+  currency?: string;
 }) {
   try {
   // Input validation — category list is shared via `@/lib/expense-categories`
@@ -357,19 +404,26 @@ export async function addEventExpense(input: {
   if (!input.description || input.description.length > 500) return { error: "Description is required and must be under 500 characters" };
   if (!Number.isFinite(input.amount) || input.amount <= 0 || input.amount > 1000000) return { error: "Amount must be between $0.01 and $1,000,000" };
 
+  // Currency validation: 3-letter ISO 4217. Optional — default at insert
+  // time below (after we know the event's currency).
+  if (input.currency && (typeof input.currency !== "string" || !/^[a-z]{3}$/i.test(input.currency))) {
+    return { error: "Invalid currency code" };
+  }
+
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
   const admin = createAdminClient();
 
-  // Get collective_id + status. Expense edits on completed/archived events
-  // silently shift P&L on already-generated settlements — so we gate writes
-  // to pre-completion statuses only. Operators who need to correct a settled
-  // event must regenerate the settlement.
+  // Get collective_id + status + currency. Default the expense's
+  // currency to the event's currency if not explicitly provided — 99%
+  // of expenses are in the local currency anyway, and this keeps the
+  // operator-side form simple (they only pick currency when it's
+  // actually different).
   const { data: event } = await admin
     .from("events")
-    .select("collective_id, status")
+    .select("collective_id, status, currency, collectives(default_currency)")
     .eq("id", input.eventId)
     .maybeSingle();
 
@@ -377,6 +431,14 @@ export async function addEventExpense(input: {
   if (event.status !== "draft" && event.status !== "published") {
     return { error: "Can't add expenses to a completed or archived event. Regenerate the settlement instead." };
   }
+
+  const resolvedCurrency = (
+    input.currency ||
+    event.currency ||
+    (event.collectives as unknown as { default_currency: string | null } | null)
+      ?.default_currency ||
+    "usd"
+  ).toLowerCase();
 
   // Verify user is a member of this collective
   const { count } = await admin
@@ -388,13 +450,16 @@ export async function addEventExpense(input: {
 
   if (!count || count === 0) return { error: "You don't have permission to add expenses to this event" };
 
+  // Note: event_expenses has no collective_id or added_by columns
+  // (collective is derivable via event_id, and provenance goes in
+  // metadata if needed). Audit who added this via metadata.
   const { error } = await admin.from("event_expenses").insert({
     event_id: input.eventId,
-    collective_id: event.collective_id,
     category: input.category,
     description: input.description.slice(0, 500),
     amount: Math.round(input.amount * 100) / 100, // Round to 2 decimal places
-    added_by: user.id,
+    currency: resolvedCurrency,
+    metadata: { added_by: user.id },
   });
 
   if (error) {

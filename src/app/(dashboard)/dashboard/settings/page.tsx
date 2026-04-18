@@ -17,6 +17,7 @@ import { Separator } from "@/components/ui/separator";
 import { Loader2, AlertCircle, Check } from "lucide-react";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { getMyCollectiveDefaults, updateCollectiveCurrency } from "@/app/actions/collective-settings";
+import { PayoutsCard } from "@/components/settings/payouts-card";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -370,43 +371,19 @@ export default function SettingsPage() {
 
       <Separator />
 
-      {/* Payments */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Payments</CardTitle>
-          <CardDescription>
-            Ticket payments are processed by Nocturn. Payouts are handled manually after each event settlement.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500">
-                <svg
-                  className="h-3 w-3 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={3}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-              </div>
-              <span className="text-sm font-medium text-emerald-500">
-                Payments Active
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Your events can accept ticket payments. After each event, generate a settlement
-              in the Finance tab and mark it as paid once you&apos;ve sent the payout.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Payouts — Stripe Connect (Express) */}
+      {collectiveId ? (
+        <PayoutsCard collectiveId={collectiveId} />
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle>Payouts</CardTitle>
+            <CardDescription>
+              Create or join a collective to set up payouts.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
     </div>
   );
 }

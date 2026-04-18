@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { convertBetween } from "@/lib/currency";
 
 import { enrichAttendeeCRM } from "./crm-enrichment";
 
@@ -17,10 +18,11 @@ export async function generateAutoSettlement(eventId: string) {
     // 1. Get event + collective_id + financial columns. The bar-minimum
     // shortfall and venue-cost/deposit columns are part of profit math per
     // the finance UI — must be fetched here so the settlement record
-    // matches what getEventFinancials shows.
+    // matches what getEventFinancials shows. currency + collective's
+    // default_currency let us normalize cross-currency operator inputs.
     const { data: event, error: eventError } = await admin
       .from("events")
-      .select("id, collective_id, status, venue_cost, venue_deposit, bar_minimum, actual_bar_revenue")
+      .select("id, collective_id, status, venue_cost, venue_deposit, bar_minimum, actual_bar_revenue, currency, collectives(default_currency)")
       .eq("id", eventId)
       .maybeSingle();
 
@@ -28,6 +30,13 @@ export async function generateAutoSettlement(eventId: string) {
       if (eventError) console.error("[generateAutoSettlement] event query error:", eventError.message);
       return { error: "Event not found" };
     }
+
+    const eventCurrency = (
+      event.currency ||
+      (event.collectives as unknown as { default_currency: string | null } | null)
+        ?.default_currency ||
+      "usd"
+    ).toLowerCase();
 
     // Verify caller is a member of the event's collective
     const { count: memberCount } = await admin
@@ -86,10 +95,14 @@ export async function generateAutoSettlement(eventId: string) {
       0
     );
 
-    // 4. Calculate artist fees
+    // 4. Calculate artist fees, normalized to the event currency. An
+    // artist paid in USD for a CAD event (fee_currency = "usd",
+    // eventCurrency = "cad") is converted at the current ECB cross-rate
+    // via convertBetween. Fees in the same currency as the event (or with
+    // null fee_currency) pass through unchanged.
     const { data: eventArtists, error: artistsError } = await admin
       .from("event_artists")
-      .select("fee")
+      .select("fee, fee_currency")
       .eq("event_id", eventId)
       .eq("status", "confirmed");
 
@@ -98,10 +111,16 @@ export async function generateAutoSettlement(eventId: string) {
       return { error: "Failed to calculate artist fees" };
     }
 
-    const artistFeesTotal = (eventArtists ?? []).reduce(
-      (sum, a) => sum + (Number(a.fee) || 0),
-      0
+    const artistFeeConversions = await Promise.all(
+      (eventArtists ?? []).map(async (a) => {
+        const raw = Number(a.fee) || 0;
+        const from = (a.fee_currency || eventCurrency).toLowerCase();
+        if (raw === 0 || from === eventCurrency) return raw;
+        const { amount } = await convertBetween(raw, from, eventCurrency);
+        return amount;
+      })
     );
+    const artistFeesTotal = artistFeeConversions.reduce((sum, v) => sum + v, 0);
 
     // 5. Fetch expenses, filtering out categories that are accounted for
     //    elsewhere to prevent double-count:
@@ -113,7 +132,7 @@ export async function generateAutoSettlement(eventId: string) {
     //      double-count against the lineup fee.
     const { data: expenses, error: expensesError } = await admin
       .from("expenses")
-      .select("amount, category")
+      .select("amount, category, currency")
       .eq("event_id", eventId);
 
     if (expensesError) {
@@ -123,6 +142,21 @@ export async function generateAutoSettlement(eventId: string) {
 
     const HEADLINER_CATEGORIES = new Set(["talent", "flights", "hotel", "transport", "per_diem"]);
     const VENUE_CATEGORIES = new Set(["venue_rental", "deposit"]);
+
+    // Normalize every expense to the event currency BEFORE the pair-wise
+    // matching below, so double-count prevention compares like-for-like.
+    // expenses.currency was added in the add_currency_to_expenses
+    // migration; rows created before that default to the event's currency
+    // via the backfill, so this is safe on historical data.
+    const normalizedExpenses = await Promise.all(
+      (expenses ?? []).map(async (e) => {
+        const raw = Number(e.amount) || 0;
+        const from = (e.currency || eventCurrency).toLowerCase();
+        if (raw === 0 || from === eventCurrency) return { ...e, amount: raw };
+        const { amount } = await convertBetween(raw, from, eventCurrency);
+        return { ...e, amount };
+      })
+    );
 
     // Pair-wise talent double-count prevention.
     //
@@ -139,13 +173,15 @@ export async function generateAutoSettlement(eventId: string) {
     // against an event_artists.fee row of the same amount. Matched → skip
     // (avoid double-count). Unmatched → include (real separate cost).
     // Cents-based to avoid FP drift on the pairing key.
-    const availableArtistFeeCents = (eventArtists ?? [])
-      .map((a) => Math.round((Number(a.fee) || 0) * 100))
+    // Match against normalized (event-currency) fees so the dedup works
+    // even when artist fees are entered in a different currency.
+    const availableArtistFeeCents = artistFeeConversions
+      .map((v) => Math.round(v * 100))
       .filter((c) => c > 0);
     let totalExpenses = 0;
-    for (const e of expenses ?? []) {
+    for (const e of normalizedExpenses) {
       const category = e.category ?? "";
-      const amount = Number(e.amount) || 0;
+      const amount = e.amount; // already in event currency
       if (VENUE_CATEGORIES.has(category)) continue;
       if (HEADLINER_CATEGORIES.has(category)) {
         const cents = Math.round(amount * 100);

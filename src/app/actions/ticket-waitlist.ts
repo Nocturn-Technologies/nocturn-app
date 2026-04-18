@@ -3,6 +3,7 @@
 import { sendEmail } from "@/lib/email/send";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { redactEmail } from "@/lib/log-redaction";
 
 /**
  * Join the waitlist for a sold-out ticket tier.
@@ -173,12 +174,12 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string, coun
           .eq("id", entry.id);
 
         if (updateError) {
-          console.error(`[waitlist] Failed to update status for ${entry.email}:`, updateError);
+          console.error(`[waitlist] Failed to update status for ${redactEmail(entry.email)}:`, updateError);
         }
 
         notifiedEmails.push(entry.email);
       } catch (emailErr) {
-        console.error(`[waitlist] Failed to send notification to ${entry.email}:`, emailErr);
+        console.error(`[waitlist] Failed to send notification to ${redactEmail(entry.email)}:`, emailErr);
       }
     }
 

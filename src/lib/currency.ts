@@ -80,9 +80,29 @@ export function getCurrencyForCountry(countryCode: string | null): string {
 
 /**
  * Check if a currency uses zero-decimal formatting.
+ * Exported so callers can convert dollars → Stripe's smallest-unit amount
+ * correctly across all currencies.
  */
-function isZeroDecimal(currency: string): boolean {
+export function isZeroDecimal(currency: string): boolean {
   return ZERO_DECIMAL_CURRENCIES.has(currency.toLowerCase());
+}
+
+/**
+ * Convert a dollar-denominated amount to Stripe's expected smallest-unit
+ * integer for the given currency.
+ *
+ * For two-decimal currencies (USD, CAD, EUR, …): dollars × 100.
+ * For zero-decimal currencies (JPY, KRW, CLP, …): round to whole units.
+ *
+ * Use this anywhere you're passing `amount` to Stripe APIs (charges,
+ * transfers, reversals, refunds) from an internal dollar value.
+ */
+export function toStripeAmount(dollars: number, currency: string): number {
+  if (!Number.isFinite(dollars)) return 0;
+  if (isZeroDecimal(currency)) {
+    return Math.round(dollars);
+  }
+  return Math.round(dollars * 100);
 }
 
 // In-memory cache for exchange rates (refreshed every hour)

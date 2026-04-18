@@ -9,6 +9,13 @@ export const STRIPE_PUBLISHABLE_KEY =
 
 export const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
 
+// Separate secret for Connect events (account.updated, transfer.*, payout.*).
+// Stripe delivers these from a different endpoint and signs them with a
+// different secret — configure both in the Stripe dashboard pointing to the
+// same /api/webhooks/stripe route.
+export const STRIPE_CONNECT_WEBHOOK_SECRET =
+  process.env.STRIPE_CONNECT_WEBHOOK_SECRET || "";
+
 let _stripe: Stripe | null = null;
 
 export function getStripe(): Stripe {

@@ -10,6 +10,7 @@ import {
   calculateCheckoutPricing,
   insertPendingTickets,
 } from "@/lib/checkout-helpers";
+import { isZeroDecimal } from "@/lib/currency";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
@@ -101,10 +102,13 @@ export async function POST(request: NextRequest) {
       if (!referrerUser) referrerToken = undefined;
     }
 
-    // Look up the event
+    // Look up the event + its collective's default currency. The currency
+    // precedence is: events.currency (per-event override) → collective
+    // default → USD. This becomes the charge currency, the ticket currency,
+    // and the transfer currency at payout — zero FX on Nocturn's side.
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, title, slug, collective_id, status")
+      .select("id, title, slug, collective_id, status, currency, collectives(default_currency)")
       .eq("id", eventId)
       .is("deleted_at", null)
       .maybeSingle();
@@ -433,8 +437,50 @@ export async function POST(request: NextRequest) {
       } catch {}
     }
 
-    // All payments go to Nocturn platform account — payouts handled manually
-    // Buyer pays ticket price + service fee (7% + $0.50)
+    // Resolve the event's charge currency: events.currency → collective's
+    // default → USD. The ticket tier price is already denominated in this
+    // currency (operators set prices in their collective's currency). We
+    // just need to echo it into Stripe. Buyer's bank does any FX on their
+    // side — Nocturn receives, transfers, and refunds in one currency.
+    const collectiveForCurrency = event.collectives as unknown as {
+      default_currency: string | null;
+    } | null;
+    const eventCurrency = (
+      event.currency ||
+      collectiveForCurrency?.default_currency ||
+      "usd"
+    ).toLowerCase();
+
+    // Zero-decimal currencies (JPY, KRW, …) are not supported yet — the
+    // tier-price math elsewhere (calculateCheckoutPricing, settlements)
+    // assumes two-decimal dollars. MVP serves USD + CAD + EUR + GBP + AUD
+    // which all are two-decimal. Reject with a clear error rather than
+    // silently miscompute.
+    if (isZeroDecimal(eventCurrency)) {
+      return NextResponse.json(
+        {
+          error: `${eventCurrency.toUpperCase()} is not yet supported for ticket sales. Contact support.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Latch the event's currency on first sale. If the collective later
+    // flips their default_currency (say, CAD → USD), in-flight events
+    // keep their original charge currency so settlement math doesn't
+    // mix currencies across one event's tickets. Idempotent: concurrent
+    // first sales write the same value (resolved from the same inputs).
+    if (!event.currency) {
+      await supabase
+        .from("events")
+        .update({ currency: eventCurrency })
+        .eq("id", eventId)
+        .is("currency", null);
+    }
+
+    // All payments go to Nocturn's platform balance in the event currency.
+    // Settlement/payout transfers to the connected account in the same
+    // currency via markSettlementPaid. No FX on Nocturn's side.
     let session;
     try {
       session = await getStripe().checkout.sessions.create({
@@ -443,7 +489,7 @@ export async function POST(request: NextRequest) {
         line_items: [
           {
             price_data: {
-              currency: "usd",
+              currency: eventCurrency,
               product_data: {
                 name: `${tier.name} — ${event.title}`,
               },
@@ -453,7 +499,7 @@ export async function POST(request: NextRequest) {
           },
           {
             price_data: {
-              currency: "usd",
+              currency: eventCurrency,
               product_data: {
                 name: "Service fee",
               },
@@ -468,6 +514,11 @@ export async function POST(request: NextRequest) {
           quantity: String(quantity),
           ticketPriceCents: String(unitAmountCents),
           serviceFeeCents: String(serviceFeePerTicketCents),
+          // The charge currency is the event currency — also the currency
+          // the ticket is stored in, the settlement is denominated in, and
+          // the transfer happens in. Webhook reads this to stamp the
+          // ticket row correctly.
+          chargeCurrency: eventCurrency,
           buyerPhone,
           ...(promoId && { promoId, promoCode: validatedPromoCode ?? "", promoClaimedQuantity: String(quantity) }),
           ...(referrerToken && { referrerToken }),

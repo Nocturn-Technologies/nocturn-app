@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
-import { getCurrencyForCountry, convertAmount, formatLocalAmount } from "@/lib/currency";
+import { formatLocalAmount, isZeroDecimal } from "@/lib/currency";
 import { logPaymentEvent } from "@/lib/payment-events";
 import {
   validatePromo,
@@ -87,10 +87,12 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Look up event
+    // Look up event + collective default_currency. Charge currency =
+    // events.currency → collective default → USD. Buyer's card handles any
+    // FX on their side; Nocturn receives in the event currency.
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, title, collective_id, status")
+      .select("id, title, collective_id, status, currency, collectives(default_currency)")
       .eq("id", eventId)
       .is("deleted_at", null)
       .maybeSingle();
@@ -209,19 +211,51 @@ export async function POST(request: NextRequest) {
 
     const _serviceFeePerTicketCents = pricing.serviceFeePerTicketCents;
     const totalPerTicketCents = pricing.totalPerTicketCents;
-    const totalUsdCents = totalPerTicketCents * quantity;
+    const totalEventCents = totalPerTicketCents * quantity;
 
-    // Detect buyer's country from Vercel header → convert to local currency
-    const buyerCountry = request.headers.get("x-vercel-ip-country") || null;
-    const targetCurrency = getCurrencyForCountry(buyerCountry);
-    const { amount: chargeAmount, rate: fxRate, currency: chargeCurrency } =
-      await convertAmount(totalUsdCents, targetCurrency);
+    // Charge currency = event currency. Buyer pays in the event's currency;
+    // their card handles FX buyer-side. Nocturn receives/refunds/transfers
+    // all in one currency.
+    const collectiveForCurrency = event.collectives as unknown as {
+      default_currency: string | null;
+    } | null;
+    const chargeCurrency = (
+      event.currency ||
+      collectiveForCurrency?.default_currency ||
+      "usd"
+    ).toLowerCase();
 
-    // Create PaymentIntent in buyer's local currency
+    if (isZeroDecimal(chargeCurrency)) {
+      if (pendingTicketIds.length > 0) {
+        await supabase
+          .from("tickets")
+          .delete()
+          .in("id", pendingTicketIds)
+          .eq("status", "pending");
+      }
+      return NextResponse.json(
+        {
+          error: `${chargeCurrency.toUpperCase()} is not yet supported for ticket sales. Contact support.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Latch event currency on first sale — see the mirror in /api/checkout.
+    // Protects against mid-event collective.default_currency flips.
+    if (!event.currency) {
+      await supabase
+        .from("events")
+        .update({ currency: chargeCurrency })
+        .eq("id", eventId)
+        .is("currency", null);
+    }
+
+    // Create PaymentIntent in the event's currency.
     let paymentIntent;
     try {
       paymentIntent = await getStripe().paymentIntents.create({
-        amount: chargeAmount,
+        amount: totalEventCents,
         currency: chargeCurrency,
         receipt_email: buyerEmail,
         metadata: {
@@ -231,11 +265,8 @@ export async function POST(request: NextRequest) {
           buyerEmail,
           buyerPhone,
           ticketPriceCents: String(unitAmountCents),
-          baseCurrency: "usd",
-          baseAmountCents: String(totalUsdCents),
           chargeCurrency,
-          fxRate: String(fxRate),
-          ...(buyerCountry && { buyerCountry }),
+          totalAmountCents: String(totalEventCents),
           ...(referrerToken && { referrerToken }),
           ...(promoId && { promoId, promoCode: validatedPromoCode ?? "", promoClaimedQuantity: String(quantity) }),
           ...(discountCents > 0 && { discountCents: String(discountCents) }),
@@ -290,12 +321,10 @@ export async function POST(request: NextRequest) {
       event_id: eventId,
       tier_id: tierId,
       quantity,
-      amount_cents: chargeAmount,
+      amount_cents: totalEventCents,
       currency: chargeCurrency,
       buyer_email: buyerEmail,
       metadata: {
-        base_amount_cents: totalUsdCents,
-        fx_rate: fxRate,
         promo_id: promoId ?? undefined,
         discount_cents: discountCents > 0 ? discountCents : undefined,
       },
@@ -303,9 +332,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
-      amount: chargeAmount,
+      amount: totalEventCents,
       currency: chargeCurrency,
-      displayAmount: formatLocalAmount(chargeAmount, chargeCurrency),
+      displayAmount: formatLocalAmount(totalEventCents, chargeCurrency),
     });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : "Unknown error";
