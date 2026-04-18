@@ -76,9 +76,10 @@ export async function generateSettlement(eventId: string) {
       .eq("event_id", eventId)
       .eq("status", "confirmed"),
     admin
-      .from("event_expenses")
+      .from("expenses")
       .select("id, description, amount, category, currency")
-      .eq("event_id", eventId),
+      .eq("event_id", eventId)
+      .is("deleted_at", null),
   ]);
 
   const grossRevenue = (tickets ?? []).reduce(
@@ -458,16 +459,16 @@ export async function addEventExpense(input: {
 
   if (!count || count === 0) return { error: "You don't have permission to add expenses to this event" };
 
-  // Note: event_expenses has no collective_id or added_by columns
-  // (collective is derivable via event_id, and provenance goes in
-  // metadata if needed). Audit who added this via metadata.
-  const { error } = await admin.from("event_expenses").insert({
+  // expenses is the canonical table — has collective_id (required) and paid_by
+  // for attributability. No reason to keep the old event_expenses fork.
+  const { error } = await admin.from("expenses").insert({
     event_id: input.eventId,
+    collective_id: event.collective_id,
+    paid_by: user.id,
     category: input.category,
     description: input.description.slice(0, 500),
-    amount: Math.round(input.amount * 100) / 100, // Round to 2 decimal places
+    amount: Math.round(input.amount * 100) / 100,
     currency: resolvedCurrency,
-    metadata: { added_by: user.id },
   });
 
   if (error) {
@@ -532,9 +533,10 @@ export async function getEventExpenses(eventId: string) {
   }
 
   const { data, error: expensesError } = await admin
-    .from("event_expenses")
+    .from("expenses")
     .select("*")
     .eq("event_id", eventId)
+    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (expensesError) {

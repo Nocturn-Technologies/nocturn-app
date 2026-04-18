@@ -1021,63 +1021,6 @@ export type Database = {
           },
         ]
       }
-      event_expenses: {
-        Row: {
-          amount: number | null
-          category: string | null
-          created_at: string
-          currency: string | null
-          deleted_at: string | null
-          description: string | null
-          event_id: string
-          id: string
-          metadata: Json | null
-          receipt_url: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          amount?: number | null
-          category?: string | null
-          created_at?: string
-          currency?: string | null
-          deleted_at?: string | null
-          description?: string | null
-          event_id: string
-          id?: string
-          metadata?: Json | null
-          receipt_url?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          amount?: number | null
-          category?: string | null
-          created_at?: string
-          currency?: string | null
-          deleted_at?: string | null
-          description?: string | null
-          event_id?: string
-          id?: string
-          metadata?: Json | null
-          receipt_url?: string | null
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "event_expenses_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "event_expenses_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       event_reactions: {
         Row: {
           created_at: string
