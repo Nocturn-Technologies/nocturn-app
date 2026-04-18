@@ -107,7 +107,7 @@ export async function GET() {
                   background: "#C084FC",
                 }}
               />
-              THE AGENTIC WORK OS · NIGHTLIFE
+              BUILT FOR COLLECTIVES · PROMOTERS · VENUES
             </div>
           </div>
 
