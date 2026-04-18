@@ -200,7 +200,7 @@ export default async function AdminPage({ searchParams }: Props) {
       .order("created_at", { ascending: false })
       .limit(50),
     // All settlements
-    supabase.from("settlements").select("id, event_id, collective_id, status, gross_revenue, platform_fee, net_revenue, stripe_fees, profit, created_at"),
+    supabase.from("settlements").select("id, event_id, collective_id, status, gross_revenue, platform_fee, net_revenue, stripe_fees, net_profit, created_at"),
     // Revenue tickets (last 6 months)
     supabase.from("tickets").select("price_paid, created_at").in("status", ["paid", "checked_in"]).gte("created_at", sixMonthsAgo),
     // Top events by revenue — get all tickets with event info

@@ -75,7 +75,7 @@ export default async function AnalyticsPage() {
     // Previous 30 days tickets (for comparison)
     admin.from("tickets").select("created_at, price_paid").in("status", ["paid", "checked_in"]).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
     // All settlements
-    admin.from("settlements").select("gross_revenue, net_revenue, platform_fee, profit, status"),
+    admin.from("settlements").select("gross_revenue, net_revenue, platform_fee, net_profit, status"),
     // New collectives last 30d
     admin.from("collectives").select("*", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
     // New users last 30d
@@ -95,7 +95,7 @@ export default async function AnalyticsPage() {
   const prevGMV = previousTicketRows.reduce((s, t) => s + Number(t.price_paid || 0), 0);
   const gmvGrowth = prevGMV > 0 ? ((totalGMV - prevGMV) / prevGMV) * 100 : totalGMV > 0 ? 100 : 0;
 
-  const settlementRows = (settlements ?? []) as { gross_revenue: number; net_revenue: number; platform_fee: number; profit: number; status: string }[];
+  const settlementRows = (settlements ?? []) as { gross_revenue: number; net_revenue: number; platform_fee: number; net_profit: number; status: string }[];
   const totalPlatformFees = settlementRows.reduce((s, r) => s + Number(r.platform_fee || 0), 0);
   const totalGrossRevenue = settlementRows.reduce((s, r) => s + Number(r.gross_revenue || 0), 0);
 

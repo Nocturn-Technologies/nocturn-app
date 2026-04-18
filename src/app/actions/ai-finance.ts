@@ -612,12 +612,12 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   // Settlement
   const { data: settlementRaw } = await admin
     .from("settlements")
-    .select("profit, status")
+    .select("net_profit, status")
     .eq("event_id", eventId)
     .maybeSingle();
-  const settlement = settlementRaw as { profit: number | null; status: string } | null;
+  const settlement = settlementRaw as { net_profit: number | null; status: string } | null;
 
-  const netProfit = Number(settlement?.profit ?? 0);
+  const netProfit = Number(settlement?.net_profit ?? 0);
 
   // Past events for comparison
   const { data: pastEventsRaw } = await admin

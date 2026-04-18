@@ -63,7 +63,7 @@ export async function generateAutoSettlement(eventId: string) {
     // 2. Calculate gross revenue from paid/checked-in tickets
     const { data: tickets, error: ticketsError } = await admin
       .from("tickets")
-      .select("id, price_paid")
+      .select("id, price_paid, buyer_fee")
       .eq("event_id", eventId)
       .in("status", ["paid", "checked_in"]);
 
@@ -75,6 +75,11 @@ export async function generateAutoSettlement(eventId: string) {
     const ticketCount = tickets?.length ?? 0;
     const grossRevenue = (tickets ?? []).reduce(
       (sum, t) => sum + (Number(t.price_paid) || 0),
+      0
+    );
+    // Pre-aggregated buyer fees (7%+$0.50 per paid ticket, auto-computed via DB trigger)
+    const buyerFeesCollected = (tickets ?? []).reduce(
+      (sum, t) => sum + (Number((t as { buyer_fee?: number }).buyer_fee) || 0),
       0
     );
 
@@ -240,13 +245,14 @@ export async function generateAutoSettlement(eventId: string) {
         event_id: eventId,
         collective_id: event.collective_id,
         gross_revenue: Math.round(grossRevenue * 100) / 100,
+        buyer_fees_collected: Math.round(buyerFeesCollected * 100) / 100,
         refunds_total: Math.round(refundsTotal * 100) / 100,
-        total_artist_fees: Math.round(artistFeesTotal * 100) / 100,
+        artist_fees_total: Math.round(artistFeesTotal * 100) / 100,
         total_costs: Math.round(totalExpenses * 100) / 100,
         platform_fee: Math.round(platformFee * 100) / 100,
         stripe_fees: Math.round(stripeFees * 100) / 100,
         net_revenue: Math.round(netRevenue * 100) / 100,
-        profit: Math.round(profit * 100) / 100,
+        // net_profit is a GENERATED column — auto-computed by Postgres from the fields above.
         status: "draft",
       })
       .select("id")

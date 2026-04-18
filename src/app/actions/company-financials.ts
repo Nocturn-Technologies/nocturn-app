@@ -115,7 +115,7 @@ export async function getCompanyFinancials(): Promise<{
     const { data: settlements, error: settlementsError } = await admin
       .from("settlements")
       .select(
-        "gross_revenue, net_revenue, profit, platform_fee, stripe_fees, total_artist_fees, total_costs, event_id"
+        "gross_revenue, net_revenue, net_profit, platform_fee, stripe_fees, artist_fees_total, total_costs, event_id"
       )
       .in("collective_id", collectiveIds);
 
@@ -167,12 +167,12 @@ export async function getCompanyFinancials(): Promise<{
         sum +
         Number(s.stripe_fees) +
         Number(s.platform_fee) +
-        Number(s.total_artist_fees) +
+        Number(s.artist_fees_total) +
         Number(s.total_costs),
       0
     );
     const netProfit = (settlements ?? []).reduce(
-      (sum, s) => sum + Number(s.profit),
+      (sum, s) => sum + Number(s.net_profit),
       0
     );
     // Count ALL events (not just settlements) so the overview shows even pre-revenue
@@ -212,7 +212,7 @@ export async function getEventFinancialSummaries(): Promise<{
       admin
         .from("settlements")
         .select(
-          "id, event_id, status, gross_revenue, net_revenue, profit, platform_fee, stripe_fees, total_artist_fees, total_costs, events(title, starts_at, status)"
+          "id, event_id, status, gross_revenue, net_revenue, net_profit, platform_fee, stripe_fees, artist_fees_total, total_costs, events(title, starts_at, status)"
         )
         .in("collective_id", collectiveIds)
         .order("created_at", { ascending: false }),
@@ -263,9 +263,9 @@ export async function getEventFinancialSummaries(): Promise<{
       const totalExp =
         Number(s.stripe_fees) +
         Number(s.platform_fee) +
-        Number(s.total_artist_fees) +
+        Number(s.artist_fees_total) +
         Number(s.total_costs);
-      const profit = Number(s.profit);
+      const profit = Number(s.net_profit);
 
       results.push({
         id: s.id,

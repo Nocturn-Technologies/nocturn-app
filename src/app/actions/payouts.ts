@@ -50,7 +50,7 @@ export async function markSettlementPaid(settlementId: string) {
     const { data: settlement, error: fetchError } = await admin
       .from("settlements")
       .select(
-        "id, status, collective_id, event_id, profit, net_revenue, gross_revenue, collectives(id, name, stripe_account_id, default_currency), events(currency)"
+        "id, status, collective_id, event_id, net_profit, net_revenue, gross_revenue, collectives(id, name, stripe_account_id, default_currency), events(currency)"
       )
       .eq("id", settlementId)
       .maybeSingle();

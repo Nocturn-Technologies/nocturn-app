@@ -62,7 +62,7 @@ export async function generateSettlement(eventId: string) {
   const [{ data: tickets }, { data: refundedTickets }, { data: bookings }, { data: expenses }] = await Promise.all([
     admin
       .from("tickets")
-      .select("price_paid")
+      .select("price_paid, buyer_fee")
       .eq("event_id", eventId)
       .in("status", ["paid", "checked_in"]),
     admin
@@ -83,6 +83,14 @@ export async function generateSettlement(eventId: string) {
 
   const grossRevenue = (tickets ?? []).reduce(
     (sum, t) => sum + (Number(t.price_paid) || 0),
+    0
+  );
+
+  // Buyer-paid 7%+$0.50 service fee sum (auto-computed via DB trigger from price_paid).
+  // Stored separately on the settlement for clean operator-P&L reporting:
+  // gross_revenue (face value) = what operator earns; buyer_fees_collected = Nocturn's take.
+  const buyerFeesCollected = (tickets ?? []).reduce(
+    (sum, t) => sum + (Number(t.buyer_fee) || 0),
     0
   );
 
@@ -141,8 +149,8 @@ export async function generateSettlement(eventId: string) {
 
   // Organizer-side net = gross − refunds only. No Stripe deduction (was the
   // old bug — phantom $400+ phantom subtraction on a typical event).
+  // net_profit is a GENERATED column on settlements — auto-computed from source fields.
   const netRevenue = grossRevenue - refundsTotal;
-  const profit = netRevenue - totalArtistFees - totalExpenses;
 
   // Create settlement
   const { data: settlement, error: settlementError } = await admin
@@ -152,12 +160,12 @@ export async function generateSettlement(eventId: string) {
       collective_id: event.collective_id,
       status: "draft",
       gross_revenue: grossRevenue,
+      buyer_fees_collected: Math.round(buyerFeesCollected * 100) / 100,
       stripe_fees: stripeFees,
       platform_fee: platformFee,
       net_revenue: netRevenue,
       total_costs: totalExpenses,
-      total_artist_fees: totalArtistFees,
-      profit: profit,
+      artist_fees_total: totalArtistFees,
     })
     .select("id")
     .maybeSingle();
@@ -245,7 +253,7 @@ export async function generateSettlement(eventId: string) {
       eventId,
       settlementId: settlement.id,
       grossRevenue,
-      profit,
+      profit: netRevenue - totalArtistFees - totalExpenses,
       ticketCount,
     });
   } catch (trackErr) {

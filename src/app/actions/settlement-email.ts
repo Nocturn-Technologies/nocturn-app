@@ -121,7 +121,7 @@ Deductions:
 ${deductions || "  (none)"}
 
 ━━━━━━━━━━━━━━━━
-Net Profit:       $${Number(settlement.profit ?? 0).toFixed(2)}
+Net Profit:       $${Number(settlement.net_profit ?? 0).toFixed(2)}
 Status:           ${(settlement.status ?? "pending").toUpperCase()}
 
 ${settlement.status === "paid_out" ? "✅ Payout has been processed via Stripe." : "⏳ Payout pending approval."}

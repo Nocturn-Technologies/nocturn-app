@@ -761,6 +761,7 @@ export type Database = {
           checkout_completions: number | null
           checkout_starts: number | null
           conversion_rate: number | null
+          currency: string
           event_id: string
           gross_revenue: number | null
           id: string
@@ -780,6 +781,7 @@ export type Database = {
           checkout_completions?: number | null
           checkout_starts?: number | null
           conversion_rate?: number | null
+          currency?: string
           event_id: string
           gross_revenue?: number | null
           id?: string
@@ -799,6 +801,7 @@ export type Database = {
           checkout_completions?: number | null
           checkout_starts?: number | null
           conversion_rate?: number | null
+          currency?: string
           event_id?: string
           gross_revenue?: number | null
           id?: string
@@ -1120,6 +1123,7 @@ export type Database = {
           category: string
           collective_id: string
           created_at: string
+          currency: string
           description: string
           event_id: string
           id: string
@@ -1130,6 +1134,7 @@ export type Database = {
           category?: string
           collective_id: string
           created_at?: string
+          currency?: string
           description: string
           event_id: string
           id?: string
@@ -1140,6 +1145,7 @@ export type Database = {
           category?: string
           collective_id?: string
           created_at?: string
+          currency?: string
           description?: string
           event_id?: string
           id?: string
@@ -1293,7 +1299,7 @@ export type Database = {
           bar_minimum: number | null
           collective_id: string
           created_at: string
-          currency: string | null
+          currency: string
           deleted_at: string | null
           description: string | null
           doors_at: string | null
@@ -1322,7 +1328,7 @@ export type Database = {
           bar_minimum?: number | null
           collective_id: string
           created_at?: string
-          currency?: string | null
+          currency?: string
           deleted_at?: string | null
           description?: string | null
           doors_at?: string | null
@@ -1351,7 +1357,7 @@ export type Database = {
           bar_minimum?: number | null
           collective_id?: string
           created_at?: string
-          currency?: string | null
+          currency?: string
           deleted_at?: string | null
           description?: string | null
           doors_at?: string | null
@@ -1881,6 +1887,7 @@ export type Database = {
           metadata: Json | null
           payment_intent_id: string | null
           quantity: number | null
+          ticket_id: string | null
           tier_id: string | null
         }
         Insert: {
@@ -1895,6 +1902,7 @@ export type Database = {
           metadata?: Json | null
           payment_intent_id?: string | null
           quantity?: number | null
+          ticket_id?: string | null
           tier_id?: string | null
         }
         Update: {
@@ -1909,6 +1917,7 @@ export type Database = {
           metadata?: Json | null
           payment_intent_id?: string | null
           quantity?: number | null
+          ticket_id?: string | null
           tier_id?: string | null
         }
         Relationships: [
@@ -1924,6 +1933,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_events_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
             referencedColumns: ["id"]
           },
           {
@@ -2161,6 +2177,7 @@ export type Database = {
           code: string
           collective_id: string
           created_at: string
+          currency: string
           current_uses: number | null
           discount_type: string | null
           discount_value: number | null
@@ -2169,7 +2186,6 @@ export type Database = {
           max_uses: number | null
           promoter_id: string
           updated_at: string
-          uses_count: number | null
           valid_from: string | null
           valid_until: string | null
         }
@@ -2177,6 +2193,7 @@ export type Database = {
           code: string
           collective_id: string
           created_at?: string
+          currency?: string
           current_uses?: number | null
           discount_type?: string | null
           discount_value?: number | null
@@ -2185,7 +2202,6 @@ export type Database = {
           max_uses?: number | null
           promoter_id: string
           updated_at?: string
-          uses_count?: number | null
           valid_from?: string | null
           valid_until?: string | null
         }
@@ -2193,6 +2209,7 @@ export type Database = {
           code?: string
           collective_id?: string
           created_at?: string
+          currency?: string
           current_uses?: number | null
           discount_type?: string | null
           discount_value?: number | null
@@ -2201,7 +2218,6 @@ export type Database = {
           max_uses?: number | null
           promoter_id?: string
           updated_at?: string
-          uses_count?: number | null
           valid_from?: string | null
           valid_until?: string | null
         }
@@ -2575,6 +2591,7 @@ export type Database = {
           amount: number
           category: string | null
           created_at: string
+          currency: string
           description: string
           id: string
           metadata: Json | null
@@ -2584,6 +2601,7 @@ export type Database = {
           amount?: number
           category?: string | null
           created_at?: string
+          currency?: string
           description: string
           id?: string
           metadata?: Json | null
@@ -2593,6 +2611,7 @@ export type Database = {
           amount?: number
           category?: string | null
           created_at?: string
+          currency?: string
           description?: string
           id?: string
           metadata?: Json | null
@@ -2613,8 +2632,10 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           artist_fees_total: number | null
+          buyer_fees_collected: number
           collective_id: string
           created_at: string
+          currency: string
           event_id: string
           gross_revenue: number | null
           id: string
@@ -2624,11 +2645,9 @@ export type Database = {
           notes: string | null
           other_costs: number | null
           platform_fee: number | null
-          profit: number | null
           refunds_total: number | null
           status: Database["public"]["Enums"]["settlement_status"]
           stripe_fees: number | null
-          total_artist_fees: number | null
           total_costs: number | null
           updated_at: string
           venue_fee: number | null
@@ -2637,8 +2656,10 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           artist_fees_total?: number | null
+          buyer_fees_collected?: number
           collective_id: string
           created_at?: string
+          currency?: string
           event_id: string
           gross_revenue?: number | null
           id?: string
@@ -2648,11 +2669,9 @@ export type Database = {
           notes?: string | null
           other_costs?: number | null
           platform_fee?: number | null
-          profit?: number | null
           refunds_total?: number | null
           status?: Database["public"]["Enums"]["settlement_status"]
           stripe_fees?: number | null
-          total_artist_fees?: number | null
           total_costs?: number | null
           updated_at?: string
           venue_fee?: number | null
@@ -2661,8 +2680,10 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           artist_fees_total?: number | null
+          buyer_fees_collected?: number
           collective_id?: string
           created_at?: string
+          currency?: string
           event_id?: string
           gross_revenue?: number | null
           id?: string
@@ -2672,11 +2693,9 @@ export type Database = {
           notes?: string | null
           other_costs?: number | null
           platform_fee?: number | null
-          profit?: number | null
           refunds_total?: number | null
           status?: Database["public"]["Enums"]["settlement_status"]
           stripe_fees?: number | null
-          total_artist_fees?: number | null
           total_costs?: number | null
           updated_at?: string
           venue_fee?: number | null
@@ -2717,6 +2736,7 @@ export type Database = {
           amount: number
           collective_id: string | null
           created_at: string
+          currency: string
           id: string
           label: string
           payout_id: string | null
@@ -2731,6 +2751,7 @@ export type Database = {
           amount: number
           collective_id?: string | null
           created_at?: string
+          currency?: string
           id?: string
           label: string
           payout_id?: string | null
@@ -2745,6 +2766,7 @@ export type Database = {
           amount?: number
           collective_id?: string | null
           created_at?: string
+          currency?: string
           id?: string
           label?: string
           payout_id?: string | null
@@ -2797,6 +2819,7 @@ export type Database = {
         Row: {
           capacity: number | null
           created_at: string
+          currency: string
           description: string | null
           event_id: string
           id: string
@@ -2810,6 +2833,7 @@ export type Database = {
         Insert: {
           capacity?: number | null
           created_at?: string
+          currency?: string
           description?: string | null
           event_id: string
           id?: string
@@ -2823,6 +2847,7 @@ export type Database = {
         Update: {
           capacity?: number | null
           created_at?: string
+          currency?: string
           description?: string | null
           event_id?: string
           id?: string
@@ -2853,6 +2878,7 @@ export type Database = {
       tickets: {
         Row: {
           attendee_name: string | null
+          buyer_fee: number
           checked_in_at: string | null
           checked_in_by: string | null
           created_at: string
@@ -2873,6 +2899,7 @@ export type Database = {
         }
         Insert: {
           attendee_name?: string | null
+          buyer_fee?: number
           checked_in_at?: string | null
           checked_in_by?: string | null
           created_at?: string
@@ -2893,6 +2920,7 @@ export type Database = {
         }
         Update: {
           attendee_name?: string | null
+          buyer_fee?: number
           checked_in_at?: string | null
           checked_in_by?: string | null
           created_at?: string
@@ -3629,3 +3657,4 @@ export const Constants = {
     },
   },
 } as const
+

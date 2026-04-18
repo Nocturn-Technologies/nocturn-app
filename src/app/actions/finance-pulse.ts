@@ -136,7 +136,7 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
     if (pastEventIds.length > 0) {
       const { data: pastSettlements, error: pastSettlementsError } = await admin
         .from("settlements")
-        .select("event_id, net_profit, profit")
+        .select("event_id, net_profit")
         .in("event_id", pastEventIds);
 
       if (pastSettlementsError) {
@@ -145,8 +145,8 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
 
       const profitByEvent = new Map<string, number>();
       for (const s of pastSettlements ?? []) {
-        // Prefer net_profit (generated from source fields); fall back to manual `profit` column
-        const p = Number(s.net_profit ?? s.profit) || 0;
+        // net_profit is a GENERATED column — always accurate, derived from source fields.
+        const p = Number(s.net_profit) || 0;
         profitByEvent.set(s.event_id, p);
       }
 

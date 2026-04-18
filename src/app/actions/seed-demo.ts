@@ -235,7 +235,6 @@ export async function seedDemoData(collectiveId: string) {
       gross_revenue: grossRevenue,
       refunds_total: 0,
       artist_fees_total: totalArtistFees,
-      total_artist_fees: totalArtistFees,
       venue_fee: venueFee,
       other_costs: otherCosts,
       stripe_fees: 0,

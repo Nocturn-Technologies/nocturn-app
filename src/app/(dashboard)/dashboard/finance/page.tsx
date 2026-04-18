@@ -103,10 +103,10 @@ export default async function FinancePage() {
     status: string;
     gross_revenue: number;
     net_revenue: number;
-    profit: number;
+    net_profit: number;
     platform_fee: number;
     stripe_fees: number;
-    total_artist_fees: number;
+    artist_fees_total: number;
     total_costs: number;
     created_at: string;
     events: {
