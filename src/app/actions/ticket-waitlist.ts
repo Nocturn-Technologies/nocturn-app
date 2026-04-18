@@ -47,10 +47,10 @@ export async function joinWaitlist(eventId: string, tierId: string, waitlistEmai
 
     // Add to waitlist (upsert to handle duplicates gracefully)
     const { error } = await sb
-      .from("ticket_waitlist")
+      .from("waitlist_entries")
       .upsert(
-        { event_id: eventId, ticket_tier_id: tierId, email: email.toLowerCase().trim(), status: "waiting" },
-        { onConflict: "event_id,ticket_tier_id,email" }
+        { event_id: eventId, tier_id: tierId, email: email.toLowerCase().trim(), status: "waiting" },
+        { onConflict: "event_id,tier_id,email" }
       );
 
     if (error) return { error: "Something went wrong" };
@@ -99,10 +99,10 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string, coun
 
     // Get the next N people waiting (oldest first)
     const { data: waitlistEntries } = await sb
-      .from("ticket_waitlist")
+      .from("waitlist_entries")
       .select("id, email")
       .eq("event_id", eventId)
-      .eq("ticket_tier_id", tierId)
+      .eq("tier_id", tierId)
       .eq("status", "waiting")
       .order("created_at", { ascending: true })
       .limit(notifyCount);
@@ -168,7 +168,7 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string, coun
 
         // Only mark as notified after email successfully sent
         const { error: updateError } = await sb
-          .from("ticket_waitlist")
+          .from("waitlist_entries")
           .update({ status: "notified", notified_at: new Date().toISOString() })
           .eq("id", entry.id);
 

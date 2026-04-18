@@ -85,7 +85,7 @@ export default async function AnalyticsPage() {
     // Recent events
     admin.from("events").select("id, title, starts_at, status, collective_id, collectives(name)").is("deleted_at", null).order("created_at", { ascending: false }).limit(10),
     // Waitlist
-    admin.from("ticket_waitlist").select("*", { count: "exact", head: true }),
+    admin.from("waitlist_entries").select("*", { count: "exact", head: true }),
   ]);
 
   // Revenue calculations
