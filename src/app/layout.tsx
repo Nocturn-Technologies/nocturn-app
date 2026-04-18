@@ -35,15 +35,16 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Nocturn — AI for Music Collectives and Promoters",
+  title: "Nocturn — You run the night. Nocturn runs the business.",
   description:
-    "You run the night. Nocturn runs the business.",
+    "Run your nights from one place. Events, tickets, finance, team chat, and a talent marketplace — for collectives, promoters, and venues.",
   icons: {
     icon: "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='12' fill='%237B2FF7'/><circle cx='20' cy='14' r='10' fill='%2309090B'/></svg>",
   },
   openGraph: {
-    title: "Nocturn — AI for Music Collectives and Promoters",
-    description: "You run the night. Nocturn runs the business.",
+    title: "Nocturn — You run the night. Nocturn runs the business.",
+    description:
+      "Run your nights from one place. Events, tickets, finance, team chat, and a talent marketplace — for collectives, promoters, and venues.",
     url: "https://app.trynocturn.com",
     siteName: "Nocturn",
     images: [
@@ -51,15 +52,16 @@ export const metadata: Metadata = {
         url: "https://app.trynocturn.com/og-image",
         width: 1200,
         height: 630,
-        alt: "Nocturn — AI for Music Collectives and Promoters",
+        alt: "Nocturn — You run the night. Nocturn runs the business.",
       },
     ],
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Nocturn — AI for Music Collectives and Promoters",
-    description: "You run the night. Nocturn runs the business.",
+    title: "Nocturn — You run the night. Nocturn runs the business.",
+    description:
+      "Run your nights from one place. Events, tickets, finance, team chat, and a talent marketplace — for collectives, promoters, and venues.",
     images: ["https://app.trynocturn.com/og-image"],
   },
 };

@@ -6,7 +6,7 @@ import { CinematicEffects } from "@/components/cinematic-effects";
 export const metadata: Metadata = {
   title: "Nocturn — You run the night. Nocturn runs the business.",
   description:
-    "The Agentic Work OS for nightlife. Book the talent. Fill the room. Settle the night — on autopilot.",
+    "Run your nights from one place. Events, tickets, finance, team chat, and a talent marketplace — for collectives, promoters, and venues.",
 };
 import {
   Calendar,
@@ -148,7 +148,7 @@ export default function HomePage() {
         <div className="max-w-3xl">
           <div className="eyebrow-pill mb-8">
             <span className="eyebrow-pill-dot" />
-            THE AGENTIC WORK OS · NIGHTLIFE
+            BUILT FOR COLLECTIVES · PROMOTERS · VENUES
           </div>
 
           <h1 className="font-heading text-[clamp(44px,7vw,80px)] font-semibold tracking-[-0.035em] leading-[0.98]">
@@ -160,8 +160,7 @@ export default function HomePage() {
           </h1>
 
           <p className="mt-7 text-lg md:text-xl text-muted-foreground max-w-xl leading-[1.5]">
-            The Agentic Work OS for nightlife. Book the talent. Fill the room.
-            Settle the night —{" "}
+            Book the talent. Fill the room. Settle the night —{" "}
             <span className="text-nocturn-glow">on autopilot.</span>
           </p>
 
