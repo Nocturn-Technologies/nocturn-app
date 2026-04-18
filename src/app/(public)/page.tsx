@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { NocturnLogo } from "@/components/nocturn-logo";
 import { CinematicEffects } from "@/components/cinematic-effects";
+import { AppNav } from "@/components/app-nav";
 
 export const metadata: Metadata = {
   title: "Nocturn — You run the night. Nocturn runs the business.",
@@ -124,24 +125,7 @@ export default function HomePage() {
       </div>
 
       {/* ── Navigation ── */}
-      <nav className="relative z-20 flex items-center justify-between px-6 py-5 max-w-6xl mx-auto">
-        <NocturnLogo size="md" />
-        <div className="flex items-center gap-3">
-          <Link
-            href="/login"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors px-3 min-h-[44px] inline-flex items-center"
-          >
-            Sign In
-          </Link>
-          <Link
-            href="/signup"
-            data-magnetic
-            className="inline-flex h-11 items-center justify-center rounded-lg bg-nocturn hover:bg-nocturn-light px-5 text-sm font-medium text-white transition-colors"
-          >
-            Start free
-          </Link>
-        </div>
-      </nav>
+      <AppNav />
 
       {/* ── Hero ── */}
       <section className="relative z-10 px-6 pt-16 pb-24 max-w-6xl mx-auto">
