@@ -15,112 +15,156 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Users, Music, MapPin, ArrowLeft, Megaphone, Camera, Video, Speaker, Lightbulb, BadgeDollarSign, Briefcase, Plane, CalendarCheck, UserCheck, Mic, Palette, Newspaper, Loader2, PartyPopper } from "lucide-react";
+import {
+  Users,
+  Music,
+  MapPin,
+  ArrowLeft,
+  Megaphone,
+  Camera,
+  Video,
+  Speaker,
+  Lightbulb,
+  BadgeDollarSign,
+  Briefcase,
+  Plane,
+  CalendarCheck,
+  UserCheck,
+  Mic,
+  Palette,
+  Newspaper,
+  Loader2,
+  PartyPopper,
+} from "lucide-react";
 
-type UserType = "collective" | "host" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
+type UserType =
+  | "collective"
+  | "host"
+  | "promoter"
+  | "artist"
+  | "venue"
+  | "photographer"
+  | "videographer"
+  | "sound_production"
+  | "lighting_production"
+  | "sponsor"
+  | "artist_manager"
+  | "tour_manager"
+  | "booking_agent"
+  | "event_staff"
+  | "mc_host"
+  | "graphic_designer"
+  | "pr_publicist";
 
-const USER_TYPES: Array<{ type: UserType; icon: typeof Users; label: string; description: string }> = [
+const USER_TYPES: Array<{
+  type: UserType;
+  icon: typeof Users;
+  label: string;
+  description: string;
+  tagline?: string;
+}> = [
   {
     type: "collective",
     icon: Users,
     label: "Collective",
-    description: "Run events, sell tickets, manage your crew",
+    description: "Run regular nights with a crew. Full platform: tickets, settlement, marketing, team chat, marketplace.",
+    tagline: "Most popular",
   },
   {
     type: "host",
     icon: PartyPopper,
     label: "Host",
-    description: "Throw a night, invite friends, collect RSVPs in minutes",
+    description: "Throwing a one-off. Free event, invite friends, collect RSVPs in minutes. No approval needed.",
   },
   {
     type: "promoter",
     icon: Megaphone,
     label: "Promoter",
-    description: "Sell tickets, track your sales, grow your network",
+    description: "Selling tickets under your brand. Grow your audience, track sales, get paid.",
   },
   {
     type: "artist",
     icon: Music,
     label: "Artist / DJ",
-    description: "Build your profile, get discovered, get booked",
+    description: "Build your profile, get discovered, get booked.",
   },
   {
     type: "venue",
     icon: MapPin,
     label: "Venue",
-    description: "List your space, manage bookings, connect with promoters",
+    description: "List your space, manage bookings, connect with promoters.",
   },
   {
     type: "artist_manager",
     icon: Briefcase,
     label: "Artist Manager",
-    description: "Manage bookings, deals, and career growth for artists",
+    description: "Manage bookings, deals, and career growth for artists.",
   },
   {
     type: "tour_manager",
     icon: Plane,
     label: "Tour Manager",
-    description: "Handle logistics, travel, and hospitality for touring acts",
+    description: "Handle logistics, travel, and hospitality for touring acts.",
   },
   {
     type: "booking_agent",
     icon: CalendarCheck,
     label: "Booking Agent",
-    description: "Book talent for venues, clubs, and festivals",
+    description: "Book talent for venues, clubs, and festivals.",
   },
   {
     type: "photographer",
     icon: Camera,
     label: "Photographer",
-    description: "Showcase your portfolio and get booked for events",
+    description: "Showcase your portfolio and get booked for events.",
   },
   {
     type: "videographer",
     icon: Video,
     label: "Videographer",
-    description: "Event recaps, aftermovies, and livestreams",
+    description: "Event recaps, aftermovies, and livestreams.",
   },
   {
     type: "mc_host",
     icon: Mic,
     label: "MC / Host",
-    description: "Emcee events, hype crowds, host shows",
+    description: "Emcee events, hype crowds, host shows.",
   },
   {
     type: "graphic_designer",
     icon: Palette,
     label: "Graphic Designer",
-    description: "Flyers, branding, merch, and social media assets",
+    description: "Flyers, branding, merch, and social media assets.",
   },
   {
     type: "sound_production",
     icon: Speaker,
     label: "Sound & Production",
-    description: "PA systems, sound engineering, DJ equipment",
+    description: "PA systems, sound engineering, DJ equipment.",
   },
   {
     type: "lighting_production",
     icon: Lightbulb,
     label: "Lighting & Visuals",
-    description: "Stage lighting, lasers, LED walls, VJ",
+    description: "Stage lighting, lasers, LED walls, VJ.",
   },
   {
     type: "event_staff",
     icon: UserCheck,
     label: "Event Staff",
-    description: "Bartenders, security, door staff, barbacks",
+    description: "Bartenders, security, door staff, barbacks.",
   },
   {
     type: "pr_publicist",
     icon: Newspaper,
     label: "PR / Publicist",
-    description: "Press coverage, media outreach, social strategy",
+    description: "Press coverage, media outreach, social strategy.",
   },
   {
     type: "sponsor",
     icon: BadgeDollarSign,
     label: "Sponsor / Brand",
-    description: "Connect with events and collectives for partnerships",
+    description: "Connect with events and collectives for partnerships.",
   },
 ];
 
@@ -147,8 +191,6 @@ export default function SignupPage() {
       return;
     }
 
-    // Route based on user type — only collectives and promoters need manual approval.
-    // Hosts are instant-access (the whole value prop is "throw a night in minutes").
     if (userType === "collective" || userType === "promoter") {
       router.push("/pending-approval");
     } else {
@@ -157,7 +199,6 @@ export default function SignupPage() {
     router.refresh();
   }
 
-  // Split into primary types (full cards) and marketplace types (compact grid)
   const primaryTypes = USER_TYPES.filter((t) =>
     ["collective", "host", "promoter"].includes(t.type)
   );
@@ -168,69 +209,78 @@ export default function SignupPage() {
   if (step === "type") {
     return (
       <Card>
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Join Nocturn</CardTitle>
-          <CardDescription>How do you want to use the platform?</CardDescription>
+        <CardHeader className="text-center pb-4">
+          <CardTitle className="text-xl">Join Nocturn</CardTitle>
+          <CardDescription className="text-sm">
+            Pick what fits you best — you can add more later.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          {/* Primary: Collective & Promoter — full-width cards */}
-          <div className="space-y-3">
-            {primaryTypes.map(({ type, icon: Icon, label, description }) => (
-              <button
-                key={type}
-                onClick={() => {
-                  setUserType(type);
-                  setStep("form");
-                }}
-                className={`w-full flex items-center gap-4 rounded-xl border p-4 text-left transition-all hover:border-nocturn/50 hover:bg-nocturn/5 active:scale-[0.98] min-h-[56px] ${
-                  userType === type ? "border-nocturn bg-nocturn/10" : "border-border"
-                }`}
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-nocturn/20 shrink-0">
-                  <Icon className="h-6 w-6 text-nocturn" />
-                </div>
-                <div>
-                  <p className="font-semibold text-foreground">{label}</p>
-                  <p className="text-sm text-muted-foreground">{description}</p>
-                </div>
-              </button>
-            ))}
+          {/* Primary: Event operators */}
+          <div>
+            <div className="section-label-mono mb-3 text-[11px]">
+              01 / I THROW EVENTS
+            </div>
+            <div className="space-y-2">
+              {primaryTypes.map(({ type, icon: Icon, label, description, tagline }) => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    setUserType(type);
+                    setStep("form");
+                  }}
+                  className="group w-full flex items-start gap-3 rounded-xl border border-border p-3.5 text-left transition-all hover:border-nocturn/40 hover:bg-nocturn/5 active:scale-[0.98] min-h-[56px]"
+                >
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-nocturn/[0.08] shrink-0 mt-0.5">
+                    <Icon className="h-4 w-4 text-nocturn-glow" strokeWidth={1.5} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <p className="font-semibold text-sm text-foreground">{label}</p>
+                      {tagline && (
+                        <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-nocturn-glow bg-nocturn/10 border border-nocturn/20 rounded-full px-2 py-0.5">
+                          {tagline}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{description}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground uppercase tracking-wider">
-              List yourself on the marketplace
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-
-          {/* Marketplace types — compact 2-column grid */}
-          <div className="grid grid-cols-2 gap-2">
-            {marketplaceTypes.map(({ type, icon: Icon, label }) => (
-              <button
-                key={type}
-                onClick={() => {
-                  setUserType(type);
-                  setStep("form");
-                }}
-                className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-all hover:border-nocturn/50 hover:bg-nocturn/5 active:scale-[0.98] min-h-[56px] ${
-                  userType === type ? "border-nocturn bg-nocturn/10" : "border-border"
-                }`}
-              >
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-nocturn/20 shrink-0">
-                  <Icon className="h-4 w-4 text-nocturn" />
-                </div>
-                <p className="font-medium text-sm text-white leading-tight">{label}</p>
-              </button>
-            ))}
+          {/* Marketplace section */}
+          <div>
+            <div className="section-label-mono mb-2 text-[11px]">
+              02 / I WORK AT EVENTS
+            </div>
+            <p className="text-xs text-muted-foreground mb-3 leading-relaxed">
+              List yourself on the Discover marketplace. Get found by collectives, promoters, and venues.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {marketplaceTypes.map(({ type, icon: Icon, label }) => (
+                <button
+                  key={type}
+                  onClick={() => {
+                    setUserType(type);
+                    setStep("form");
+                  }}
+                  className="flex items-center gap-2.5 rounded-lg border border-border p-2.5 text-left transition-all hover:border-nocturn/40 hover:bg-nocturn/5 active:scale-[0.98] min-h-[44px]"
+                >
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-nocturn/[0.08] shrink-0">
+                    <Icon className="h-3.5 w-3.5 text-nocturn-glow" strokeWidth={1.5} />
+                  </div>
+                  <p className="font-medium text-xs text-foreground leading-tight truncate">{label}</p>
+                </button>
+              ))}
+            </div>
           </div>
         </CardContent>
-        <CardFooter className="justify-center">
+        <CardFooter className="justify-center pt-4">
           <p className="text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link href="/login" className="text-nocturn hover:underline">
+            <Link href="/login" className="text-nocturn-glow hover:underline">
               Sign in
             </Link>
           </p>
@@ -246,18 +296,18 @@ export default function SignupPage() {
       <CardHeader>
         <button
           onClick={() => setStep("type")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors mb-2 min-h-[44px]"
+          className="flex items-center gap-1.5 text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors mb-3 min-h-[44px]"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Change type
         </button>
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-nocturn/20">
-            <selectedType.icon className="h-5 w-5 text-nocturn" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/10 bg-nocturn/[0.08]">
+            <selectedType.icon className="h-4 w-4 text-nocturn-glow" strokeWidth={1.5} />
           </div>
           <div>
-            <CardTitle>{selectedType.label}</CardTitle>
-            <CardDescription>{selectedType.description}</CardDescription>
+            <CardTitle className="text-lg">{selectedType.label}</CardTitle>
+            <CardDescription className="text-xs leading-relaxed">{selectedType.description}</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -322,7 +372,7 @@ export default function SignupPage() {
       <CardFooter className="justify-center">
         <p className="text-sm text-muted-foreground">
           Already have an account?{" "}
-          <Link href="/login" className="text-nocturn hover:underline">
+          <Link href="/login" className="text-nocturn-glow hover:underline">
             Sign in
           </Link>
         </p>
