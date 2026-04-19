@@ -340,27 +340,15 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           }, { onConflict: "collective_id,email", ignoreDuplicates: false });
 
-          // Backfill phone on attendee_profiles (insert-if-missing pattern)
-          await supabaseAdmin.from("attendee_profiles").upsert(
-            {
-              collective_id: event.collective_id,
-              email: buyerEmail,
-              phone: buyerPhone,
-              total_spent: 0,
-              total_tickets: 0,
-              total_events: 0,
-              segment: "new",
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "collective_id,email", ignoreDuplicates: true }
-          );
-          // Only fill phone if null so we never clobber an existing value
-          await supabaseAdmin
-            .from("attendee_profiles")
-            .update({ phone: buyerPhone })
-            .eq("collective_id", event.collective_id)
-            .eq("email", buyerEmail)
-            .is("phone", null);
+          // Backfill phone on contacts if missing (never clobber existing)
+          if (buyerPhone) {
+            await supabaseAdmin
+              .from("contacts")
+              .update({ phone: buyerPhone })
+              .eq("collective_id", event.collective_id)
+              .eq("email", buyerEmail)
+              .is("phone", null);
+          }
         }
       } catch (contactErr) {
         console.error("[checkout] Contact upsert failed (non-blocking):", contactErr);

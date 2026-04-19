@@ -569,18 +569,8 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
       });
 
       try {
-        const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+        const { trackTicketSold } = await import("@/lib/analytics");
         trackTicketSold(eventId, quantity, pricePaid * quantity);
-        if (buyerEmail) {
-          const { data: eventForAnalytics } = await admin
-            .from("events")
-            .select("collective_id")
-            .eq("id", eventId)
-            .maybeSingle();
-          if (eventForAnalytics?.collective_id) {
-            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
-          }
-        }
       } catch (analyticsErr) { console.error("[fulfillPaymentIntent] Analytics tracking failed (non-blocking):", analyticsErr); }
 
       return {
@@ -737,20 +727,8 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
 
     // Analytics tracking
     try {
-      const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+      const { trackTicketSold } = await import("@/lib/analytics");
       trackTicketSold(eventId, quantity, pricePaid * quantity);
-      if (buyerEmail) {
-        try {
-          const { data: eventForAnalytics } = await admin
-            .from("events")
-            .select("collective_id")
-            .eq("id", eventId)
-            .maybeSingle();
-          if (eventForAnalytics?.collective_id) {
-            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
-          }
-        } catch (profileErr) { console.error("[fulfillPaymentIntent] Attendee profile upsert failed (non-blocking):", profileErr); }
-      }
     } catch (analyticsErr) {
       console.error("[fulfillPaymentIntent] Analytics tracking failed (non-blocking):", analyticsErr);
     }

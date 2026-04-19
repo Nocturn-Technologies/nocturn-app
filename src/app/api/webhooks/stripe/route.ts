@@ -1459,14 +1459,6 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           }
         }
 
-        // Backfill attendee_profiles.phone if missing
-        if (buyerPhone) {
-          await supabase.from("attendee_profiles")
-            .update({ phone: buyerPhone })
-            .eq("collective_id", eventForContact.collective_id)
-            .eq("email", contactEmail)
-            .is("phone", null);
-        }
       }
     }
   } catch (contactErr) {
@@ -1504,22 +1496,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         });
       } catch { /* non-critical */ }
 
-      // Analytics tracking
+      // Analytics tracking (contact row is written inline above in the contacts insert/RPC)
       try {
-        const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+        const { trackTicketSold } = await import("@/lib/analytics");
         trackTicketSold(eventId, quantity, pricePaid * quantity);
-        const customerEmailForAnalytics = session.customer_email ?? session.customer_details?.email;
-        if (customerEmailForAnalytics) {
-          const { data: eventForAnalytics } = await supabase
-            .from("events")
-            .select("collective_id")
-            .eq("id", eventId)
-            .is("deleted_at", null)
-            .maybeSingle();
-          if (eventForAnalytics?.collective_id) {
-            upsertAttendeeProfile(eventForAnalytics.collective_id, customerEmailForAnalytics, eventId, pricePaid * quantity);
-          }
-        }
       } catch { /* non-critical */ }
 
       // Dedup: skip if email was already sent by the client action
@@ -1934,14 +1914,6 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
             }
           }
 
-          // Backfill attendee_profiles.phone if missing
-          if (buyerPhone) {
-            await supabase.from("attendee_profiles")
-              .update({ phone: buyerPhone })
-              .eq("collective_id", eventForContact.collective_id)
-              .eq("email", contactEmail)
-              .is("phone", null);
-          }
         }
       }
     } catch (contactErr) {
@@ -1978,21 +1950,11 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   return {
     backgroundWork: async () => {
       // Analytics tracking — only if tickets were newly created
+      // (Contact row is written inline above in the contacts insert/RPC path.)
       if (wasNewlyCreated) {
         try {
-          const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
+          const { trackTicketSold } = await import("@/lib/analytics");
           trackTicketSold(eventId, quantity, pricePaid * quantity);
-          if (buyerEmail) {
-            const { data: eventForAnalytics } = await supabase
-              .from("events")
-              .select("collective_id")
-              .eq("id", eventId)
-              .is("deleted_at", null)
-              .maybeSingle();
-            if (eventForAnalytics?.collective_id) {
-              upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
-            }
-          }
         } catch (err) {
           console.error("[stripe-webhook] Analytics tracking failed (non-blocking):", err);
         }

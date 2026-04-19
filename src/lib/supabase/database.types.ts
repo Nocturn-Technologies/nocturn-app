@@ -82,106 +82,6 @@ export type Database = {
           },
         ]
       }
-      attendee_profiles: {
-        Row: {
-          collective_id: string | null
-          created_at: string
-          email: string | null
-          favorite_genre: string | null
-          favorite_venue_id: string | null
-          first_event_at: string | null
-          first_purchase_at: string | null
-          full_name: string | null
-          id: string
-          last_event_at: string | null
-          last_purchase_at: string | null
-          metadata: Json | null
-          phone: string | null
-          referral_count: number | null
-          segment: string | null
-          tags: string[] | null
-          total_events: number | null
-          total_spend: number | null
-          total_spent: number | null
-          total_tickets: number | null
-          updated_at: string
-          user_id: string | null
-          vip_status: boolean | null
-        }
-        Insert: {
-          collective_id?: string | null
-          created_at?: string
-          email?: string | null
-          favorite_genre?: string | null
-          favorite_venue_id?: string | null
-          first_event_at?: string | null
-          first_purchase_at?: string | null
-          full_name?: string | null
-          id?: string
-          last_event_at?: string | null
-          last_purchase_at?: string | null
-          metadata?: Json | null
-          phone?: string | null
-          referral_count?: number | null
-          segment?: string | null
-          tags?: string[] | null
-          total_events?: number | null
-          total_spend?: number | null
-          total_spent?: number | null
-          total_tickets?: number | null
-          updated_at?: string
-          user_id?: string | null
-          vip_status?: boolean | null
-        }
-        Update: {
-          collective_id?: string | null
-          created_at?: string
-          email?: string | null
-          favorite_genre?: string | null
-          favorite_venue_id?: string | null
-          first_event_at?: string | null
-          first_purchase_at?: string | null
-          full_name?: string | null
-          id?: string
-          last_event_at?: string | null
-          last_purchase_at?: string | null
-          metadata?: Json | null
-          phone?: string | null
-          referral_count?: number | null
-          segment?: string | null
-          tags?: string[] | null
-          total_events?: number | null
-          total_spend?: number | null
-          total_spent?: number | null
-          total_tickets?: number | null
-          updated_at?: string
-          user_id?: string | null
-          vip_status?: boolean | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "attendee_profiles_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendee_profiles_favorite_venue_id_fkey"
-            columns: ["favorite_venue_id"]
-            isOneToOne: false
-            referencedRelation: "venues"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "attendee_profiles_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: true
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       audit_logs: {
         Row: {
           action: string
@@ -523,13 +423,16 @@ export type Database = {
           notes: string | null
           phone: string | null
           role: string | null
+          segment: string
           source: string
           source_detail: string | null
           tags: string[] | null
           total_events: number | null
           total_spend: number | null
+          total_tickets: number
           updated_at: string
           user_id: string | null
+          vip_status: boolean
         }
         Insert: {
           artist_id?: string | null
@@ -549,13 +452,16 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           role?: string | null
+          segment?: string
           source?: string
           source_detail?: string | null
           tags?: string[] | null
           total_events?: number | null
           total_spend?: number | null
+          total_tickets?: number
           updated_at?: string
           user_id?: string | null
+          vip_status?: boolean
         }
         Update: {
           artist_id?: string | null
@@ -575,13 +481,16 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           role?: string | null
+          segment?: string
           source?: string
           source_detail?: string | null
           tags?: string[] | null
           total_events?: number | null
           total_spend?: number | null
+          total_tickets?: number
           updated_at?: string
           user_id?: string | null
+          vip_status?: boolean
         }
         Relationships: [
           {
@@ -2467,13 +2376,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "segment_members_attendee_profile_id_fkey"
-            columns: ["attendee_profile_id"]
-            isOneToOne: false
-            referencedRelation: "attendee_profiles"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "segment_members_segment_id_fkey"
             columns: ["segment_id"]
             isOneToOne: false
@@ -3366,10 +3268,6 @@ export type Database = {
       }
       increment_analytics_counter: {
         Args: { p_column: string; p_event_id: string; p_value?: number }
-        Returns: undefined
-      }
-      increment_attendee_profile: {
-        Args: { p_collective_id: string; p_email: string; p_spent: number }
         Returns: undefined
       }
       increment_promo_click: { Args: { p_link_id: string }; Returns: undefined }
