@@ -395,7 +395,7 @@ function contactToIndustry(c: Contact): IndustryContact {
     city: (meta.city as string) ?? null,
     email: c.email ?? null,
     phone: c.phone ?? null,
-    instagramHandle: c.instagram ?? null,
+    instagramHandle: null,
     soundcloudUrl: (meta.soundcloud_url as string) ?? null,
     spotifyUrl: (meta.spotify_url as string) ?? null,
     websiteUrl: (meta.website_url as string) ?? null,

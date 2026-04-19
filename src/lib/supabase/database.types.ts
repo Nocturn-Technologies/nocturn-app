@@ -23,13 +23,12 @@ export type Database = {
           deleted_at: string | null
           genre: string[] | null
           id: string
-          instagram: string | null
           metadata: Json | null
           name: string
+          party_id: string | null
           phone: string | null
           photo_url: string | null
           slug: string
-          soundcloud: string | null
           spotify: string | null
           updated_at: string
           user_id: string | null
@@ -42,13 +41,12 @@ export type Database = {
           deleted_at?: string | null
           genre?: string[] | null
           id?: string
-          instagram?: string | null
           metadata?: Json | null
           name: string
+          party_id?: string | null
           phone?: string | null
           photo_url?: string | null
           slug: string
-          soundcloud?: string | null
           spotify?: string | null
           updated_at?: string
           user_id?: string | null
@@ -61,18 +59,24 @@ export type Database = {
           deleted_at?: string | null
           genre?: string[] | null
           id?: string
-          instagram?: string | null
           metadata?: Json | null
           name?: string
+          party_id?: string | null
           phone?: string | null
           photo_url?: string | null
           slug?: string
-          soundcloud?: string | null
           spotify?: string | null
           updated_at?: string
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "artists_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "artists_user_id_fkey"
             columns: ["user_id"]
@@ -175,7 +179,7 @@ export type Database = {
       }
       channels: {
         Row: {
-          collective_id: string
+          collective_id: string | null
           created_at: string | null
           event_id: string | null
           id: string
@@ -185,7 +189,7 @@ export type Database = {
           type: string
         }
         Insert: {
-          collective_id: string
+          collective_id?: string | null
           created_at?: string | null
           event_id?: string | null
           id?: string
@@ -195,7 +199,7 @@ export type Database = {
           type?: string
         }
         Update: {
-          collective_id?: string
+          collective_id?: string | null
           created_at?: string | null
           event_id?: string | null
           id?: string
@@ -243,6 +247,7 @@ export type Database = {
           id: string
           invited_by: string | null
           joined_at: string
+          party_id: string | null
           role: Database["public"]["Enums"]["collective_role"]
           updated_at: string
           user_id: string
@@ -254,6 +259,7 @@ export type Database = {
           id?: string
           invited_by?: string | null
           joined_at?: string
+          party_id?: string | null
           role?: Database["public"]["Enums"]["collective_role"]
           updated_at?: string
           user_id: string
@@ -265,6 +271,7 @@ export type Database = {
           id?: string
           invited_by?: string | null
           joined_at?: string
+          party_id?: string | null
           role?: Database["public"]["Enums"]["collective_role"]
           updated_at?: string
           user_id?: string
@@ -285,6 +292,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "collective_members_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "collective_members_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
@@ -302,10 +316,10 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
-          instagram: string | null
           logo_url: string | null
           metadata: Json | null
           name: string
+          party_id: string | null
           referral_code: string | null
           slug: string
           stripe_account_id: string | null
@@ -316,7 +330,6 @@ export type Database = {
           stripe_requirements_currently_due: string[]
           stripe_status_updated_at: string | null
           updated_at: string
-          website: string | null
         }
         Insert: {
           bio?: string | null
@@ -326,10 +339,10 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
-          instagram?: string | null
           logo_url?: string | null
           metadata?: Json | null
           name: string
+          party_id?: string | null
           referral_code?: string | null
           slug: string
           stripe_account_id?: string | null
@@ -340,7 +353,6 @@ export type Database = {
           stripe_requirements_currently_due?: string[]
           stripe_status_updated_at?: string | null
           updated_at?: string
-          website?: string | null
         }
         Update: {
           bio?: string | null
@@ -350,10 +362,10 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
-          instagram?: string | null
           logo_url?: string | null
           metadata?: Json | null
           name?: string
+          party_id?: string | null
           referral_code?: string | null
           slug?: string
           stripe_account_id?: string | null
@@ -364,9 +376,16 @@ export type Database = {
           stripe_requirements_currently_due?: string[]
           stripe_status_updated_at?: string | null
           updated_at?: string
-          website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "collectives_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       contacts: {
         Row: {
@@ -380,11 +399,11 @@ export type Database = {
           follow_up_at: string | null
           full_name: string | null
           id: string
-          instagram: string | null
           last_seen_at: string | null
           marketplace_profile_id: string | null
           metadata: Json | null
           notes: string | null
+          party_id: string | null
           phone: string | null
           role: string | null
           segment: string
@@ -409,11 +428,11 @@ export type Database = {
           follow_up_at?: string | null
           full_name?: string | null
           id?: string
-          instagram?: string | null
           last_seen_at?: string | null
           marketplace_profile_id?: string | null
           metadata?: Json | null
           notes?: string | null
+          party_id?: string | null
           phone?: string | null
           role?: string | null
           segment?: string
@@ -438,11 +457,11 @@ export type Database = {
           follow_up_at?: string | null
           full_name?: string | null
           id?: string
-          instagram?: string | null
           last_seen_at?: string | null
           marketplace_profile_id?: string | null
           metadata?: Json | null
           notes?: string | null
+          party_id?: string | null
           phone?: string | null
           role?: string | null
           segment?: string
@@ -469,6 +488,13 @@ export type Database = {
             columns: ["collective_id"]
             isOneToOne: false
             referencedRelation: "collectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contacts_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
             referencedColumns: ["id"]
           },
           {
@@ -717,6 +743,7 @@ export type Database = {
           hotel_cost: number | null
           id: string
           notes: string | null
+          party_id: string | null
           set_duration: number | null
           set_time: string | null
           status: Database["public"]["Enums"]["booking_status"]
@@ -735,6 +762,7 @@ export type Database = {
           hotel_cost?: number | null
           id?: string
           notes?: string | null
+          party_id?: string | null
           set_duration?: number | null
           set_time?: string | null
           status?: Database["public"]["Enums"]["booking_status"]
@@ -753,6 +781,7 @@ export type Database = {
           hotel_cost?: number | null
           id?: string
           notes?: string | null
+          party_id?: string | null
           set_duration?: number | null
           set_time?: string | null
           status?: Database["public"]["Enums"]["booking_status"]
@@ -787,6 +816,13 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_artists_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
             referencedColumns: ["id"]
           },
         ]
@@ -991,6 +1027,55 @@ export type Database = {
           },
         ]
       }
+      event_status_log: {
+        Row: {
+          changed_by: string | null
+          event_id: string
+          id: string
+          note: string | null
+          occurred_at: string
+          status: Database["public"]["Enums"]["event_status_type"]
+        }
+        Insert: {
+          changed_by?: string | null
+          event_id: string
+          id?: string
+          note?: string | null
+          occurred_at?: string
+          status: Database["public"]["Enums"]["event_status_type"]
+        }
+        Update: {
+          changed_by?: string | null
+          event_id?: string
+          id?: string
+          note?: string | null
+          occurred_at?: string
+          status?: Database["public"]["Enums"]["event_status_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_status_log_changed_by_fkey"
+            columns: ["changed_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_status_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "event_dashboard"
+            referencedColumns: ["event_id"]
+          },
+          {
+            foreignKeyName: "event_status_log_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_tasks: {
         Row: {
           assigned_to: string | null
@@ -1137,6 +1222,7 @@ export type Database = {
           venue_cost: number | null
           venue_deposit: number | null
           venue_id: string | null
+          venue_party_id: string | null
           vibe_tags: string[] | null
         }
         Insert: {
@@ -1166,6 +1252,7 @@ export type Database = {
           venue_cost?: number | null
           venue_deposit?: number | null
           venue_id?: string | null
+          venue_party_id?: string | null
           vibe_tags?: string[] | null
         }
         Update: {
@@ -1195,6 +1282,7 @@ export type Database = {
           venue_cost?: number | null
           venue_deposit?: number | null
           venue_id?: string | null
+          venue_party_id?: string | null
           vibe_tags?: string[] | null
         }
         Relationships: [
@@ -1210,6 +1298,13 @@ export type Database = {
             columns: ["venue_id"]
             isOneToOne: false
             referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_venue_party_id_fkey"
+            columns: ["venue_party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
             referencedColumns: ["id"]
           },
         ]
@@ -1534,20 +1629,18 @@ export type Database = {
           display_name: string
           genres: string[] | null
           id: string
-          instagram_handle: string | null
           is_active: boolean | null
           is_verified: boolean | null
+          party_id: string | null
           past_venues: string[] | null
           portfolio_urls: string[] | null
           rate_range: string | null
           services: string[] | null
           slug: string
-          soundcloud_url: string | null
           spotify_url: string | null
           updated_at: string | null
           user_id: string
           user_type: string
-          website_url: string | null
         }
         Insert: {
           availability?: string | null
@@ -1559,20 +1652,18 @@ export type Database = {
           display_name: string
           genres?: string[] | null
           id?: string
-          instagram_handle?: string | null
           is_active?: boolean | null
           is_verified?: boolean | null
+          party_id?: string | null
           past_venues?: string[] | null
           portfolio_urls?: string[] | null
           rate_range?: string | null
           services?: string[] | null
           slug: string
-          soundcloud_url?: string | null
           spotify_url?: string | null
           updated_at?: string | null
           user_id: string
           user_type: string
-          website_url?: string | null
         }
         Update: {
           availability?: string | null
@@ -1584,22 +1675,27 @@ export type Database = {
           display_name?: string
           genres?: string[] | null
           id?: string
-          instagram_handle?: string | null
           is_active?: boolean | null
           is_verified?: boolean | null
+          party_id?: string | null
           past_venues?: string[] | null
           portfolio_urls?: string[] | null
           rate_range?: string | null
           services?: string[] | null
           slug?: string
-          soundcloud_url?: string | null
           spotify_url?: string | null
           updated_at?: string | null
           user_id?: string
           user_type?: string
-          website_url?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "marketplace_profiles_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "marketplace_profiles_user_id_fkey"
             columns: ["user_id"]
@@ -1686,6 +1782,107 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parties: {
+        Row: {
+          created_at: string
+          display_name: string
+          id: string
+          type: Database["public"]["Enums"]["party_type"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          display_name: string
+          id?: string
+          type: Database["public"]["Enums"]["party_type"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string
+          id?: string
+          type?: Database["public"]["Enums"]["party_type"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      party_contact_methods: {
+        Row: {
+          created_at: string
+          id: string
+          is_primary: boolean
+          party_id: string
+          type: Database["public"]["Enums"]["contact_method_type"]
+          value: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          party_id: string
+          type: Database["public"]["Enums"]["contact_method_type"]
+          value: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_primary?: boolean
+          party_id?: string
+          type?: Database["public"]["Enums"]["contact_method_type"]
+          value?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "party_contact_methods_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      party_roles: {
+        Row: {
+          collective_id: string | null
+          created_at: string
+          id: string
+          metadata: Json | null
+          party_id: string
+          role: Database["public"]["Enums"]["party_role_type"]
+        }
+        Insert: {
+          collective_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          party_id: string
+          role: Database["public"]["Enums"]["party_role_type"]
+        }
+        Update: {
+          collective_id?: string | null
+          created_at?: string
+          id?: string
+          metadata?: Json | null
+          party_id?: string
+          role?: Database["public"]["Enums"]["party_role_type"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "party_roles_collective_id_fkey"
+            columns: ["collective_id"]
+            isOneToOne: false
+            referencedRelation: "collectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "party_roles_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
             referencedColumns: ["id"]
           },
         ]
@@ -1984,6 +2181,52 @@ export type Database = {
             columns: ["promo_link_id"]
             isOneToOne: false
             referencedRelation: "promo_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promo_code_usage: {
+        Row: {
+          id: string
+          party_id: string | null
+          promo_code_id: string
+          ticket_id: string
+          used_at: string
+        }
+        Insert: {
+          id?: string
+          party_id?: string | null
+          promo_code_id: string
+          ticket_id: string
+          used_at?: string
+        }
+        Update: {
+          id?: string
+          party_id?: string | null
+          promo_code_id?: string
+          ticket_id?: string
+          used_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promo_code_usage_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promo_code_usage_promo_code_id_fkey"
+            columns: ["promo_code_id"]
+            isOneToOne: false
+            referencedRelation: "promo_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promo_code_usage_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
             referencedColumns: ["id"]
           },
         ]
@@ -2464,6 +2707,48 @@ export type Database = {
           },
         ]
       }
+      ticket_events: {
+        Row: {
+          event_type: Database["public"]["Enums"]["ticket_event_type"]
+          id: string
+          metadata: Json | null
+          occurred_at: string
+          party_id: string | null
+          ticket_id: string
+        }
+        Insert: {
+          event_type: Database["public"]["Enums"]["ticket_event_type"]
+          id?: string
+          metadata?: Json | null
+          occurred_at?: string
+          party_id?: string | null
+          ticket_id: string
+        }
+        Update: {
+          event_type?: Database["public"]["Enums"]["ticket_event_type"]
+          id?: string
+          metadata?: Json | null
+          occurred_at?: string
+          party_id?: string | null
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_events_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_events_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ticket_tiers: {
         Row: {
           capacity: number | null
@@ -2654,6 +2939,7 @@ export type Database = {
           is_approved: boolean
           is_denied: boolean | null
           metadata: Json | null
+          party_id: string | null
           phone: string | null
           stripe_account_id: string | null
           updated_at: string
@@ -2672,6 +2958,7 @@ export type Database = {
           is_approved?: boolean
           is_denied?: boolean | null
           metadata?: Json | null
+          party_id?: string | null
           phone?: string | null
           stripe_account_id?: string | null
           updated_at?: string
@@ -2690,12 +2977,21 @@ export type Database = {
           is_approved?: boolean
           is_denied?: boolean | null
           metadata?: Json | null
+          party_id?: string | null
           phone?: string | null
           stripe_account_id?: string | null
           updated_at?: string
           user_type?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "users_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       venues: {
         Row: {
@@ -2710,17 +3006,16 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
-          instagram: string | null
           latitude: number | null
           longitude: number | null
           metadata: Json | null
           name: string
+          party_id: string | null
           postal_code: string | null
           slug: string
           state: string | null
           stripe_account_id: string | null
           updated_at: string
-          website: string | null
         }
         Insert: {
           address?: string | null
@@ -2734,17 +3029,16 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
-          instagram?: string | null
           latitude?: number | null
           longitude?: number | null
           metadata?: Json | null
           name: string
+          party_id?: string | null
           postal_code?: string | null
           slug: string
           state?: string | null
           stripe_account_id?: string | null
           updated_at?: string
-          website?: string | null
         }
         Update: {
           address?: string | null
@@ -2758,19 +3052,26 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
-          instagram?: string | null
           latitude?: number | null
           longitude?: number | null
           metadata?: Json | null
           name?: string
+          party_id?: string | null
           postal_code?: string | null
           slug?: string
           state?: string | null
           stripe_account_id?: string | null
           updated_at?: string
-          website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "venues_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       waitlist_entries: {
         Row: {
@@ -3008,6 +3309,14 @@ export type Database = {
         | "door_staff"
         | "member"
         | "owner"
+      contact_method_type:
+        | "email"
+        | "phone"
+        | "instagram"
+        | "soundcloud"
+        | "spotify"
+        | "website"
+        | "twitter"
       event_collective_role: "primary" | "co_host" | "sponsor"
       event_status:
         | "draft"
@@ -3016,6 +3325,14 @@ export type Database = {
         | "completed"
         | "upcoming"
         | "settled"
+      event_status_type: "draft" | "published" | "cancelled" | "wrapped"
+      party_role_type:
+        | "artist"
+        | "collective"
+        | "venue_operator"
+        | "platform_user"
+        | "contact"
+      party_type: "person" | "organization" | "venue"
       payout_status: "pending" | "processing" | "completed" | "failed"
       settlement_status:
         | "draft"
@@ -3024,6 +3341,12 @@ export type Database = {
         | "paid_out"
         | "disputed"
         | "sent"
+      ticket_event_type:
+        | "purchased"
+        | "transferred"
+        | "checked_in"
+        | "refunded"
+        | "voided"
       ticket_status:
         | "reserved"
         | "paid"
@@ -3032,6 +3355,13 @@ export type Database = {
         | "cancelled"
         | "free"
         | "pending"
+      transaction_type:
+        | "ticket_sale"
+        | "refund"
+        | "payout"
+        | "adjustment"
+        | "platform_fee"
+        | "stripe_fee"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3170,6 +3500,15 @@ export const Constants = {
         "member",
         "owner",
       ],
+      contact_method_type: [
+        "email",
+        "phone",
+        "instagram",
+        "soundcloud",
+        "spotify",
+        "website",
+        "twitter",
+      ],
       event_collective_role: ["primary", "co_host", "sponsor"],
       event_status: [
         "draft",
@@ -3179,6 +3518,15 @@ export const Constants = {
         "upcoming",
         "settled",
       ],
+      event_status_type: ["draft", "published", "cancelled", "wrapped"],
+      party_role_type: [
+        "artist",
+        "collective",
+        "venue_operator",
+        "platform_user",
+        "contact",
+      ],
+      party_type: ["person", "organization", "venue"],
       payout_status: ["pending", "processing", "completed", "failed"],
       settlement_status: [
         "draft",
@@ -3187,6 +3535,13 @@ export const Constants = {
         "paid_out",
         "disputed",
         "sent",
+      ],
+      ticket_event_type: [
+        "purchased",
+        "transferred",
+        "checked_in",
+        "refunded",
+        "voided",
       ],
       ticket_status: [
         "reserved",
@@ -3197,7 +3552,14 @@ export const Constants = {
         "free",
         "pending",
       ],
+      transaction_type: [
+        "ticket_sale",
+        "refund",
+        "payout",
+        "adjustment",
+        "platform_fee",
+        "stripe_fee",
+      ],
     },
   },
 } as const
-

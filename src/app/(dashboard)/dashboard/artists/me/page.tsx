@@ -15,8 +15,6 @@ interface ArtistProfile {
   name: string;
   bio: string | null;
   genre: string[];
-  instagram: string | null;
-  soundcloud: string | null;
   spotify: string | null;
   booking_email: string | null;
   default_fee: number | null;
@@ -64,8 +62,6 @@ export default function ArtistMePage() {
       setName(artist.name ?? "");
       setBio(artist.bio ?? "");
       setGenre((artist.genre ?? []).join(", "));
-      setInstagram(artist.instagram ?? "");
-      setSoundcloud(artist.soundcloud ?? "");
       setSpotify(artist.spotify ?? "");
       setBookingEmail(artist.booking_email ?? "");
       setDefaultFee(artist.default_fee ? String(artist.default_fee) : "");
@@ -108,8 +104,6 @@ export default function ArtistMePage() {
           name,
           bio: bio || null,
           genre: genres,
-          instagram: instagram || null,
-          soundcloud: soundcloud || null,
           spotify: spotify || null,
           booking_email: bookingEmail || null,
           default_fee: defaultFee ? parseFloat(defaultFee) : null,
@@ -129,8 +123,6 @@ export default function ArtistMePage() {
         name,
         bio: bio || null,
         genre: genres,
-        instagram: instagram || null,
-        soundcloud: soundcloud || null,
         spotify: spotify || null,
         bookingEmail: bookingEmail || null,
         defaultFee: defaultFee ? parseFloat(defaultFee) : null,

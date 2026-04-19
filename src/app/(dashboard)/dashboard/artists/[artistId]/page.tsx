@@ -11,7 +11,6 @@ import {
 import {
   ArrowLeft,
   Music,
-  Instagram,
   Mail,
   DollarSign,
   Calendar,
@@ -27,8 +26,6 @@ interface Artist {
   slug: string;
   bio: string | null;
   genre: string[];
-  instagram: string | null;
-  soundcloud: string | null;
   spotify: string | null;
   booking_email: string | null;
   default_fee: number | null;
@@ -68,7 +65,7 @@ export default function ArtistDetailPage() {
     const { data: artistData } = await supabase
       .from("artists")
       .select(
-        "id, name, slug, bio, genre, instagram, soundcloud, spotify, booking_email, default_fee"
+        "id, name, slug, bio, genre, spotify, booking_email, default_fee"
       )
       .eq("id", artistId)
       .maybeSingle();
@@ -206,19 +203,6 @@ export default function ArtistDetailPage() {
               <p className="text-sm text-muted-foreground">{artist.bio}</p>
             </div>
           )}
-          {artist.instagram && (
-            <div className="flex items-center gap-2 text-sm">
-              <Instagram className="h-4 w-4 text-muted-foreground" />
-              <a
-                href={`https://instagram.com/${artist.instagram.replace("@", "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-nocturn hover:underline"
-              >
-                {artist.instagram}
-              </a>
-            </div>
-          )}
           {artist.booking_email && (
             <div className="flex items-center gap-2 text-sm">
               <Mail className="h-4 w-4 text-muted-foreground" />
@@ -240,30 +224,11 @@ export default function ArtistDetailPage() {
       </Card>
 
       {/* Music Links */}
-      {(artist.soundcloud || artist.spotify) && (
+      {artist.spotify && (
         <Card>
           <CardContent className="p-4 space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Listen</p>
             <div className="flex flex-col gap-2">
-              {artist.soundcloud && (
-                <a
-                  href={artist.soundcloud.startsWith("http") ? artist.soundcloud : `https://soundcloud.com/${artist.soundcloud}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 rounded-lg border border-orange-500/20 bg-orange-500/5 p-3 hover:bg-orange-500/10 transition-colors"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/20">
-                    <svg className="h-5 w-5 text-orange-400" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M11.56 8.87V17h8.76c1.85 0 2.68-1.22 2.68-2.68 0-2.3-1.73-3.38-3.38-3.38-.58 0-.87.08-1.15.17-.38-2.49-2.49-3.24-3.82-3.24-1.3 0-2.42.6-3.09 1z"/>
-                      <path d="M10.5 9.56V17h.5V8.87c-.17.17-.33.4-.5.69zm-1.5 2.4V17h.75V11.12c-.25.23-.5.5-.75.84zm-1.5 1.97V17h.75v-2.37c-.2.17-.45.4-.75.7zM6 15.27V17h.75v-1.73c-.18.12-.42.3-.75.55zM4.5 16.18V17h.75v-.82c-.25.15-.5.37-.75.55zM3 16.73V17h.75v-.27c-.25.1-.5.2-.75.3z"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-orange-400">SoundCloud</p>
-                    <p className="text-xs text-muted-foreground">Listen to tracks</p>
-                  </div>
-                </a>
-              )}
               {artist.spotify && (
                 <a
                   href={artist.spotify.startsWith("http") ? artist.spotify : `https://open.spotify.com/artist/${artist.spotify}`}

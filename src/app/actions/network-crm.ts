@@ -168,8 +168,6 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
         id: string;
         name: string;
         slug: string | null;
-        instagram: string | null;
-        soundcloud: string | null;
         spotify: string | null;
         bio: string | null;
         genre: string[] | null;
@@ -180,7 +178,7 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
     let eventArtistRows: EventArtistRow[] = [];
     if (eventIds.length > 0) {
       const { data: eaData } = await admin.from("event_artists")
-        .select("artist_id, event_id, artists(id, name, slug, instagram, soundcloud, spotify, bio, genre, metadata)")
+        .select("artist_id, event_id, artists(id, name, slug, spotify, bio, genre, metadata)")
         .in("event_id", eventIds)
         .in("status", ["confirmed", "pending"]);
 
@@ -244,10 +242,10 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
         city: (profile.city as string) ?? null,
         email: null,
         phone: null,
-        instagramHandle: (profile.instagram_handle as string) ?? null,
-        soundcloudUrl: (profile.soundcloud_url as string) ?? null,
+        instagramHandle: null,
+        soundcloudUrl: null,
         spotifyUrl: (profile.spotify_url as string) ?? null,
-        websiteUrl: (profile.website_url as string) ?? null,
+        websiteUrl: null,
         eventsWorked: 0,
         lastCollabDate: latestContact?.created_at ?? null,
         isSaved: savedProfileIds.has(profileId),
@@ -287,8 +285,8 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
           city: location,
           email: null,
           phone: null,
-          instagramHandle: artist.instagram ?? null,
-          soundcloudUrl: artist.soundcloud ?? null,
+          instagramHandle: null,
+          soundcloudUrl: null,
           spotifyUrl: artist.spotify ?? null,
           websiteUrl: null,
           eventsWorked: artistEventIds.length,

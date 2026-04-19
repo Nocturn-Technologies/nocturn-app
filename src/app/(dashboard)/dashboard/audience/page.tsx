@@ -153,18 +153,8 @@ export default function AudiencePage() {
 
       let textToCopy = "";
       if (insight.actionType === "copy_handles") {
-        // Copy IG handles for the relevant segment
-        const fans = result.contacts.filter((c) => c.instagram);
-        if (insight.id === "ambassador_candidates" || insight.id === "potential_ambassadors") {
-          textToCopy = fans
-            .filter((c) => c.totalEvents >= 2)
-            .map((c) => `@${c.instagram!.replace(/^@/, "")}`)
-            .join("\n");
-        } else {
-          textToCopy = fans
-            .map((c) => `@${c.instagram!.replace(/^@/, "")}`)
-            .join("\n");
-        }
+        // IG handles removed — fall through to email copy
+        textToCopy = "";
       } else if (insight.actionType === "copy_emails") {
         const fans = result.contacts.filter((c) => c.email);
         if (insight.id === "core_crew") {

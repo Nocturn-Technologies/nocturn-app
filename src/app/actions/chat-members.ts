@@ -94,7 +94,7 @@ export async function getChannelMembers(
       .eq("id", channelId)
       .maybeSingle();
 
-    if (!channel) return [];
+    if (!channel || !channel.collective_id) return [];
 
     // Verify caller is a member of the channel's collective
     const membership = await verifyCollectiveMembership(
@@ -184,7 +184,7 @@ export async function addChannelMember(
       .eq("id", channelId)
       .maybeSingle();
 
-    if (!channel) return { error: "Channel not found" };
+    if (!channel || !channel.collective_id) return { error: "Channel not found" };
 
     // Verify caller is admin or manager
     const membership = await verifyCollectiveMembership(
@@ -262,7 +262,7 @@ export async function removeChannelMember(
       .eq("id", channelId)
       .maybeSingle();
 
-    if (!channel) return { error: "Channel not found" };
+    if (!channel || !channel.collective_id) return { error: "Channel not found" };
 
     // Verify caller is admin or manager
     const membership = await verifyCollectiveMembership(
@@ -323,7 +323,7 @@ export async function searchInvitableUsers(
       .eq("id", channelId)
       .maybeSingle();
 
-    if (!channel) return [];
+    if (!channel || !channel.collective_id) return [];
 
     // Verify caller is a member of the collective
     const membership = await verifyCollectiveMembership(
@@ -500,7 +500,7 @@ export async function searchInvitableUsers(
           .from("collectives")
           .select("id, name, collective_members!inner(user_id, role, users!inner(id, full_name, email))")
           .ilike("name", `%${sanitized}%`)
-          .neq("id", channel.collective_id)
+          .neq("id", channel.collective_id ?? "")
           .limit(10);
 
         if (platformCollectives) {
@@ -632,7 +632,7 @@ export async function syncEventMembers(
       .eq("type", "event")
       .maybeSingle();
 
-    if (!eventChannel) return { error: "Event channel not found" };
+    if (!eventChannel || !eventChannel.collective_id) return { error: "Event channel not found" };
 
     // Verify caller is a member of the collective
     const membership = await verifyCollectiveMembership(
@@ -642,11 +642,11 @@ export async function syncEventMembers(
     );
     if (!membership) return { error: "Not a member of this collective" };
 
-    // Get collective members
+    // Get collective members (collective_id is guaranteed non-null by the guard above)
     const { data: teamMembers } = await sb
       .from("collective_members")
       .select("user_id, role")
-      .eq("collective_id", eventChannel.collective_id)
+      .eq("collective_id", eventChannel.collective_id!)
       .is("deleted_at", null);
 
     // Get event artists that have linked user accounts

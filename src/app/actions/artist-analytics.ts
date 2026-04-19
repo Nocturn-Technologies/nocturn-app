@@ -7,7 +7,6 @@ export interface ArtistPerformance {
   artistId: string;
   artistName: string;
   genre: string[];
-  instagram: string | null;
   location: string | null;
   totalEvents: number;
   totalTicketsSold: number;
@@ -74,7 +73,7 @@ export async function getArtistPerformanceAnalytics(): Promise<{
 
     // Get all artist bookings for these events
     const { data: bookings } = await admin.from("event_artists")
-      .select("artist_id, event_id, created_at, artists(id, name, genre, instagram, metadata), events(starts_at)")
+      .select("artist_id, event_id, created_at, artists(id, name, genre, metadata), events(starts_at)")
       .in("event_id", eventIds)
       .neq("status", "cancelled");
 
@@ -102,14 +101,13 @@ export async function getArtistPerformanceAnalytics(): Promise<{
     interface BookingRow {
       artist_id: string;
       event_id: string;
-      artists: { id: string; name: string; genre: string[] | null; instagram: string | null; metadata: { location?: string } | null } | null;
+      artists: { id: string; name: string; genre: string[] | null; metadata: { location?: string } | null } | null;
       events: { starts_at: string } | null;
     }
 
     const artistMap = new Map<string, {
       name: string;
       genre: string[];
-      instagram: string | null;
       location: string | null;
       eventIds: Set<string>;
       lastBookedDate: string | null;
@@ -129,7 +127,6 @@ export async function getArtistPerformanceAnalytics(): Promise<{
         artistMap.set(b.artist_id, {
           name: b.artists.name,
           genre: b.artists.genre ?? [],
-          instagram: b.artists.instagram,
           location: (b.artists.metadata as { location?: string })?.location ?? null,
           eventIds: new Set([b.event_id]),
           lastBookedDate: startsAt,
@@ -163,7 +160,6 @@ export async function getArtistPerformanceAnalytics(): Promise<{
         artistId,
         artistName: data.name,
         genre: data.genre,
-        instagram: data.instagram,
         location: data.location,
         totalEvents,
         totalTicketsSold,

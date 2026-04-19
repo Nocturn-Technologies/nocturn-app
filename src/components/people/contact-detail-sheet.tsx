@@ -139,7 +139,7 @@ export function ContactDetailSheet({
     setEditName(c.fullName ?? "");
     setEditEmail(c.email ?? "");
     setEditPhone(c.phone ?? "");
-    setEditInstagram(c.instagram ?? "");
+    setEditInstagram("");
     setEditRole(c.role ?? "");
     setEditTags(c.tags ?? []);
     setEditNotes(c.notes ?? "");
@@ -188,7 +188,6 @@ export function ContactDetailSheet({
         fullName: editName || undefined,
         email: editEmail || undefined,
         phone: editPhone || undefined,
-        instagram: editInstagram || undefined,
         ...(contact.contactType === "industry" && editRole
           ? { role: editRole }
           : {}),
@@ -545,19 +544,6 @@ export function ContactDetailSheet({
                       className="hover:text-foreground transition-colors"
                     >
                       {contact.phone}
-                    </a>
-                  </div>
-                )}
-                {contact.instagram && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Instagram className="h-3 w-3 shrink-0" />
-                    <a
-                      href={`https://instagram.com/${contact.instagram.replace(/^@/, "")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-pink-400 transition-colors"
-                    >
-                      @{contact.instagram.replace(/^@/, "")}
                     </a>
                   </div>
                 )}

@@ -8,8 +8,6 @@ import {
   MapPin,
   Calendar,
   MessageSquareHeart,
-  Instagram,
-  Globe,
   Sparkles,
   CheckCircle2,
 } from "lucide-react";
@@ -159,30 +157,6 @@ export function CollectiveCard({
           </Link>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          {collective.instagram && (
-            <a
-              href={`https://instagram.com/${collective.instagram.replace("@", "")}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
-              aria-label="Instagram"
-            >
-              <Instagram className="h-3.5 w-3.5" />
-            </a>
-          )}
-          {collective.website && (
-            <a
-              href={collective.website.startsWith("http") ? collective.website : `https://${collective.website}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="text-muted-foreground hover:text-foreground transition-colors min-h-[44px] min-w-[44px] inline-flex items-center justify-center"
-              aria-label="Website"
-            >
-              <Globe className="h-3.5 w-3.5" />
-            </a>
-          )}
         </div>
       </div>
 

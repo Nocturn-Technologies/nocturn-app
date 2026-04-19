@@ -10,8 +10,6 @@ export interface DiscoverCollective {
   description: string | null;
   bio: string | null;
   logo_url: string | null;
-  website: string | null;
-  instagram: string | null;
   city: string | null;
   member_count: number;
   event_count: number;
@@ -62,7 +60,7 @@ export async function getDiscoverCollectives(opts?: {
   // Build query
   let builder = sb
     .from("collectives")
-    .select("id, name, slug, description, bio, logo_url, website, instagram, city, created_at", {
+    .select("id, name, slug, description, bio, logo_url, city, created_at", {
       count: "exact",
     });
 
@@ -168,8 +166,6 @@ export async function getDiscoverCollectives(opts?: {
       description: c.description,
       bio: c.bio,
       logo_url: c.logo_url,
-      website: c.website,
-      instagram: c.instagram,
       city: c.city,
       member_count: memberMap.get(c.id) ?? 0,
       event_count: stats?.total ?? 0,

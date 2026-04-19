@@ -14,7 +14,6 @@ export interface Contact {
   email: string | null;
   phone: string | null;
   fullName: string | null;
-  instagram: string | null;
   role: string | null;
   source: string;
   sourceDetail: string | null;
@@ -83,7 +82,6 @@ type ContactFieldInput = {
   fullName?: string | null;
   email?: string | null;
   phone?: string | null;
-  instagram?: string | null;
   notes?: string | null;
   role?: string | null;
 };
@@ -92,7 +90,6 @@ type ContactFieldOutput = {
   fullName?: string | null;
   email?: string | null;
   phone?: string | null;
-  instagram?: string | null;
   notes?: string | null;
   role?: string | null;
 };
@@ -161,21 +158,6 @@ function validateContactFields(
     }
   }
 
-  if (input.instagram !== undefined) {
-    if (input.instagram === null) {
-      data.instagram = null;
-    } else {
-      const trimmed = String(input.instagram).trim().replace(/^@/, "");
-      if (trimmed.length === 0) {
-        data.instagram = null;
-      } else if (trimmed.length > 100) {
-        return { error: "Instagram handle is too long (max 100 characters)", data: null };
-      } else {
-        data.instagram = trimmed;
-      }
-    }
-  }
-
   if (input.notes !== undefined) {
     if (input.notes === null) {
       data.notes = null;
@@ -221,7 +203,6 @@ function rowToContact(row: Record<string, unknown>): Contact {
     email: (row.email as string) ?? null,
     phone: (row.phone as string) ?? null,
     fullName: (row.full_name as string) ?? null,
-    instagram: (row.instagram as string) ?? null,
     role: (row.role as string) ?? null,
     source: row.source as string,
     sourceDetail: (row.source_detail as string) ?? null,
@@ -653,7 +634,6 @@ export async function importContacts(
     email: string;
     fullName?: string;
     phone?: string;
-    instagram?: string;
   };
 
   const parsed: ParsedRow[] = [];
@@ -673,10 +653,6 @@ export async function importContacts(
     const phoneIdx = headers.findIndex((h) =>
       ["phone", "phone_number", "phonenumber", "phone number", "mobile", "cell"].includes(h)
     );
-    const igIdx = headers.findIndex((h) =>
-      ["instagram", "ig", "instagram_handle", "ig_handle", "instagram handle"].includes(h)
-    );
-
     if (emailIdx === -1) {
       return { error: "Could not find an email column in the CSV header", result: null };
     }
@@ -691,7 +667,6 @@ export async function importContacts(
         email,
         fullName: nameIdx >= 0 ? cols[nameIdx] : undefined,
         phone: phoneIdx >= 0 ? cols[phoneIdx] : undefined,
-        instagram: igIdx >= 0 ? cols[igIdx] : undefined,
       });
     }
   } else {
@@ -723,7 +698,6 @@ export async function importContacts(
         fullName: row.fullName,
         email: row.email,
         phone: row.phone,
-        instagram: row.instagram,
         role: input.role,
       });
 
@@ -749,7 +723,6 @@ export async function importContacts(
         email: sanitized.email,
         full_name: sanitized.fullName ?? null,
         phone: sanitized.phone ?? null,
-        instagram: sanitized.instagram ?? null,
         role: sanitized.role ?? null,
         source: "import",
         source_detail: input.sourceDetail || null,
@@ -803,7 +776,6 @@ export async function addContact(
     fullName: string;
     email: string;
     phone?: string;
-    instagram?: string;
     contactType: "industry" | "fan";
     role?: string;
     tags?: string[];
@@ -825,7 +797,6 @@ export async function addContact(
     fullName: data.fullName,
     email: data.email,
     phone: data.phone,
-    instagram: data.instagram,
     notes: data.notes,
     role: data.role,
   });
@@ -848,7 +819,6 @@ export async function addContact(
         email: sanitized.email,
         full_name: sanitized.fullName ?? null,
         phone: sanitized.phone ?? null,
-        instagram: sanitized.instagram ?? null,
         role: sanitized.role ?? null,
         source: "manual",
         source_detail: "quick_add",
@@ -884,7 +854,6 @@ export async function updateContact(
     fullName?: string;
     email?: string;
     phone?: string;
-    instagram?: string;
     role?: string;
   }
 ): Promise<{ error: string | null; contact: Contact | null }> {
@@ -922,7 +891,6 @@ export async function updateContact(
     fullName: updates.fullName,
     email: updates.email,
     phone: updates.phone,
-    instagram: updates.instagram,
     notes: updates.notes,
     role: updates.role,
   });
@@ -940,7 +908,6 @@ export async function updateContact(
   if (sanitized.fullName !== undefined) payload.full_name = sanitized.fullName;
   if (sanitized.email !== undefined) payload.email = sanitized.email;
   if (sanitized.phone !== undefined) payload.phone = sanitized.phone;
-  if (sanitized.instagram !== undefined) payload.instagram = sanitized.instagram;
   if (sanitized.notes !== undefined) payload.notes = sanitized.notes;
   if (sanitized.role !== undefined) payload.role = sanitized.role;
 
@@ -1073,7 +1040,7 @@ export async function generateReachInsights(
     // Fetch all fan contacts
     const { data: fans } = await admin
       .from("contacts")
-      .select("id, email, full_name, instagram, total_events, total_spend, tags, last_seen_at, created_at, metadata")
+      .select("id, email, full_name, total_events, total_spend, tags, last_seen_at, created_at, metadata")
       .eq("collective_id", collectiveId)
       .eq("contact_type", "fan")
       .is("deleted_at", null);
@@ -1082,7 +1049,7 @@ export async function generateReachInsights(
 
     const allFans = fans as {
       id: string; email: string | null; full_name: string | null;
-      instagram: string | null; total_events: number; total_spend: number;
+      total_events: number; total_spend: number;
       tags: string[]; last_seen_at: string | null; created_at: string;
       metadata: Record<string, unknown> | null;
     }[];
@@ -1097,38 +1064,12 @@ export async function generateReachInsights(
     const totalEvents = eventCount ?? 0;
     const insights: ReachInsight[] = [];
 
-    // ── Insight: Fans with IG handles (ambassador potential) ──
-    const withIG = allFans.filter((f) => f.instagram);
-    const withoutIG = allFans.filter((f) => !f.instagram);
-    if (withIG.length > 0) {
-      const repeatWithIG = withIG.filter((f) => f.total_events >= 2);
-      if (repeatWithIG.length >= 3) {
-        insights.push({
-          id: "ambassador_candidates",
-          icon: "🚀",
-          title: `${repeatWithIG.length} repeat fans have IG handles`,
-          description: `These fans came back 2+ times and are reachable on Instagram. Arm them with promo codes to share — each one could bring 3-5 new people.`,
-          action: "Copy their @handles",
-          actionType: "copy_handles",
-        });
-      }
-    }
-
-    if (withoutIG.length > allFans.length * 0.5 && allFans.length >= 10) {
-      insights.push({
-        id: "missing_ig",
-        icon: "📱",
-        title: `${withoutIG.length} fans have no IG handle`,
-        description: `You're missing the main nightlife communication channel for ${Math.round((withoutIG.length / allFans.length) * 100)}% of your audience. Ask at the door or add a field to your checkout.`,
-      });
-    }
-
     // ── Insight: Ambassador arming strategy ──
     const ambassadors = allFans.filter(
       (f) => f.tags?.includes("ambassador") || (f.metadata?.referrals_count as number) >= 3
     );
     const potentialAmbassadors = allFans.filter(
-      (f) => f.total_events >= 2 && f.instagram && !f.tags?.includes("ambassador")
+      (f) => f.total_events >= 2 && !f.tags?.includes("ambassador")
     );
 
     if (potentialAmbassadors.length > 0) {
@@ -1136,9 +1077,7 @@ export async function generateReachInsights(
         id: "potential_ambassadors",
         icon: "⭐",
         title: `${potentialAmbassadors.length} fans ready to become ambassadors`,
-        description: `They've come to multiple events and have IG handles. Give them a unique promo code, early access to tickets, and ask them to post your flyer on their story.`,
-        action: "Copy their @handles",
-        actionType: "copy_handles",
+        description: `They've come to multiple events. Give them a unique promo code, early access to tickets, and ask them to post your flyer on their story.`,
       });
     }
 

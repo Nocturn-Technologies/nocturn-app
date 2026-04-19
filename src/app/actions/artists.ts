@@ -16,8 +16,6 @@ export async function createArtist(formData: {
   name: string;
   bio: string | null;
   genre: string[];
-  instagram: string | null;
-  soundcloud: string | null;
   spotify: string | null;
   bookingEmail: string | null;
   defaultFee: number | null;
@@ -39,17 +37,13 @@ export async function createArtist(formData: {
     sanitizedBio = formData.bio;
   }
 
-  // Social handles: cap 100
+  // Spotify handle: cap 100
   const capSocial = (field: string | null, label: string): { value: string | null; error: string | null } => {
     if (field == null) return { value: null, error: null };
     if (typeof field !== "string") return { value: null, error: `Invalid ${label}` };
     if (field.length > 100) return { value: null, error: `${label} must be under 100 characters` };
     return { value: field, error: null };
   };
-  const ig = capSocial(formData.instagram, "Instagram");
-  if (ig.error) return { error: ig.error, artist: null };
-  const sc = capSocial(formData.soundcloud, "SoundCloud");
-  if (sc.error) return { error: sc.error, artist: null };
   const sp = capSocial(formData.spotify, "Spotify");
   if (sp.error) return { error: sp.error, artist: null };
 
@@ -122,8 +116,6 @@ export async function createArtist(formData: {
       slug,
       bio: sanitizedBio,
       genre: sanitizedGenre,
-      instagram: ig.value,
-      soundcloud: sc.value,
       spotify: sp.value,
       booking_email: sanitizedEmail,
       phone: sanitizedPhone,
@@ -264,7 +256,7 @@ export async function addArtistToEvent(formData: {
   // Contact upsert — best-effort industry sync for booked artist
   try {
     const { data: artist } = await admin.from("artists")
-      .select("id, name, booking_email, instagram, soundcloud, spotify")
+      .select("id, name, booking_email, spotify")
       .eq("id", formData.artistId)
       .maybeSingle();
 
@@ -277,7 +269,6 @@ export async function addArtistToEvent(formData: {
         source: "artist_booking",
         role: "artist",
         artist_id: artist.id,
-        instagram: artist.instagram ?? null,
         last_seen_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }, { onConflict: "collective_id,email", ignoreDuplicates: false });
@@ -380,8 +371,6 @@ export async function createArtistAndAddToEvent(formData: {
       name: formData.name,
       bio: null,
       genre: [],
-      instagram: null,
-      soundcloud: null,
       spotify: null,
       bookingEmail: formData.email,
       defaultFee: formData.fee,

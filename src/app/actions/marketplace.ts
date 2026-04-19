@@ -13,7 +13,6 @@ import { rateLimitStrict } from "@/lib/rate-limit";
 const MAX_DISPLAY_NAME = 100;
 const MAX_BIO = 500;
 const MAX_CITY = 80;
-const MAX_INSTAGRAM_HANDLE = 60;
 const MAX_RATE_RANGE = 100;
 const MAX_AVAILABILITY = 200;
 const MAX_GENRE_OR_SERVICE = 50;
@@ -63,9 +62,6 @@ export async function createMarketplaceProfile(data: {
   displayName: string;
   city?: string | null;
   bio?: string | null;
-  instagramHandle?: string | null;
-  websiteUrl?: string | null;
-  soundcloudUrl?: string | null;
   spotifyUrl?: string | null;
   genres?: string[] | null;
   services?: string[] | null;
@@ -122,9 +118,6 @@ export async function createMarketplaceProfile(data: {
     slug,
     bio: capString(data.bio, MAX_BIO),
     city: capString(data.city, MAX_CITY),
-    instagram_handle: capString(data.instagramHandle, MAX_INSTAGRAM_HANDLE),
-    website_url: sanitizeUrl(data.websiteUrl),
-    soundcloud_url: sanitizeUrl(data.soundcloudUrl),
     spotify_url: sanitizeUrl(data.spotifyUrl),
     genres: capStringArray(data.genres, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY),
     services: capStringArray(data.services, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY),
@@ -153,9 +146,6 @@ export async function updateMarketplaceProfile(data: {
   displayName?: string;
   city?: string | null;
   bio?: string | null;
-  instagramHandle?: string | null;
-  websiteUrl?: string | null;
-  soundcloudUrl?: string | null;
   spotifyUrl?: string | null;
   genres?: string[] | null;
   services?: string[] | null;
@@ -187,9 +177,6 @@ export async function updateMarketplaceProfile(data: {
   if (data.displayName !== undefined) updates.display_name = capString(data.displayName, MAX_DISPLAY_NAME);
   if (data.city !== undefined) updates.city = capString(data.city, MAX_CITY);
   if (data.bio !== undefined) updates.bio = capString(data.bio, MAX_BIO);
-  if (data.instagramHandle !== undefined) updates.instagram_handle = capString(data.instagramHandle, MAX_INSTAGRAM_HANDLE);
-  if (data.websiteUrl !== undefined) updates.website_url = sanitizeUrl(data.websiteUrl);
-  if (data.soundcloudUrl !== undefined) updates.soundcloud_url = sanitizeUrl(data.soundcloudUrl);
   if (data.spotifyUrl !== undefined) updates.spotify_url = sanitizeUrl(data.spotifyUrl);
   if (data.genres !== undefined) updates.genres = capStringArray(data.genres, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY);
   if (data.services !== undefined) updates.services = capStringArray(data.services, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY);
@@ -254,7 +241,7 @@ export async function getProfileBySlug(slug: string) {
   const admin = createAdminClient();
 
   const { data, error: queryError } = await admin.from("marketplace_profiles")
-    .select("id, slug, user_type, user_id, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, is_verified, created_at, users(full_name)")
+    .select("id, slug, user_type, user_id, display_name, bio, city, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, is_verified, created_at, users(full_name)")
     .eq("slug", slug)
     .maybeSingle();
 
@@ -303,7 +290,7 @@ export async function searchProfiles(filters: {
     const to = from + perPage - 1;
 
     let query = admin.from("marketplace_profiles")
-      .select("id, slug, user_type, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, created_at", { count: "exact" })
+      .select("id, slug, user_type, display_name, bio, city, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, created_at", { count: "exact" })
       .eq("is_active", true)
       .order("created_at", { ascending: false })
       .range(from, to);
@@ -372,7 +359,7 @@ export async function saveProfile(
   try {
     // Fetch the saved profile details + owner email for contact record
     const { data: savedProfile } = await admin.from("marketplace_profiles")
-      .select("id, display_name, instagram_handle, user_type, users(email)")
+      .select("id, display_name, user_type, users(email)")
       .eq("id", profileId)
       .maybeSingle();
 
@@ -393,7 +380,6 @@ export async function saveProfile(
           email: savedProfile.users.email.toLowerCase().trim(),
           full_name: savedProfile.display_name ?? null,
           source: "marketplace",
-          instagram: savedProfile.instagram_handle ?? null,
           marketplace_profile_id: savedProfile.id,
           last_seen_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),

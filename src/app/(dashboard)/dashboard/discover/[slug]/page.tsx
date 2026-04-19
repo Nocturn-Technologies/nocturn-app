@@ -10,9 +10,7 @@ import {
   CheckCircle,
   ArrowLeft,
   ExternalLink,
-  Instagram,
   Music,
-  Globe,
   BarChart3,
   Calendar,
 } from "lucide-react";
@@ -60,26 +58,9 @@ export default async function ProfileDetailPage({
 
   const socialLinks = [
     {
-      url: profile.instagram_handle
-        ? `https://instagram.com/${profile.instagram_handle.replace(/^@/, "")}`
-        : null,
-      label: "Instagram",
-      icon: Instagram,
-    },
-    {
-      url: profile.soundcloud_url,
-      label: "SoundCloud",
-      icon: Music,
-    },
-    {
       url: profile.spotify_url,
       label: "Spotify",
       icon: Music,
-    },
-    {
-      url: profile.website_url,
-      label: "Website",
-      icon: Globe,
     },
   ].filter((s) => s.url);
 
