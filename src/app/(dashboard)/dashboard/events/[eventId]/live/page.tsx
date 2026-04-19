@@ -270,7 +270,7 @@ export default function LiveEventPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5 pb-8 overflow-x-hidden">
+    <div className="mx-auto max-w-4xl space-y-6 pb-8 overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center gap-3">
         <Link href={`/dashboard/events/${eventId}`}>
@@ -284,75 +284,65 @@ export default function LiveEventPage() {
           </Button>
         </Link>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-lg font-bold truncate font-heading">
-              {event.title}
-            </h1>
+          <div className="flex items-center gap-2.5 flex-wrap">
             <LiveBadge />
+            <div className="section-label-mono !mb-0 text-[10px]">DOORS OPEN · {formatElapsed(elapsed)}</div>
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-zinc-400 mt-0.5">
-            <Clock className="h-3 w-3" />
-            <span>{formatElapsed(elapsed)} since doors</span>
-          </div>
+          <h1 className="text-xl font-bold truncate font-heading mt-1 tracking-[-0.02em]">
+            {event.title}
+          </h1>
         </div>
       </div>
 
-      {/* Main Stats */}
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {/* Check-ins */}
-        <div className="rounded-xl border border-white/5 bg-zinc-900 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-              Check-ins
-            </span>
-            <Users className="h-4 w-4 text-nocturn" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold font-heading text-white tabular-nums">
+      {/* Hero stat — massive check-in counter */}
+      <div className="relative rounded-2xl border border-white/10 bg-gradient-to-b from-nocturn/[0.06] to-transparent p-7 overflow-hidden">
+        <div className="absolute -top-20 -right-20 w-64 h-64 rounded-full bg-nocturn/10 blur-[80px] pointer-events-none" />
+        <div className="relative">
+          <div className="section-label-mono mb-4 !text-[10.5px]">CHECK-INS · DOORS</div>
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <span className="font-heading text-[clamp(60px,14vw,120px)] font-semibold text-nocturn-glow tabular-nums leading-none">
               {checkedInCount}
             </span>
-            <span className="text-lg text-zinc-500">/ {totalCapacity}</span>
+            <span className="text-xl md:text-2xl text-zinc-500 font-mono tabular-nums">
+              / {totalCapacity}
+            </span>
+            <span className={`ml-auto text-sm font-mono uppercase tracking-widest ${getCapacityColor(capacityPct)}`}>
+              {capacityPct}% cap
+            </span>
           </div>
           {/* Progress bar */}
-          <div className="mt-3 h-2.5 w-full rounded-full bg-zinc-800 overflow-hidden">
+          <div className="mt-5 h-1.5 w-full rounded-full bg-white/[0.04] overflow-hidden">
             <div
-              className="h-full rounded-full bg-nocturn transition-all duration-700 ease-out"
+              className={`h-full rounded-full transition-all duration-700 ease-out ${getCapacityBarColor(capacityPct)}`}
               style={{ width: `${checkinPct}%` }}
             />
           </div>
         </div>
+      </div>
 
-        {/* Revenue + Capacity row */}
-        <div className="grid grid-cols-2 gap-3">
-          {/* Revenue */}
-          <div className="rounded-xl border border-white/5 bg-zinc-900 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                Revenue
-              </span>
-              <DollarSign className="h-4 w-4 text-green-400" />
-            </div>
-            <span className="text-3xl font-bold font-heading text-white tabular-nums">
+      {/* Secondary stats — Door revenue row */}
+      <div className="grid grid-cols-2 gap-px bg-white/[0.06] border border-white/[0.06] rounded-xl overflow-hidden">
+        <div className="bg-background p-5">
+          <div className="section-label-mono !mb-2 !text-[10px]">THE DOOR</div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-heading text-3xl font-semibold text-white tabular-nums">
               ${revenue.toLocaleString()}
             </span>
           </div>
-
-          {/* Capacity */}
-          <div className="rounded-xl border border-white/5 bg-zinc-900 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                Capacity
-              </span>
-              <div
-                className={`h-2 w-2 rounded-full ${getCapacityBarColor(capacityPct)}`}
-              />
-            </div>
-            <span
-              className={`text-3xl font-bold font-heading tabular-nums ${getCapacityColor(capacityPct)}`}
-            >
-              {capacityPct}%
+          <p className="text-[11px] font-mono text-zinc-500 mt-1 uppercase tracking-wider">
+            Gross · at the gate
+          </p>
+        </div>
+        <div className="bg-background p-5">
+          <div className="section-label-mono !mb-2 !text-[10px]">WALK-UPS</div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="font-heading text-3xl font-semibold text-white tabular-nums">
+              {recentCheckIns.filter(c => c.tier_name === "Walk-up" || c.tier_name === "Door").length}
             </span>
           </div>
+          <p className="text-[11px] font-mono text-zinc-500 mt-1 uppercase tracking-wider">
+            Day-of at the door
+          </p>
         </div>
       </div>
 
@@ -366,36 +356,31 @@ export default function LiveEventPage() {
         const barPct = estimatedBar > 0 ? Math.min(Math.round((estimatedBar / barMin) * 100), 100) : 0;
         const atRisk = estimatedBar < barMin;
         return (
-          <div className={`rounded-xl border ${atRisk ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/30 bg-emerald-500/5"} p-4`}>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-                Bar Minimum
-              </span>
-              {atRisk ? (
-                <span className="text-[11px] font-medium text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">
-                  ⚠️ ${deposit.toLocaleString()} deposit at risk
+          <div className={`rounded-xl border ${atRisk ? "border-red-500/25 bg-red-500/[0.04]" : "border-emerald-500/25 bg-emerald-500/[0.04]"} p-5`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="section-label-mono !mb-0 !text-[10px]">BAR MINIMUM</div>
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${atRisk ? "bg-red-400" : "bg-emerald-400"}`} />
+                <span className={`text-[11px] font-mono uppercase tracking-widest ${atRisk ? "text-red-400" : "text-emerald-400"}`}>
+                  {atRisk ? `$${deposit.toLocaleString()} deposit at risk` : "On track"}
                 </span>
-              ) : (
-                <span className="text-[11px] font-medium text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full">
-                  ✅ On track
-                </span>
-              )}
+              </div>
             </div>
             <div className="flex items-end justify-between mb-2">
-              <span className="text-2xl font-bold font-heading text-white tabular-nums">
+              <span className="font-heading text-3xl font-semibold text-white tabular-nums">
                 ${estimatedBar.toLocaleString()}
               </span>
-              <span className="text-sm text-zinc-400">/ ${barMin.toLocaleString()}</span>
+              <span className="text-sm text-zinc-400 font-mono">/ ${barMin.toLocaleString()}</span>
             </div>
-            <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+            <div className="h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all duration-500 ${atRisk ? "bg-red-500" : "bg-emerald-500"}`}
                 style={{ width: `${barPct}%` }}
               />
             </div>
             {atRisk && deposit > 0 && (
-              <p className="text-[11px] text-red-400/80 mt-2">
-                You need ${(barMin - estimatedBar).toLocaleString()} more in bar sales to keep your ${deposit.toLocaleString()} deposit.
+              <p className="text-[11px] text-red-400/80 mt-3 font-mono">
+                Need ${(barMin - estimatedBar).toLocaleString()} more in bar sales to keep the ${deposit.toLocaleString()} deposit.
               </p>
             )}
           </div>
@@ -403,79 +388,77 @@ export default function LiveEventPage() {
       })()}
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link href={`/dashboard/events/${eventId}/check-in`}>
-          <button className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-zinc-900 p-5 min-h-[80px] hover:bg-zinc-800 active:scale-[0.98] transition-all">
-            <ScanLine className="h-6 w-6 text-nocturn" />
-            <span className="text-sm font-medium text-white">
-              Scan Tickets
-            </span>
-          </button>
-        </Link>
+      <div>
+        <div className="section-label-mono mb-3 !text-[10px]">QUICK ACTIONS</div>
+        <div className="grid grid-cols-2 gap-px bg-white/[0.06] border border-white/[0.06] rounded-xl overflow-hidden">
+          <Link href={`/dashboard/events/${eventId}/check-in`} className="group">
+            <button className="w-full flex flex-col items-center justify-center gap-2 bg-background p-5 min-h-[88px] hover:bg-nocturn/[0.04] active:scale-[0.98] transition-all">
+              <ScanLine className="h-5 w-5 text-nocturn-glow" strokeWidth={1.5} />
+              <span className="text-sm font-medium text-white">Scan tickets</span>
+            </button>
+          </Link>
 
-        <Link href={`/dashboard/events/${eventId}/guests`}>
-          <button className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-zinc-900 p-5 min-h-[80px] hover:bg-zinc-800 active:scale-[0.98] transition-all">
-            <ClipboardList className="h-6 w-6 text-nocturn" />
-            <span className="text-sm font-medium text-white">Guest List</span>
-          </button>
-        </Link>
+          <Link href={`/dashboard/events/${eventId}/guests`} className="group">
+            <button className="w-full flex flex-col items-center justify-center gap-2 bg-background p-5 min-h-[88px] hover:bg-nocturn/[0.04] active:scale-[0.98] transition-all">
+              <ClipboardList className="h-5 w-5 text-nocturn-glow" strokeWidth={1.5} />
+              <span className="text-sm font-medium text-white">Guestlist &amp; comps</span>
+            </button>
+          </Link>
 
-        <Link href={`/dashboard/events/${eventId}/lineup`}>
-          <button className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-zinc-900 p-5 min-h-[80px] hover:bg-zinc-800 active:scale-[0.98] transition-all">
-            <Music className="h-6 w-6 text-nocturn" />
-            <span className="text-sm font-medium text-white">Lineup</span>
-          </button>
-        </Link>
+          <Link href={`/dashboard/events/${eventId}/lineup`} className="group">
+            <button className="w-full flex flex-col items-center justify-center gap-2 bg-background p-5 min-h-[88px] hover:bg-nocturn/[0.04] active:scale-[0.98] transition-all">
+              <Music className="h-5 w-5 text-nocturn-glow" strokeWidth={1.5} />
+              <span className="text-sm font-medium text-white">Lineup</span>
+            </button>
+          </Link>
 
-        <button
-          onClick={() => {
-            // Quick door-sale: future implementation
-            setCheckedInCount((prev) => prev + 1);
-            if (tiers.length > 0) {
-              const avgPrice =
-                tiers.reduce((s, t) => s + Number(t.price), 0) / tiers.length;
-              setRevenue((prev) => prev + avgPrice);
-            }
-            setRecentCheckIns((prev) => [
-              {
-                id: `walk-up-${Date.now()}`,
-                attendee_name: "Walk-up",
-                tier_name: "Door Sale",
-                checked_in_at: new Date().toISOString(),
-              },
-              ...prev.slice(0, 9),
-            ]);
-          }}
-          className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-zinc-900 p-5 min-h-[80px] hover:bg-zinc-800 active:scale-[0.98] transition-all"
-        >
-          <DollarSign className="h-6 w-6 text-green-400" />
-          <span className="text-sm font-medium text-white">Door Sales</span>
-        </button>
+          <button
+            onClick={() => {
+              setCheckedInCount((prev) => prev + 1);
+              if (tiers.length > 0) {
+                const avgPrice =
+                  tiers.reduce((s, t) => s + Number(t.price), 0) / tiers.length;
+                setRevenue((prev) => prev + avgPrice);
+              }
+              setRecentCheckIns((prev) => [
+                {
+                  id: `walk-up-${Date.now()}`,
+                  attendee_name: "Walk-up",
+                  tier_name: "Walk-up",
+                  checked_in_at: new Date().toISOString(),
+                },
+                ...prev.slice(0, 9),
+              ]);
+            }}
+            className="w-full flex flex-col items-center justify-center gap-2 bg-background p-5 min-h-[88px] hover:bg-nocturn/[0.04] active:scale-[0.98] transition-all"
+          >
+            <DollarSign className="h-5 w-5 text-nocturn-glow" strokeWidth={1.5} />
+            <span className="text-sm font-medium text-white">+ Walk-up</span>
+          </button>
+        </div>
       </div>
 
-      {/* Recent Activity Feed */}
-      <div className="rounded-xl border border-white/5 bg-zinc-900 overflow-hidden">
-        <div className="px-5 py-3 border-b border-white/5">
-          <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-            Recent Activity
-          </span>
+      {/* Door Activity Feed */}
+      <div className="rounded-xl border border-white/[0.06] bg-background overflow-hidden">
+        <div className="px-5 py-3 border-b border-white/[0.06]">
+          <div className="section-label-mono !mb-0 !text-[10px]">DOOR ACTIVITY</div>
         </div>
         {recentCheckIns.length === 0 ? (
-          <div className="px-5 py-8 text-center">
-            <p className="text-sm text-zinc-500">
-              No check-ins yet. Waiting for guests...
+          <div className="px-5 py-10 text-center">
+            <p className="text-sm text-zinc-500 font-mono uppercase tracking-wider">
+              No one through the door yet · hold tight
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-white/5 max-h-[300px] overflow-y-auto">
+          <div className="divide-y divide-white/[0.04] max-h-[320px] overflow-y-auto">
             {recentCheckIns.map((ci) => (
               <div
                 key={ci.id}
-                className="flex items-center justify-between px-5 py-3 animate-fade-in-up"
+                className="flex items-center justify-between px-5 py-3 animate-fade-in-up hover:bg-white/[0.02] transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="h-8 w-8 rounded-full bg-nocturn/20 flex items-center justify-center shrink-0">
-                    <span className="text-xs font-bold text-nocturn">
+                  <div className="h-9 w-9 rounded-full bg-nocturn/[0.12] border border-nocturn/20 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-semibold text-nocturn-glow">
                       {ci.attendee_name.charAt(0).toUpperCase()}
                     </span>
                   </div>
@@ -483,10 +466,12 @@ export default function LiveEventPage() {
                     <p className="text-sm font-medium text-white truncate">
                       {ci.attendee_name}
                     </p>
-                    <p className="text-xs text-zinc-500">{ci.tier_name}</p>
+                    <p className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">
+                      {ci.tier_name}
+                    </p>
                   </div>
                 </div>
-                <span className="text-xs text-zinc-500 shrink-0">
+                <span className="text-[11px] font-mono text-zinc-500 shrink-0 uppercase tracking-wider">
                   {timeAgo(ci.checked_in_at)}
                 </span>
               </div>
