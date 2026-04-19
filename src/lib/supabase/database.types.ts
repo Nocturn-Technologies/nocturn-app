@@ -132,42 +132,6 @@ export type Database = {
           },
         ]
       }
-      campaign_segments: {
-        Row: {
-          campaign_id: string
-          created_at: string
-          id: string
-          segment_id: string
-        }
-        Insert: {
-          campaign_id: string
-          created_at?: string
-          id?: string
-          segment_id: string
-        }
-        Update: {
-          campaign_id?: string
-          created_at?: string
-          id?: string
-          segment_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "campaign_segments_campaign_id_fkey"
-            columns: ["campaign_id"]
-            isOneToOne: false
-            referencedRelation: "email_campaigns"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "campaign_segments_segment_id_fkey"
-            columns: ["segment_id"]
-            isOneToOne: false
-            referencedRelation: "segments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       channel_members: {
         Row: {
           channel_id: string
@@ -2355,82 +2319,6 @@ export type Database = {
           },
         ]
       }
-      segment_members: {
-        Row: {
-          added_at: string
-          attendee_profile_id: string
-          id: string
-          segment_id: string
-        }
-        Insert: {
-          added_at?: string
-          attendee_profile_id: string
-          id?: string
-          segment_id: string
-        }
-        Update: {
-          added_at?: string
-          attendee_profile_id?: string
-          id?: string
-          segment_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "segment_members_segment_id_fkey"
-            columns: ["segment_id"]
-            isOneToOne: false
-            referencedRelation: "segments"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      segments: {
-        Row: {
-          collective_id: string
-          created_at: string
-          deleted_at: string | null
-          description: string | null
-          filter_rules: Json | null
-          id: string
-          is_dynamic: boolean | null
-          member_count: number | null
-          name: string
-          updated_at: string
-        }
-        Insert: {
-          collective_id: string
-          created_at?: string
-          deleted_at?: string | null
-          description?: string | null
-          filter_rules?: Json | null
-          id?: string
-          is_dynamic?: boolean | null
-          member_count?: number | null
-          name: string
-          updated_at?: string
-        }
-        Update: {
-          collective_id?: string
-          created_at?: string
-          deleted_at?: string | null
-          description?: string | null
-          filter_rules?: Json | null
-          id?: string
-          is_dynamic?: boolean | null
-          member_count?: number | null
-          name?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "segments_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       settlement_lines: {
         Row: {
           amount: number
@@ -2572,90 +2460,6 @@ export type Database = {
             columns: ["event_id"]
             isOneToOne: true
             referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      split_items: {
-        Row: {
-          amount: number
-          collective_id: string | null
-          created_at: string
-          currency: string
-          id: string
-          label: string
-          payout_id: string | null
-          percentage: number | null
-          settlement_id: string
-          type: string
-          updated_at: string
-          user_id: string | null
-          venue_id: string | null
-        }
-        Insert: {
-          amount: number
-          collective_id?: string | null
-          created_at?: string
-          currency?: string
-          id?: string
-          label: string
-          payout_id?: string | null
-          percentage?: number | null
-          settlement_id: string
-          type: string
-          updated_at?: string
-          user_id?: string | null
-          venue_id?: string | null
-        }
-        Update: {
-          amount?: number
-          collective_id?: string | null
-          created_at?: string
-          currency?: string
-          id?: string
-          label?: string
-          payout_id?: string | null
-          percentage?: number | null
-          settlement_id?: string
-          type?: string
-          updated_at?: string
-          user_id?: string | null
-          venue_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "fk_split_items_payout"
-            columns: ["payout_id"]
-            isOneToOne: false
-            referencedRelation: "payouts"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "split_items_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "split_items_settlement_id_fkey"
-            columns: ["settlement_id"]
-            isOneToOne: false
-            referencedRelation: "settlements"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "split_items_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "split_items_venue_id_fkey"
-            columns: ["venue_id"]
-            isOneToOne: false
-            referencedRelation: "venues"
             referencedColumns: ["id"]
           },
         ]
@@ -2832,93 +2636,6 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      transactions: {
-        Row: {
-          amount: number
-          collective_id: string
-          created_at: string
-          currency: string | null
-          description: string | null
-          event_id: string | null
-          id: string
-          metadata: Json | null
-          settlement_id: string | null
-          stripe_payment_intent_id: string | null
-          stripe_refund_id: string | null
-          stripe_transfer_id: string | null
-          ticket_id: string | null
-          type: Database["public"]["Enums"]["transaction_type"]
-        }
-        Insert: {
-          amount: number
-          collective_id: string
-          created_at?: string
-          currency?: string | null
-          description?: string | null
-          event_id?: string | null
-          id?: string
-          metadata?: Json | null
-          settlement_id?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_refund_id?: string | null
-          stripe_transfer_id?: string | null
-          ticket_id?: string | null
-          type: Database["public"]["Enums"]["transaction_type"]
-        }
-        Update: {
-          amount?: number
-          collective_id?: string
-          created_at?: string
-          currency?: string | null
-          description?: string | null
-          event_id?: string | null
-          id?: string
-          metadata?: Json | null
-          settlement_id?: string | null
-          stripe_payment_intent_id?: string | null
-          stripe_refund_id?: string | null
-          stripe_transfer_id?: string | null
-          ticket_id?: string | null
-          type?: Database["public"]["Enums"]["transaction_type"]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "transactions_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "transactions_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_settlement_id_fkey"
-            columns: ["settlement_id"]
-            isOneToOne: false
-            referencedRelation: "settlements"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "transactions_ticket_id_fkey"
-            columns: ["ticket_id"]
-            isOneToOne: false
-            referencedRelation: "tickets"
             referencedColumns: ["id"]
           },
         ]
@@ -3315,13 +3032,6 @@ export type Database = {
         | "cancelled"
         | "free"
         | "pending"
-      transaction_type:
-        | "ticket_sale"
-        | "refund"
-        | "payout"
-        | "adjustment"
-        | "platform_fee"
-        | "stripe_fee"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -3486,14 +3196,6 @@ export const Constants = {
         "cancelled",
         "free",
         "pending",
-      ],
-      transaction_type: [
-        "ticket_sale",
-        "refund",
-        "payout",
-        "adjustment",
-        "platform_fee",
-        "stripe_fee",
       ],
     },
   },
