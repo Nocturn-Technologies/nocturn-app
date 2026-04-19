@@ -271,12 +271,13 @@ export default function OnboardingPage() {
           {/* Screen 1: Name + City */}
           {step === "name_city" && (
             <div className="space-y-6 animate-fade-in-up">
-              <div className="text-center space-y-2">
-                <h2 className="text-2xl font-bold font-heading tracking-tight">
-                  What&apos;s your collective called?
+              <div className="space-y-3">
+                <div className="section-label-mono">01 / YOUR CREW</div>
+                <h2 className="text-3xl md:text-4xl font-bold font-heading tracking-[-0.025em] leading-[1.05]">
+                  What&apos;s the crew<br/>called?
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  You can always change this later
+                  You can always change this later.
                 </p>
               </div>
 
@@ -290,9 +291,9 @@ export default function OnboardingPage() {
                     autoFocus
                   />
                   {slug && (
-                    <p className="text-xs text-muted-foreground px-1 flex items-center gap-2">
+                    <p className="text-xs text-muted-foreground px-1 flex items-center gap-2 font-mono">
                       <span>
-                        nocturn.app/<span className="text-nocturn font-medium">{slug}</span>
+                        nocturn.app/<span className="text-nocturn-glow font-medium">{slug}</span>
                       </span>
                       {nameCheck.status === "checking" && (
                         <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
@@ -313,7 +314,7 @@ export default function OnboardingPage() {
                 </div>
 
                 <Input
-                  placeholder="Where are you based? (e.g. Toronto)"
+                  placeholder="Your city — Toronto, Brooklyn, CDMX…"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   className="text-base h-12"
