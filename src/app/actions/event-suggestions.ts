@@ -23,49 +23,47 @@ export async function getEventSuggestions(
   if (!collectiveId?.trim()) return [];
 
   const admin = createAdminClient();
+  const now = new Date().toISOString();
 
-  // Verify caller is a member of the supplied collective
-  const { count, error: memberError } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", collectiveId)
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-  if (memberError) {
-    console.error("[getEventSuggestions] membership query error:", memberError.message);
+  // Wave 1 — membership check + past events + upcoming events run in parallel
+  // (all independent — only past events' IDs are needed for the next wave's tickets query).
+  const [membershipRes, pastEventsRes, upcomingEventsRes] = await Promise.all([
+    admin
+      .from("collective_members")
+      .select("*", { count: "exact", head: true })
+      .eq("collective_id", collectiveId)
+      .eq("user_id", user.id)
+      .is("deleted_at", null),
+    admin
+      .from("events")
+      .select("id, title, starts_at, status, venues(name, city)")
+      .eq("collective_id", collectiveId)
+      .in("status", ["completed", "published"])
+      .is("deleted_at", null)
+      .order("starts_at", { ascending: false })
+      .limit(20),
+    admin
+      .from("events")
+      .select("starts_at")
+      .eq("collective_id", collectiveId)
+      .gte("starts_at", now)
+      .is("deleted_at", null)
+      .order("starts_at", { ascending: true }),
+  ]);
+
+  if (membershipRes.error) {
+    console.error("[getEventSuggestions] membership query error:", membershipRes.error.message);
     return [];
   }
-  if (!count) return [];
+  if (!membershipRes.count) return [];
 
-  // Fetch past events for this collective to analyze patterns
-  const { data: pastEvents, error: pastEventsError } = await admin
-    .from("events")
-    .select("id, title, starts_at, status, venues(name, city)")
-    .eq("collective_id", collectiveId)
-    .in("status", ["completed", "published"])
-    .is("deleted_at", null)
-    .order("starts_at", { ascending: false })
-    .limit(20);
+  if (pastEventsRes.error) console.error("[getEventSuggestions] past events query error:", pastEventsRes.error.message);
+  if (upcomingEventsRes.error) console.error("[getEventSuggestions] upcoming events query error:", upcomingEventsRes.error.message);
 
-  if (pastEventsError) {
-    console.error("[getEventSuggestions] past events query error:", pastEventsError.message);
-  }
+  const pastEvents = pastEventsRes.data;
+  const upcomingEvents = upcomingEventsRes.data;
 
-  // Fetch upcoming events to avoid scheduling conflicts
-  const now = new Date().toISOString();
-  const { data: upcomingEvents, error: upcomingError } = await admin
-    .from("events")
-    .select("starts_at")
-    .eq("collective_id", collectiveId)
-    .gte("starts_at", now)
-    .is("deleted_at", null)
-    .order("starts_at", { ascending: true });
-
-  if (upcomingError) {
-    console.error("[getEventSuggestions] upcoming events query error:", upcomingError.message);
-  }
-
-  // Fetch ticket data for past events to gauge popularity
+  // Wave 2 — ticket counts for popularity scoring (needs past event IDs)
   const eventIds = (pastEvents ?? []).map((e) => e.id);
   let ticketCounts: Record<string, number> = {};
   if (eventIds.length > 0) {
