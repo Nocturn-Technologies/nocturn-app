@@ -40,7 +40,12 @@ export async function signUpUser(formData: {
   });
 
   if (createError) {
-    console.error("[signup] createUser failed:", createError.message);
+    console.error("[signup] createUser failed:", {
+      message: createError.message,
+      status: "status" in createError ? createError.status : undefined,
+      code: "code" in createError ? createError.code : undefined,
+      name: createError.name,
+    });
     // Surface specific errors to the user instead of a generic failure.
     const msg = (createError.message ?? "").toLowerCase();
     if (
@@ -59,6 +64,14 @@ export async function signUpUser(formData: {
     }
     if (msg.includes("rate limit") || msg.includes("too many")) {
       return { error: "Too many signup attempts. Please wait a few minutes and try again." };
+    }
+    if (
+      msg.includes("invalid api key") ||
+      msg.includes("invalid jwt") ||
+      msg.includes("unauthorized") ||
+      msg.includes("forbidden")
+    ) {
+      return { error: "Signup is temporarily unavailable due to a server configuration issue." };
     }
     return { error: "Failed to create account. Please try again." };
   }

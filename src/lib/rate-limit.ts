@@ -53,11 +53,15 @@ export async function rateLimitStrict(
     // Count active entries within the window (not expired)
     const now = new Date();
     const windowEnd = new Date(now.getTime() + windowMs).toISOString();
-    const { count } = await db
+    const { count, error: countError } = await db
       .from("rate_limits")
       .select("*", { count: "exact", head: true })
       .eq("key", key)
       .gte("window_end", now.toISOString());
+
+    if (countError) {
+      throw new Error(`[rate-limit] count failed for key "${key}": ${countError.message}`);
+    }
 
     const currentCount = count ?? 0;
 
@@ -66,11 +70,15 @@ export async function rateLimitStrict(
     }
 
     // Insert new entry
-    await db.from("rate_limits").insert({
+    const { error: insertError } = await db.from("rate_limits").insert({
       key,
       window_end: windowEnd,
       created_at: now.toISOString(),
     });
+
+    if (insertError) {
+      throw new Error(`[rate-limit] insert failed for key "${key}": ${insertError.message}`);
+    }
 
     return { success: true, remaining: limit - currentCount - 1 };
   } catch (error) {
@@ -85,11 +93,14 @@ async function persistRateLimit(key: string, _limit: number, windowMs: number) {
     const admin = createAdminClient();
     const db = admin;
     const now = new Date();
-    await db.from("rate_limits").insert({
+    const { error } = await db.from("rate_limits").insert({
       key,
       window_end: new Date(now.getTime() + windowMs).toISOString(),
       created_at: now.toISOString(),
     });
+    if (error) {
+      throw error;
+    }
   } catch {
     // Non-critical — in-memory still works
   }
