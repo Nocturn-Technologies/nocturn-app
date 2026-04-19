@@ -63,10 +63,13 @@ export function EventCard({ collectiveName, vibe, data, onChange }: EventCardPro
 
   return (
     <div className="space-y-5 animate-fade-in-up">
-      <div className="text-center space-y-2">
-        <h2 className="text-2xl font-bold tracking-tight">Drop your first event</h2>
+      <div className="space-y-3">
+        <div className="section-label-mono">03 / FIRST NIGHT</div>
+        <h2 className="text-3xl md:text-4xl font-bold font-heading tracking-[-0.025em] leading-[1.05]">
+          Throw your<br/>first night.
+        </h2>
         <p className="text-sm text-muted-foreground">
-          Edit anything below, or pick a different template
+          Edit anything below, or pick a different template.
         </p>
       </div>
 
