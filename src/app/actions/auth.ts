@@ -3,33 +3,12 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
-import { currencyForCity } from "@/lib/currency";
-
-const VALID_USER_TYPES = [
-  "collective",
-  "host",
-  "promoter",
-  "artist",
-  "venue",
-  "photographer",
-  "videographer",
-  "sound_production",
-  "lighting_production",
-  "sponsor",
-  "artist_manager",
-  "tour_manager",
-  "booking_agent",
-  "event_staff",
-  "mc_host",
-  "graphic_designer",
-  "pr_publicist",
-] as const;
 
 export async function signUpUser(formData: {
   email: string;
   password: string;
   fullName: string;
-  userType?: "collective" | "host" | "promoter" | "artist" | "venue" | "photographer" | "videographer" | "sound_production" | "lighting_production" | "sponsor" | "artist_manager" | "tour_manager" | "booking_agent" | "event_staff" | "mc_host" | "graphic_designer" | "pr_publicist";
+  userType?: string;
 }) {
   try {
   // Input validation
@@ -48,16 +27,8 @@ export async function signUpUser(formData: {
   const admin = createAdminClient();
   const userType = formData.userType ?? "collective";
 
-  // Validate userType against whitelist
-  if (!VALID_USER_TYPES.includes(userType as (typeof VALID_USER_TYPES)[number])) {
-    return { error: "Invalid user type" };
-  }
-
-  // Collectives and promoters require manual approval. Hosts are instant —
-  // the whole value prop is "throw a night in minutes", so an approval gate
-  // is a direct contradiction (was previously kicking hosts to pending-approval).
-  const requiresApproval =
-    userType === "collective" || userType === "promoter";
+  // Collective signups require manual approval; all others are instant.
+  const requiresApproval = userType === "collective";
   const isApproved = !requiresApproval;
 
   // Create user with auto-confirm via admin API (no email confirmation needed)
@@ -102,12 +73,29 @@ export async function signUpUser(formData: {
         email: formData.email,
         full_name: formData.fullName,
         is_approved: isApproved,
-        user_type: userType,
       },
       { onConflict: "id" }
     );
   if (usersInsertError) {
     console.error("[signup] users insert failed:", usersInsertError.message);
+  }
+
+  // Create a parties record (person) and link it to the user
+  const { data: personParty, error: personPartyError } = await admin
+    .from("parties")
+    .insert({ type: "person", display_name: formData.fullName })
+    .select("id")
+    .maybeSingle();
+  if (personPartyError) {
+    console.error("[signup] parties insert failed:", personPartyError.message);
+  }
+  if (personParty) {
+    await admin.from("users").update({ party_id: personParty.id }).eq("id", userId);
+    await admin.from("party_roles").insert({
+      party_id: personParty.id,
+      role: "platform_user",
+      collective_id: null,
+    });
   }
 
   // For all non-collective types: auto-create a personal collective so they satisfy the
@@ -124,8 +112,6 @@ export async function signUpUser(formData: {
       .insert({
         name: collectiveName,
         slug,
-        description: null,
-        metadata: { auto_created: true, [userType]: true },
       })
       .select("id")
       .maybeSingle();
@@ -273,9 +259,7 @@ export async function createCollective(formData: {
   if (formData.slug.length > 100) {
     return { error: "Slug must be 100 characters or fewer." };
   }
-  if (formData.description && formData.description.length > 2000) {
-    return { error: "Description must be 2000 characters or fewer." };
-  }
+  // description, instagram, website are accepted for backwards-compatibility but not persisted
   if (formData.city.length > 100) {
     return { error: "City must be 100 characters or fewer." };
   }
@@ -340,23 +324,13 @@ export async function createCollective(formData: {
     return { error: "That collective name is already taken. Try a different one." };
   }
 
-  // Auto-derive default_currency from city (Toronto → CAD, NYC → USD,
-  // London → GBP, etc.). Operators can change it later in Settings. This
-  // ensures the collective starts out with the right currency for their
-  // first event, so checkout charges and payouts match.
-  const defaultCurrency = currencyForCity(formData.city);
-
   // Create collective
   const { data: collective, error: collectiveError } = await admin
     .from("collectives")
     .insert({
       name: formData.name,
       slug: formData.slug,
-      description: formData.description,
-      instagram: formData.instagram,
-      website: formData.website,
-      default_currency: defaultCurrency,
-      metadata: { city: formData.city },
+      city: formData.city,
     })
     .select("id")
     .maybeSingle();
@@ -378,6 +352,24 @@ export async function createCollective(formData: {
     return { error: "Failed to create collective" };
   }
   if (!collective) return { error: "Failed to create collective" };
+
+  // Create a parties record (organization) for this collective and link it
+  const { data: orgParty, error: orgPartyError } = await admin
+    .from("parties")
+    .insert({ type: "organization", display_name: formData.name })
+    .select("id")
+    .maybeSingle();
+  if (orgPartyError) {
+    console.error("[createCollective] parties insert error:", orgPartyError.message);
+  }
+  if (orgParty) {
+    await admin.from("collectives").update({ party_id: orgParty.id }).eq("id", collective.id);
+    await admin.from("party_roles").insert({
+      party_id: orgParty.id,
+      role: "collective",
+      collective_id: collective.id,
+    });
+  }
 
   // Add user as admin
   const { error: memberError } = await admin

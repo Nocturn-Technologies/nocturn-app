@@ -10,75 +10,153 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
-      artists: {
+      artist_profiles: {
         Row: {
+          availability: string | null
           bio: string | null
           booking_email: string | null
+          cover_photo_url: string | null
           created_at: string
           default_fee: number | null
           deleted_at: string | null
           genre: string[] | null
           id: string
-          metadata: Json | null
-          name: string
-          party_id: string | null
-          phone: string | null
+          is_active: boolean
+          is_verified: boolean
+          party_id: string
+          past_venues: string[] | null
           photo_url: string | null
+          portfolio_urls: string[] | null
+          rate_range: string | null
+          services: string[] | null
           slug: string
           spotify: string | null
+          updated_at: string
+        }
+        Insert: {
+          availability?: string | null
+          bio?: string | null
+          booking_email?: string | null
+          cover_photo_url?: string | null
+          created_at?: string
+          default_fee?: number | null
+          deleted_at?: string | null
+          genre?: string[] | null
+          id?: string
+          is_active?: boolean
+          is_verified?: boolean
+          party_id: string
+          past_venues?: string[] | null
+          photo_url?: string | null
+          portfolio_urls?: string[] | null
+          rate_range?: string | null
+          services?: string[] | null
+          slug: string
+          spotify?: string | null
+          updated_at?: string
+        }
+        Update: {
+          availability?: string | null
+          bio?: string | null
+          booking_email?: string | null
+          cover_photo_url?: string | null
+          created_at?: string
+          default_fee?: number | null
+          deleted_at?: string | null
+          genre?: string[] | null
+          id?: string
+          is_active?: boolean
+          is_verified?: boolean
+          party_id?: string
+          past_venues?: string[] | null
+          photo_url?: string | null
+          portfolio_urls?: string[] | null
+          rate_range?: string | null
+          services?: string[] | null
+          slug?: string
+          spotify?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artist_profiles_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: true
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attendee_profiles: {
+        Row: {
+          collective_id: string
+          created_at: string
+          email: string | null
+          first_seen_at: string | null
+          full_name: string | null
+          id: string
+          last_seen_at: string | null
+          metadata: Json | null
+          party_id: string | null
+          total_events: number
+          total_spend: number
+          total_tickets: number
           updated_at: string
           user_id: string | null
         }
         Insert: {
-          bio?: string | null
-          booking_email?: string | null
+          collective_id: string
           created_at?: string
-          default_fee?: number | null
-          deleted_at?: string | null
-          genre?: string[] | null
+          email?: string | null
+          first_seen_at?: string | null
+          full_name?: string | null
           id?: string
+          last_seen_at?: string | null
           metadata?: Json | null
-          name: string
           party_id?: string | null
-          phone?: string | null
-          photo_url?: string | null
-          slug: string
-          spotify?: string | null
+          total_events?: number
+          total_spend?: number
+          total_tickets?: number
           updated_at?: string
           user_id?: string | null
         }
         Update: {
-          bio?: string | null
-          booking_email?: string | null
+          collective_id?: string
           created_at?: string
-          default_fee?: number | null
-          deleted_at?: string | null
-          genre?: string[] | null
+          email?: string | null
+          first_seen_at?: string | null
+          full_name?: string | null
           id?: string
+          last_seen_at?: string | null
           metadata?: Json | null
-          name?: string
           party_id?: string | null
-          phone?: string | null
-          photo_url?: string | null
-          slug?: string
-          spotify?: string | null
+          total_events?: number
+          total_spend?: number
+          total_tickets?: number
           updated_at?: string
           user_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "artists_party_id_fkey"
+            foreignKeyName: "attendee_profiles_collective_id_fkey"
+            columns: ["collective_id"]
+            isOneToOne: false
+            referencedRelation: "collectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendee_profiles_party_id_fkey"
             columns: ["party_id"]
             isOneToOne: false
             referencedRelation: "parties"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "artists_user_id_fkey"
+            foreignKeyName: "attendee_profiles_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
@@ -91,42 +169,56 @@ export type Database = {
           action: string
           collective_id: string | null
           created_at: string
+          event_id: string | null
           id: string
-          ip_address: unknown
+          ip_address: string | null
           new_data: Json | null
           old_data: Json | null
-          record_id: string
-          table_name: string
-          user_agent: string | null
+          record_id: string | null
+          table_name: string | null
           user_id: string | null
         }
         Insert: {
           action: string
           collective_id?: string | null
           created_at?: string
+          event_id?: string | null
           id?: string
-          ip_address?: unknown
+          ip_address?: string | null
           new_data?: Json | null
           old_data?: Json | null
-          record_id: string
-          table_name: string
-          user_agent?: string | null
+          record_id?: string | null
+          table_name?: string | null
           user_id?: string | null
         }
         Update: {
           action?: string
           collective_id?: string | null
           created_at?: string
+          event_id?: string | null
           id?: string
-          ip_address?: unknown
+          ip_address?: string | null
           new_data?: Json | null
           old_data?: Json | null
-          record_id?: string
-          table_name?: string
-          user_agent?: string | null
+          record_id?: string | null
+          table_name?: string | null
           user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "audit_logs_collective_id_fkey"
+            columns: ["collective_id"]
+            isOneToOne: false
+            referencedRelation: "collectives"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "audit_logs_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "audit_logs_user_id_fkey"
             columns: ["user_id"]
@@ -139,32 +231,20 @@ export type Database = {
       channel_members: {
         Row: {
           channel_id: string
-          created_at: string
           id: string
-          is_online: boolean
           joined_at: string
-          last_seen_at: string | null
-          role: string
           user_id: string
         }
         Insert: {
           channel_id: string
-          created_at?: string
           id?: string
-          is_online?: boolean
           joined_at?: string
-          last_seen_at?: string | null
-          role?: string
           user_id: string
         }
         Update: {
           channel_id?: string
-          created_at?: string
           id?: string
-          is_online?: boolean
           joined_at?: string
-          last_seen_at?: string | null
-          role?: string
           user_id?: string
         }
         Relationships: [
@@ -175,37 +255,38 @@ export type Database = {
             referencedRelation: "channels"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "channel_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
         ]
       }
       channels: {
         Row: {
           collective_id: string | null
-          created_at: string | null
-          event_id: string | null
+          created_at: string
+          created_by: string | null
           id: string
-          metadata: Json | null
-          name: string
-          partner_collective_id: string | null
+          name: string | null
           type: string
         }
         Insert: {
           collective_id?: string | null
-          created_at?: string | null
-          event_id?: string | null
+          created_at?: string
+          created_by?: string | null
           id?: string
-          metadata?: Json | null
-          name: string
-          partner_collective_id?: string | null
+          name?: string | null
           type?: string
         }
         Update: {
           collective_id?: string | null
-          created_at?: string | null
-          event_id?: string | null
+          created_at?: string
+          created_by?: string | null
           id?: string
-          metadata?: Json | null
-          name?: string
-          partner_collective_id?: string | null
+          name?: string | null
           type?: string
         }
         Relationships: [
@@ -217,24 +298,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "channels_event_id_fkey"
-            columns: ["event_id"]
+            foreignKeyName: "channels_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "channels_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "channels_partner_collective_id_fkey"
-            columns: ["partner_collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -242,38 +309,29 @@ export type Database = {
       collective_members: {
         Row: {
           collective_id: string
-          created_at: string
           deleted_at: string | null
           id: string
-          invited_by: string | null
           joined_at: string
           party_id: string | null
-          role: Database["public"]["Enums"]["collective_role"]
-          updated_at: string
+          role: string
           user_id: string
         }
         Insert: {
           collective_id: string
-          created_at?: string
           deleted_at?: string | null
           id?: string
-          invited_by?: string | null
           joined_at?: string
           party_id?: string | null
-          role?: Database["public"]["Enums"]["collective_role"]
-          updated_at?: string
+          role?: string
           user_id: string
         }
         Update: {
           collective_id?: string
-          created_at?: string
           deleted_at?: string | null
           id?: string
-          invited_by?: string | null
           joined_at?: string
           party_id?: string | null
-          role?: Database["public"]["Enums"]["collective_role"]
-          updated_at?: string
+          role?: string
           user_id?: string
         }
         Relationships: [
@@ -282,13 +340,6 @@ export type Database = {
             columns: ["collective_id"]
             isOneToOne: false
             referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "collective_members_invited_by_fkey"
-            columns: ["invited_by"]
-            isOneToOne: false
-            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
@@ -311,71 +362,50 @@ export type Database = {
         Row: {
           bio: string | null
           city: string | null
+          cover_url: string | null
           created_at: string
-          default_currency: string
-          deleted_at: string | null
-          description: string | null
+          genre_tags: string[] | null
           id: string
+          is_active: boolean
+          is_approved: boolean
           logo_url: string | null
-          metadata: Json | null
           name: string
           party_id: string | null
-          referral_code: string | null
           slug: string
-          stripe_account_id: string | null
-          stripe_charges_enabled: boolean
-          stripe_details_submitted: boolean
-          stripe_disabled_reason: string | null
-          stripe_payouts_enabled: boolean
-          stripe_requirements_currently_due: string[]
-          stripe_status_updated_at: string | null
           updated_at: string
+          vibe: string | null
         }
         Insert: {
           bio?: string | null
           city?: string | null
+          cover_url?: string | null
           created_at?: string
-          default_currency?: string
-          deleted_at?: string | null
-          description?: string | null
+          genre_tags?: string[] | null
           id?: string
+          is_active?: boolean
+          is_approved?: boolean
           logo_url?: string | null
-          metadata?: Json | null
           name: string
           party_id?: string | null
-          referral_code?: string | null
           slug: string
-          stripe_account_id?: string | null
-          stripe_charges_enabled?: boolean
-          stripe_details_submitted?: boolean
-          stripe_disabled_reason?: string | null
-          stripe_payouts_enabled?: boolean
-          stripe_requirements_currently_due?: string[]
-          stripe_status_updated_at?: string | null
           updated_at?: string
+          vibe?: string | null
         }
         Update: {
           bio?: string | null
           city?: string | null
+          cover_url?: string | null
           created_at?: string
-          default_currency?: string
-          deleted_at?: string | null
-          description?: string | null
+          genre_tags?: string[] | null
           id?: string
+          is_active?: boolean
+          is_approved?: boolean
           logo_url?: string | null
-          metadata?: Json | null
           name?: string
           party_id?: string | null
-          referral_code?: string | null
           slug?: string
-          stripe_account_id?: string | null
-          stripe_charges_enabled?: boolean
-          stripe_details_submitted?: boolean
-          stripe_disabled_reason?: string | null
-          stripe_payouts_enabled?: boolean
-          stripe_requirements_currently_due?: string[]
-          stripe_status_updated_at?: string | null
           updated_at?: string
+          vibe?: string | null
         }
         Relationships: [
           {
@@ -387,188 +417,39 @@ export type Database = {
           },
         ]
       }
-      contacts: {
-        Row: {
-          artist_id: string | null
-          collective_id: string
-          contact_type: string
-          created_at: string
-          deleted_at: string | null
-          email: string | null
-          first_seen_at: string | null
-          follow_up_at: string | null
-          full_name: string | null
-          id: string
-          last_seen_at: string | null
-          marketplace_profile_id: string | null
-          metadata: Json | null
-          notes: string | null
-          party_id: string | null
-          phone: string | null
-          role: string | null
-          segment: string
-          source: string
-          source_detail: string | null
-          tags: string[] | null
-          total_events: number | null
-          total_spend: number | null
-          total_tickets: number
-          updated_at: string
-          user_id: string | null
-          vip_status: boolean
-        }
-        Insert: {
-          artist_id?: string | null
-          collective_id: string
-          contact_type?: string
-          created_at?: string
-          deleted_at?: string | null
-          email?: string | null
-          first_seen_at?: string | null
-          follow_up_at?: string | null
-          full_name?: string | null
-          id?: string
-          last_seen_at?: string | null
-          marketplace_profile_id?: string | null
-          metadata?: Json | null
-          notes?: string | null
-          party_id?: string | null
-          phone?: string | null
-          role?: string | null
-          segment?: string
-          source?: string
-          source_detail?: string | null
-          tags?: string[] | null
-          total_events?: number | null
-          total_spend?: number | null
-          total_tickets?: number
-          updated_at?: string
-          user_id?: string | null
-          vip_status?: boolean
-        }
-        Update: {
-          artist_id?: string | null
-          collective_id?: string
-          contact_type?: string
-          created_at?: string
-          deleted_at?: string | null
-          email?: string | null
-          first_seen_at?: string | null
-          follow_up_at?: string | null
-          full_name?: string | null
-          id?: string
-          last_seen_at?: string | null
-          marketplace_profile_id?: string | null
-          metadata?: Json | null
-          notes?: string | null
-          party_id?: string | null
-          phone?: string | null
-          role?: string | null
-          segment?: string
-          source?: string
-          source_detail?: string | null
-          tags?: string[] | null
-          total_events?: number | null
-          total_spend?: number | null
-          total_tickets?: number
-          updated_at?: string
-          user_id?: string | null
-          vip_status?: boolean
-        }
-        Relationships: [
-          {
-            foreignKeyName: "contacts_artist_id_fkey"
-            columns: ["artist_id"]
-            isOneToOne: false
-            referencedRelation: "artists"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contacts_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contacts_party_id_fkey"
-            columns: ["party_id"]
-            isOneToOne: false
-            referencedRelation: "parties"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "contacts_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       email_campaigns: {
         Row: {
-          body_html: string | null
-          body_text: string | null
-          clicks: number | null
+          body: string
           collective_id: string
           created_at: string
           created_by: string | null
-          deleted_at: string | null
           event_id: string | null
           id: string
-          metadata: Json | null
-          name: string
-          opens: number | null
-          recipients: number | null
-          scheduled_at: string | null
-          send_to_all: boolean | null
           sent_at: string | null
-          status: Database["public"]["Enums"]["campaign_status"]
+          sent_to: number
           subject: string
-          updated_at: string
         }
         Insert: {
-          body_html?: string | null
-          body_text?: string | null
-          clicks?: number | null
+          body: string
           collective_id: string
           created_at?: string
           created_by?: string | null
-          deleted_at?: string | null
           event_id?: string | null
           id?: string
-          metadata?: Json | null
-          name: string
-          opens?: number | null
-          recipients?: number | null
-          scheduled_at?: string | null
-          send_to_all?: boolean | null
           sent_at?: string | null
-          status?: Database["public"]["Enums"]["campaign_status"]
+          sent_to?: number
           subject: string
-          updated_at?: string
         }
         Update: {
-          body_html?: string | null
-          body_text?: string | null
-          clicks?: number | null
+          body?: string
           collective_id?: string
           created_at?: string
           created_by?: string | null
-          deleted_at?: string | null
           event_id?: string | null
           id?: string
-          metadata?: Json | null
-          name?: string
-          opens?: number | null
-          recipients?: number | null
-          scheduled_at?: string | null
-          send_to_all?: boolean | null
           sent_at?: string | null
-          status?: Database["public"]["Enums"]["campaign_status"]
+          sent_to?: number
           subject?: string
-          updated_at?: string
         }
         Relationships: [
           {
@@ -589,13 +470,6 @@ export type Database = {
             foreignKeyName: "email_campaigns_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "email_campaigns_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
@@ -609,6 +483,7 @@ export type Database = {
           event_id: string
           id: string
           metadata: Json | null
+          party_id: string | null
           user_id: string | null
         }
         Insert: {
@@ -618,6 +493,7 @@ export type Database = {
           event_id: string
           id?: string
           metadata?: Json | null
+          party_id?: string | null
           user_id?: string | null
         }
         Update: {
@@ -627,6 +503,7 @@ export type Database = {
           event_id?: string
           id?: string
           metadata?: Json | null
+          party_id?: string | null
           user_id?: string | null
         }
         Relationships: [
@@ -634,14 +511,14 @@ export type Database = {
             foreignKeyName: "event_activity_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "event_activity_event_id_fkey"
-            columns: ["event_id"]
+            foreignKeyName: "event_activity_party_id_fkey"
+            columns: ["party_id"]
             isOneToOne: false
-            referencedRelation: "events"
+            referencedRelation: "parties"
             referencedColumns: ["id"]
           },
           {
@@ -655,73 +532,36 @@ export type Database = {
       }
       event_analytics: {
         Row: {
-          avg_ticket_price: number | null
-          capacity_percentage: number | null
-          checkout_completions: number | null
-          checkout_starts: number | null
-          conversion_rate: number | null
-          currency: string
+          created_at: string
           event_id: string
-          gross_revenue: number | null
           id: string
-          net_revenue: number | null
-          page_views: number | null
-          promo_redemptions: number | null
-          referral_count: number | null
-          tickets_refunded: number | null
-          tickets_sold: number | null
-          tier_clicks: number | null
-          unique_visitors: number | null
-          updated_at: string | null
+          page_views: number
+          shares: number
+          ticket_page_views: number
+          unique_visitors: number
+          updated_at: string
         }
         Insert: {
-          avg_ticket_price?: number | null
-          capacity_percentage?: number | null
-          checkout_completions?: number | null
-          checkout_starts?: number | null
-          conversion_rate?: number | null
-          currency?: string
+          created_at?: string
           event_id: string
-          gross_revenue?: number | null
           id?: string
-          net_revenue?: number | null
-          page_views?: number | null
-          promo_redemptions?: number | null
-          referral_count?: number | null
-          tickets_refunded?: number | null
-          tickets_sold?: number | null
-          tier_clicks?: number | null
-          unique_visitors?: number | null
-          updated_at?: string | null
+          page_views?: number
+          shares?: number
+          ticket_page_views?: number
+          unique_visitors?: number
+          updated_at?: string
         }
         Update: {
-          avg_ticket_price?: number | null
-          capacity_percentage?: number | null
-          checkout_completions?: number | null
-          checkout_starts?: number | null
-          conversion_rate?: number | null
-          currency?: string
+          created_at?: string
           event_id?: string
-          gross_revenue?: number | null
           id?: string
-          net_revenue?: number | null
-          page_views?: number | null
-          promo_redemptions?: number | null
-          referral_count?: number | null
-          tickets_refunded?: number | null
-          tickets_sold?: number | null
-          tier_clicks?: number | null
-          unique_visitors?: number | null
-          updated_at?: string | null
+          page_views?: number
+          shares?: number
+          ticket_page_views?: number
+          unique_visitors?: number
+          updated_at?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "event_analytics_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: true
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
           {
             foreignKeyName: "event_analytics_event_id_fkey"
             columns: ["event_id"]
@@ -733,84 +573,45 @@ export type Database = {
       }
       event_artists: {
         Row: {
-          artist_id: string
-          booked_by: string | null
           created_at: string
           event_id: string
           fee: number | null
-          fee_currency: string | null
-          flight_cost: number | null
-          hotel_cost: number | null
           id: string
+          name: string
           notes: string | null
           party_id: string | null
-          set_duration: number | null
+          role: string | null
+          set_length: number | null
           set_time: string | null
-          status: Database["public"]["Enums"]["booking_status"]
-          transport_cost: number | null
-          travel_notes: string | null
-          updated_at: string
+          sort_order: number
         }
         Insert: {
-          artist_id: string
-          booked_by?: string | null
           created_at?: string
           event_id: string
           fee?: number | null
-          fee_currency?: string | null
-          flight_cost?: number | null
-          hotel_cost?: number | null
           id?: string
+          name: string
           notes?: string | null
           party_id?: string | null
-          set_duration?: number | null
+          role?: string | null
+          set_length?: number | null
           set_time?: string | null
-          status?: Database["public"]["Enums"]["booking_status"]
-          transport_cost?: number | null
-          travel_notes?: string | null
-          updated_at?: string
+          sort_order?: number
         }
         Update: {
-          artist_id?: string
-          booked_by?: string | null
           created_at?: string
           event_id?: string
           fee?: number | null
-          fee_currency?: string | null
-          flight_cost?: number | null
-          hotel_cost?: number | null
           id?: string
+          name?: string
           notes?: string | null
           party_id?: string | null
-          set_duration?: number | null
+          role?: string | null
+          set_length?: number | null
           set_time?: string | null
-          status?: Database["public"]["Enums"]["booking_status"]
-          transport_cost?: number | null
-          travel_notes?: string | null
-          updated_at?: string
+          sort_order?: number
         }
         Relationships: [
-          {
-            foreignKeyName: "event_artists_artist_id_fkey"
-            columns: ["artist_id"]
-            isOneToOne: false
-            referencedRelation: "artists"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_artists_booked_by_fkey"
-            columns: ["booked_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_artists_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
           {
             foreignKeyName: "event_artists_event_id_fkey"
             columns: ["event_id"]
@@ -829,197 +630,80 @@ export type Database = {
       }
       event_cards: {
         Row: {
-          card_type: string
-          content: string | null
+          content: Json
           created_at: string
-          deleted_at: string | null
           event_id: string
           id: string
-          metadata: Json | null
-          position: number | null
-          title: string | null
-          updated_at: string
+          sort_order: number
+          type: string
         }
         Insert: {
-          card_type: string
-          content?: string | null
+          content?: Json
           created_at?: string
-          deleted_at?: string | null
           event_id: string
           id?: string
-          metadata?: Json | null
-          position?: number | null
-          title?: string | null
-          updated_at?: string
+          sort_order?: number
+          type: string
         }
         Update: {
-          card_type?: string
-          content?: string | null
+          content?: Json
           created_at?: string
-          deleted_at?: string | null
           event_id?: string
           id?: string
-          metadata?: Json | null
-          position?: number | null
-          title?: string | null
-          updated_at?: string
+          sort_order?: number
+          type?: string
         }
         Relationships: [
           {
             foreignKeyName: "event_cards_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "event_cards_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
         ]
       }
-      event_collectives: {
-        Row: {
-          collective_id: string
-          created_at: string
-          event_id: string
-          id: string
-          revenue_share_pct: number | null
-          role: Database["public"]["Enums"]["event_collective_role"]
-        }
-        Insert: {
-          collective_id: string
-          created_at?: string
-          event_id: string
-          id?: string
-          revenue_share_pct?: number | null
-          role?: Database["public"]["Enums"]["event_collective_role"]
-        }
-        Update: {
-          collective_id?: string
-          created_at?: string
-          event_id?: string
-          id?: string
-          revenue_share_pct?: number | null
-          role?: Database["public"]["Enums"]["event_collective_role"]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "event_collectives_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "event_collectives_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "event_collectives_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      event_reactions: {
-        Row: {
-          created_at: string
-          emoji: string
-          event_id: string
-          fingerprint: string
-          id: string
-        }
-        Insert: {
-          created_at?: string
-          emoji: string
-          event_id: string
-          fingerprint: string
-          id?: string
-        }
-        Update: {
-          created_at?: string
-          emoji?: string
-          event_id?: string
-          fingerprint?: string
-          id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "event_reactions_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "event_reactions_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      event_revenue: {
+      event_expenses: {
         Row: {
           amount: number
           category: string
-          collective_id: string
           created_at: string
-          currency: string
-          description: string
+          created_by: string | null
+          description: string | null
           event_id: string
           id: string
-          updated_at: string
+          is_paid: boolean
         }
         Insert: {
           amount: number
-          category?: string
-          collective_id: string
+          category: string
           created_at?: string
-          currency?: string
-          description: string
+          created_by?: string | null
+          description?: string | null
           event_id: string
           id?: string
-          updated_at?: string
+          is_paid?: boolean
         }
         Update: {
           amount?: number
           category?: string
-          collective_id?: string
           created_at?: string
-          currency?: string
-          description?: string
+          created_by?: string | null
+          description?: string | null
           event_id?: string
           id?: string
-          updated_at?: string
+          is_paid?: boolean
         }
         Relationships: [
           {
-            foreignKeyName: "event_revenue_collective_id_fkey"
-            columns: ["collective_id"]
+            foreignKeyName: "event_expenses_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
-            referencedRelation: "collectives"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "event_revenue_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "event_revenue_event_id_fkey"
+            foreignKeyName: "event_expenses_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
@@ -1064,13 +748,6 @@ export type Database = {
             foreignKeyName: "event_status_log_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "event_status_log_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
@@ -1081,46 +758,37 @@ export type Database = {
           assigned_to: string | null
           completed_at: string | null
           created_at: string
-          deleted_at: string | null
+          created_by: string | null
           description: string | null
           due_at: string | null
           event_id: string
           id: string
-          metadata: Json | null
-          priority: string | null
-          status: string | null
+          status: string
           title: string
-          updated_at: string
         }
         Insert: {
           assigned_to?: string | null
           completed_at?: string | null
           created_at?: string
-          deleted_at?: string | null
+          created_by?: string | null
           description?: string | null
           due_at?: string | null
           event_id: string
           id?: string
-          metadata?: Json | null
-          priority?: string | null
-          status?: string | null
+          status?: string
           title: string
-          updated_at?: string
         }
         Update: {
           assigned_to?: string | null
           completed_at?: string | null
           created_at?: string
-          deleted_at?: string | null
+          created_by?: string | null
           description?: string | null
           due_at?: string | null
           event_id?: string
           id?: string
-          metadata?: Json | null
-          priority?: string | null
-          status?: string | null
+          status?: string
           title?: string
-          updated_at?: string
         }
         Relationships: [
           {
@@ -1131,62 +799,14 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "event_tasks_event_id_fkey"
-            columns: ["event_id"]
+            foreignKeyName: "event_tasks_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "event_tasks_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      event_updates: {
-        Row: {
-          author_id: string
-          body: string
-          created_at: string
-          email_sent: boolean
-          emailed_at: string | null
-          event_id: string
-          id: string
-          recipient_count: number
-        }
-        Insert: {
-          author_id: string
-          body: string
-          created_at?: string
-          email_sent?: boolean
-          emailed_at?: string | null
-          event_id: string
-          id?: string
-          recipient_count?: number
-        }
-        Update: {
-          author_id?: string
-          body?: string
-          created_at?: string
-          email_sent?: boolean
-          emailed_at?: string | null
-          event_id?: string
-          id?: string
-          recipient_count?: number
-        }
-        Relationships: [
           {
-            foreignKeyName: "event_updates_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "event_updates_event_id_fkey"
+            foreignKeyName: "event_tasks_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
@@ -1196,92 +816,74 @@ export type Database = {
       }
       events: {
         Row: {
-          actual_bar_revenue: number | null
-          bar_minimum: number | null
+          capacity: number | null
+          city: string | null
           collective_id: string
           created_at: string
-          currency: string
-          deleted_at: string | null
           description: string | null
           doors_at: string | null
           ends_at: string | null
-          estimated_bar_revenue: number | null
-          event_mode: string
           flyer_url: string | null
           id: string
-          is_free: boolean | null
+          is_free: boolean
+          is_published: boolean
           metadata: Json | null
           min_age: number | null
-          slug: string
+          slug: string | null
           starts_at: string
-          status: Database["public"]["Enums"]["event_status"]
-          ticket_capacity: number | null
-          ticket_price: number | null
+          status: string
           title: string
           updated_at: string
-          venue_cost: number | null
-          venue_deposit: number | null
-          venue_id: string | null
+          venue_address: string | null
+          venue_name: string | null
           venue_party_id: string | null
           vibe_tags: string[] | null
         }
         Insert: {
-          actual_bar_revenue?: number | null
-          bar_minimum?: number | null
+          capacity?: number | null
+          city?: string | null
           collective_id: string
           created_at?: string
-          currency?: string
-          deleted_at?: string | null
           description?: string | null
           doors_at?: string | null
           ends_at?: string | null
-          estimated_bar_revenue?: number | null
-          event_mode?: string
           flyer_url?: string | null
           id?: string
-          is_free?: boolean | null
+          is_free?: boolean
+          is_published?: boolean
           metadata?: Json | null
           min_age?: number | null
-          slug: string
+          slug?: string | null
           starts_at: string
-          status?: Database["public"]["Enums"]["event_status"]
-          ticket_capacity?: number | null
-          ticket_price?: number | null
+          status?: string
           title: string
           updated_at?: string
-          venue_cost?: number | null
-          venue_deposit?: number | null
-          venue_id?: string | null
+          venue_address?: string | null
+          venue_name?: string | null
           venue_party_id?: string | null
           vibe_tags?: string[] | null
         }
         Update: {
-          actual_bar_revenue?: number | null
-          bar_minimum?: number | null
+          capacity?: number | null
+          city?: string | null
           collective_id?: string
           created_at?: string
-          currency?: string
-          deleted_at?: string | null
           description?: string | null
           doors_at?: string | null
           ends_at?: string | null
-          estimated_bar_revenue?: number | null
-          event_mode?: string
           flyer_url?: string | null
           id?: string
-          is_free?: boolean | null
+          is_free?: boolean
+          is_published?: boolean
           metadata?: Json | null
           min_age?: number | null
-          slug?: string
+          slug?: string | null
           starts_at?: string
-          status?: Database["public"]["Enums"]["event_status"]
-          ticket_capacity?: number | null
-          ticket_price?: number | null
+          status?: string
           title?: string
           updated_at?: string
-          venue_cost?: number | null
-          venue_deposit?: number | null
-          venue_id?: string | null
+          venue_address?: string | null
+          venue_name?: string | null
           venue_party_id?: string | null
           vibe_tags?: string[] | null
         }
@@ -1294,13 +896,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "events_venue_id_fkey"
-            columns: ["venue_id"]
-            isOneToOne: false
-            referencedRelation: "venues"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "events_venue_party_id_fkey"
             columns: ["venue_party_id"]
             isOneToOne: false
@@ -1309,132 +904,52 @@ export type Database = {
           },
         ]
       }
-      expenses: {
-        Row: {
-          amount: number
-          category: string
-          collective_id: string
-          created_at: string
-          currency: string | null
-          deleted_at: string | null
-          description: string | null
-          event_id: string
-          id: string
-          metadata: Json | null
-          paid_by: string | null
-          receipt_url: string | null
-          updated_at: string
-        }
-        Insert: {
-          amount?: number
-          category: string
-          collective_id: string
-          created_at?: string
-          currency?: string | null
-          deleted_at?: string | null
-          description?: string | null
-          event_id: string
-          id?: string
-          metadata?: Json | null
-          paid_by?: string | null
-          receipt_url?: string | null
-          updated_at?: string
-        }
-        Update: {
-          amount?: number
-          category?: string
-          collective_id?: string
-          created_at?: string
-          currency?: string | null
-          deleted_at?: string | null
-          description?: string | null
-          event_id?: string
-          id?: string
-          metadata?: Json | null
-          paid_by?: string | null
-          receipt_url?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "expenses_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expenses_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "expenses_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "expenses_paid_by_fkey"
-            columns: ["paid_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       external_events: {
         Row: {
-          created_at: string | null
-          deleted_at: string | null
-          event_date: string | null
-          external_url: string
-          flyer_url: string | null
+          city: string | null
+          collective_id: string | null
           id: string
           metadata: Json | null
-          platform: string | null
-          promoter_id: string
+          scraped_at: string
+          source: string | null
+          source_url: string | null
+          starts_at: string | null
+          ticket_price: number | null
           title: string
-          updated_at: string | null
           venue_name: string | null
         }
         Insert: {
-          created_at?: string | null
-          deleted_at?: string | null
-          event_date?: string | null
-          external_url: string
-          flyer_url?: string | null
+          city?: string | null
+          collective_id?: string | null
           id?: string
           metadata?: Json | null
-          platform?: string | null
-          promoter_id: string
+          scraped_at?: string
+          source?: string | null
+          source_url?: string | null
+          starts_at?: string | null
+          ticket_price?: number | null
           title: string
-          updated_at?: string | null
           venue_name?: string | null
         }
         Update: {
-          created_at?: string | null
-          deleted_at?: string | null
-          event_date?: string | null
-          external_url?: string
-          flyer_url?: string | null
+          city?: string | null
+          collective_id?: string | null
           id?: string
           metadata?: Json | null
-          platform?: string | null
-          promoter_id?: string
+          scraped_at?: string
+          source?: string | null
+          source_url?: string | null
+          starts_at?: string | null
+          ticket_price?: number | null
           title?: string
-          updated_at?: string | null
           venue_name?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "external_events_promoter_id_fkey"
-            columns: ["promoter_id"]
+            foreignKeyName: "external_events_collective_id_fkey"
+            columns: ["collective_id"]
             isOneToOne: false
-            referencedRelation: "users"
+            referencedRelation: "collectives"
             referencedColumns: ["id"]
           },
         ]
@@ -1442,48 +957,39 @@ export type Database = {
       guest_list: {
         Row: {
           added_by: string | null
-          checked_in_at: string | null
+          checked_in: boolean
           created_at: string
           email: string | null
           event_id: string
           id: string
-          metadata: Json | null
           name: string
           notes: string | null
-          phone: string | null
-          plus_ones: number | null
-          status: string | null
-          updated_at: string
+          party_id: string | null
+          plus_ones: number
         }
         Insert: {
           added_by?: string | null
-          checked_in_at?: string | null
+          checked_in?: boolean
           created_at?: string
           email?: string | null
           event_id: string
           id?: string
-          metadata?: Json | null
           name: string
           notes?: string | null
-          phone?: string | null
-          plus_ones?: number | null
-          status?: string | null
-          updated_at?: string
+          party_id?: string | null
+          plus_ones?: number
         }
         Update: {
           added_by?: string | null
-          checked_in_at?: string | null
+          checked_in?: boolean
           created_at?: string
           email?: string | null
           event_id?: string
           id?: string
-          metadata?: Json | null
           name?: string
           notes?: string | null
-          phone?: string | null
-          plus_ones?: number | null
-          status?: string | null
-          updated_at?: string
+          party_id?: string | null
+          plus_ones?: number
         }
         Relationships: [
           {
@@ -1497,54 +1003,51 @@ export type Database = {
             foreignKeyName: "guest_list_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
+            referencedRelation: "events"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "guest_list_event_id_fkey"
-            columns: ["event_id"]
+            foreignKeyName: "guest_list_party_id_fkey"
+            columns: ["party_id"]
             isOneToOne: false
-            referencedRelation: "events"
+            referencedRelation: "parties"
             referencedColumns: ["id"]
           },
         ]
       }
       invitations: {
         Row: {
+          accepted_at: string | null
           collective_id: string
-          created_at: string | null
+          created_at: string
           email: string
           expires_at: string | null
           id: string
-          invited_by: string | null
+          invited_by: string
           role: string
-          status: string
-          token: string | null
-          type: string
+          token: string
         }
         Insert: {
+          accepted_at?: string | null
           collective_id: string
-          created_at?: string | null
+          created_at?: string
           email: string
           expires_at?: string | null
           id?: string
-          invited_by?: string | null
+          invited_by: string
           role?: string
-          status?: string
-          token?: string | null
-          type?: string
+          token: string
         }
         Update: {
+          accepted_at?: string | null
           collective_id?: string
-          created_at?: string | null
+          created_at?: string
           email?: string
           expires_at?: string | null
           id?: string
-          invited_by?: string | null
+          invited_by?: string
           role?: string
-          status?: string
-          token?: string | null
-          type?: string
+          token?: string
         }
         Relationships: [
           {
@@ -1554,187 +1057,9 @@ export type Database = {
             referencedRelation: "collectives"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      marketplace_inquiries: {
-        Row: {
-          created_at: string | null
-          event_id: string | null
-          from_user_id: string
-          id: string
-          inquiry_type: string
-          message: string | null
-          status: string
-          to_profile_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          event_id?: string | null
-          from_user_id: string
-          id?: string
-          inquiry_type?: string
-          message?: string | null
-          status?: string
-          to_profile_id: string
-        }
-        Update: {
-          created_at?: string | null
-          event_id?: string | null
-          from_user_id?: string
-          id?: string
-          inquiry_type?: string
-          message?: string | null
-          status?: string
-          to_profile_id?: string
-        }
-        Relationships: [
           {
-            foreignKeyName: "marketplace_inquiries_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "marketplace_inquiries_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "marketplace_inquiries_from_user_id_fkey"
-            columns: ["from_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "marketplace_inquiries_to_profile_id_fkey"
-            columns: ["to_profile_id"]
-            isOneToOne: false
-            referencedRelation: "marketplace_profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      marketplace_profiles: {
-        Row: {
-          availability: string | null
-          avatar_url: string | null
-          bio: string | null
-          city: string | null
-          cover_photo_url: string | null
-          created_at: string | null
-          display_name: string
-          genres: string[] | null
-          id: string
-          is_active: boolean | null
-          is_verified: boolean | null
-          party_id: string | null
-          past_venues: string[] | null
-          portfolio_urls: string[] | null
-          rate_range: string | null
-          services: string[] | null
-          slug: string
-          spotify_url: string | null
-          updated_at: string | null
-          user_id: string
-          user_type: string
-        }
-        Insert: {
-          availability?: string | null
-          avatar_url?: string | null
-          bio?: string | null
-          city?: string | null
-          cover_photo_url?: string | null
-          created_at?: string | null
-          display_name: string
-          genres?: string[] | null
-          id?: string
-          is_active?: boolean | null
-          is_verified?: boolean | null
-          party_id?: string | null
-          past_venues?: string[] | null
-          portfolio_urls?: string[] | null
-          rate_range?: string | null
-          services?: string[] | null
-          slug: string
-          spotify_url?: string | null
-          updated_at?: string | null
-          user_id: string
-          user_type: string
-        }
-        Update: {
-          availability?: string | null
-          avatar_url?: string | null
-          bio?: string | null
-          city?: string | null
-          cover_photo_url?: string | null
-          created_at?: string | null
-          display_name?: string
-          genres?: string[] | null
-          id?: string
-          is_active?: boolean | null
-          is_verified?: boolean | null
-          party_id?: string | null
-          past_venues?: string[] | null
-          portfolio_urls?: string[] | null
-          rate_range?: string | null
-          services?: string[] | null
-          slug?: string
-          spotify_url?: string | null
-          updated_at?: string | null
-          user_id?: string
-          user_type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "marketplace_profiles_party_id_fkey"
-            columns: ["party_id"]
-            isOneToOne: false
-            referencedRelation: "parties"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "marketplace_profiles_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      marketplace_saved: {
-        Row: {
-          created_at: string | null
-          id: string
-          profile_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          profile_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          profile_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "marketplace_saved_profile_id_fkey"
-            columns: ["profile_id"]
-            isOneToOne: false
-            referencedRelation: "marketplace_profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "marketplace_saved_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "invitations_invited_by_fkey"
+            columns: ["invited_by"]
             isOneToOne: false
             referencedRelation: "users"
             referencedColumns: ["id"]
@@ -1745,29 +1070,29 @@ export type Database = {
         Row: {
           channel_id: string
           content: string
-          created_at: string | null
+          created_at: string
           id: string
-          metadata: Json | null
-          type: string
-          user_id: string | null
+          party_id: string | null
+          updated_at: string
+          user_id: string
         }
         Insert: {
           channel_id: string
           content: string
-          created_at?: string | null
+          created_at?: string
           id?: string
-          metadata?: Json | null
-          type?: string
-          user_id?: string | null
+          party_id?: string | null
+          updated_at?: string
+          user_id: string
         }
         Update: {
           channel_id?: string
           content?: string
-          created_at?: string | null
+          created_at?: string
           id?: string
-          metadata?: Json | null
-          type?: string
-          user_id?: string | null
+          party_id?: string | null
+          updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -1778,10 +1103,135 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "messages_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "messages_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_lines: {
+        Row: {
+          created_at: string
+          id: string
+          order_id: string
+          quantity: number
+          refunded_quantity: number
+          subtotal: number
+          tier_id: string
+          unit_price: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          order_id: string
+          quantity: number
+          refunded_quantity?: number
+          subtotal: number
+          tier_id: string
+          unit_price: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          order_id?: string
+          quantity?: number
+          refunded_quantity?: number
+          subtotal?: number
+          tier_id?: string
+          unit_price?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_lines_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_lines_tier_id_fkey"
+            columns: ["tier_id"]
+            isOneToOne: false
+            referencedRelation: "ticket_tiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string
+          currency: string
+          event_id: string
+          id: string
+          metadata: Json | null
+          party_id: string
+          platform_fee: number
+          promo_code_id: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          stripe_fee: number
+          stripe_payment_intent_id: string | null
+          subtotal: number
+          total: number
+        }
+        Insert: {
+          created_at?: string
+          currency?: string
+          event_id: string
+          id?: string
+          metadata?: Json | null
+          party_id: string
+          platform_fee?: number
+          promo_code_id?: string | null
+          status?: Database["public"]["Enums"]["order_status"]
+          stripe_fee?: number
+          stripe_payment_intent_id?: string | null
+          subtotal?: number
+          total?: number
+        }
+        Update: {
+          created_at?: string
+          currency?: string
+          event_id?: string
+          id?: string
+          metadata?: Json | null
+          party_id?: string
+          platform_fee?: number
+          promo_code_id?: string | null
+          status?: Database["public"]["Enums"]["order_status"]
+          stripe_fee?: number
+          stripe_payment_intent_id?: string | null
+          subtotal?: number
+          total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_promo_code_id_fkey"
+            columns: ["promo_code_id"]
+            isOneToOne: false
+            referencedRelation: "promo_codes"
             referencedColumns: ["id"]
           },
         ]
@@ -1889,58 +1339,51 @@ export type Database = {
       }
       payment_events: {
         Row: {
-          amount_cents: number | null
-          buyer_email: string | null
-          created_at: string | null
+          amount: number | null
+          created_at: string
           currency: string | null
-          error_message: string | null
+          customer_email: string | null
           event_id: string | null
           event_type: string
           id: string
           metadata: Json | null
-          payment_intent_id: string | null
-          quantity: number | null
-          ticket_id: string | null
-          tier_id: string | null
+          order_id: string | null
+          raw_payload: Json | null
+          status: string | null
+          stripe_event_id: string
+          stripe_payment_intent_id: string | null
         }
         Insert: {
-          amount_cents?: number | null
-          buyer_email?: string | null
-          created_at?: string | null
+          amount?: number | null
+          created_at?: string
           currency?: string | null
-          error_message?: string | null
+          customer_email?: string | null
           event_id?: string | null
           event_type: string
           id?: string
           metadata?: Json | null
-          payment_intent_id?: string | null
-          quantity?: number | null
-          ticket_id?: string | null
-          tier_id?: string | null
+          order_id?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          stripe_event_id: string
+          stripe_payment_intent_id?: string | null
         }
         Update: {
-          amount_cents?: number | null
-          buyer_email?: string | null
-          created_at?: string | null
+          amount?: number | null
+          created_at?: string
           currency?: string | null
-          error_message?: string | null
+          customer_email?: string | null
           event_id?: string | null
           event_type?: string
           id?: string
           metadata?: Json | null
-          payment_intent_id?: string | null
-          quantity?: number | null
-          ticket_id?: string | null
-          tier_id?: string | null
+          order_id?: string | null
+          raw_payload?: Json | null
+          status?: string | null
+          stripe_event_id?: string
+          stripe_payment_intent_id?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "payment_events_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
           {
             foreignKeyName: "payment_events_event_id_fkey"
             columns: ["event_id"]
@@ -1949,17 +1392,10 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "payment_events_ticket_id_fkey"
-            columns: ["ticket_id"]
+            foreignKeyName: "payment_events_order_id_fkey"
+            columns: ["order_id"]
             isOneToOne: false
-            referencedRelation: "tickets"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_events_tier_id_fkey"
-            columns: ["tier_id"]
-            isOneToOne: false
-            referencedRelation: "ticket_tiers"
+            referencedRelation: "orders"
             referencedColumns: ["id"]
           },
         ]
@@ -1968,62 +1404,41 @@ export type Database = {
         Row: {
           amount: number
           collective_id: string
-          completed_at: string | null
           created_at: string
-          currency: string | null
-          failed_at: string | null
-          failure_reason: string | null
+          currency: string
           id: string
-          initiated_at: string | null
-          kind: string
-          metadata: Json | null
-          recipient_user_id: string | null
-          recipient_venue_id: string | null
+          method: string | null
+          notes: string | null
+          paid_at: string | null
+          reference: string | null
           settlement_id: string
-          status: Database["public"]["Enums"]["payout_status"]
-          stripe_payout_id: string | null
-          stripe_transfer_id: string | null
-          updated_at: string
+          status: string
         }
         Insert: {
           amount: number
           collective_id: string
-          completed_at?: string | null
           created_at?: string
-          currency?: string | null
-          failed_at?: string | null
-          failure_reason?: string | null
+          currency?: string
           id?: string
-          initiated_at?: string | null
-          kind?: string
-          metadata?: Json | null
-          recipient_user_id?: string | null
-          recipient_venue_id?: string | null
+          method?: string | null
+          notes?: string | null
+          paid_at?: string | null
+          reference?: string | null
           settlement_id: string
-          status?: Database["public"]["Enums"]["payout_status"]
-          stripe_payout_id?: string | null
-          stripe_transfer_id?: string | null
-          updated_at?: string
+          status?: string
         }
         Update: {
           amount?: number
           collective_id?: string
-          completed_at?: string | null
           created_at?: string
-          currency?: string | null
-          failed_at?: string | null
-          failure_reason?: string | null
+          currency?: string
           id?: string
-          initiated_at?: string | null
-          kind?: string
-          metadata?: Json | null
-          recipient_user_id?: string | null
-          recipient_venue_id?: string | null
+          method?: string | null
+          notes?: string | null
+          paid_at?: string | null
+          reference?: string | null
           settlement_id?: string
-          status?: Database["public"]["Enums"]["payout_status"]
-          stripe_payout_id?: string | null
-          stripe_transfer_id?: string | null
-          updated_at?: string
+          status?: string
         }
         Relationships: [
           {
@@ -2031,20 +1446,6 @@ export type Database = {
             columns: ["collective_id"]
             isOneToOne: false
             referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payouts_recipient_user_id_fkey"
-            columns: ["recipient_user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payouts_recipient_venue_id_fkey"
-            columns: ["recipient_venue_id"]
-            isOneToOne: false
-            referencedRelation: "venues"
             referencedColumns: ["id"]
           },
           {
@@ -2059,44 +1460,35 @@ export type Database = {
       playbook_task_templates: {
         Row: {
           created_at: string
-          default_assignee_role: string | null
           description: string | null
-          due_offset_hours: number | null
+          due_offset: number | null
           id: string
-          metadata: Json | null
-          playbook_id: string
-          position: number | null
+          sort_order: number
+          template_id: string
           title: string
-          updated_at: string
         }
         Insert: {
           created_at?: string
-          default_assignee_role?: string | null
           description?: string | null
-          due_offset_hours?: number | null
+          due_offset?: number | null
           id?: string
-          metadata?: Json | null
-          playbook_id: string
-          position?: number | null
+          sort_order?: number
+          template_id: string
           title: string
-          updated_at?: string
         }
         Update: {
           created_at?: string
-          default_assignee_role?: string | null
           description?: string | null
-          due_offset_hours?: number | null
+          due_offset?: number | null
           id?: string
-          metadata?: Json | null
-          playbook_id?: string
-          position?: number | null
+          sort_order?: number
+          template_id?: string
           title?: string
-          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "playbook_task_templates_playbook_id_fkey"
-            columns: ["playbook_id"]
+            foreignKeyName: "playbook_task_templates_template_id_fkey"
+            columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "playbook_templates"
             referencedColumns: ["id"]
@@ -2105,43 +1497,28 @@ export type Database = {
       }
       playbook_templates: {
         Row: {
-          category: string | null
           collective_id: string | null
           created_at: string
-          deleted_at: string | null
           description: string | null
           id: string
-          is_global: boolean | null
-          metadata: Json | null
+          is_global: boolean
           name: string
-          tasks: Json | null
-          updated_at: string
         }
         Insert: {
-          category?: string | null
           collective_id?: string | null
           created_at?: string
-          deleted_at?: string | null
           description?: string | null
           id?: string
-          is_global?: boolean | null
-          metadata?: Json | null
+          is_global?: boolean
           name: string
-          tasks?: Json | null
-          updated_at?: string
         }
         Update: {
-          category?: string | null
           collective_id?: string | null
           created_at?: string
-          deleted_at?: string | null
           description?: string | null
           id?: string
-          is_global?: boolean | null
-          metadata?: Json | null
+          is_global?: boolean
           name?: string
-          tasks?: Json | null
-          updated_at?: string
         }
         Relationships: [
           {
@@ -2155,21 +1532,21 @@ export type Database = {
       }
       promo_clicks: {
         Row: {
-          clicked_at: string | null
+          created_at: string
           id: string
           promo_link_id: string
           referrer: string | null
           user_agent: string | null
         }
         Insert: {
-          clicked_at?: string | null
+          created_at?: string
           id?: string
           promo_link_id: string
           referrer?: string | null
           user_agent?: string | null
         }
         Update: {
-          clicked_at?: string | null
+          created_at?: string
           id?: string
           promo_link_id?: string
           referrer?: string | null
@@ -2234,118 +1611,85 @@ export type Database = {
       promo_codes: {
         Row: {
           code: string
-          collective_id: string
           created_at: string
-          currency: string
-          current_uses: number | null
-          discount_type: string | null
-          discount_value: number | null
-          event_id: string | null
+          discount_type: string
+          discount_value: number
+          event_id: string
+          expires_at: string | null
           id: string
+          is_active: boolean
           max_uses: number | null
-          promoter_id: string
-          updated_at: string
-          valid_from: string | null
-          valid_until: string | null
+          starts_at: string | null
         }
         Insert: {
           code: string
-          collective_id: string
           created_at?: string
-          currency?: string
-          current_uses?: number | null
-          discount_type?: string | null
-          discount_value?: number | null
-          event_id?: string | null
+          discount_type?: string
+          discount_value: number
+          event_id: string
+          expires_at?: string | null
           id?: string
+          is_active?: boolean
           max_uses?: number | null
-          promoter_id: string
-          updated_at?: string
-          valid_from?: string | null
-          valid_until?: string | null
+          starts_at?: string | null
         }
         Update: {
           code?: string
-          collective_id?: string
           created_at?: string
-          currency?: string
-          current_uses?: number | null
-          discount_type?: string | null
-          discount_value?: number | null
-          event_id?: string | null
+          discount_type?: string
+          discount_value?: number
+          event_id?: string
+          expires_at?: string | null
           id?: string
+          is_active?: boolean
           max_uses?: number | null
-          promoter_id?: string
-          updated_at?: string
-          valid_from?: string | null
-          valid_until?: string | null
+          starts_at?: string | null
         }
         Relationships: [
-          {
-            foreignKeyName: "promo_codes_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "promo_codes_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
           {
             foreignKeyName: "promo_codes_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "promo_codes_promoter_id_fkey"
-            columns: ["promoter_id"]
-            isOneToOne: false
-            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
       }
       promo_links: {
         Row: {
-          click_count: number | null
-          created_at: string | null
-          event_id: string | null
-          external_event_id: string | null
+          clicks: number
+          code: string
+          created_at: string
+          created_by: string | null
+          event_id: string
           id: string
-          promoter_id: string
-          token: string
+          label: string | null
         }
         Insert: {
-          click_count?: number | null
-          created_at?: string | null
-          event_id?: string | null
-          external_event_id?: string | null
+          clicks?: number
+          code: string
+          created_at?: string
+          created_by?: string | null
+          event_id: string
           id?: string
-          promoter_id: string
-          token: string
+          label?: string | null
         }
         Update: {
-          click_count?: number | null
-          created_at?: string | null
-          event_id?: string | null
-          external_event_id?: string | null
+          clicks?: number
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          event_id?: string
           id?: string
-          promoter_id?: string
-          token?: string
+          label?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "promo_links_event_id_fkey"
-            columns: ["event_id"]
+            foreignKeyName: "promo_links_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
+            referencedRelation: "users"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "promo_links_event_id_fkey"
@@ -2354,90 +1698,67 @@ export type Database = {
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "promo_links_external_event_id_fkey"
-            columns: ["external_event_id"]
-            isOneToOne: false
-            referencedRelation: "external_events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "promo_links_promoter_id_fkey"
-            columns: ["promoter_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
         ]
       }
       rate_limits: {
         Row: {
+          count: number
           created_at: string
           id: string
           key: string
+          window_end: string
         }
         Insert: {
+          count?: number
           created_at?: string
           id?: string
           key: string
+          window_end: string
         }
         Update: {
+          count?: number
           created_at?: string
           id?: string
           key?: string
+          window_end?: string
         }
         Relationships: []
       }
       recordings: {
         Row: {
-          action_items: string | null
-          audio_url: string
           collective_id: string
           created_at: string
-          deleted_at: string | null
-          duration_seconds: number | null
+          duration_secs: number | null
           id: string
-          key_decisions: string | null
-          metadata: Json | null
-          status: string | null
+          status: string
+          storage_path: string
           summary: string | null
           title: string | null
           transcript: string | null
-          updated_at: string
           user_id: string
         }
         Insert: {
-          action_items?: string | null
-          audio_url: string
           collective_id: string
           created_at?: string
-          deleted_at?: string | null
-          duration_seconds?: number | null
+          duration_secs?: number | null
           id?: string
-          key_decisions?: string | null
-          metadata?: Json | null
-          status?: string | null
+          status?: string
+          storage_path: string
           summary?: string | null
           title?: string | null
           transcript?: string | null
-          updated_at?: string
           user_id: string
         }
         Update: {
-          action_items?: string | null
-          audio_url?: string
           collective_id?: string
           created_at?: string
-          deleted_at?: string | null
-          duration_seconds?: number | null
+          duration_secs?: number | null
           id?: string
-          key_decisions?: string | null
-          metadata?: Json | null
-          status?: string | null
+          status?: string
+          storage_path?: string
           summary?: string | null
           title?: string | null
           transcript?: string | null
-          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -2457,107 +1778,38 @@ export type Database = {
           },
         ]
       }
-      rsvps: {
-        Row: {
-          access_token: string
-          created_at: string
-          email: string | null
-          event_id: string
-          full_name: string | null
-          id: string
-          message: string | null
-          phone: string | null
-          plus_ones: number
-          status: string
-          updated_at: string
-          user_id: string | null
-        }
-        Insert: {
-          access_token?: string
-          created_at?: string
-          email?: string | null
-          event_id: string
-          full_name?: string | null
-          id?: string
-          message?: string | null
-          phone?: string | null
-          plus_ones?: number
-          status: string
-          updated_at?: string
-          user_id?: string | null
-        }
-        Update: {
-          access_token?: string
-          created_at?: string
-          email?: string | null
-          event_id?: string
-          full_name?: string | null
-          id?: string
-          message?: string | null
-          phone?: string | null
-          plus_ones?: number
-          status?: string
-          updated_at?: string
-          user_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "rsvps_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "rsvps_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       saved_venues: {
         Row: {
-          collective_id: string
           created_at: string
           id: string
-          metadata: Json | null
-          notes: string | null
-          rating: number | null
-          venue_id: string
+          user_id: string
+          venue_party_id: string | null
         }
         Insert: {
-          collective_id: string
           created_at?: string
           id?: string
-          metadata?: Json | null
-          notes?: string | null
-          rating?: number | null
-          venue_id: string
+          user_id: string
+          venue_party_id?: string | null
         }
         Update: {
-          collective_id?: string
           created_at?: string
           id?: string
-          metadata?: Json | null
-          notes?: string | null
-          rating?: number | null
-          venue_id?: string
+          user_id?: string
+          venue_party_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "saved_venues_collective_id_fkey"
-            columns: ["collective_id"]
+            foreignKeyName: "saved_venues_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "collectives"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "saved_venues_venue_id_fkey"
-            columns: ["venue_id"]
+            foreignKeyName: "saved_venues_venue_party_id_fkey"
+            columns: ["venue_party_id"]
             isOneToOne: false
-            referencedRelation: "venues"
+            referencedRelation: "parties"
             referencedColumns: ["id"]
           },
         ]
@@ -2565,35 +1817,42 @@ export type Database = {
       settlement_lines: {
         Row: {
           amount: number
-          category: string | null
           created_at: string
-          currency: string
-          description: string
+          description: string | null
           id: string
-          metadata: Json | null
+          order_id: string | null
           settlement_id: string
+          ticket_id: string | null
+          type: string
         }
         Insert: {
-          amount?: number
-          category?: string | null
+          amount: number
           created_at?: string
-          currency?: string
-          description: string
+          description?: string | null
           id?: string
-          metadata?: Json | null
+          order_id?: string | null
           settlement_id: string
+          ticket_id?: string | null
+          type: string
         }
         Update: {
           amount?: number
-          category?: string | null
           created_at?: string
-          currency?: string
-          description?: string
+          description?: string | null
           id?: string
-          metadata?: Json | null
+          order_id?: string | null
           settlement_id?: string
+          ticket_id?: string | null
+          type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "settlement_lines_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "settlement_lines_settlement_id_fkey"
             columns: ["settlement_id"]
@@ -2601,89 +1860,56 @@ export type Database = {
             referencedRelation: "settlements"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "settlement_lines_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
         ]
       }
       settlements: {
         Row: {
-          approved_at: string | null
-          approved_by: string | null
-          artist_fees_total: number | null
-          buyer_fees_collected: number
           collective_id: string
           created_at: string
-          currency: string
           event_id: string
-          gross_revenue: number | null
+          finalized_at: string | null
           id: string
-          metadata: Json | null
-          net_profit: number | null
-          net_revenue: number | null
-          notes: string | null
-          other_costs: number | null
-          platform_fee: number | null
-          refunds_total: number | null
-          status: Database["public"]["Enums"]["settlement_status"]
-          stripe_fees: number | null
-          total_costs: number | null
+          net_payout: number
+          platform_fee: number
+          status: string
+          stripe_fee: number
+          total_revenue: number
           updated_at: string
-          venue_fee: number | null
         }
         Insert: {
-          approved_at?: string | null
-          approved_by?: string | null
-          artist_fees_total?: number | null
-          buyer_fees_collected?: number
           collective_id: string
           created_at?: string
-          currency?: string
           event_id: string
-          gross_revenue?: number | null
+          finalized_at?: string | null
           id?: string
-          metadata?: Json | null
-          net_profit?: number | null
-          net_revenue?: number | null
-          notes?: string | null
-          other_costs?: number | null
-          platform_fee?: number | null
-          refunds_total?: number | null
-          status?: Database["public"]["Enums"]["settlement_status"]
-          stripe_fees?: number | null
-          total_costs?: number | null
+          net_payout?: number
+          platform_fee?: number
+          status?: string
+          stripe_fee?: number
+          total_revenue?: number
           updated_at?: string
-          venue_fee?: number | null
         }
         Update: {
-          approved_at?: string | null
-          approved_by?: string | null
-          artist_fees_total?: number | null
-          buyer_fees_collected?: number
           collective_id?: string
           created_at?: string
-          currency?: string
           event_id?: string
-          gross_revenue?: number | null
+          finalized_at?: string | null
           id?: string
-          metadata?: Json | null
-          net_profit?: number | null
-          net_revenue?: number | null
-          notes?: string | null
-          other_costs?: number | null
-          platform_fee?: number | null
-          refunds_total?: number | null
-          status?: Database["public"]["Enums"]["settlement_status"]
-          stripe_fees?: number | null
-          total_costs?: number | null
+          net_payout?: number
+          platform_fee?: number
+          status?: string
+          stripe_fee?: number
+          total_revenue?: number
           updated_at?: string
-          venue_fee?: number | null
         }
         Relationships: [
-          {
-            foreignKeyName: "settlements_approved_by_fkey"
-            columns: ["approved_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "settlements_collective_id_fkey"
             columns: ["collective_id"]
@@ -2694,14 +1920,7 @@ export type Database = {
           {
             foreignKeyName: "settlements_event_id_fkey"
             columns: ["event_id"]
-            isOneToOne: true
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "settlements_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
           },
@@ -2753,43 +1972,46 @@ export type Database = {
         Row: {
           capacity: number | null
           created_at: string
-          currency: string
           description: string | null
           event_id: string
           id: string
+          is_active: boolean
           name: string
           price: number
-          sales_end: string | null
-          sales_start: string | null
-          sort_order: number | null
+          sale_end_at: string | null
+          sale_start_at: string | null
+          sort_order: number
+          tickets_sold: number
           updated_at: string
         }
         Insert: {
           capacity?: number | null
           created_at?: string
-          currency?: string
           description?: string | null
           event_id: string
           id?: string
+          is_active?: boolean
           name: string
-          price: number
-          sales_end?: string | null
-          sales_start?: string | null
-          sort_order?: number | null
+          price?: number
+          sale_end_at?: string | null
+          sale_start_at?: string | null
+          sort_order?: number
+          tickets_sold?: number
           updated_at?: string
         }
         Update: {
           capacity?: number | null
           created_at?: string
-          currency?: string
           description?: string | null
           event_id?: string
           id?: string
+          is_active?: boolean
           name?: string
           price?: number
-          sales_end?: string | null
-          sales_start?: string | null
-          sort_order?: number | null
+          sale_end_at?: string | null
+          sale_start_at?: string | null
+          sort_order?: number
+          tickets_sold?: number
           updated_at?: string
         }
         Relationships: [
@@ -2797,97 +2019,91 @@ export type Database = {
             foreignKeyName: "ticket_tiers_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_waitlist: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          name: string | null
+          notified_at: string | null
+          party_id: string | null
+          tier_id: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          name?: string | null
+          notified_at?: string | null
+          party_id?: string | null
+          tier_id: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          name?: string | null
+          notified_at?: string | null
+          party_id?: string | null
+          tier_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_waitlist_party_id_fkey"
+            columns: ["party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "ticket_tiers_event_id_fkey"
-            columns: ["event_id"]
+            foreignKeyName: "ticket_waitlist_tier_id_fkey"
+            columns: ["tier_id"]
             isOneToOne: false
-            referencedRelation: "events"
+            referencedRelation: "ticket_tiers"
             referencedColumns: ["id"]
           },
         ]
       }
       tickets: {
         Row: {
-          attendee_name: string | null
-          buyer_fee: number
-          checked_in_at: string | null
-          checked_in_by: string | null
           created_at: string
-          currency: string | null
           event_id: string
+          holder_party_id: string | null
           id: string
-          metadata: Json | null
-          price_paid: number
-          promo_code_id: string | null
+          issued_at: string
+          order_line_id: string | null
           qr_code: string | null
-          referred_by: string | null
-          status: Database["public"]["Enums"]["ticket_status"]
-          stripe_payment_intent_id: string | null
-          ticket_tier_id: string | null
-          ticket_token: string
-          updated_at: string
-          user_id: string | null
+          status: string
+          tier_id: string
         }
         Insert: {
-          attendee_name?: string | null
-          buyer_fee?: number
-          checked_in_at?: string | null
-          checked_in_by?: string | null
           created_at?: string
-          currency?: string | null
           event_id: string
+          holder_party_id?: string | null
           id?: string
-          metadata?: Json | null
-          price_paid: number
-          promo_code_id?: string | null
+          issued_at?: string
+          order_line_id?: string | null
           qr_code?: string | null
-          referred_by?: string | null
-          status?: Database["public"]["Enums"]["ticket_status"]
-          stripe_payment_intent_id?: string | null
-          ticket_tier_id?: string | null
-          ticket_token?: string
-          updated_at?: string
-          user_id?: string | null
+          status?: string
+          tier_id: string
         }
         Update: {
-          attendee_name?: string | null
-          buyer_fee?: number
-          checked_in_at?: string | null
-          checked_in_by?: string | null
           created_at?: string
-          currency?: string | null
           event_id?: string
+          holder_party_id?: string | null
           id?: string
-          metadata?: Json | null
-          price_paid?: number
-          promo_code_id?: string | null
+          issued_at?: string
+          order_line_id?: string | null
           qr_code?: string | null
-          referred_by?: string | null
-          status?: Database["public"]["Enums"]["ticket_status"]
-          stripe_payment_intent_id?: string | null
-          ticket_tier_id?: string | null
-          ticket_token?: string
-          updated_at?: string
-          user_id?: string | null
+          status?: string
+          tier_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "tickets_checked_in_by_fkey"
-            columns: ["checked_in_by"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tickets_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
           {
             foreignKeyName: "tickets_event_id_fkey"
             columns: ["event_id"]
@@ -2896,94 +2112,82 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tickets_promo_code_id_fkey"
-            columns: ["promo_code_id"]
+            foreignKeyName: "tickets_holder_party_id_fkey"
+            columns: ["holder_party_id"]
             isOneToOne: false
-            referencedRelation: "promo_codes"
+            referencedRelation: "parties"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tickets_referred_by_fkey"
-            columns: ["referred_by"]
+            foreignKeyName: "tickets_order_line_id_fkey"
+            columns: ["order_line_id"]
             isOneToOne: false
-            referencedRelation: "users"
+            referencedRelation: "order_lines"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "tickets_ticket_tier_id_fkey"
-            columns: ["ticket_tier_id"]
+            foreignKeyName: "tickets_tier_id_fkey"
+            columns: ["tier_id"]
             isOneToOne: false
             referencedRelation: "ticket_tiers"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tickets_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
       }
       users: {
         Row: {
-          auth_id: string | null
           avatar_url: string | null
           bio: string | null
+          city: string | null
+          collective_id: string | null
           created_at: string
-          deleted_at: string | null
-          display_name: string | null
           email: string
-          full_name: string
+          full_name: string | null
           id: string
           is_approved: boolean
-          is_denied: boolean | null
-          metadata: Json | null
+          is_denied: boolean
           party_id: string | null
           phone: string | null
-          stripe_account_id: string | null
           updated_at: string
-          user_type: string
         }
         Insert: {
-          auth_id?: string | null
           avatar_url?: string | null
           bio?: string | null
+          city?: string | null
+          collective_id?: string | null
           created_at?: string
-          deleted_at?: string | null
-          display_name?: string | null
           email: string
-          full_name: string
-          id?: string
+          full_name?: string | null
+          id: string
           is_approved?: boolean
-          is_denied?: boolean | null
-          metadata?: Json | null
+          is_denied?: boolean
           party_id?: string | null
           phone?: string | null
-          stripe_account_id?: string | null
           updated_at?: string
-          user_type?: string
         }
         Update: {
-          auth_id?: string | null
           avatar_url?: string | null
           bio?: string | null
+          city?: string | null
+          collective_id?: string | null
           created_at?: string
-          deleted_at?: string | null
-          display_name?: string | null
           email?: string
-          full_name?: string
+          full_name?: string | null
           id?: string
           is_approved?: boolean
-          is_denied?: boolean | null
-          metadata?: Json | null
+          is_denied?: boolean
           party_id?: string | null
           phone?: string | null
-          stripe_account_id?: string | null
           updated_at?: string
-          user_type?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "users_collective_id_fkey"
+            columns: ["collective_id"]
+            isOneToOne: false
+            referencedRelation: "collectives"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "users_party_id_fkey"
             columns: ["party_id"]
@@ -2993,81 +2197,60 @@ export type Database = {
           },
         ]
       }
-      venues: {
+      venue_profiles: {
         Row: {
           address: string | null
+          amenities: string[] | null
           capacity: number | null
           city: string | null
-          contact_email: string | null
-          contact_name: string | null
-          contact_phone: string | null
-          country: string | null
+          cover_photo_url: string | null
           created_at: string
-          deleted_at: string | null
-          description: string | null
           id: string
-          latitude: number | null
-          longitude: number | null
-          metadata: Json | null
+          is_active: boolean
+          is_verified: boolean
           name: string
-          party_id: string | null
-          postal_code: string | null
+          party_id: string
+          photo_url: string | null
           slug: string
-          state: string | null
-          stripe_account_id: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
+          amenities?: string[] | null
           capacity?: number | null
           city?: string | null
-          contact_email?: string | null
-          contact_name?: string | null
-          contact_phone?: string | null
-          country?: string | null
+          cover_photo_url?: string | null
           created_at?: string
-          deleted_at?: string | null
-          description?: string | null
           id?: string
-          latitude?: number | null
-          longitude?: number | null
-          metadata?: Json | null
+          is_active?: boolean
+          is_verified?: boolean
           name: string
-          party_id?: string | null
-          postal_code?: string | null
+          party_id: string
+          photo_url?: string | null
           slug: string
-          state?: string | null
-          stripe_account_id?: string | null
           updated_at?: string
         }
         Update: {
           address?: string | null
+          amenities?: string[] | null
           capacity?: number | null
           city?: string | null
-          contact_email?: string | null
-          contact_name?: string | null
-          contact_phone?: string | null
-          country?: string | null
+          cover_photo_url?: string | null
           created_at?: string
-          deleted_at?: string | null
-          description?: string | null
           id?: string
-          latitude?: number | null
-          longitude?: number | null
-          metadata?: Json | null
+          is_active?: boolean
+          is_verified?: boolean
           name?: string
-          party_id?: string | null
-          postal_code?: string | null
+          party_id?: string
+          photo_url?: string | null
           slug?: string
-          state?: string | null
-          stripe_account_id?: string | null
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "venues_party_id_fkey"
+            foreignKeyName: "venue_profiles_party_id_fkey"
             columns: ["party_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "parties"
             referencedColumns: ["id"]
           },
@@ -3075,226 +2258,154 @@ export type Database = {
       }
       waitlist_entries: {
         Row: {
+          city: string | null
           created_at: string
           email: string
-          event_id: string
           id: string
-          metadata: Json | null
           name: string | null
-          notified_at: string | null
-          phone: string | null
-          status: string | null
-          tier_id: string | null
+          referral: string | null
         }
         Insert: {
+          city?: string | null
           created_at?: string
           email: string
-          event_id: string
           id?: string
-          metadata?: Json | null
           name?: string | null
-          notified_at?: string | null
-          phone?: string | null
-          status?: string | null
-          tier_id?: string | null
+          referral?: string | null
         }
         Update: {
+          city?: string | null
           created_at?: string
           email?: string
-          event_id?: string
           id?: string
-          metadata?: Json | null
           name?: string | null
-          notified_at?: string | null
-          phone?: string | null
-          status?: string | null
-          tier_id?: string | null
+          referral?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "waitlist_entries_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "waitlist_entries_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "waitlist_entries_tier_id_fkey"
-            columns: ["tier_id"]
-            isOneToOne: false
-            referencedRelation: "ticket_tiers"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       webhook_events: {
         Row: {
+          created_at: string
+          event_type: string
           id: string
-          processed_at: string
-          source: string
+          processed: boolean
+          processed_at: string | null
+          stripe_event_id: string
         }
         Insert: {
-          id: string
-          processed_at?: string
-          source?: string
+          created_at?: string
+          event_type: string
+          id?: string
+          processed?: boolean
+          processed_at?: string | null
+          stripe_event_id: string
         }
         Update: {
+          created_at?: string
+          event_type?: string
           id?: string
-          processed_at?: string
-          source?: string
+          processed?: boolean
+          processed_at?: string | null
+          stripe_event_id?: string
         }
         Relationships: []
       }
     }
     Views: {
-      event_dashboard: {
-        Row: {
-          checked_in: number | null
-          collective_id: string | null
-          confirmed_artists: number | null
-          event_id: string | null
-          gross_revenue: number | null
-          starts_at: string | null
-          status: Database["public"]["Enums"]["event_status"] | null
-          tickets_sold: number | null
-          title: string | null
-          total_artist_fees: number | null
-          venue_name: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "events_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      event_rsvp_counts: {
-        Row: {
-          count: number | null
-          event_id: string | null
-          plus_ones_total: number | null
-          status: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "rsvps_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "rsvps_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      promoter_performance: {
-        Row: {
-          code: string | null
-          collective_id: string | null
-          event_id: string | null
-          event_title: string | null
-          promoter_id: string | null
-          promoter_name: string | null
-          revenue_generated: number | null
-          tickets_sold: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "promo_codes_collective_id_fkey"
-            columns: ["collective_id"]
-            isOneToOne: false
-            referencedRelation: "collectives"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "promo_codes_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "event_dashboard"
-            referencedColumns: ["event_id"]
-          },
-          {
-            foreignKeyName: "promo_codes_event_id_fkey"
-            columns: ["event_id"]
-            isOneToOne: false
-            referencedRelation: "events"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "promo_codes_promoter_id_fkey"
-            columns: ["promoter_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
-      acquire_ticket_lock: { Args: { p_tier_id: string }; Returns: boolean }
+      acquire_ticket_lock: { Args: { p_tier_id: string }; Returns: undefined }
       check_and_reserve_capacity: {
         Args: { p_quantity: number; p_tier_id: string }
-        Returns: Json
+        Returns: boolean
       }
       claim_promo_code: {
-        Args: { p_code_id: string; p_quantity?: number }
-        Returns: undefined
+        Args: { p_code: string; p_event_id: string }
+        Returns: {
+          code: string
+          created_at: string
+          discount_type: string
+          discount_value: number
+          event_id: string
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          max_uses: number | null
+          starts_at: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "promo_codes"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       fulfill_tickets_atomic: {
         Args: {
-          p_buyer_email?: string
-          p_currency: string
           p_event_id: string
-          p_metadata?: Json
-          p_payment_intent_id: string
-          p_price_paid: number
+          p_holder_party_id: string
+          p_order_line_id: string
           p_quantity: number
-          p_referrer_token?: string
           p_tier_id: string
         }
-        Returns: Json
-      }
-      get_collective_revenue: {
-        Args: { p_collective_ids: string[] }
         Returns: {
-          ticket_count: number
-          total_revenue: number
+          created_at: string
+          event_id: string
+          holder_party_id: string | null
+          id: string
+          issued_at: string
+          order_line_id: string | null
+          qr_code: string | null
+          status: string
+          tier_id: string
         }[]
+        SetofOptions: {
+          from: "*"
+          to: "tickets"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       get_user_collectives: { Args: never; Returns: string[] }
-      has_collective_role: {
+      has_collective_role:
+        | {
+            Args: { p_collective_id: string; p_role: string }
+            Returns: boolean
+          }
+        | {
+            Args: {
+              p_collective_id: string
+              p_roles: Database["public"]["Enums"]["collective_role"][]
+            }
+            Returns: boolean
+          }
+      increment_analytics_counter:
+        | { Args: { p_event_id: string; p_field: string }; Returns: undefined }
+        | {
+            Args: { p_event_id: string; p_field: string; p_value?: number }
+            Returns: undefined
+          }
+      increment_attendee_profile: {
         Args: {
           p_collective_id: string
-          p_roles: Database["public"]["Enums"]["collective_role"][]
+          p_email: string
+          p_name: string
+          p_party_id: string
+          p_spend: number
+          p_ticket_count: number
         }
-        Returns: boolean
-      }
-      increment_analytics_counter: {
-        Args: { p_column: string; p_event_id: string; p_value?: number }
         Returns: undefined
       }
-      increment_promo_click: { Args: { p_link_id: string }; Returns: undefined }
+      increment_promo_click:
+        | { Args: { p_code: string }; Returns: undefined }
+        | { Args: { p_link_id: string }; Returns: undefined }
       track_ticket_refund: {
-        Args: { p_amount: number; p_event_id: string; p_quantity: number }
+        Args: { p_quantity: number; p_tier_id: string }
         Returns: undefined
       }
       track_ticket_sale: {
-        Args: { p_event_id: string; p_quantity: number; p_revenue: number }
+        Args: { p_quantity: number; p_tier_id: string }
         Returns: undefined
       }
     }
@@ -3326,6 +2437,12 @@ export type Database = {
         | "upcoming"
         | "settled"
       event_status_type: "draft" | "published" | "cancelled" | "wrapped"
+      order_status:
+        | "pending"
+        | "paid"
+        | "failed"
+        | "refunded"
+        | "partially_refunded"
       party_role_type:
         | "artist"
         | "collective"
@@ -3519,6 +2636,13 @@ export const Constants = {
         "settled",
       ],
       event_status_type: ["draft", "published", "cancelled", "wrapped"],
+      order_status: [
+        "pending",
+        "paid",
+        "failed",
+        "refunded",
+        "partially_refunded",
+      ],
       party_role_type: [
         "artist",
         "collective",

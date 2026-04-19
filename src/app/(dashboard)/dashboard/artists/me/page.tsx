@@ -14,11 +14,10 @@ interface ArtistProfile {
   id: string;
   name: string;
   bio: string | null;
-  genre: string[];
+  genre: string[] | null;
   spotify: string | null;
   booking_email: string | null;
   default_fee: number | null;
-  metadata: { location?: string } | null;
 }
 
 export default function ArtistMePage() {
@@ -50,22 +49,42 @@ export default function ArtistMePage() {
     if (!user) return;
     setUserId(user.id);
 
-    // Check if artist profile exists
-    const { data: artist } = await supabase
-      .from("artists")
-      .select("*")
-      .eq("user_id", user.id)
+    // Check if artist profile exists (via party_id on users)
+    const { data: userRow } = await supabase
+      .from("users")
+      .select("party_id")
+      .eq("id", user.id)
       .maybeSingle();
 
+    const artistProfileQuery = userRow?.party_id
+      ? await supabase
+          .from("artist_profiles")
+          .select("id, slug, bio, genre, spotify, booking_email, default_fee, parties(display_name)")
+          .eq("party_id", userRow.party_id)
+          .maybeSingle()
+      : { data: null };
+
+    const artist = artistProfileQuery.data;
+
     if (artist) {
-      setProfile(artist as ArtistProfile);
-      setName(artist.name ?? "");
-      setBio(artist.bio ?? "");
-      setGenre((artist.genre ?? []).join(", "));
-      setSpotify(artist.spotify ?? "");
-      setBookingEmail(artist.booking_email ?? "");
-      setDefaultFee(artist.default_fee ? String(artist.default_fee) : "");
-      setLocation((artist.metadata as { location?: string })?.location ?? "");
+      const party = artist.parties as unknown as { display_name: string } | null;
+      const profileData: ArtistProfile = {
+        id: artist.id,
+        name: party?.display_name ?? "",
+        bio: artist.bio,
+        genre: artist.genre,
+        spotify: artist.spotify,
+        booking_email: artist.booking_email,
+        default_fee: artist.default_fee,
+      };
+      setProfile(profileData);
+      setName(profileData.name);
+      setBio(profileData.bio ?? "");
+      setGenre((profileData.genre ?? []).join(", "));
+      setSpotify(profileData.spotify ?? "");
+      setBookingEmail(profileData.booking_email ?? "");
+      setDefaultFee(profileData.default_fee ? String(profileData.default_fee) : "");
+      setLocation("");
     } else {
       // Pre-fill name from user profile
       const { data: userProfile } = await supabase
@@ -99,15 +118,13 @@ export default function ArtistMePage() {
     if (profile) {
       // Update existing
       const { error: updateError } = await supabase
-        .from("artists")
+        .from("artist_profiles")
         .update({
-          name,
           bio: bio || null,
           genre: genres,
           spotify: spotify || null,
           booking_email: bookingEmail || null,
           default_fee: defaultFee ? parseFloat(defaultFee) : null,
-          metadata: { location: location || null },
         })
         .eq("id", profile.id);
 

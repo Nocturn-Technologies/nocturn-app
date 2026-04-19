@@ -17,7 +17,7 @@ async function sendInvitationEmail(
     const [{ data: collective }, { data: inviter }, { data: invitation }] = await Promise.all([
       admin.from("collectives").select("name").eq("id", collectiveId).maybeSingle(),
       admin.from("users").select("full_name").eq("id", inviterUserId).maybeSingle(),
-      admin.from("invitations").select("token").eq("collective_id", collectiveId).eq("email", email.toLowerCase().trim()).eq("status", "pending").eq("type", "member").maybeSingle(),
+      admin.from("invitations").select("token").eq("collective_id", collectiveId).eq("email", email.toLowerCase().trim()).is("accepted_at", null).maybeSingle(),
     ]);
 
     if (!invitation?.token) return;
@@ -134,17 +134,16 @@ export async function inviteMember(
   }
 
   // User doesn't exist — create a pending invitation
-  // Filter by type='member' since the unique constraint includes type
+  // Check for an existing pending invitation for this email
   const { data: existingInvite } = await admin
     .from("invitations")
-    .select("id, status")
+    .select("id, accepted_at")
     .eq("collective_id", collectiveId)
     .eq("email", email.toLowerCase().trim())
-    .eq("type", "member")
     .maybeSingle();
 
   if (existingInvite) {
-    if (existingInvite.status === "pending") {
+    if (existingInvite.accepted_at === null) {
       return { error: "An invitation has already been sent to this email." };
     }
     // If expired or accepted, allow re-invite by updating
@@ -152,7 +151,6 @@ export async function inviteMember(
       .from("invitations")
       .update({
         role,
-        status: "pending",
         invited_by: user.id,
         created_at: new Date().toISOString(),
         expires_at: new Date(
@@ -181,6 +179,8 @@ export async function inviteMember(
     email: email.toLowerCase().trim(),
     role,
     invited_by: user.id,
+    token: crypto.randomUUID(),
+    expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
   });
 
   if (inviteError) {
@@ -297,10 +297,9 @@ export async function getPendingInvitations(collectiveId: string) {
 
   const { data, error } = await admin
     .from("invitations")
-    .select("id, email, role, status, created_at, expires_at")
+    .select("id, email, role, created_at, expires_at")
     .eq("collective_id", collectiveId)
-    .eq("status", "pending")
-    .eq("type", "member")
+    .is("accepted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -389,12 +388,12 @@ export async function acceptInvitation(token: string) {
 
   const admin = createAdminClient();
 
-  // Look up the invitation by token
+  // Look up the invitation by token (pending = accepted_at is null)
   const { data: invitation, error: lookupError } = await admin
     .from("invitations")
     .select("*")
     .eq("token", token)
-    .eq("status", "pending")
+    .is("accepted_at", null)
     .maybeSingle();
 
   if (lookupError || !invitation) {
@@ -403,10 +402,7 @@ export async function acceptInvitation(token: string) {
 
   // Check if expired
   if (invitation.expires_at && new Date(invitation.expires_at) < new Date()) {
-    await admin
-      .from("invitations")
-      .update({ status: "expired" })
-      .eq("id", invitation.id);
+    // No status column — expiry is determined by expires_at; just return the error
     return { error: "This invitation has expired." };
   }
 
@@ -430,7 +426,7 @@ export async function acceptInvitation(token: string) {
     // Mark invitation as accepted anyway
     await admin
       .from("invitations")
-      .update({ status: "accepted" })
+      .update({ accepted_at: new Date().toISOString() })
       .eq("id", invitation.id);
     return { error: null, alreadyMember: true };
   }
@@ -468,7 +464,7 @@ export async function acceptInvitation(token: string) {
   // Mark invitation as accepted
   await admin
     .from("invitations")
-    .update({ status: "accepted" })
+    .update({ accepted_at: new Date().toISOString() })
     .eq("id", invitation.id);
 
   // Auto-add new member to team chat (non-blocking)

@@ -75,12 +75,6 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
-const USER_TYPES = [
-  "collective", "promoter", "artist", "venue", "artist_manager", "tour_manager",
-  "booking_agent", "photographer", "videographer", "mc_host", "graphic_designer",
-  "sound_production", "lighting_production", "event_staff", "pr_publicist", "sponsor",
-];
-
 // ── Main Component ──────────────────────────────────────────────────────────
 
 export default async function AdminPage({ searchParams }: Props) {
@@ -95,7 +89,6 @@ export default async function AdminPage({ searchParams }: Props) {
   const activeTab = (params.tab as TabKey) || "overview";
   const searchQuery = params.q ?? "";
   const pageNum = Math.max(1, parseInt(params.page ?? "1", 10));
-  const filterType = params.type ?? "";
 
   const supabase = createAdminClient();
 
@@ -154,61 +147,60 @@ export default async function AdminPage({ searchParams }: Props) {
     supabase.from("users").select("id", { count: "exact", head: true }),
     // Collectives
     supabase.from("collectives").select("id", { count: "exact", head: true }),
-    // Marketplace profiles
-    supabase.from("marketplace_profiles").select("id", { count: "exact", head: true }),
+    // Parties (replaces marketplace_profiles)
+    supabase.from("parties").select("id", { count: "exact", head: true }),
     // Events count
-    supabase.from("events").select("id", { count: "exact", head: true }).is("deleted_at", null),
-    // All paid/checked_in tickets with price for GMV
-    supabase.from("tickets").select("price_paid, created_at, event_id").in("status", ["paid", "checked_in"]),
+    supabase.from("events").select("id", { count: "exact", head: true }),
+    // All paid orders with total for GMV
+    supabase.from("orders").select("total, created_at, event_id").eq("status", "paid"),
     // Users last 30 days
     supabase.from("users").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
     // Users prev 30 days
     supabase.from("users").select("id", { count: "exact", head: true }).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
-    // Tickets last 30 days
-    supabase.from("tickets").select("price_paid").in("status", ["paid", "checked_in"]).gte("created_at", thirtyDaysAgo),
-    // Tickets prev 30 days
-    supabase.from("tickets").select("price_paid").in("status", ["paid", "checked_in"]).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
+    // Orders last 30 days
+    supabase.from("orders").select("total").eq("status", "paid").gte("created_at", thirtyDaysAgo),
+    // Orders prev 30 days
+    supabase.from("orders").select("total").eq("status", "paid").gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
     // Events last 30 days
-    supabase.from("events").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo).is("deleted_at", null),
+    supabase.from("events").select("id", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
     // Events prev 30 days
-    supabase.from("events").select("id", { count: "exact", head: true }).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo).is("deleted_at", null),
+    supabase.from("events").select("id", { count: "exact", head: true }).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
     // 7-day signups raw
     supabase.from("users").select("created_at").gte("created_at", sevenDaysAgo),
-    // 7-day ticket sales raw
-    supabase.from("tickets").select("created_at").in("status", ["paid", "checked_in"]).gte("created_at", sevenDaysAgo),
+    // 7-day ticket sales raw (using orders)
+    supabase.from("orders").select("created_at").eq("status", "paid").gte("created_at", sevenDaysAgo),
     // 7-day events created raw
-    supabase.from("events").select("created_at").gte("created_at", sevenDaysAgo).is("deleted_at", null),
+    supabase.from("events").select("created_at").gte("created_at", sevenDaysAgo),
     // Pending approvals
     supabase
       .from("users")
-      .select("id, email, user_type, full_name, created_at")
+      .select("id, email, full_name, created_at")
       .eq("is_approved", false)
       .order("created_at", { ascending: false }),
     // Recent signups (30)
     supabase
       .from("users")
-      .select("id, email, user_type, full_name, created_at, is_approved")
+      .select("id, email, full_name, created_at, is_approved")
       .order("created_at", { ascending: false })
       .limit(30),
-    // Marketplace breakdown
-    supabase.from("marketplace_profiles").select("user_type"),
+    // Party type breakdown
+    supabase.from("parties").select("type"),
     // All events with collective name (50 most recent)
     supabase
       .from("events")
       .select("id, title, slug, starts_at, status, collective_id, collectives(name)")
-      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(50),
     // All settlements
-    supabase.from("settlements").select("id, event_id, collective_id, status, gross_revenue, platform_fee, net_revenue, stripe_fees, net_profit, created_at"),
-    // Revenue tickets (last 6 months)
-    supabase.from("tickets").select("price_paid, created_at").in("status", ["paid", "checked_in"]).gte("created_at", sixMonthsAgo),
-    // Top events by revenue — get all tickets with event info
-    supabase.from("tickets").select("event_id, price_paid, events(title)").in("status", ["paid", "checked_in"]),
-    // Stripe connected collectives
-    supabase.from("collectives").select("id, stripe_account_id"),
-    // Refunded tickets
-    supabase.from("tickets").select("price_paid").eq("status", "refunded"),
+    supabase.from("settlements").select("id, event_id, collective_id, status, total_revenue, platform_fee, stripe_fee, net_payout, created_at"),
+    // Revenue orders (last 6 months)
+    supabase.from("orders").select("total, created_at").eq("status", "paid").gte("created_at", sixMonthsAgo),
+    // Top events by revenue — get all paid orders with event info
+    supabase.from("orders").select("event_id, total, events(title)").eq("status", "paid"),
+    // All collectives (for Stripe Connect status)
+    supabase.from("collectives").select("id"),
+    // Refunded orders
+    supabase.from("orders").select("total").eq("status", "refunded"),
   ]);
 
   // ── Derived data ───────────────────────────────────────────────────────
@@ -219,10 +211,10 @@ export default async function AdminPage({ searchParams }: Props) {
   const pendingUsers = pendingRes.data ?? [];
   const recentUsers = recentUsersRes.data ?? [];
 
-  // Tickets & GMV
-  const allPaidTickets = allPaidTicketsRes.data ?? [];
-  const totalTicketsSold = allPaidTickets.length;
-  const totalGMV = allPaidTickets.reduce((s, t) => s + Number(t.price_paid || 0), 0);
+  // Orders & GMV
+  const allPaidOrders = allPaidTicketsRes.data ?? [];
+  const totalTicketsSold = allPaidOrders.length;
+  const totalGMV = allPaidOrders.reduce((s, t) => s + Number(t.total || 0), 0);
   const platformRevenue = totalGMV * 0.07;
 
   // Growth calculations
@@ -232,8 +224,8 @@ export default async function AdminPage({ searchParams }: Props) {
   const ticketsPrev30 = ticketsPrev30Res.data ?? [];
   const ticketsLast30Count = ticketsLast30.length;
   const ticketsPrev30Count = ticketsPrev30.length;
-  const gmvLast30 = ticketsLast30.reduce((s, t) => s + Number(t.price_paid || 0), 0);
-  const gmvPrev30 = ticketsPrev30.reduce((s, t) => s + Number(t.price_paid || 0), 0);
+  const gmvLast30 = ticketsLast30.reduce((s, t) => s + Number(t.total || 0), 0);
+  const gmvPrev30 = ticketsPrev30.reduce((s, t) => s + Number(t.total || 0), 0);
   const eventsLast30 = eventsLast30Res.count ?? 0;
   const eventsPrev30 = eventsPrev30Res.count ?? 0;
 
@@ -267,11 +259,11 @@ export default async function AdminPage({ searchParams }: Props) {
     if (key in eventsByDay) eventsByDay[key]++;
   }
 
-  // Marketplace breakdown
+  // Party type breakdown
   const mpBreakdown: Record<string, number> = {};
   if (marketplaceBreakdownRes.data) {
     for (const row of marketplaceBreakdownRes.data) {
-      const t = row.user_type ?? "unknown";
+      const t = row.type ?? "unknown";
       mpBreakdown[t] = (mpBreakdown[t] ?? 0) + 1;
     }
   }
@@ -300,7 +292,7 @@ export default async function AdminPage({ searchParams }: Props) {
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (key in revenueByMonth) {
       revenueByMonth[key].tickets++;
-      revenueByMonth[key].gmv += Number(t.price_paid || 0);
+      revenueByMonth[key].gmv += Number(t.total || 0);
     }
   }
 
@@ -309,23 +301,23 @@ export default async function AdminPage({ searchParams }: Props) {
   for (const t of topEventsTicketsRes.data ?? []) {
     const eid = t.event_id;
     if (!eventRevMap[eid]) {
-      eventRevMap[eid] = { title: t.events?.title ?? "Unknown", revenue: 0, tickets: 0 };
+      eventRevMap[eid] = { title: (t.events as { title: string } | null)?.title ?? "Unknown", revenue: 0, tickets: 0 };
     }
-    eventRevMap[eid].revenue += Number(t.price_paid || 0);
+    eventRevMap[eid].revenue += Number(t.total || 0);
     eventRevMap[eid].tickets++;
   }
   const topEventsByRevenue = Object.entries(eventRevMap)
     .sort((a, b) => b[1].revenue - a[1].revenue)
     .slice(0, 5);
 
-  // Stripe Connect
+  // Stripe Connect (stripe_account_id removed from schema — show collective count)
   const allCollectivesForStripe = stripeConnectedRes.data ?? [];
-  const stripeConnected = allCollectivesForStripe.filter((c) => c.stripe_account_id).length;
+  const stripeConnected = 0;
   const stripeNotConnected = allCollectivesForStripe.length - stripeConnected;
 
   // Refunded
   const refundedTickets = refundedTicketsRes.data ?? [];
-  const totalRefunds = refundedTickets.reduce((s, t) => s + Number(t.price_paid || 0), 0);
+  const totalRefunds = refundedTickets.reduce((s, t) => s + Number(t.total || 0), 0);
 
   // ── Users tab: fetch auth metadata + apply filters ─────────────────────
   // Fetch auth users for metadata (last_sign_in)
@@ -335,7 +327,6 @@ export default async function AdminPage({ searchParams }: Props) {
     for (const u of authList.users) {
       authMetaMap[u.id] = {
         full_name: u.user_metadata?.full_name,
-        user_type: u.user_metadata?.user_type,
         last_sign_in_at: u.last_sign_in_at,
       };
     }
@@ -344,12 +335,8 @@ export default async function AdminPage({ searchParams }: Props) {
   // Users tab: full user list with filters and pagination
   let usersTabQuery = supabase
     .from("users")
-    .select("id, email, user_type, full_name, created_at, is_approved", { count: "exact" })
+    .select("id, email, full_name, created_at, is_approved", { count: "exact" })
     .order("created_at", { ascending: false });
-
-  if (filterType && USER_TYPES.includes(filterType)) {
-    usersTabQuery = usersTabQuery.eq("user_type", filterType);
-  }
   if (searchQuery) {
     const safeQuery = sanitizePostgRESTInput(searchQuery);
     if (safeQuery) {
@@ -366,13 +353,13 @@ export default async function AdminPage({ searchParams }: Props) {
   const usersTabTotal = usersTabRes.count ?? 0;
   const totalPages = Math.ceil(usersTabTotal / perPage);
 
-  // ── Ticket counts per event (for events tab) ──────────────────────────
+  // ── Order counts per event (for events tab) ───────────────────────────
   const ticketCountsByEvent: Record<string, { sold: number; revenue: number }> = {};
-  for (const t of allPaidTickets) {
+  for (const t of allPaidOrders) {
     const eid = t.event_id;
     if (!ticketCountsByEvent[eid]) ticketCountsByEvent[eid] = { sold: 0, revenue: 0 };
     ticketCountsByEvent[eid].sold++;
-    ticketCountsByEvent[eid].revenue += Number(t.price_paid || 0);
+    ticketCountsByEvent[eid].revenue += Number(t.total || 0);
   }
 
   // ── Sentry (for errors tab) ───────────────────────────────────────────
@@ -593,7 +580,6 @@ export default async function AdminPage({ searchParams }: Props) {
                       <tr>
                         <th className="text-left px-4 py-3">Name</th>
                         <th className="text-left px-4 py-3">Email</th>
-                        <th className="text-left px-4 py-3">Type</th>
                         <th className="text-left px-4 py-3">Signed Up</th>
                         <th className="text-left px-4 py-3">Actions</th>
                       </tr>
@@ -602,16 +588,10 @@ export default async function AdminPage({ searchParams }: Props) {
                       {pendingUsers.map((user: any) => {
                         const meta = authMetaMap[user.id];
                         const name = user.full_name ?? meta?.full_name ?? "\u2014";
-                        const type = user.user_type ?? meta?.user_type ?? "\u2014";
                         return (
                           <tr key={user.id} className="hover:bg-zinc-900/60">
                             <td className="px-4 py-3 font-medium">{name}</td>
                             <td className="px-4 py-3 text-zinc-400">{user.email}</td>
-                            <td className="px-4 py-3">
-                              <span className="inline-block rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs capitalize">
-                                {type}
-                              </span>
-                            </td>
                             <td className="px-4 py-3 text-zinc-400">{formatDate(user.created_at)}</td>
                             <td className="px-4 py-3 space-x-3">
                               <a
@@ -647,7 +627,6 @@ export default async function AdminPage({ searchParams }: Props) {
                     <tr>
                       <th className="text-left px-4 py-3">Name</th>
                       <th className="text-left px-4 py-3">Email</th>
-                      <th className="text-left px-4 py-3">Type</th>
                       <th className="text-left px-4 py-3">Signed Up</th>
                       <th className="text-left px-4 py-3">Last Sign In</th>
                       <th className="text-left px-4 py-3">Status</th>
@@ -657,17 +636,11 @@ export default async function AdminPage({ searchParams }: Props) {
                     {recentUsers.map((user: any) => {
                       const meta = authMetaMap[user.id];
                       const name = user.full_name ?? meta?.full_name ?? "\u2014";
-                      const type = user.user_type ?? meta?.user_type ?? "\u2014";
                       const approved = user.is_approved;
                       return (
                         <tr key={user.id} className="hover:bg-zinc-900/60">
                           <td className="px-4 py-3 font-medium">{name}</td>
                           <td className="px-4 py-3 text-zinc-400">{user.email}</td>
-                          <td className="px-4 py-3">
-                            <span className="inline-block rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs capitalize">
-                              {type}
-                            </span>
-                          </td>
                           <td className="px-4 py-3 text-zinc-400">{formatDate(user.created_at)}</td>
                           <td className="px-4 py-3 text-zinc-400">{formatDate(meta?.last_sign_in_at ?? null)}</td>
                           <td className="px-4 py-3">
@@ -686,7 +659,7 @@ export default async function AdminPage({ searchParams }: Props) {
                     })}
                     {recentUsers.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-6 text-center text-zinc-500">
+                        <td colSpan={5} className="px-4 py-6 text-center text-zinc-500">
                           No users yet.
                         </td>
                       </tr>
@@ -750,54 +723,29 @@ export default async function AdminPage({ searchParams }: Props) {
         {/* ══════════════════════════════════════════════════════════════ */}
         {activeTab === "users" && (
           <div className="space-y-6">
-            {/* Search + Filter */}
-            <div className="flex flex-col md:flex-row gap-4">
-              <form className="flex-1" method="GET" action="/admin">
-                <input type="hidden" name="tab" value="users" />
-                {filterType && <input type="hidden" name="type" value={filterType} />}
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    name="q"
-                    defaultValue={searchQuery}
-                    placeholder="Search by name or email..."
-                    className="flex-1 min-h-[44px] rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-base md:text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-[#7B2FF7]"
-                  />
-                  <button
-                    type="submit"
-                    className="min-h-[44px] rounded-lg bg-[#7B2FF7] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6b24e0] transition-colors"
-                  >
-                    Search
-                  </button>
-                </div>
-              </form>
-              <div className="flex gap-2 flex-wrap">
-                <a
-                  href={`/admin?tab=users${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
-                  className={`inline-flex items-center min-h-[44px] rounded-lg border px-3 py-2.5 text-xs font-medium transition-colors ${
-                    !filterType ? "border-[#7B2FF7] text-[#7B2FF7] bg-[#7B2FF7]/10" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                  }`}
+            {/* Search */}
+            <form method="GET" action="/admin">
+              <input type="hidden" name="tab" value="users" />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  name="q"
+                  defaultValue={searchQuery}
+                  placeholder="Search by name or email..."
+                  className="flex-1 min-h-[44px] rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 text-base md:text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:border-[#7B2FF7]"
+                />
+                <button
+                  type="submit"
+                  className="min-h-[44px] rounded-lg bg-[#7B2FF7] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#6b24e0] transition-colors"
                 >
-                  All
-                </a>
-                {USER_TYPES.map((ut) => (
-                  <a
-                    key={ut}
-                    href={`/admin?tab=users&type=${ut}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
-                    className={`inline-flex items-center min-h-[44px] rounded-lg border px-3 py-2.5 text-xs font-medium capitalize transition-colors ${
-                      filterType === ut ? "border-[#7B2FF7] text-[#7B2FF7] bg-[#7B2FF7]/10" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
-                    }`}
-                  >
-                    {ut.replace(/_/g, " ")}
-                  </a>
-                ))}
+                  Search
+                </button>
               </div>
-            </div>
+            </form>
 
             {/* Results count */}
             <p className="text-sm text-zinc-400">
               Showing {offset + 1}–{Math.min(offset + perPage, usersTabTotal)} of {usersTabTotal} users
-              {filterType && <span> (filtered by {filterType.replace(/_/g, " ")})</span>}
               {searchQuery && <span> matching &ldquo;{searchQuery}&rdquo;</span>}
             </p>
 
@@ -808,7 +756,6 @@ export default async function AdminPage({ searchParams }: Props) {
                   <tr>
                     <th className="text-left px-4 py-3">Name</th>
                     <th className="text-left px-4 py-3">Email</th>
-                    <th className="text-left px-4 py-3">Type</th>
                     <th className="text-left px-4 py-3">Signed Up</th>
                     <th className="text-left px-4 py-3">Last Sign In</th>
                     <th className="text-left px-4 py-3">Status</th>
@@ -819,17 +766,11 @@ export default async function AdminPage({ searchParams }: Props) {
                   {usersTabData.map((user: any) => {
                     const meta = authMetaMap[user.id];
                     const name = user.full_name ?? meta?.full_name ?? "\u2014";
-                    const type = user.user_type ?? meta?.user_type ?? "\u2014";
                     const approved = user.is_approved;
                     return (
                       <tr key={user.id} className="hover:bg-zinc-900/60">
                         <td className="px-4 py-3 font-medium">{name}</td>
                         <td className="px-4 py-3 text-zinc-400">{user.email}</td>
-                        <td className="px-4 py-3">
-                          <span className="inline-block rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs capitalize">
-                            {type.replace(/_/g, " ")}
-                          </span>
-                        </td>
                         <td className="px-4 py-3 text-zinc-400">{formatDate(user.created_at)}</td>
                         <td className="px-4 py-3 text-zinc-400">{formatDate(meta?.last_sign_in_at ?? null)}</td>
                         <td className="px-4 py-3">
@@ -867,7 +808,7 @@ export default async function AdminPage({ searchParams }: Props) {
                   })}
                   {usersTabData.length === 0 && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-6 text-center text-zinc-500">
+                      <td colSpan={6} className="px-4 py-6 text-center text-zinc-500">
                         No users found.
                       </td>
                     </tr>
@@ -881,7 +822,7 @@ export default async function AdminPage({ searchParams }: Props) {
               <div className="flex items-center justify-center gap-2">
                 {pageNum > 1 && (
                   <a
-                    href={`/admin?tab=users&page=${pageNum - 1}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+                    href={`/admin?tab=users&page=${pageNum - 1}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
                     className="inline-flex items-center min-h-[44px] rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
                   >
                     Prev
@@ -892,7 +833,7 @@ export default async function AdminPage({ searchParams }: Props) {
                   return (
                     <a
                       key={p}
-                      href={`/admin?tab=users&page=${p}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+                      href={`/admin?tab=users&page=${p}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
                       className={`inline-flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg border px-3 py-2 text-sm transition-colors ${
                         p === pageNum ? "border-[#7B2FF7] text-[#7B2FF7] bg-[#7B2FF7]/10" : "border-zinc-800 text-zinc-400 hover:text-zinc-200"
                       }`}
@@ -903,7 +844,7 @@ export default async function AdminPage({ searchParams }: Props) {
                 })}
                 {pageNum < totalPages && (
                   <a
-                    href={`/admin?tab=users&page=${pageNum + 1}${filterType ? `&type=${filterType}` : ""}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
+                    href={`/admin?tab=users&page=${pageNum + 1}${searchQuery ? `&q=${encodeURIComponent(searchQuery)}` : ""}`}
                     className="inline-flex items-center min-h-[44px] rounded-lg border border-zinc-800 px-3 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
                   >
                     Next

@@ -405,7 +405,6 @@ function contactToIndustry(c: Contact): IndustryContact {
     relationships: c.source === "import" ? ["Connected"] : [],
     profileId: c.marketplaceProfileId ?? null,
     slug: null,
-    _contactsTableId: c.id,
   };
 }
 
@@ -642,9 +641,9 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
   // ── Handle contact card click → open detail sheet ─────────────────────────
 
   function handleCardClick(contact: IndustryContact) {
-    // If this contact has a contacts-table ID, open the detail sheet
-    if (contact._contactsTableId) {
-      setDetailContactId(contact._contactsTableId);
+    // Open the detail sheet for this contact
+    if (contact.id) {
+      setDetailContactId(contact.id);
     }
   }
 

@@ -50,12 +50,8 @@ export type RevenueForecastItem = {
   projectedProfit: number;
 };
 
-// Wrapped in `React.cache()` so the Finance page's 4 calls
-// (getCompanyFinancials + getEventFinancialSummaries + getRevenueForecast
-//  + anything else upstream) share a single auth.getUser() + membership
-// lookup per render. Was previously 4× round-trips per page load for a
-// query that never changes within one request. `cache()` memoizes on the
-// per-request basis, so cross-request isolation is preserved.
+// Wrapped in `React.cache()` so multiple calls on the Finance page
+// share a single auth.getUser() + membership lookup per render.
 const getCollectiveIds = cache(async () => {
   try {
     const supabase = await createServerClient();
@@ -111,12 +107,11 @@ export async function getCompanyFinancials(): Promise<{
 
     const admin = createAdminClient();
 
-    // Get all settlements for aggregates
+    // New settlements schema: total_revenue, platform_fee, stripe_fee, net_payout
+    // (no gross_revenue, net_revenue, net_profit, stripe_fees, artist_fees_total, total_costs)
     const { data: settlements, error: settlementsError } = await admin
       .from("settlements")
-      .select(
-        "gross_revenue, net_revenue, net_profit, platform_fee, stripe_fees, artist_fees_total, total_costs, event_id"
-      )
+      .select("event_id, total_revenue, platform_fee, stripe_fee, net_payout")
       .in("collective_id", collectiveIds);
 
     if (settlementsError) {
@@ -124,20 +119,7 @@ export async function getCompanyFinancials(): Promise<{
       return { error: "Something went wrong", data: null };
     }
 
-    // Get ticket counts for settled events
-    const settledEventIds = (settlements ?? []).map((s) => s.event_id);
-    let totalTicketsSold = 0;
-
-    if (settledEventIds.length > 0) {
-      const { count } = await admin
-        .from("tickets")
-        .select("*", { count: "exact", head: true })
-        .in("event_id", settledEventIds)
-        .in("status", ["paid", "checked_in"]);
-      totalTicketsSold = count ?? 0;
-    }
-
-    // Also count tickets for unsettled completed events
+    // Count all events (settled and unsettled) for overview metrics
     const { data: allEvents } = await admin
       .from("events")
       .select("id")
@@ -145,44 +127,66 @@ export async function getCompanyFinancials(): Promise<{
       .in("status", ["completed", "published"])
       .is("deleted_at", null);
 
-    const unsettledIds = (allEvents ?? [])
-      .map((e) => e.id)
-      .filter((id) => !settledEventIds.includes(id));
+    const settledEventIds = (settlements ?? []).map((s) => s.event_id);
 
-    if (unsettledIds.length > 0) {
-      const { count } = await admin
-        .from("tickets")
-        .select("*", { count: "exact", head: true })
-        .in("event_id", unsettledIds)
-        .in("status", ["paid", "checked_in"]);
-      totalTicketsSold += count ?? 0;
+    // Count tickets sold via orders (source of truth in new schema)
+    // tickets table no longer has price_paid — use orders.total for revenue
+    let totalTicketsSold = 0;
+
+    const allEventIds = (allEvents ?? []).map((e) => e.id);
+    if (allEventIds.length > 0) {
+      // ticket_tiers.tickets_sold is a denormalized counter kept in sync by the DB
+      const { data: tiers } = await admin
+        .from("ticket_tiers")
+        .select("tickets_sold")
+        .in("event_id", allEventIds);
+      totalTicketsSold = (tiers ?? []).reduce(
+        (sum, t) => sum + (t.tickets_sold ?? 0),
+        0
+      );
     }
 
+    // Revenue from finalized settlements (total_revenue = sum of order totals for the event)
     const totalRevenue = (settlements ?? []).reduce(
-      (sum, s) => sum + Number(s.gross_revenue),
+      (sum, s) => sum + Number(s.total_revenue),
       0
     );
-    const totalCosts = (settlements ?? []).reduce(
-      (sum, s) =>
-        sum +
-        Number(s.stripe_fees) +
-        Number(s.platform_fee) +
-        Number(s.artist_fees_total) +
-        Number(s.total_costs),
+
+    // Costs visible on settlements: stripe + platform fees (buyer-paid but recorded)
+    // plus we'll add event_expenses for a more complete picture
+    const settlementFees = (settlements ?? []).reduce(
+      (sum, s) => sum + Number(s.stripe_fee) + Number(s.platform_fee),
       0
     );
+
+    // Fetch event_expenses for all settled events for the totalExpenses field
+    let totalEventExpenses = 0;
+    if (settledEventIds.length > 0) {
+      const { data: expenses } = await admin
+        .from("event_expenses")
+        .select("amount")
+        .in("event_id", settledEventIds);
+      totalEventExpenses = (expenses ?? []).reduce(
+        (sum, e) => sum + Number(e.amount),
+        0
+      );
+    }
+
+    const totalExpenses = settlementFees + totalEventExpenses;
+
+    // Net profit = sum of settlements' net_payout (revenue minus expenses as computed at settlement time)
     const netProfit = (settlements ?? []).reduce(
-      (sum, s) => sum + Number(s.net_profit),
+      (sum, s) => sum + Number(s.net_payout),
       0
     );
-    // Count ALL events (not just settlements) so the overview shows even pre-revenue
+
     const totalEvents = (allEvents ?? []).length;
 
     return {
       error: null,
       data: {
         totalRevenue,
-        totalExpenses: totalCosts,
+        totalExpenses,
         netProfit,
         totalTicketsSold,
         avgRevenuePerEvent: totalEvents > 0 ? totalRevenue / totalEvents : 0,
@@ -207,12 +211,12 @@ export async function getEventFinancialSummaries(): Promise<{
 
     const admin = createAdminClient();
 
-    // Get all events with settlements
+    // Get all events with settlements. New settlements schema fields used.
     const [{ data: settlements }, { data: allEvents }] = await Promise.all([
       admin
         .from("settlements")
         .select(
-          "id, event_id, status, gross_revenue, net_revenue, net_profit, platform_fee, stripe_fees, artist_fees_total, total_costs, events(title, starts_at, status)"
+          "id, event_id, status, total_revenue, platform_fee, stripe_fee, net_payout, events(title, starts_at, status)"
         )
         .in("collective_id", collectiveIds)
         .order("created_at", { ascending: false }),
@@ -227,7 +231,6 @@ export async function getEventFinancialSummaries(): Promise<{
 
     const settledEventIds = (settlements ?? []).map((s) => s.event_id);
 
-    // Get ticket counts per event
     const eventIds = [
       ...new Set([
         ...settledEventIds,
@@ -235,18 +238,30 @@ export async function getEventFinancialSummaries(): Promise<{
       ]),
     ];
 
+    // Revenue from orders (source of truth) and ticket counts from ticket_tiers
+    let orderRevenue: Record<string, number> = {};
     let ticketCounts: Record<string, number> = {};
-    let ticketRevenue: Record<string, number> = {};
-    if (eventIds.length > 0) {
-      const { data: tickets } = await admin
-        .from("tickets")
-        .select("event_id, price_paid")
-        .in("event_id", eventIds)
-        .in("status", ["paid", "checked_in"]);
 
-      (tickets ?? []).forEach((t) => {
-        ticketCounts[t.event_id] = (ticketCounts[t.event_id] || 0) + 1;
-        ticketRevenue[t.event_id] = (ticketRevenue[t.event_id] || 0) + Number(t.price_paid || 0);
+    if (eventIds.length > 0) {
+      // Fetch paid orders for revenue
+      const { data: orders } = await admin
+        .from("orders")
+        .select("event_id, total")
+        .in("event_id", eventIds)
+        .eq("status", "paid");
+
+      (orders ?? []).forEach((o) => {
+        orderRevenue[o.event_id] = (orderRevenue[o.event_id] ?? 0) + Number(o.total || 0);
+      });
+
+      // Ticket counts from ticket_tiers denormalized counter
+      const { data: tiers } = await admin
+        .from("ticket_tiers")
+        .select("event_id, tickets_sold")
+        .in("event_id", eventIds);
+
+      (tiers ?? []).forEach((t) => {
+        ticketCounts[t.event_id] = (ticketCounts[t.event_id] ?? 0) + (t.tickets_sold ?? 0);
       });
     }
 
@@ -259,13 +274,11 @@ export async function getEventFinancialSummaries(): Promise<{
         starts_at: string;
         status: string;
       } | null;
-      const gross = Number(s.gross_revenue);
-      const totalExp =
-        Number(s.stripe_fees) +
-        Number(s.platform_fee) +
-        Number(s.artist_fees_total) +
-        Number(s.total_costs);
-      const profit = Number(s.net_profit);
+
+      const gross = Number(s.total_revenue);
+      // totalExpenses = stripe + platform fees (buyer-paid, included for completeness)
+      const totalExp = Number(s.stripe_fee) + Number(s.platform_fee);
+      const profit = Number(s.net_payout);
 
       results.push({
         id: s.id,
@@ -275,7 +288,7 @@ export async function getEventFinancialSummaries(): Promise<{
         ticketsSold: ticketCounts[s.event_id] ?? 0,
         grossRevenue: gross,
         totalExpenses: totalExp,
-        netRevenue: Number(s.net_revenue),
+        netRevenue: gross,
         profit,
         status: s.status,
         eventStatus: event?.status ?? "unknown",
@@ -283,12 +296,12 @@ export async function getEventFinancialSummaries(): Promise<{
       });
     });
 
-    // Add unsettled events — show estimated revenue from ticket sales
+    // Add unsettled events — show estimated revenue from paid orders
     (allEvents ?? [])
       .filter((e) => !settledEventIds.includes(e.id))
       .forEach((e) => {
         const sold = ticketCounts[e.id] ?? 0;
-        const gross = ticketRevenue[e.id] ?? 0;
+        const gross = orderRevenue[e.id] ?? 0;
         results.push({
           id: e.id,
           eventId: e.id,
@@ -347,17 +360,19 @@ export async function getRevenueForecast(): Promise<{
 
   const eventIds = upcomingEvents.map((e) => e.id);
 
-  const [{ data: tiers }, { data: tickets }, { data: artists }] =
+  // Fetch tiers, paid orders, and artist fees in parallel.
+  // Revenue comes from orders, not tickets (no price_paid column in new schema).
+  const [{ data: tiers }, { data: orders }, { data: artists }] =
     await Promise.all([
       admin
         .from("ticket_tiers")
-        .select("id, event_id, price, capacity")
+        .select("id, event_id, price, capacity, tickets_sold")
         .in("event_id", eventIds),
       admin
-        .from("tickets")
-        .select("event_id, price_paid")
+        .from("orders")
+        .select("event_id, total, subtotal")
         .in("event_id", eventIds)
-        .in("status", ["paid", "checked_in"]),
+        .eq("status", "paid"),
       admin
         .from("event_artists")
         .select("event_id, fee")
@@ -366,34 +381,29 @@ export async function getRevenueForecast(): Promise<{
 
   const results: RevenueForecastItem[] = upcomingEvents.map((event) => {
     const eventTiers = (tiers ?? []).filter((t) => t.event_id === event.id);
-    const eventTickets = (tickets ?? []).filter(
-      (t) => t.event_id === event.id
-    );
-    const eventArtists = (artists ?? []).filter(
-      (a) => a.event_id === event.id
-    );
+    const eventOrders = (orders ?? []).filter((o) => o.event_id === event.id);
+    const eventArtists = (artists ?? []).filter((a) => a.event_id === event.id);
 
-    const ticketsSold = eventTickets.length;
+    // tickets_sold is the denormalized count on ticket_tiers
+    const ticketsSold = eventTiers.reduce((s, t) => s + (t.tickets_sold ?? 0), 0);
     const totalCapacity = eventTiers.reduce((s, t) => s + (t.capacity ?? 0), 0);
-    const currentRevenue = eventTickets.reduce(
-      (s, t) => s + Number(t.price_paid),
+
+    // Current revenue from paid orders (subtotal = face value before buyer fees)
+    const currentRevenue = eventOrders.reduce(
+      (s, o) => s + Number(o.subtotal || 0),
       0
     );
+
     const avgTicketPrice =
       ticketsSold > 0
         ? currentRevenue / ticketsSold
         : eventTiers.length > 0
-          ? eventTiers.reduce((s, t) => s + Number(t.price), 0) /
-            eventTiers.length
+          ? eventTiers.reduce((s, t) => s + Number(t.price), 0) / eventTiers.length
           : 0;
-    const artistCosts = eventArtists.reduce(
-      (s, a) => s + Number(a.fee),
-      0
-    );
+
+    const artistCosts = eventArtists.reduce((s, a) => s + Number(a.fee || 0), 0);
 
     const eventDate = new Date(event.starts_at);
-    // TODO: Add published_at column to events table for accurate forecasting.
-    // Using created_at as proxy — inaccurate for events that sit in draft.
     const publishDate = new Date(event.created_at);
     const daysUntilEvent = Math.max(
       1,
@@ -413,17 +423,13 @@ export async function getRevenueForecast(): Promise<{
     const projectedAdditionalTickets = Math.round(
       dailySalesVelocity * daysUntilEvent
     );
-    // If totalCapacity is 0 (unlimited/unset), don't cap the projection
     const projectedTickets = totalCapacity > 0
       ? Math.min(totalCapacity, ticketsSold + projectedAdditionalTickets)
       : ticketsSold + projectedAdditionalTickets;
     const projectedRevenue = projectedTickets * avgTicketPrice;
 
-    // Projected profit (revenue - estimated stripe fees - artist costs)
-    // Only apply per-transaction fee ($0.30) to additional projected tickets, not already-sold ones
+    // Projected profit: revenue - estimated stripe fees - artist costs
     const additionalTickets = projectedTickets - ticketsSold;
-    // Stripe charges 2.9% + $0.30 per TRANSACTION (checkout), not per ticket.
-    // Approximate: assume ~1.5 tickets per checkout on average for group purchases.
     const avgTicketsPerCheckout = 1.5;
     const existingCheckouts = Math.ceil(ticketsSold / avgTicketsPerCheckout);
     const existingStripeFees = currentRevenue > 0 ? currentRevenue * 0.029 + 0.3 * existingCheckouts : 0;

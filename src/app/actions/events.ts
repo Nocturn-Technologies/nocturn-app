@@ -7,7 +7,6 @@ import { generateAutoSettlement } from "./auto-settlement";
 import { getStripe } from "@/lib/stripe";
 import { DEFAULT_TIMEZONE } from "@/lib/utils";
 import { rateLimitStrict } from "@/lib/rate-limit";
-import type { Database } from "@/lib/supabase/database.types";
 
 function slugify(text: string): string {
   return text
@@ -30,7 +29,6 @@ interface CreateEventInput {
   venueCapacity: number;
   tiers: { name: string; price: number; quantity: number }[];
   timezone?: string; // IANA timezone, defaults to America/Toronto
-  eventMode?: "ticketed" | "rsvp" | "hybrid";
   isFree?: boolean;
   // ── Budget fields from the wizard's budget step ──
   // These are optional because the budget step is skippable. When present,
@@ -42,27 +40,18 @@ interface CreateEventInput {
   barMinimum?: number | null;
   estimatedBarRevenue?: number | null;
   // Free-form bucket from the budget step ("sound, lights, security, promo").
-  // Stored as a single line in the expenses table so it shows up in the P&L.
+  // Stored as a single line in the event_expenses table so it shows up in the P&L.
   otherExpenses?: number | null;
   // Talent travel (flights/hotel/transport/per diem). May be a server-computed
   // estimate from calculateBudget rather than a user input.
   travelCost?: number | null;
-  // ── Multi-currency budget (v2) ──
-  // `currency` is the event's reporting currency (per-event override; when
-  // omitted the event inherits the collective's default_currency).
-  currency?: string | null;
   // When the wizard's Budget step produces resolved line items via
-  // calculateBudget(), they land here. Each row writes to the `expenses`
-  // table with FX snapshot stashed in metadata for later settlement math.
+  // calculateBudget(), they land here. Each row writes to the `event_expenses`
+  // table for later settlement math.
   expenseItems?: Array<{
     category: string;
     label: string;
-    amount: number;        // original amount in the row's native currency
-    currency: string;      // ISO 4217 lowercase
-    local_amount: number;  // amount in the event's reporting currency
-    local_currency: string;
-    fx_rate: number;
-    fx_locked_at: string;
+    amount: number;
   }> | null;
 }
 
@@ -84,11 +73,8 @@ interface UpdateEventInput {
   venueCost?: number | null;
   estimatedBarRevenue?: number | null;
   timezone?: string; // IANA timezone, defaults to America/Toronto
-  // ── Multi-currency budget (v2) ──
-  // Per-event currency override; NULL keeps the current value unchanged.
-  currency?: string | null;
-  // Itemized expenses. Reconciled against the `expenses` table:
-  //   id present → update in place (amount re-converted via event currency)
+  // Itemized expenses. Reconciled against the `event_expenses` table:
+  //   id present → update in place
   //   id absent  → insert new row
   //   ids listed in `removedExpenseIds` → deleted
   // If `expenseItems` is undefined, expenses are left untouched (the old
@@ -98,8 +84,7 @@ interface UpdateEventInput {
     id?: string;
     category: string;
     label: string;
-    amount: number;    // in the row's native currency (`currency`)
-    currency: string;
+    amount: number;
   }>;
   removedExpenseIds?: string[];
 }
@@ -176,64 +161,6 @@ export async function createEvent(input: CreateEventInput) {
   }
 
   const collectiveId = memberships[0].collective_id;
-
-  // Create or find venue
-  let venueId: string;
-  let venueWasNewlyCreated = false;
-  const { data: existingVenue } = await admin
-    .from("venues")
-    .select("id")
-    .eq("name", input.venueName)
-    .eq("city", input.venueCity)
-    .limit(1)
-    .maybeSingle();
-
-  if (existingVenue) {
-    venueId = existingVenue.id;
-    // Update venue details in case address or capacity changed
-    await admin
-      .from("venues")
-      .update({
-        address: trimmedAddress || undefined,
-        capacity: input.venueCapacity || undefined,
-      })
-      .eq("id", venueId);
-  } else {
-    // Include city in slug to avoid collisions (e.g. "story-miami" vs "story-toronto")
-    const baseSlug = slugify(`${input.venueName} ${input.venueCity || ""}`);
-    let venueSlug = baseSlug;
-
-    // Check if slug already exists, add random suffix if so
-    const { data: slugCheck } = await admin
-      .from("venues")
-      .select("id")
-      .eq("slug", venueSlug)
-      .maybeSingle();
-
-    if (slugCheck) {
-      venueSlug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
-    }
-
-    const { data: newVenue, error: venueError } = await admin
-      .from("venues")
-      .insert({
-        name: input.venueName,
-        slug: venueSlug,
-        address: trimmedAddress,
-        city: input.venueCity,
-        capacity: input.venueCapacity,
-      })
-      .select("id")
-      .maybeSingle();
-
-    if (venueError) {
-      console.error("[createEvent] venue error:", venueError.message);
-      return { error: "Failed to create venue" };
-    }
-    if (!newVenue) return { error: "Failed to create venue" };
-    venueId = newVenue.id;
-    venueWasNewlyCreated = true;
-  }
 
   // Build timestamps from date + time inputs
   // Use America/Toronto timezone by default for nightlife events
@@ -336,12 +263,7 @@ export async function createEvent(input: CreateEventInput) {
     eventSlug = `${eventSlug}-${Math.random().toString(36).slice(2, 6)}`;
   }
 
-  // Validate + default event mode
-  const eventMode: "ticketed" | "rsvp" | "hybrid" =
-    input.eventMode === "rsvp" || input.eventMode === "hybrid" || input.eventMode === "ticketed"
-      ? input.eventMode
-      : "ticketed";
-  const isFree = typeof input.isFree === "boolean" ? input.isFree : eventMode === "rsvp";
+  const isFree = typeof input.isFree === "boolean" ? input.isFree : false;
 
   // Sanitize budget fields. NUMERIC(10,2) caps and non-negative — anything
   // out of range gets dropped silently rather than blowing up the whole
@@ -351,46 +273,28 @@ export async function createEvent(input: CreateEventInput) {
     if (!Number.isFinite(n) || n < 0 || n > 9999999.99) return null;
     return Math.round(n * 100) / 100;
   }
-  const venueCostClean = safeMoney(input.venueCost);
-  const venueDepositClean = safeMoney(input.venueDeposit);
-  const barMinimumClean = safeMoney(input.barMinimum);
-  const estimatedBarRevenueClean = safeMoney(input.estimatedBarRevenue);
   const talentFeeClean = safeMoney(input.talentFee);
   const otherExpensesClean = safeMoney(input.otherExpenses);
   const travelCostClean = safeMoney(input.travelCost);
 
-  // ── v2 multi-currency budget ──
-  // Sanitize the event-level currency override. NULL means "inherit from
-  // collective.default_currency" (handled at read time, not write time).
-  const eventCurrencyClean =
-    typeof input.currency === "string" && /^[a-z]{3}$/.test(input.currency.toLowerCase())
-      ? input.currency.toLowerCase()
-      : null;
-
-  // Create event
+  // Create event — venue details stored as flat columns (venue_name, venue_address, city, capacity)
   const { data: event, error: eventError } = await admin
     .from("events")
     .insert({
       collective_id: collectiveId,
-      venue_id: venueId,
       title: trimmedTitle,
       slug: eventSlug,
       description: enrichedDescription,
       starts_at: startsAt,
       ends_at: endsAt,
       doors_at: doorsAt,
+      venue_name: input.venueName,
+      venue_address: trimmedAddress,
+      city: input.venueCity,
+      capacity: input.venueCapacity || null,
       status: "draft",
-      event_mode: eventMode,
       is_free: isFree,
       vibe_tags: vibeTags.length > 0 ? vibeTags : undefined,
-      // Persist event-level financial fields so the P&L page can read them
-      // back. Previously the wizard collected these and threw them away,
-      // forcing the user to re-enter every cost on the financials screen.
-      venue_cost: venueCostClean,
-      venue_deposit: venueDepositClean,
-      bar_minimum: barMinimumClean,
-      estimated_bar_revenue: estimatedBarRevenueClean,
-      ...(eventCurrencyClean ? { currency: eventCurrencyClean } : {}),
       metadata: {
         timezone: tz,
         ...(dressCode ? { dress_code: dressCode } : {}),
@@ -422,44 +326,27 @@ export async function createEvent(input: CreateEventInput) {
       console.error("Ticket tier error:", tierError);
       // Cleanup: delete the event that was just created
       await admin.from("events").delete().eq("id", event.id);
-      // Cleanup: delete the venue if it was newly created (not pre-existing)
-      if (venueWasNewlyCreated) {
-        await admin.from("venues").delete().eq("id", venueId);
-      }
       console.error("[createEvent] tier error:", tierError.message);
       return { error: "Failed to create ticket tiers" };
     }
   }
 
-  // Persist budget-step line items as expense rows so the P&L reads them
+  // Persist budget-step line items as event_expense rows so the P&L reads them
   // back without asking the user to re-enter every cost. Failure here is
   // non-fatal — the event itself is already saved and the user can re-add
   // expenses manually on the financials page.
-  //
-  // v2 multi-currency path: if `expenseItems` was provided, write each
-  // resolved row (post-FX) and stash the original amount/currency/rate in
-  // metadata for audit. Legacy callers that pass flat talentFee/otherExpenses/
-  // travelCost still work via the fallback branch below.
-  type BudgetExpenseRow = Database["public"]["Tables"]["expenses"]["Insert"];
+  type BudgetExpenseRow = { event_id: string; category: string; description: string; amount: number };
   const budgetExpenseRows: BudgetExpenseRow[] = [];
 
   if (input.expenseItems && input.expenseItems.length > 0) {
     for (const it of input.expenseItems) {
-      const localAmt = safeMoney(it.local_amount);
-      if (!localAmt || localAmt <= 0) continue;
+      const amt = safeMoney(it.amount);
+      if (!amt || amt <= 0) continue;
       budgetExpenseRows.push({
         event_id: event.id,
-        collective_id: collectiveId,
         description: it.label.slice(0, 200),
         category: it.category,
-        amount: localAmt, // stored in the event's reporting currency
-        metadata: {
-          original_amount: it.amount,
-          original_currency: it.currency,
-          local_currency: it.local_currency,
-          fx_rate: it.fx_rate,
-          fx_locked_at: it.fx_locked_at,
-        },
+        amount: amt,
       });
     }
   } else {
@@ -467,20 +354,20 @@ export async function createEvent(input: CreateEventInput) {
     // caller that hasn't migrated to itemized input yet.
     if (talentFeeClean && talentFeeClean > 0) {
       budgetExpenseRows.push({
-        event_id: event.id, collective_id: collectiveId,
+        event_id: event.id,
         description: "Talent fee", category: "artist", amount: talentFeeClean,
       });
     }
     if (travelCostClean && travelCostClean > 0) {
       budgetExpenseRows.push({
-        event_id: event.id, collective_id: collectiveId,
+        event_id: event.id,
         description: "Talent travel (flights, hotel, transport)",
         category: "transportation", amount: travelCostClean,
       });
     }
     if (otherExpensesClean && otherExpensesClean > 0) {
       budgetExpenseRows.push({
-        event_id: event.id, collective_id: collectiveId,
+        event_id: event.id,
         description: "Other expenses (sound, lights, security, promo)",
         category: "other", amount: otherExpensesClean,
       });
@@ -488,7 +375,7 @@ export async function createEvent(input: CreateEventInput) {
   }
 
   if (budgetExpenseRows.length > 0) {
-    const { error: expErr } = await admin.from("expenses").insert(budgetExpenseRows);
+    const { error: expErr } = await admin.from("event_expenses").insert(budgetExpenseRows);
     if (expErr) {
       console.error("[createEvent] budget expense insert failed (non-fatal):", expErr.message);
     }
@@ -567,58 +454,6 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     }
   }
 
-  // Create or find venue
-  let venueId: string;
-  const { data: existingVenue } = await admin
-    .from("venues")
-    .select("id")
-    .eq("name", input.venueName)
-    .eq("city", input.venueCity)
-    .limit(1)
-    .maybeSingle();
-
-  if (existingVenue) {
-    venueId = existingVenue.id;
-    // Update venue details
-    await admin
-      .from("venues")
-      .update({
-        address: input.venueAddress,
-        capacity: input.venueCapacity,
-      })
-      .eq("id", venueId);
-  } else {
-    const baseSlug = slugify(`${input.venueName} ${input.venueCity || ""}`);
-    let venueSlug = baseSlug;
-    const { data: slugCheck } = await admin
-      .from("venues")
-      .select("id")
-      .eq("slug", venueSlug)
-      .maybeSingle();
-    if (slugCheck) {
-      venueSlug = `${baseSlug}-${Math.random().toString(36).slice(2, 6)}`;
-    }
-
-    const { data: newVenue, error: venueError } = await admin
-      .from("venues")
-      .insert({
-        name: input.venueName,
-        slug: venueSlug,
-        address: input.venueAddress,
-        city: input.venueCity,
-        capacity: input.venueCapacity,
-      })
-      .select("id")
-      .maybeSingle();
-
-    if (venueError) {
-      console.error("[updateEvent] venue error:", venueError.message);
-      return { error: "Failed to create venue" };
-    }
-    if (!newVenue) return { error: "Failed to create venue" };
-    venueId = newVenue.id;
-  }
-
   // Build timestamps with timezone awareness (same approach as createEvent)
   const tz = input.timezone ?? DEFAULT_TIMEZONE;
   function toTimestamp(date: string, time: string): string {
@@ -661,31 +496,18 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     return { error: "Tier prices cannot be negative" };
   }
 
-  // Sanitize per-event currency override (ISO 4217 lowercase 3-letter).
-  // NULL/undefined keeps the column unchanged; empty string → clear it.
-  let nextEventCurrency: string | null | undefined = undefined;
-  if (input.currency === null || input.currency === "") {
-    nextEventCurrency = null;
-  } else if (typeof input.currency === "string" && /^[a-z]{3}$/.test(input.currency.toLowerCase())) {
-    nextEventCurrency = input.currency.toLowerCase();
-  }
-
-  // Update event
+  // Update event — venue stored as flat columns
   const eventUpdatePayload: Record<string, unknown> = {
-    venue_id: venueId,
     title: trimmedTitle,
     description: input.description,
     starts_at: startsAt,
     ends_at: endsAt,
     doors_at: doorsAt,
-    bar_minimum: input.barMinimum ?? null,
-    venue_deposit: input.venueDeposit ?? null,
-    venue_cost: input.venueCost ?? null,
-    estimated_bar_revenue: input.estimatedBarRevenue ?? null,
+    venue_name: input.venueName,
+    venue_address: input.venueAddress,
+    city: input.venueCity,
+    capacity: input.venueCapacity || null,
   };
-  if (nextEventCurrency !== undefined) {
-    eventUpdatePayload.currency = nextEventCurrency;
-  }
   if (newSlug) {
     eventUpdatePayload.slug = newSlug;
   }
@@ -752,40 +574,14 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     }
   }
 
-  // ── Reconcile itemized expenses (v2 multi-currency) ──
+  // ── Reconcile itemized expenses ──
   // Only runs when expenseItems is explicitly provided — undefined means
-  // "leave existing expenses alone", which matches legacy behavior. Each
-  // input row is re-converted to the event's reporting currency at save
-  // time so the FX snapshot reflects the rate the operator actually
-  // committed to. Drafts only (page.tsx gates edit to draft status), so
-  // re-snapshotting rates doesn't drift historical data.
+  // "leave existing expenses alone", which matches legacy behavior.
   if (input.expenseItems !== undefined) {
-    // Resolve the event's reporting currency: explicit override on this
-    // update → existing event.currency → collective default → 'usd'.
-    let resolvedEventCurrency = nextEventCurrency ?? undefined;
-    if (!resolvedEventCurrency) {
-      const { data: eventRow } = await admin
-        .from("events")
-        .select("currency, collective_id")
-        .eq("id", eventId)
-        .maybeSingle();
-      resolvedEventCurrency = eventRow?.currency ?? undefined;
-      if (!resolvedEventCurrency && eventRow?.collective_id) {
-        const { data: collectiveRow } = await admin
-          .from("collectives")
-          .select("default_currency")
-          .eq("id", eventRow.collective_id)
-          .maybeSingle();
-        resolvedEventCurrency = collectiveRow?.default_currency ?? undefined;
-      }
-    }
-    const eventCurrency = (resolvedEventCurrency ?? "usd").toLowerCase();
-
-    // Delete explicitly-removed rows first, scoped to this event (defense
-    // in depth — the client could technically pass arbitrary IDs).
+    // Delete explicitly-removed rows first, scoped to this event.
     if (input.removedExpenseIds && input.removedExpenseIds.length > 0) {
       const { error: delErr } = await admin
-        .from("expenses")
+        .from("event_expenses")
         .delete()
         .in("id", input.removedExpenseIds)
         .eq("event_id", eventId);
@@ -795,45 +591,20 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
       }
     }
 
-    // Validate + re-convert each item.
-    const fxLockedAt = new Date().toISOString();
-    const { convertBetween } = await import("@/lib/currency");
-
     for (const it of input.expenseItems) {
       if (!Number.isFinite(it.amount) || it.amount < 0 || it.amount > 10_000_000) continue;
-      if (!/^[a-z]{3}$/.test(it.currency.toLowerCase())) continue;
       const label = (it.label ?? "").toString().slice(0, 200);
       const category = (it.category ?? "other").toString().slice(0, 50);
-      const rowCurrency = it.currency.toLowerCase();
-
-      const { amount: localAmountRaw, rate } = await convertBetween(
-        it.amount,
-        rowCurrency,
-        eventCurrency,
-      );
-      // Inline safeMoney equivalent — cap to NUMERIC(10,2), non-negative.
-      const localAmt =
-        !Number.isFinite(localAmountRaw) || localAmountRaw < 0 || localAmountRaw > 9999999.99
-          ? 0
-          : Math.round(localAmountRaw * 100) / 100;
-      if (localAmt <= 0) continue;
-
-      const metadata = {
-        original_amount: it.amount,
-        original_currency: rowCurrency,
-        local_currency: eventCurrency,
-        fx_rate: rate,
-        fx_locked_at: fxLockedAt,
-      } as Database["public"]["Tables"]["expenses"]["Insert"]["metadata"];
+      const amt = Math.round(it.amount * 100) / 100;
+      if (amt <= 0) continue;
 
       if (it.id) {
         const { error: upErr } = await admin
-          .from("expenses")
+          .from("event_expenses")
           .update({
             description: label,
             category,
-            amount: localAmt,
-            metadata,
+            amount: amt,
           })
           .eq("id", it.id)
           .eq("event_id", eventId); // tenancy guard
@@ -842,14 +613,12 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
         }
       } else {
         const { error: insErr } = await admin
-          .from("expenses")
+          .from("event_expenses")
           .insert({
             event_id: eventId,
-            collective_id: ownership.event.collective_id,
             description: label,
             category,
-            amount: localAmt,
-            metadata,
+            amount: amt,
           });
         if (insErr) {
           console.error("[updateEvent] expense insert error:", insErr.message);
@@ -950,7 +719,7 @@ export async function publishEvent(eventId: string) {
 
   const { error } = await admin
     .from("events")
-    .update({ status: "published" })
+    .update({ status: "published", is_published: true })
     .eq("id", eventId);
 
   if (error) {
@@ -1006,84 +775,82 @@ export async function cancelEvent(eventId: string) {
     return { error: "Failed to cancel event" };
   }
 
-  // --- Refund all paid and checked-in tickets ---
-  const { data: paidTickets, error: ticketsError } = await admin
-    .from("tickets")
-    .select("id, price_paid, stripe_payment_intent_id, metadata")
+  // --- Refund all paid orders for this event ---
+  const { data: paidOrders, error: ordersError } = await admin
+    .from("orders")
+    .select("id, total, stripe_payment_intent_id")
     .eq("event_id", eventId)
-    .in("status", ["paid", "checked_in"]);
+    .eq("status", "paid");
 
-  if (ticketsError) {
-    console.error("[cancelEvent] tickets query error:", ticketsError.message);
+  if (ordersError) {
+    console.error("[cancelEvent] orders query error:", ordersError.message);
   }
 
-  const refundResults: { ticketId: string; success: boolean; error?: string }[] = [];
+  const refundResults: { orderId: string; success: boolean; error?: string }[] = [];
 
-  if (paidTickets && paidTickets.length > 0) {
+  if (paidOrders && paidOrders.length > 0) {
     const stripe = getStripe();
 
     const results = await Promise.allSettled(
-      paidTickets.map(async (ticket) => {
-        const pricePaid = Number(ticket.price_paid) || 0;
+      paidOrders.map(async (order) => {
+        const total = Number(order.total) || 0;
 
         // Issue Stripe refund if there was a real payment
-        if (ticket.stripe_payment_intent_id && pricePaid > 0) {
+        if (order.stripe_payment_intent_id && total > 0) {
           try {
             await stripe.refunds.create({
-              payment_intent: ticket.stripe_payment_intent_id,
-              amount: Math.round(pricePaid * 100),
+              payment_intent: order.stripe_payment_intent_id,
+              amount: Math.round(total * 100),
               reason: "requested_by_customer",
             });
           } catch (stripeErr) {
             const msg = stripeErr instanceof Error ? stripeErr.message : "Stripe refund failed";
-            console.error(`[cancelEvent] Stripe refund failed for ticket ${ticket.id}:`, msg);
+            console.error(`[cancelEvent] Stripe refund failed for order ${order.id}:`, msg);
             throw new Error(msg);
           }
         }
 
-        // Update ticket to refunded
+        // Update order to refunded
         const { error: updateErr } = await admin
-          .from("tickets")
-          .update({
-            status: "refunded",
-            metadata: {
-              ...(ticket.metadata as Record<string, unknown>),
-              refunded_at: new Date().toISOString(),
-              refunded_by: user.id,
-              refund_reason: "event_cancelled",
-              refund_amount: pricePaid,
-            },
-          })
-          .eq("id", ticket.id);
+          .from("orders")
+          .update({ status: "refunded" })
+          .eq("id", order.id);
 
         if (updateErr) throw new Error(updateErr.message);
-        return ticket.id;
+        return order.id;
       })
     );
 
     results.forEach((result, i) => {
       if (result.status === "fulfilled") {
-        refundResults.push({ ticketId: paidTickets[i].id, success: true });
+        refundResults.push({ orderId: paidOrders[i].id, success: true });
       } else {
-        console.error(`[cancelEvent] refund failed for ticket ${paidTickets[i].id}:`, result.reason?.message);
-        refundResults.push({ ticketId: paidTickets[i].id, success: false, error: "Refund failed" });
+        console.error(`[cancelEvent] refund failed for order ${paidOrders[i].id}:`, result.reason?.message);
+        refundResults.push({ orderId: paidOrders[i].id, success: false, error: "Refund failed" });
       }
     });
   }
 
-  // --- Cancel remaining non-refunded tickets (pending, free, etc.) ---
+  // --- Cancel all tickets for this event ---
   await admin
     .from("tickets")
-    .update({ status: "cancelled" as const })
-    .eq("event_id", eventId)
-    .not("status", "in", "(refunded,cancelled)");
-
-  // --- Cancel waitlist entries ---
-  await admin
-    .from("waitlist_entries")
     .update({ status: "cancelled" })
     .eq("event_id", eventId)
-    .neq("status", "cancelled");
+    .not("status", "in", "(cancelled)");
+
+  // --- Cancel waitlist entries (ticket_waitlist keyed by tier) ---
+  const { data: eventTiers } = await admin
+    .from("ticket_tiers")
+    .select("id")
+    .eq("event_id", eventId);
+
+  if (eventTiers && eventTiers.length > 0) {
+    const tierIds = eventTiers.map((t) => t.id);
+    await admin
+      .from("ticket_waitlist")
+      .delete()
+      .in("tier_id", tierIds);
+  }
 
   // --- Log the cancellation in event_activity ---
   await admin
@@ -1094,8 +861,8 @@ export async function cancelEvent(eventId: string) {
       action: "event_cancelled",
       metadata: {
         cancelled_at: new Date().toISOString(),
-        tickets_refunded: refundResults.filter((r) => r.success).length,
-        tickets_failed: refundResults.filter((r) => !r.success).length,
+        orders_refunded: refundResults.filter((r) => r.success).length,
+        orders_failed: refundResults.filter((r) => !r.success).length,
         previous_status: status,
       },
     });
@@ -1106,7 +873,7 @@ export async function cancelEvent(eventId: string) {
   if (failedRefunds.length > 0) {
     return {
       error: null,
-      warning: `Event cancelled but ${failedRefunds.length} ticket refund(s) failed. Check the dashboard to retry.`,
+      warning: `Event cancelled but ${failedRefunds.length} order refund(s) failed. Check the dashboard to retry.`,
       failedRefunds,
     };
   }
@@ -1169,7 +936,7 @@ export async function completeEvent(eventId: string) {
 
 /**
  * Duplicate an existing event into a fresh draft. Copies title (with " (Copy)"
- * suffix), description, venue, budget fields, ticket tiers, and expense rows.
+ * suffix), description, venue fields, ticket tiers, and expense rows.
  * Defaults the new starts_at to 7 days from today at the source event's
  * time-of-day; doors_at and ends_at are shifted by the same delta so the
  * relative timing is preserved. Skips bookings, tickets, attendees,
@@ -1196,7 +963,7 @@ export async function duplicateEvent(sourceEventId: string) {
       admin
         .from("events")
         .select(
-          "title, description, starts_at, ends_at, doors_at, venue_id, collective_id, event_mode, is_free, vibe_tags, min_age, venue_cost, venue_deposit, bar_minimum, estimated_bar_revenue, flyer_url, metadata"
+          "title, description, starts_at, ends_at, doors_at, venue_name, venue_address, city, capacity, collective_id, is_free, vibe_tags, min_age, flyer_url, metadata"
         )
         .eq("id", sourceEventId)
         .maybeSingle(),
@@ -1206,7 +973,7 @@ export async function duplicateEvent(sourceEventId: string) {
         .eq("event_id", sourceEventId)
         .order("sort_order", { ascending: true }),
       admin
-        .from("expenses")
+        .from("event_expenses")
         .select("description, category, amount")
         .eq("event_id", sourceEventId),
     ]);
@@ -1254,22 +1021,20 @@ export async function duplicateEvent(sourceEventId: string) {
       .from("events")
       .insert({
         collective_id: source.collective_id,
-        venue_id: source.venue_id,
         title: baseTitle,
         slug: newSlug,
         description: source.description,
         starts_at: newStart.toISOString(),
         ends_at: newEnds,
         doors_at: newDoors,
+        venue_name: source.venue_name,
+        venue_address: source.venue_address,
+        city: source.city,
+        capacity: source.capacity,
         status: "draft",
-        event_mode: source.event_mode,
         is_free: source.is_free,
         vibe_tags: source.vibe_tags ?? undefined,
         min_age: source.min_age,
-        venue_cost: source.venue_cost,
-        venue_deposit: source.venue_deposit,
-        bar_minimum: source.bar_minimum,
-        estimated_bar_revenue: source.estimated_bar_revenue,
         flyer_url: source.flyer_url,
         metadata: source.metadata ?? undefined,
       })
@@ -1299,10 +1064,9 @@ export async function duplicateEvent(sourceEventId: string) {
 
     // Clone expense rows (best-effort — non-fatal).
     if (sourceExpensesRes.data && sourceExpensesRes.data.length > 0) {
-      const { error: expErr } = await admin.from("expenses").insert(
+      const { error: expErr } = await admin.from("event_expenses").insert(
         sourceExpensesRes.data.map((e) => ({
           event_id: newEvent.id,
-          collective_id: source.collective_id,
           description: e.description,
           category: e.category,
           amount: e.amount,
@@ -1487,12 +1251,12 @@ export async function getEventDesign(eventId: string) {
   const [eventRes, artistsRes] = await Promise.all([
     admin
       .from("events")
-      .select("id, title, slug, description, flyer_url, vibe_tags, min_age, metadata, collective_id, starts_at, doors_at, venues(name, city, address)")
+      .select("id, title, slug, description, flyer_url, vibe_tags, min_age, metadata, collective_id, starts_at, doors_at, venue_name, venue_address, city")
       .eq("id", eventId)
       .maybeSingle(),
     admin
       .from("event_artists")
-      .select("artists(name)")
+      .select("name")
       .eq("event_id", eventId),
   ]);
 
@@ -1511,10 +1275,9 @@ export async function getEventDesign(eventId: string) {
     .eq("id", event.collective_id)
     .maybeSingle();
 
-  // Extract artist names and venue for poster pre-fill
-  const venue = event.venues as unknown as { name: string; city: string; address: string | null } | null;
+  // Extract artist names for poster pre-fill
   const artistNames = (artistsRes.data || [])
-    .map((a) => (a.artists as unknown as { name: string })?.name)
+    .map((a) => a.name)
     .filter(Boolean);
 
   const dateDisplay = event.starts_at
@@ -1534,9 +1297,9 @@ export async function getEventDesign(eventId: string) {
     event: {
       ...event,
       collectiveSlug: collective?.slug ?? null,
-      venueName: venue?.name ?? null,
-      venueCity: venue?.city ?? null,
-      venueAddress: venue?.address ?? null,
+      venueName: event.venue_name ?? null,
+      venueCity: event.city ?? null,
+      venueAddress: event.venue_address ?? null,
       artistNames,
       dateDisplay,
       timeDisplay,

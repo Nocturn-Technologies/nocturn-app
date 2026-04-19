@@ -171,16 +171,15 @@ export default async function EventDetailPage({ params }: Props) {
 
   if (collectiveIds.length === 0) notFound();
 
-  // Fetch event with venue. event_mode + is_free drive whether we render
+  // Fetch event with flat venue columns. is_free drives whether we render
   // the RSVPs widget (free/rsvp events) or the Ticket Holders widget
   // (ticketed events) below.
   const { data: event } = await admin
     .from("events")
     .select(
-      "id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, collective_id, event_mode, is_free, venues(name, address, city, capacity)"
+      "id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, collective_id, is_free, venue_name, venue_address, city, capacity"
     )
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event || !collectiveIds.includes(event.collective_id)) notFound();
@@ -205,15 +204,15 @@ export default async function EventDetailPage({ params }: Props) {
     const tierIds = rawTiers.map((t) => t.id);
     const { data: soldData } = await admin
       .from("tickets")
-      .select("ticket_tier_id")
-      .in("ticket_tier_id", tierIds)
+      .select("tier_id")
+      .in("tier_id", tierIds)
       .in("status", ["paid", "checked_in"]);
 
     if (soldData) {
       for (const ticket of soldData) {
-        if (!ticket.ticket_tier_id) continue;
-        tierSoldCounts[ticket.ticket_tier_id] =
-          (tierSoldCounts[ticket.ticket_tier_id] ?? 0) + 1;
+        if (!ticket.tier_id) continue;
+        tierSoldCounts[ticket.tier_id] =
+          (tierSoldCounts[ticket.tier_id] ?? 0) + 1;
       }
     }
   }
@@ -238,20 +237,18 @@ export default async function EventDetailPage({ params }: Props) {
     .eq("event_id", eventId)
     .eq("status", "refunded");
 
-  // Get disputed ticket count
+  // Get disputed ticket count (voided = potential dispute indicator)
   const { count: disputedCount } = await admin
     .from("tickets")
     .select("*", { count: "exact", head: true })
     .eq("event_id", eventId)
-    .eq("status", "cancelled")
-    .filter("metadata->>disputed", "eq", "true");
+    .eq("status", "voided");
 
   // Fetch task progress for playbook
   const { data: taskStats } = await admin
     .from("event_tasks")
     .select("status")
-    .eq("event_id", eventId)
-    .is("deleted_at", null);
+    .eq("event_id", eventId);
 
   const taskTotal = taskStats?.length ?? 0;
   const taskDone = taskStats?.filter((t: { status: string | null }) => t.status === "done").length ?? 0;
@@ -260,12 +257,12 @@ export default async function EventDetailPage({ params }: Props) {
   // Fetch existing updates for the composer
   const { updates: existingUpdates } = await listEventUpdatesPublic(eventId);
 
-  // Free / RSVP-mode events show the RSVPs widget. Ticketed events show the
+  // Free events show the RSVPs widget. Ticketed events show the
   // Ticket Holders widget (who actually paid + checked-in status + CSV).
   // Fetch both lazily — only the active one is rendered, but keeping both
   // fetches cheap avoids a conditional data-flow that breaks component
   // initial state.
-  const isTicketedMode = event.event_mode === "ticketed" && !event.is_free;
+  const isTicketedMode = !event.is_free;
 
   const { rsvps: initialRsvps } = isTicketedMode
     ? { rsvps: [] }
@@ -275,12 +272,14 @@ export default async function EventDetailPage({ params }: Props) {
     ? await listEventTicketHolders(eventId)
     : { holders: [] };
 
-  const venue = event.venues as unknown as {
-    name: string;
-    address: string;
-    city: string;
-    capacity: number;
-  } | null;
+  const venue = event.venue_name
+    ? {
+        name: event.venue_name,
+        address: event.venue_address ?? "",
+        city: event.city ?? "",
+        capacity: event.capacity ?? 0,
+      }
+    : null;
 
   const eventDate = new Date(event.starts_at);
   const endsAt = event.ends_at ? new Date(event.ends_at) : null;

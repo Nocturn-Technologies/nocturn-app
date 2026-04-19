@@ -180,23 +180,17 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
   const [
     { data: tiersRaw },
-    { count: ticketsSold },
     { data: artistsRaw },
-    { data: reactionRowsRaw },
     { count: collectiveEventCount },
     { data: pastEventsRaw },
     { data: nearbyEventsRaw },
-    { data: tierTicketsRaw },
-    { data: pendingTierTicketsRaw },
   ] = await Promise.all([
     supabase.from("ticket_tiers").select("*").eq("event_id", event.id).order("sort_order"),
-    supabase.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
-    supabase.from("event_artists").select("artist_id, set_time, artists(name, genre)").eq("event_id", event.id).eq("status", "confirmed").order("set_time"),
-    supabase.from("event_reactions").select("emoji").eq("event_id", event.id),
+    supabase.from("event_artists").select("party_id, name, set_time, role").eq("event_id", event.id).order("set_time"),
     supabase.from("events").select("*", { count: "exact", head: true }).eq("collective_id", collective.id).in("status", ["published", "completed"]).is("deleted_at", null),
     supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).is("deleted_at", null).order("starts_at", { ascending: false }).limit(6),
     supabase.from("events")
-      .select("title, slug, flyer_url, starts_at, collective_id, collectives(name, slug), venues(name, city)")
+      .select("title, slug, flyer_url, starts_at, collective_id, collectives(name, slug), venue_name, city")
       .eq("status", "published")
       .neq("id", event.id)
       .neq("collective_id", collective.id)
@@ -205,27 +199,26 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       .lte("starts_at", weekFromNow)
       .order("starts_at", { ascending: true })
       .limit(6),
-    supabase.from("tickets").select("ticket_tier_id").eq("event_id", event.id).in("status", ["paid", "checked_in"]),
-    supabase.from("tickets").select("ticket_tier_id").eq("event_id", event.id).eq("status", "pending").gte("created_at", new Date(Date.now() - 30 * 60 * 1000).toISOString()),
   ]);
 
-  const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number; sort_order: number }[] | null;
-  const artists = artistsRaw as { artist_id: string; set_time: string | null; artists: { name: string; genre: string[] | null } | null }[] | null;
+  // event_reactions exists in DB but not in generated types — use untyped client
+  const { data: reactionRowsRaw } = await (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> })
+    .from("event_reactions")
+    .select("emoji")
+    .eq("event_id", event.id);
+
+  const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number; sort_order: number; tickets_sold: number }[] | null;
+  const artists = artistsRaw as { party_id: string | null; name: string | null; set_time: string | null; role: string | null }[] | null;
   const reactionRows = reactionRowsRaw as { emoji: string }[] | null;
   const pastEvents = pastEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string }[] | null;
-  const nearbyEvents = nearbyEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string; collective_id: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string } | null }[] | null;
-  const tierTickets = tierTicketsRaw as { ticket_tier_id: string }[] | null;
-  const pendingTierTickets = pendingTierTicketsRaw as { ticket_tier_id: string }[] | null;
+  const nearbyEvents = nearbyEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string; collective_id: string; collectives: { name: string; slug: string } | null; venue_name: string | null; city: string | null }[] | null;
 
-  // Compute per-tier sold counts for accurate "remaining" display
-  // Include confirmed tickets + active pending reservations (< 30 min old) toward capacity
+  // Per-tier sold counts from tickets_sold counter on ticket_tiers
   const tierSoldCounts: Record<string, number> = {};
-  for (const t of tierTickets || []) {
-    tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
+  for (const t of tiers || []) {
+    tierSoldCounts[t.id] = t.tickets_sold ?? 0;
   }
-  for (const t of pendingTierTickets || []) {
-    tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
-  }
+  const ticketsSold = (tiers || []).reduce((sum, t) => sum + (t.tickets_sold ?? 0), 0);
 
 
   const reactionCounts: Record<string, number> = {};
@@ -584,11 +577,10 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             <div className="relative">
               <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
                 {artists.map((a) => {
-                  const artist = a.artists;
-                  if (!artist) return null;
+                  if (!a.name) return null;
                   return (
                     <div
-                      key={a.artist_id}
+                      key={a.party_id ?? a.name}
                       className="flex-none rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 min-w-[150px] space-y-2.5 hover:border-white/[0.12] transition-all duration-300"
                     >
                       <div
@@ -598,9 +590,9 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                         <Music className="h-5 w-5" style={{ color: accentColor }} />
                       </div>
                       <p className="font-heading text-sm font-bold text-white tracking-tight">
-                        {artist.name}
+                        {a.name}
                       </p>
-                      {artist.genre && (
+                      {a.role && (
                         <span
                           className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium tracking-wide truncate"
                           style={{
@@ -608,7 +600,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                             color: `${accentColor}cc`,
                           }}
                         >
-                          {Array.isArray(artist.genre) ? artist.genre.join(" · ") : artist.genre}
+                          {a.role}
                         </span>
                       )}
                       {a.set_time && (
@@ -774,7 +766,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       <AlsoThisWeek
         events={(nearbyEvents || []).map((e) => {
           const c = e.collectives;
-          const v = e.venues;
           return {
             title: e.title,
             slug: e.slug,
@@ -782,8 +773,8 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             collectiveName: c?.name || "",
             startsAt: e.starts_at,
             flyerUrl: e.flyer_url,
-            venueName: v?.name || null,
-            venueCity: v?.city || null,
+            venueName: e.venue_name || null,
+            venueCity: e.city || null,
           };
         })}
         city={venue?.city || undefined}

@@ -71,14 +71,31 @@ export async function getArtistPerformanceAnalytics(): Promise<{
       }
     }
 
-    // Get all artist bookings for these events
+    // Get all artist bookings for these events.
+    // event_artists now links via party_id → parties (display_name).
+    // Genre comes from artist_profiles joined on the same party_id.
     const { data: bookings } = await admin.from("event_artists")
-      .select("artist_id, event_id, created_at, artists(id, name, genre, metadata), events(starts_at)")
+      .select("party_id, event_id, created_at, parties(id, display_name), events(starts_at)")
       .in("event_id", eventIds)
-      .neq("status", "cancelled");
+      .not("party_id", "is", null);
 
     if (!bookings || (bookings as unknown[]).length === 0) {
       return { error: null, artists: [], avgTicketsAcrossAll: 0 };
+    }
+
+    // Collect unique party_ids to look up artist_profiles in one query
+    const partyIds = [...new Set(
+      (bookings as { party_id: string | null }[])
+        .map((b) => b.party_id)
+        .filter((id): id is string => id !== null)
+    )];
+
+    const { data: artistProfilesRaw } = await admin.from("artist_profiles")
+      .select("party_id, genre")
+      .in("party_id", partyIds);
+    const genreByParty = new Map<string, string[]>();
+    for (const ap of (artistProfilesRaw ?? []) as { party_id: string; genre: string[] | null }[]) {
+      genreByParty.set(ap.party_id, ap.genre ?? []);
     }
 
     // Get all tickets for these events
@@ -97,11 +114,11 @@ export async function getArtistPerformanceAnalytics(): Promise<{
       ticketsByEvent[eid] = (ticketsByEvent[eid] || 0) + count;
     }
 
-    // Group bookings by artist
+    // Group bookings by party_id (one entry per artist-party)
     interface BookingRow {
-      artist_id: string;
+      party_id: string | null;
       event_id: string;
-      artists: { id: string; name: string; genre: string[] | null; metadata: { location?: string } | null } | null;
+      parties: { id: string; display_name: string } | null;
       events: { starts_at: string } | null;
     }
 
@@ -114,8 +131,8 @@ export async function getArtistPerformanceAnalytics(): Promise<{
     }>();
 
     for (const b of bookings as BookingRow[]) {
-      if (!b.artists) continue;
-      const existing = artistMap.get(b.artist_id);
+      if (!b.party_id || !b.parties) continue;
+      const existing = artistMap.get(b.party_id);
       const startsAt = b.events?.starts_at ?? null;
 
       if (existing) {
@@ -124,10 +141,10 @@ export async function getArtistPerformanceAnalytics(): Promise<{
           existing.lastBookedDate = startsAt;
         }
       } else {
-        artistMap.set(b.artist_id, {
-          name: b.artists.name,
-          genre: b.artists.genre ?? [],
-          location: (b.artists.metadata as { location?: string })?.location ?? null,
+        artistMap.set(b.party_id, {
+          name: b.parties.display_name,
+          genre: genreByParty.get(b.party_id) ?? [],
+          location: null,
           eventIds: new Set([b.event_id]),
           lastBookedDate: startsAt,
         });

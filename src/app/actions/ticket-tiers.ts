@@ -134,7 +134,7 @@ export async function updateTicketTier(
     const { count: soldCount } = await admin
       .from("tickets")
       .select("*", { count: "exact", head: true })
-      .eq("ticket_tier_id", tierId)
+      .eq("tier_id", tierId)
       .in("status", ["paid", "checked_in"]);
 
     const sold = soldCount ?? 0;
@@ -160,7 +160,7 @@ export async function updateTicketTier(
     const { count: postUpdateSold } = await admin
       .from("tickets")
       .select("*", { count: "exact", head: true })
-      .eq("ticket_tier_id", tierId)
+      .eq("tier_id", tierId)
       .in("status", ["paid", "checked_in"]);
 
     const actualSold = postUpdateSold ?? 0;
@@ -275,7 +275,7 @@ export async function deleteTicketTier(tierId: string) {
     const { count: soldCount } = await admin
       .from("tickets")
       .select("*", { count: "exact", head: true })
-      .eq("ticket_tier_id", tierId)
+      .eq("tier_id", tierId)
       .in("status", ["paid", "checked_in"]);
 
     if (soldCount && soldCount > 0) {

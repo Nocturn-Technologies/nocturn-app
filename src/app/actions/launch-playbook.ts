@@ -356,7 +356,7 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
           .maybeSingle(),
         admin
           .from("event_artists")
-          .select("artists(name)")
+          .select("name")
           .eq("event_id", eventId),
         admin
           .from("ticket_tiers")
@@ -378,7 +378,7 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
         const vibeStr = vibes.length > 0 ? vibes.slice(0, 3).join(", ") : "underground";
 
         const artistNames = (lineupData.data ?? [])
-          .map((l) => (l.artists as unknown as { name: string })?.name)
+          .map((l) => (l as { name: string | null }).name)
           .filter(Boolean);
         const lineupStr = artistNames.length > 0 ? artistNames.join(", ") : "a curated lineup";
 

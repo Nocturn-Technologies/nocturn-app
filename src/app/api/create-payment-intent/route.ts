@@ -8,7 +8,6 @@ import {
   validatePromo,
   isPromoError,
   calculateCheckoutPricing,
-  insertPendingTickets,
 } from "@/lib/checkout-helpers";
 
 export async function POST(request: NextRequest) {
@@ -87,14 +86,11 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Look up event + collective default_currency. Charge currency =
-    // events.currency → collective default → USD. Buyer's card handles any
-    // FX on their side; Nocturn receives in the event currency.
+    // Look up event. Currency is hardcoded to CAD — events.currency was removed in schema rebuild.
     const { data: event, error: eventError } = await supabase
       .from("events")
-      .select("id, title, collective_id, status, currency, collectives(default_currency)")
+      .select("id, title, collective_id, status")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     if (eventError || !event) {
@@ -109,10 +105,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Look up ticket tier
+    // Look up ticket tier (column renames: sales_start → sale_start_at, sales_end → sale_end_at)
     const { data: tier, error: tierError } = await supabase
       .from("ticket_tiers")
-      .select("id, name, price, capacity, sales_start, sales_end")
+      .select("id, name, price, capacity, sale_start_at, sale_end_at")
       .eq("id", tierId)
       .eq("event_id", eventId)
       .maybeSingle();
@@ -123,10 +119,10 @@ export async function POST(request: NextRequest) {
 
     // Validate sales window
     const now = new Date();
-    if (tier.sales_start && new Date(tier.sales_start) > now) {
+    if (tier.sale_start_at && new Date(tier.sale_start_at) > now) {
       return NextResponse.json({ error: "Ticket sales have not started yet" }, { status: 400 });
     }
-    if (tier.sales_end && new Date(tier.sales_end) < now) {
+    if (tier.sale_end_at && new Date(tier.sale_end_at) < now) {
       return NextResponse.json({ error: "Ticket sales have ended" }, { status: 400 });
     }
 
@@ -150,26 +146,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Reserve capacity by inserting "pending" tickets immediately.
-    // These count toward capacity and will be updated to "paid" on fulfillment,
-    // or cleaned up after 30 minutes if the checkout is abandoned (Gap 9 + 25).
-    let pendingTicketIds: string[];
-    try {
-      const pendingResult = await insertPendingTickets(supabase, {
-        eventId,
-        tierId,
-        quantity,
-        email: buyerEmail,
-        phone: buyerPhone,
-      });
-      pendingTicketIds = pendingResult.pendingTicketIds;
-    } catch (err) {
-      console.error("[create-payment-intent] Failed to insert pending tickets:", err);
-      return NextResponse.json(
-        { error: "Failed to reserve tickets. Please try again." },
-        { status: 500 }
-      );
-    }
+    // Ticket rows are created by fulfill_tickets_atomic after payment succeeds (via webhook).
+    // No pending ticket rows needed here — capacity is reserved via check_and_reserve_capacity.
+    const pendingTicketIds: string[] = [];
 
     // Validate tier price
     const basePriceNumber = Number(tier.price);
@@ -213,26 +192,10 @@ export async function POST(request: NextRequest) {
     const totalPerTicketCents = pricing.totalPerTicketCents;
     const totalEventCents = totalPerTicketCents * quantity;
 
-    // Charge currency = event currency. Buyer pays in the event's currency;
-    // their card handles FX buyer-side. Nocturn receives/refunds/transfers
-    // all in one currency.
-    const collectiveForCurrency = event.collectives as unknown as {
-      default_currency: string | null;
-    } | null;
-    const chargeCurrency = (
-      event.currency ||
-      collectiveForCurrency?.default_currency ||
-      "usd"
-    ).toLowerCase();
+    // Currency is hardcoded to CAD — events.currency was removed in schema rebuild.
+    const chargeCurrency = "cad";
 
     if (isZeroDecimal(chargeCurrency)) {
-      if (pendingTicketIds.length > 0) {
-        await supabase
-          .from("tickets")
-          .delete()
-          .in("id", pendingTicketIds)
-          .eq("status", "pending");
-      }
       return NextResponse.json(
         {
           error: `${chargeCurrency.toUpperCase()} is not yet supported for ticket sales. Contact support.`,
@@ -241,17 +204,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Latch event currency on first sale — see the mirror in /api/checkout.
-    // Protects against mid-event collective.default_currency flips.
-    if (!event.currency) {
-      await supabase
-        .from("events")
-        .update({ currency: chargeCurrency })
-        .eq("id", eventId)
-        .is("currency", null);
-    }
-
-    // Create PaymentIntent in the event's currency.
+    // Create PaymentIntent in the charge currency.
     let paymentIntent;
     try {
       paymentIntent = await getStripe().paymentIntents.create({
@@ -279,52 +232,28 @@ export async function POST(request: NextRequest) {
       });
     } catch (stripeErr) {
       console.error("[create-payment-intent] Stripe PaymentIntent creation failed:", stripeErr);
-      // Clean up pending tickets to release reserved capacity
-      if (pendingTicketIds.length > 0) {
-        try {
-          await supabase
-            .from("tickets")
-            .delete()
-            .in("id", pendingTicketIds)
-            .eq("status", "pending");
-          console.info(`[create-payment-intent] Cleaned up ${pendingTicketIds.length} pending ticket(s) after Stripe failure`);
-        } catch (cleanupErr) {
-          console.error("[create-payment-intent] Failed to clean up pending tickets:", cleanupErr);
-        }
-      }
+      // No pending tickets to clean up — capacity reservation via check_and_reserve_capacity
+      // is not persisted as ticket rows, so nothing to delete here.
       return NextResponse.json(
         { error: "Payment service temporarily unavailable." },
         { status: 500 }
       );
     }
 
-    // Link pending tickets to this PaymentIntent so webhooks can find them
-    if (pendingTicketIds.length > 0) {
-      await supabase
-        .from("tickets")
-        .update({
-          stripe_payment_intent_id: paymentIntent.id,
-          metadata: {
-            customer_email: buyerEmail,
-            customer_phone: buyerPhone,
-            pending_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-            payment_intent_id: paymentIntent.id,
-          },
-        })
-        .in("id", pendingTicketIds);
-    }
+    // No pending ticket rows to link — tickets are created post-payment via fulfill_tickets_atomic
 
     // Log the payment creation for audit trail
     void logPaymentEvent({
+      stripe_event_id: `pi_created:${paymentIntent.id}`,
       event_type: "payment_created",
-      payment_intent_id: paymentIntent.id,
+      stripe_payment_intent_id: paymentIntent.id,
       event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: totalEventCents,
+      amount: totalEventCents / 100,
       currency: chargeCurrency,
-      buyer_email: buyerEmail,
+      customer_email: buyerEmail,
       metadata: {
+        tier_id: tierId,
+        quantity,
         promo_id: promoId ?? undefined,
         discount_cents: discountCents > 0 ? discountCents : undefined,
       },

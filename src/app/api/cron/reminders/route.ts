@@ -58,9 +58,8 @@ export async function GET(request: Request) {
 
     const { data: todayEvents } = await sb
       .from("events")
-      .select("id, title, slug, starts_at, doors_at, metadata, venues(name, address, city), collectives(slug)")
+      .select("id, title, slug, starts_at, doors_at, venue_name, venue_address, collective_id, collectives(slug)")
       .eq("status", "published")
-      .is("deleted_at", null)
       .gte("starts_at", todayStart.toISOString())
       .lt("starts_at", todayEnd.toISOString())
       .limit(500);
@@ -83,40 +82,46 @@ export async function GET(request: Request) {
     for (const event of todayEvents ?? []) {
       if (alreadySent.has(event.id)) continue;
 
-      const venue = event.venues as unknown as { name: string; city: string } | null;
       const collective = event.collectives as unknown as { slug: string } | null;
-      const meta = (event.metadata ?? {}) as Record<string, string>;
       // Format times in the event's local timezone (not the cron host's).
       // Without an explicit `timeZone`, Vercel's cron container renders
       // UTC → attendees see "Doors: 12:00 AM" for a 7pm local show.
-      const eventTz = meta.timezone || DEFAULT_TIMEZONE;
+      const eventTz = DEFAULT_TIMEZONE;
       const doorsTime = event.doors_at
         ? new Date(event.doors_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: eventTz })
         : "";
       const showTime = new Date(event.starts_at).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: eventTz });
 
-      // Get all ticket holders
-      const { data: tickets } = await sb
-        .from("tickets")
-        .select("metadata")
+      // Get all buyer emails for this event via orders → party_contact_methods
+      const { data: eventOrders } = await sb
+        .from("orders")
+        .select("party_id")
         .eq("event_id", event.id)
-        .in("status", ["paid", "checked_in"])
+        .eq("status", "paid")
         .limit(10000);
 
+      const partyIds = [...new Set((eventOrders ?? []).map((o) => o.party_id))];
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       const emails = new Set<string>();
-      for (const t of tickets ?? []) {
-        const meta = t.metadata as Record<string, unknown> | null;
-        const email = (meta?.email || meta?.customer_email || meta?.buyer_email) as string;
-        if (email && emailRegex.test(email)) emails.add(email.toLowerCase().trim());
+      if (partyIds.length > 0) {
+        const { data: contactMethods } = await sb
+          .from("party_contact_methods")
+          .select("value")
+          .in("party_id", partyIds)
+          .eq("type", "email")
+          .eq("is_primary", true);
+        for (const cm of contactMethods ?? []) {
+          const email = cm.value;
+          if (email && emailRegex.test(email)) emails.add(email.toLowerCase().trim());
+        }
       }
 
       const html = dayOfHypeEmail(
         event.title,
-        venue?.name ?? "TBA",
+        event.venue_name ?? "TBA",
         doorsTime,
         showTime,
-        meta.dressCode ?? null,
+        null,
         collective?.slug && event.slug
           ? `https://app.trynocturn.com/e/${collective.slug}/${event.slug}`
           : `https://app.trynocturn.com/dashboard/events/${event.id}`
@@ -164,7 +169,6 @@ export async function GET(request: Request) {
       .from("events")
       .select("id, title, starts_at, collective_id")
       .eq("status", "published")
-      .is("deleted_at", null)
       .gte("starts_at", in46hr.toISOString())
       .lte("starts_at", in48hr.toISOString())
       .limit(500);
@@ -186,14 +190,14 @@ export async function GET(request: Request) {
       if (countdownAlreadySent.has(event.id)) continue;
 
       // Get ticket stats
-      const [{ count: ticketsSold }, { data: tiers }, { data: ticketRevenue }] = await Promise.all([
+      const [{ count: ticketsSold }, { data: tiers }, { data: orderRevenue }] = await Promise.all([
         sb.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
         sb.from("ticket_tiers").select("capacity, price").eq("event_id", event.id),
-        sb.from("tickets").select("price_paid").eq("event_id", event.id).in("status", ["paid", "checked_in"]),
+        sb.from("orders").select("total").eq("event_id", event.id).eq("status", "paid"),
       ]);
 
       const totalCap = (tiers ?? []).reduce((s, t) => s + (t.capacity || 0), 0);
-      const revenue = (ticketRevenue ?? []).reduce((s: number, t: { price_paid: unknown }) => s + (Number(t.price_paid) || 0), 0);
+      const revenue = (orderRevenue ?? []).reduce((s: number, o: { total: unknown }) => s + (Number(o.total) || 0), 0);
 
       // Get organizer email
       const { data: members } = await sb
@@ -248,8 +252,7 @@ export async function GET(request: Request) {
       // Get all collectives with their last event
       const { data: collectives } = await sb
         .from("collectives")
-        .select("id, name, metadata")
-        .is("deleted_at", null)
+        .select("id, name")
         .limit(100);
 
       const collectiveIds = (collectives ?? []).map((c) => c.id);
@@ -266,7 +269,6 @@ export async function GET(request: Request) {
           .from("events")
           .select("collective_id, created_at")
           .in("collective_id", collectiveIds)
-          .is("deleted_at", null)
           .order("created_at", { ascending: false });
         for (const ev of allRecentEvents ?? []) {
           if (ev.collective_id && !lastEventByCollective.has(ev.collective_id)) {

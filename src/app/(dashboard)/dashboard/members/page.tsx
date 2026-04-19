@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { inviteMember, getTeamMembers, getPendingInvitations, cancelInvitation, removeCollectiveMember } from "@/app/actions/members";
 import { searchCollectives, startCollabChat } from "@/app/actions/collab";
-import { getReferralCode } from "@/app/actions/referral-program";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,10 +62,8 @@ interface PendingInvite {
   id: string;
   email: string;
   role: string;
-  status: string;
   created_at: string;
-  expires_at: string;
-  token: string;
+  expires_at: string | null;
 }
 
 interface CollectiveResult {
@@ -74,7 +72,7 @@ interface CollectiveResult {
   slug: string;
   logo_url: string | null;
   city: string | null;
-  description: string | null;
+  bio: string | null;
 }
 
 const roleLabels: Record<Role, string> = {
@@ -164,12 +162,11 @@ export default function MembersPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Load referral code when switching to referral tab
+  // Referral codes are generated per-event via getReferralLink; no collective-level code yet
   useEffect(() => {
     if (activeTab === "referral" && collectiveId && !referralCode) {
-      getReferralCode(collectiveId).then((result) => {
-        if (!result.error && result.code) setReferralCode(result.code);
-      });
+      // Placeholder: show collective slug as referral identifier until per-collective codes land
+      setReferralCode(null);
     }
   }, [activeTab, collectiveId, referralCode]);
 
@@ -483,8 +480,8 @@ export default function MembersPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {pendingInvites.map((invite) => {
-                  const expiresAt = new Date(invite.expires_at);
-                  const daysLeft = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 86400000));
+                  const expiresAt = invite.expires_at ? new Date(invite.expires_at) : null;
+                  const daysLeft = expiresAt ? Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 86400000)) : 7;
                   return (
                     <div
                       key={invite.id}
@@ -681,9 +678,9 @@ export default function MembersPage() {
                         {c.city && (
                           <p className="text-xs text-muted-foreground">{c.city}</p>
                         )}
-                        {c.description && (
+                        {c.bio && (
                           <p className="text-xs text-muted-foreground truncate mt-0.5">
-                            {c.description}
+                            {c.bio}
                           </p>
                         )}
                       </div>

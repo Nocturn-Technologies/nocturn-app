@@ -65,13 +65,12 @@ export async function generatePostEventEmail(eventId: string) {
   // Get lineup
   const { data: lineupRaw } = await admin
     .from("event_artists")
-    .select("artists(name)")
-    .eq("event_id", eventId)
-    .eq("status", "confirmed");
-  const lineup = lineupRaw as { artists: { name: string } | null }[] | null;
+    .select("name")
+    .eq("event_id", eventId);
+  const lineup = lineupRaw as { name: string | null }[] | null;
 
   const artistNames = (lineup ?? []).map((l) => {
-    return l.artists?.name ?? "";
+    return l.name ?? "";
   });
 
   const collective = event.collectives ?? { name: "Unknown", slug: "" };
@@ -212,13 +211,12 @@ export async function generatePromoEmail(eventId: string) {
 
     const { data: lineupRaw2 } = await admin
       .from("event_artists")
-      .select("artists(name)")
-      .eq("event_id", eventId)
-      .eq("status", "confirmed");
-    const lineup = lineupRaw2 as { artists: { name: string } | null }[] | null;
+      .select("name")
+      .eq("event_id", eventId);
+    const lineup = lineupRaw2 as { name: string | null }[] | null;
 
     const artistNames = (lineup ?? []).map((l) => {
-      return l.artists?.name ?? "";
+      return l.name ?? "";
     });
 
     const collective = event.collectives ?? { name: "Unknown", slug: "" };

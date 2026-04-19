@@ -49,14 +49,15 @@ export async function rateLimitStrict(
   try {
     const admin = createAdminClient();
     const db = admin;
-    const windowStart = new Date(Date.now() - windowMs).toISOString();
 
-    // Count recent entries in the window
+    // Count active entries within the window (not expired)
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + windowMs).toISOString();
     const { count } = await db
       .from("rate_limits")
       .select("*", { count: "exact", head: true })
       .eq("key", key)
-      .gte("created_at", windowStart);
+      .gte("window_end", now.toISOString());
 
     const currentCount = count ?? 0;
 
@@ -67,7 +68,8 @@ export async function rateLimitStrict(
     // Insert new entry
     await db.from("rate_limits").insert({
       key,
-      created_at: new Date().toISOString(),
+      window_end: windowEnd,
+      created_at: now.toISOString(),
     });
 
     return { success: true, remaining: limit - currentCount - 1 };
@@ -78,13 +80,15 @@ export async function rateLimitStrict(
   }
 }
 
-async function persistRateLimit(key: string, _limit: number, _windowMs: number) {
+async function persistRateLimit(key: string, _limit: number, windowMs: number) {
   try {
     const admin = createAdminClient();
     const db = admin;
+    const now = new Date();
     await db.from("rate_limits").insert({
       key,
-      created_at: new Date().toISOString(),
+      window_end: new Date(now.getTime() + windowMs).toISOString(),
+      created_at: now.toISOString(),
     });
   } catch {
     // Non-critical — in-memory still works

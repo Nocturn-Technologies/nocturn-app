@@ -75,7 +75,7 @@ export async function generateContentPlaybook(eventId: string): Promise<{
     // Get lineup
     const { data: lineup, error: lineupError } = await admin
       .from("event_artists")
-      .select("artists(name)")
+      .select("name")
       .eq("event_id", eventId);
 
     if (lineupError) {
@@ -83,7 +83,7 @@ export async function generateContentPlaybook(eventId: string): Promise<{
     }
 
     const artistNames = (lineup ?? [])
-      .map((l) => (l.artists as unknown as { name: string })?.name)
+      .map((l) => (l as { name: string | null }).name)
       .filter(Boolean);
 
     const lineupStr = artistNames.length > 0

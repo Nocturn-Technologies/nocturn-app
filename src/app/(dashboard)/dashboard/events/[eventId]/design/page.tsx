@@ -122,7 +122,7 @@ export default function EventDesignPage() {
       setVibeTags((e.vibe_tags as string[]) ?? []);
       setMinAge(e.min_age ? String(e.min_age) : "");
       setEventTitle(e.title);
-      setEventSlug(e.slug);
+      setEventSlug(e.slug ?? "");
       setCollectiveSlug(e.collectiveSlug ?? "");
       const meta = (e.metadata ?? {}) as Record<string, unknown>;
       setDressCode((meta.dressCode as string) ?? "");

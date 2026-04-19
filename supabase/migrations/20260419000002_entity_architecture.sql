@@ -109,49 +109,55 @@ CREATE INDEX idx_promo_code_usage_code ON public.promo_code_usage (promo_code_id
 
 -- ============================================================
 -- STEP 4: ADD party_id FKs TO EXISTING TABLES
+-- IF EXISTS guards allow this to run on partially-populated schemas (e.g. QA).
 -- ============================================================
 
-ALTER TABLE public.artists          ADD COLUMN party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
-ALTER TABLE public.collectives       ADD COLUMN party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
-ALTER TABLE public.venues            ADD COLUMN party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
-ALTER TABLE public.contacts          ADD COLUMN party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
-ALTER TABLE public.users             ADD COLUMN party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
-ALTER TABLE public.marketplace_profiles ADD COLUMN party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
-ALTER TABLE public.collective_members   ADD COLUMN party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
-ALTER TABLE public.event_artists        ADD COLUMN party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
-ALTER TABLE public.events               ADD COLUMN venue_party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS public.artists          ADD COLUMN IF NOT EXISTS party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS public.collectives       ADD COLUMN IF NOT EXISTS party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS public.venues            ADD COLUMN IF NOT EXISTS party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS public.contacts          ADD COLUMN IF NOT EXISTS party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS public.users             ADD COLUMN IF NOT EXISTS party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS public.marketplace_profiles ADD COLUMN IF NOT EXISTS party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS public.collective_members   ADD COLUMN IF NOT EXISTS party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS public.event_artists        ADD COLUMN IF NOT EXISTS party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS public.events               ADD COLUMN IF NOT EXISTS venue_party_id UUID REFERENCES public.parties(id) ON DELETE SET NULL;
 
-CREATE INDEX idx_artists_party_id          ON public.artists (party_id) WHERE party_id IS NOT NULL;
-CREATE INDEX idx_collectives_party_id      ON public.collectives (party_id) WHERE party_id IS NOT NULL;
-CREATE INDEX idx_venues_party_id           ON public.venues (party_id) WHERE party_id IS NOT NULL;
-CREATE INDEX idx_contacts_party_id         ON public.contacts (party_id) WHERE party_id IS NOT NULL;
-CREATE INDEX idx_users_party_id            ON public.users (party_id) WHERE party_id IS NOT NULL;
-CREATE INDEX idx_mp_party_id               ON public.marketplace_profiles (party_id) WHERE party_id IS NOT NULL;
-CREATE INDEX idx_collective_members_party  ON public.collective_members (party_id) WHERE party_id IS NOT NULL;
-CREATE INDEX idx_event_artists_party_id    ON public.event_artists (party_id) WHERE party_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_artists_party_id          ON public.artists (party_id) WHERE party_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_collectives_party_id      ON public.collectives (party_id) WHERE party_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_venues_party_id           ON public.venues (party_id) WHERE party_id IS NOT NULL;
+DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='contacts') THEN CREATE INDEX IF NOT EXISTS idx_contacts_party_id ON public.contacts (party_id) WHERE party_id IS NOT NULL; END IF; END $$;
+CREATE INDEX IF NOT EXISTS idx_users_party_id            ON public.users (party_id) WHERE party_id IS NOT NULL;
+DO $$ BEGIN IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='marketplace_profiles') THEN CREATE INDEX IF NOT EXISTS idx_mp_party_id ON public.marketplace_profiles (party_id) WHERE party_id IS NOT NULL; END IF; END $$;
+CREATE INDEX IF NOT EXISTS idx_collective_members_party  ON public.collective_members (party_id) WHERE party_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_event_artists_party_id    ON public.event_artists (party_id) WHERE party_id IS NOT NULL;
 
 -- ============================================================
 -- STEP 5: DROP REDUNDANT SOCIAL COLUMNS
 -- Replaced by party_contact_methods.
 -- ============================================================
 
-ALTER TABLE public.artists          DROP COLUMN IF EXISTS instagram, DROP COLUMN IF EXISTS soundcloud;
-ALTER TABLE public.collectives       DROP COLUMN IF EXISTS instagram, DROP COLUMN IF EXISTS website;
-ALTER TABLE public.venues            DROP COLUMN IF EXISTS instagram, DROP COLUMN IF EXISTS website;
-ALTER TABLE public.contacts          DROP COLUMN IF EXISTS instagram;
-ALTER TABLE public.marketplace_profiles DROP COLUMN IF EXISTS instagram_handle,
-                                        DROP COLUMN IF EXISTS soundcloud_url,
-                                        DROP COLUMN IF EXISTS website_url;
+ALTER TABLE IF EXISTS public.artists          DROP COLUMN IF EXISTS instagram, DROP COLUMN IF EXISTS soundcloud;
+ALTER TABLE IF EXISTS public.collectives       DROP COLUMN IF EXISTS instagram, DROP COLUMN IF EXISTS website;
+ALTER TABLE IF EXISTS public.venues            DROP COLUMN IF EXISTS instagram, DROP COLUMN IF EXISTS website;
+ALTER TABLE IF EXISTS public.contacts          DROP COLUMN IF EXISTS instagram;
+ALTER TABLE IF EXISTS public.marketplace_profiles DROP COLUMN IF EXISTS instagram_handle,
+                                                  DROP COLUMN IF EXISTS soundcloud_url,
+                                                  DROP COLUMN IF EXISTS website_url;
 
 -- Drop usage counter — replaced by promo_code_usage table
-ALTER TABLE public.promo_codes DROP COLUMN IF EXISTS times_used;
+ALTER TABLE IF EXISTS public.promo_codes DROP COLUMN IF EXISTS times_used;
 
 -- ============================================================
 -- STEP 6: DIRECT MESSAGE CHANNEL SUPPORT
 -- Make collective_id nullable so direct channels have no collective owner.
 -- ============================================================
 
-ALTER TABLE public.channels ALTER COLUMN collective_id DROP NOT NULL;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'channels' AND column_name = 'collective_id') THEN
+    ALTER TABLE public.channels ALTER COLUMN collective_id DROP NOT NULL;
+  END IF;
+END $$;
 
 -- ============================================================
 -- STEP 7: updated_at TRIGGER FOR parties

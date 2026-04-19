@@ -78,10 +78,10 @@ export async function generateEventForecast(
   // Get event
   const { data: eventRaw, error: eventError } = await admin
     .from("events")
-    .select("id, title, starts_at, collective_id, bar_minimum, venue_deposit, venue_cost, estimated_bar_revenue")
+    .select("id, title, starts_at, collective_id")
     .eq("id", eventId)
     .maybeSingle();
-  const event = eventRaw as { id: string; title: string; starts_at: string; collective_id: string; bar_minimum: number | null; venue_deposit: number | null; venue_cost: number | null; estimated_bar_revenue: number | null } | null;
+  const event = eventRaw as { id: string; title: string; starts_at: string; collective_id: string } | null;
 
   if (eventError) {
     console.error("[generateEventForecast] event lookup failed:", eventError);
@@ -120,7 +120,7 @@ export async function generateEventForecast(
       const { count } = await admin
         .from("tickets")
         .select("*", { count: "exact", head: true })
-        .eq("ticket_tier_id", tier.id)
+        .eq("tier_id", tier.id)
         .in("status", ["paid", "checked_in"]);
 
       const sold = count ?? 0;
@@ -163,36 +163,39 @@ export async function generateEventForecast(
   const bestCase = totalCapacity * avgTicketPrice; // sell out
   const worstCase = currentRevenue; // no more sales
 
-  // Get artist fees + travel costs
+  // Get artist fees (travel costs are now tracked via event_expenses)
   const { data: bookingsRaw } = await admin
     .from("event_artists")
-    .select("fee, flight_cost, hotel_cost, transport_cost")
-    .eq("event_id", eventId)
-    .eq("status", "confirmed");
-  const bookings = bookingsRaw as { fee: number | null; flight_cost: number | null; hotel_cost: number | null; transport_cost: number | null }[] | null;
+    .select("fee")
+    .eq("event_id", eventId);
+  const bookings = bookingsRaw as { fee: number | null }[] | null;
 
   const artistFees = (bookings ?? []).reduce((s, b) => s + (Number(b.fee) || 0), 0);
-  const talentTravelCosts = (bookings ?? []).reduce(
-    (s, b) => s + (Number(b.flight_cost) || 0) + (Number(b.hotel_cost) || 0) + (Number(b.transport_cost) || 0),
-    0
-  );
+  // Travel costs are no longer stored as flat columns on event_artists —
+  // they are tracked as categorised rows in event_expenses instead.
+  const talentTravelCosts = 0;
 
-  // Venue financials
-  const venueCost = Number(event.venue_cost) || 0;
-  const barMinimum = Number(event.bar_minimum) || 0;
-  const venueDeposit = Number(event.venue_deposit) || 0;
-  const estimatedBarRevenue = Number(event.estimated_bar_revenue) || 0;
-  const barMinimumMet = estimatedBarRevenue >= barMinimum || barMinimum === 0;
-  const depositAtRisk = !barMinimumMet && venueDeposit > 0;
-
-  // Get known expenses
+  // Get all expenses (venue cost, travel, other) from event_expenses
   const { data: expensesRaw } = await admin
-    .from("expenses")
-    .select("amount")
+    .from("event_expenses")
+    .select("amount, category")
     .eq("event_id", eventId);
-  const expenses = expensesRaw as { amount: number }[] | null;
+  const expenseRows = expensesRaw as { amount: number; category: string }[] | null;
 
-  const estimatedExpenses = (expenses ?? []).reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const venueCost = (expenseRows ?? [])
+    .filter((e) => e.category === "venue")
+    .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+  const estimatedExpenses = (expenseRows ?? [])
+    .filter((e) => e.category !== "venue")
+    .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+
+  // Bar minimum / venue deposit are no longer stored on events.
+  // Default to zero so the rest of the forecast math still works.
+  const barMinimum = 0;
+  const venueDeposit = 0;
+  const estimatedBarRevenue = 0;
+  const barMinimumMet = true;
+  const depositAtRisk = false;
 
   // Stripe + Nocturn fees are buyer-paid (Nocturn is the merchant of
   // record), so the organizer keeps the full ticket face value. We zero
@@ -371,9 +374,8 @@ export async function getTicketSalesTrajectory(
     // Get event
     const { data: event } = await admin
       .from("events")
-      .select("id, starts_at, collective_id, venue_cost, bar_minimum, venue_deposit, estimated_bar_revenue")
+      .select("id, starts_at, collective_id")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     if (!event) return { error: "Event not found", trajectory: null };
@@ -413,7 +415,7 @@ export async function getTicketSalesTrajectory(
           const { count } = await admin
             .from("tickets")
             .select("*", { count: "exact", head: true })
-            .eq("ticket_tier_id", tier.id)
+            .eq("tier_id", tier.id)
             .in("status", ["paid", "checked_in"]);
           return { ...tier, sold: count ?? 0 };
         })
@@ -465,29 +467,28 @@ export async function getTicketSalesTrajectory(
     // Break-even calculation (same as generateEventForecast)
     const { data: bookingsRaw } = await admin
       .from("event_artists")
-      .select("fee, flight_cost, hotel_cost, transport_cost")
-      .eq("event_id", eventId)
-      .eq("status", "confirmed");
-    const bookings = (bookingsRaw ?? []) as { fee: number | null; flight_cost: number | null; hotel_cost: number | null; transport_cost: number | null }[];
+      .select("fee")
+      .eq("event_id", eventId);
+    const bookings = (bookingsRaw ?? []) as { fee: number | null }[];
 
     const artistFees = bookings.reduce((s, b) => s + (Number(b.fee) || 0), 0);
-    const travelCosts = bookings.reduce(
-      (s, b) => s + (Number(b.flight_cost) || 0) + (Number(b.hotel_cost) || 0) + (Number(b.transport_cost) || 0),
-      0
-    );
-    const venueCost = Number((event as Record<string, unknown>).venue_cost) || 0;
-    const estimatedBarRevenue = Number((event as Record<string, unknown>).estimated_bar_revenue) || 0;
 
     const { data: expensesRaw } = await admin
-      .from("expenses")
-      .select("amount")
+      .from("event_expenses")
+      .select("amount, category")
       .eq("event_id", eventId);
-    const estimatedExpenses = ((expensesRaw ?? []) as { amount: number }[]).reduce(
-      (s, e) => s + (Number(e.amount) || 0),
-      0
-    );
+    const expenseRows = (expensesRaw ?? []) as { amount: number; category: string }[];
 
-    const fixedCosts = artistFees + travelCosts + venueCost + estimatedExpenses;
+    const venueCost = expenseRows
+      .filter((e) => e.category === "venue")
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const estimatedExpenses = expenseRows
+      .filter((e) => e.category !== "venue")
+      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    // Bar revenue / minimums are no longer stored on events
+    const estimatedBarRevenue = 0;
+
+    const fixedCosts = artistFees + venueCost + estimatedExpenses;
     const avgTicketPrice = totalCapacity > 0
       ? typedTiers.reduce((s, t) => s + Number(t.price) * t.capacity, 0) / totalCapacity
       : 0;
@@ -562,13 +563,13 @@ export async function generatePostEventRecap(eventId: string): Promise<{
 
   const admin = createAdminClient();
 
-  // Get event with venue
+  // Get event with flat venue columns
   const { data: eventRaw2, error: eventError2 } = await admin
     .from("events")
-    .select("id, title, starts_at, collective_id, status, venues(name, city)")
+    .select("id, title, starts_at, collective_id, status, venue_name, city")
     .eq("id", eventId)
     .maybeSingle();
-  const event = eventRaw2 as { id: string; title: string; starts_at: string; collective_id: string; status: string; venues: { name: string; city: string } | null } | null;
+  const event = eventRaw2 as { id: string; title: string; starts_at: string; collective_id: string; status: string; venue_name: string | null; city: string | null } | null;
 
   if (eventError2) {
     console.error("[generatePostEventRecap] event lookup failed:", eventError2);
@@ -585,19 +586,22 @@ export async function generatePostEventRecap(eventId: string): Promise<{
     .is("deleted_at", null);
   if (!memberCount) return { error: "Not authorized", recap: null };
 
-  const venue = event.venues;
+  const venueLabel = event.venue_name
+    ? `${event.venue_name}${event.city ? `, ${event.city}` : ""}`
+    : null;
 
-  // Ticket data
-  const { data: ticketsRaw } = await admin
-    .from("tickets")
-    .select("status, price_paid, checked_in_at")
-    .eq("event_id", eventId);
-  const tickets = ticketsRaw as { status: string; price_paid: number | null; checked_in_at: string | null }[] | null;
+  // Ticket data (price_paid removed — derive revenue from orders)
+  const [ticketsRaw2, ordersRaw] = await Promise.all([
+    admin.from("tickets").select("status").eq("event_id", eventId),
+    admin.from("orders").select("total").eq("event_id", eventId).eq("status", "paid"),
+  ]);
+  const tickets = ticketsRaw2.data as { status: string }[] | null;
+  const paidOrders = ordersRaw.data as { total: number }[] | null;
 
   const paidTickets = (tickets ?? []).filter((t) => t.status === "paid" || t.status === "checked_in");
   const checkedIn = (tickets ?? []).filter((t) => t.status === "checked_in").length;
   const ticketsSold = paidTickets.length;
-  const grossRevenue = paidTickets.reduce((s, t) => s + (Number(t.price_paid) || 0), 0);
+  const grossRevenue = (paidOrders ?? []).reduce((s, o) => s + (Number(o.total) || 0), 0);
   const avgTicketPrice = ticketsSold > 0 ? grossRevenue / ticketsSold : 0;
 
   // Capacity
@@ -612,12 +616,12 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   // Settlement
   const { data: settlementRaw } = await admin
     .from("settlements")
-    .select("net_profit, status")
+    .select("net_payout, status")
     .eq("event_id", eventId)
     .maybeSingle();
-  const settlement = settlementRaw as { net_profit: number | null; status: string } | null;
+  const settlement = settlementRaw as { net_payout: number | null; status: string } | null;
 
-  const netProfit = Number(settlement?.net_profit ?? 0);
+  const netProfit = Number(settlement?.net_payout ?? 0);
 
   // Past events for comparison
   const { data: pastEventsRaw } = await admin
@@ -754,7 +758,7 @@ export async function generatePostEventRecap(eventId: string): Promise<{
   const recapPrompt = `You are a concise post-event analyst for a nightlife promoter. Analyze this event data and respond in EXACTLY this JSON format (no markdown, no code fences):
 {"worked":["thing1","thing2","thing3"],"improve":["thing1","thing2","thing3"],"actions":[{"title":"...","description":"...","priority":"high|medium|low","category":"finance|marketing|operations|growth"},{"title":"...","description":"...","priority":"...","category":"..."},{"title":"...","description":"...","priority":"...","category":"..."},{"title":"...","description":"...","priority":"...","category":"..."},{"title":"...","description":"...","priority":"...","category":"..."}]}
 
-Event: "${event.title}" at ${venue ? `${venue.name}, ${venue.city}` : "N/A"}
+Event: "${event.title}" at ${venueLabel ?? "N/A"}
 Date: ${new Date(event.starts_at).toLocaleDateString()}
 Tickets sold: ${ticketsSold} of ${capacity} (${Math.round(sellThrough * 100)}% sell-through)
 Gross revenue: $${grossRevenue.toFixed(2)}
@@ -817,7 +821,7 @@ Give specific, actionable advice. Reference the actual numbers.`;
           day: "numeric",
           year: "numeric",
         }),
-        venue: venue ? `${venue.name}, ${venue.city}` : "N/A",
+        venue: venueLabel ?? "N/A",
       },
       financial: {
         grossRevenue,

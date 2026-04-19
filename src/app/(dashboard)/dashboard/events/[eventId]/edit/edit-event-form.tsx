@@ -183,7 +183,6 @@ export function EditEventForm({ event }: { event: EventData }) {
       venueDeposit: venueDeposit ? Number(venueDeposit) : null,
       venueCost: venueCostVal ? Number(venueCostVal) : null,
       estimatedBarRevenue: estimatedBarRevenue ? Number(estimatedBarRevenue) : null,
-      currency: eventCurrency,
       // Only send rows with a label — drops blank scaffolding without surprising the operator.
       expenseItems: expenses
         .filter((e) => e.label.trim().length > 0)

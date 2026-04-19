@@ -10,7 +10,7 @@ export type RelationshipTag = "Booked" | "Saved" | "Connected";
 export interface IndustryContact {
   id: string;
   name: string;
-  type: string; // matches marketplace user_type values
+  type: string; // "artist", "venue", "contact", etc.
   avatarUrl: string | null;
   city: string | null;
   email: string | null;
@@ -26,8 +26,6 @@ export interface IndustryContact {
   // For marketplace profile contacts — used to contact via dialog
   profileId: string | null;
   slug: string | null;
-  // Set when contact comes from the unified contacts table
-  _contactsTableId?: string;
 }
 
 export interface NetworkCRMStats {
@@ -86,231 +84,175 @@ export async function getNetworkCRM(): Promise<NetworkCRMResult> {
     const admin = createAdminClient();
     const collectiveIds = await getCollectiveIds(user.id);
 
-    // ── Parallel data fetches ─────────────────────────────────────────────────
+    // ── Fetch events for the user's collectives ─────────────────────────────
 
-    const [
-      savedResult,
-      contactedResult,
-      eventsResult,
-    ] = await Promise.all([
-      // 1. Saved marketplace profiles
-      admin.from("marketplace_saved")
-        .select("profile_id, saved_at:created_at, marketplace_profiles(*)")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false }),
-
-      // 2. Marketplace profiles the user has contacted (sent inquiry to)
-      admin.from("marketplace_inquiries")
-        .select("to_profile_id, created_at")
-        .eq("from_user_id", user.id)
-        .order("created_at", { ascending: false }),
-
-      // 3. Events for the user's collectives (to look up booked artists)
-      collectiveIds.length > 0
-        ? admin
-            .from("events")
-            .select("id, starts_at")
-            .in("collective_id", collectiveIds)
-            .is("deleted_at", null)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-
-    // ── Process saved profiles ─────────────────────────────────────────────────
-
-    type SavedRow = {
-      profile_id: string;
-      saved_at: string;
-      marketplace_profiles: Record<string, unknown> | null;
-    };
-
-    const savedRows = (savedResult.data ?? []) as SavedRow[];
-    const savedProfileIds = new Set(savedRows.map((r) => r.profile_id));
-
-    // Build a map of profileId -> marketplace profile data
-    const mpProfileMap = new Map<string, Record<string, unknown>>();
-    for (const row of savedRows) {
-      if (row.marketplace_profiles) {
-        mpProfileMap.set(row.profile_id, row.marketplace_profiles);
-      }
-    }
-
-    // ── Process contacted profiles ─────────────────────────────────────────────
-
-    type ContactedRow = { to_profile_id: string; created_at: string };
-    const contactedRows = (contactedResult.data ?? []) as ContactedRow[];
-    const contactedProfileIds = new Set(contactedRows.map((r) => r.to_profile_id));
-
-    // For contacted profiles that aren't already in our map, fetch them
-    const missingProfileIds = [...contactedProfileIds].filter(
-      (id) => !mpProfileMap.has(id)
-    );
-
-    if (missingProfileIds.length > 0) {
-      const { data: missingProfiles } = await admin.from("marketplace_profiles")
-        .select("*")
-        .in("id", missingProfileIds);
-
-      for (const p of (missingProfiles ?? []) as Record<string, unknown>[]) {
-        mpProfileMap.set(p.id as string, p);
-      }
-    }
-
-    // ── Process booked artists ─────────────────────────────────────────────────
+    const eventsResult = collectiveIds.length > 0
+      ? await admin
+          .from("events")
+          .select("id, starts_at")
+          .in("collective_id", collectiveIds)
+      : { data: [], error: null };
 
     const events = (eventsResult.data ?? []) as { id: string; starts_at: string }[];
     const eventIds = events.map((e) => e.id);
     const eventDateMap = new Map(events.map((e) => [e.id, e.starts_at]));
 
+    // ── Fetch booked artists via event_artists ──────────────────────────────
+    // event_artists now stores artist name inline + optional party_id link
+
     type EventArtistRow = {
-      artist_id: string;
+      id: string;
       event_id: string;
-      artists: {
-        id: string;
-        name: string;
-        slug: string | null;
-        spotify: string | null;
-        bio: string | null;
-        genre: string[] | null;
-        metadata: Record<string, unknown> | null;
-      } | null;
+      party_id: string | null;
+      name: string;
+      role: string | null;
     };
 
     let eventArtistRows: EventArtistRow[] = [];
     if (eventIds.length > 0) {
-      const { data: eaData } = await admin.from("event_artists")
-        .select("artist_id, event_id, artists(id, name, slug, spotify, bio, genre, metadata)")
-        .in("event_id", eventIds)
-        .in("status", ["confirmed", "pending"]);
+      const { data: eaData } = await admin
+        .from("event_artists")
+        .select("id, event_id, party_id, name, role")
+        .in("event_id", eventIds);
 
       eventArtistRows = (eaData ?? []) as EventArtistRow[];
     }
 
-    // Group event_artists by artist_id
-    type ArtistBookingAgg = {
-      artist: EventArtistRow["artists"];
+    // ── Fetch artist_profiles for known party_ids ───────────────────────────
+
+    const artistPartyIds = Array.from(
+      new Set(eventArtistRows.map((r) => r.party_id).filter((pid): pid is string => !!pid))
+    );
+
+    type ArtistProfileRow = {
+      party_id: string;
+      slug: string;
+      spotify: string | null;
+      bio: string | null;
+      genre: string[] | null;
+      photo_url: string | null;
+    };
+
+    const artistProfileMap = new Map<string, ArtistProfileRow>();
+    if (artistPartyIds.length > 0) {
+      const { data: apData } = await admin
+        .from("artist_profiles")
+        .select("party_id, slug, spotify, bio, genre, photo_url")
+        .in("party_id", artistPartyIds)
+        .is("deleted_at", null);
+
+      for (const ap of (apData ?? []) as ArtistProfileRow[]) {
+        artistProfileMap.set(ap.party_id, ap);
+      }
+    }
+
+    // ── Fetch contact methods (email/phone/instagram) for known party_ids ───
+
+    type ContactMethodRow = {
+      party_id: string;
+      type: string;
+      value: string;
+      is_primary: boolean;
+    };
+
+    const contactMethodsByParty = new Map<string, ContactMethodRow[]>();
+    if (artistPartyIds.length > 0) {
+      const { data: cmData } = await admin
+        .from("party_contact_methods")
+        .select("party_id, type, value, is_primary")
+        .in("party_id", artistPartyIds);
+
+      for (const cm of (cmData ?? []) as ContactMethodRow[]) {
+        if (!contactMethodsByParty.has(cm.party_id)) {
+          contactMethodsByParty.set(cm.party_id, []);
+        }
+        contactMethodsByParty.get(cm.party_id)!.push(cm);
+      }
+    }
+
+    // ── Build contact map keyed by event_artist.id ──────────────────────────
+
+    // Group event_artist rows by (party_id if present, otherwise by name)
+    type BookingAgg = {
+      name: string;
+      partyId: string | null;
       eventIds: string[];
       dates: string[];
     };
 
-    const artistBookings = new Map<string, ArtistBookingAgg>();
+    const bookingMap = new Map<string, BookingAgg>();
     for (const row of eventArtistRows) {
-      if (!row.artists) continue;
-      const existing = artistBookings.get(row.artist_id);
+      // Key by party_id if we have one, otherwise by lowercase name
+      const key = row.party_id ? `party:${row.party_id}` : `name:${row.name.toLowerCase()}`;
       const date = eventDateMap.get(row.event_id) ?? null;
+      const existing = bookingMap.get(key);
       if (existing) {
         existing.eventIds.push(row.event_id);
         if (date) existing.dates.push(date);
       } else {
-        artistBookings.set(row.artist_id, {
-          artist: row.artists,
+        bookingMap.set(key, {
+          name: row.name,
+          partyId: row.party_id,
           eventIds: [row.event_id],
           dates: date ? [date] : [],
         });
       }
     }
 
-    // ── Build unified contact list ─────────────────────────────────────────────
-
-    // We'll deduplicate by a "contact key":
-    //   - Marketplace profiles: keyed by profile ID
-    //   - Artists (from event_artists): keyed by artist ID (if no matching marketplace profile found)
-    //
-    // Priority: if an artist has a marketplace profile (same user), unify them.
+    // ── Build unified contact list ──────────────────────────────────────────
 
     const contactMap = new Map<string, IndustryContact>();
 
-    // First, add all marketplace profile contacts (saved + contacted)
-    const allMpIds = new Set([...savedProfileIds, ...contactedProfileIds]);
-    for (const profileId of allMpIds) {
-      const profile = mpProfileMap.get(profileId);
-      if (!profile) continue;
-
-      const relationships: RelationshipTag[] = [];
-      if (savedProfileIds.has(profileId)) relationships.push("Saved");
-      if (contactedProfileIds.has(profileId)) relationships.push("Connected");
-
-      // Determine lastCollabDate from contacted rows
-      const latestContact = contactedRows
-        .filter((r) => r.to_profile_id === profileId)
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-
-      contactMap.set(`mp:${profileId}`, {
-        id: profileId,
-        name: (profile.display_name as string) ?? "Unknown",
-        type: (profile.user_type as string) ?? "artist",
-        avatarUrl: (profile.avatar_url as string) ?? null,
-        city: (profile.city as string) ?? null,
-        email: null,
-        phone: null,
-        instagramHandle: null,
-        soundcloudUrl: null,
-        spotifyUrl: (profile.spotify_url as string) ?? null,
-        websiteUrl: null,
-        eventsWorked: 0,
-        lastCollabDate: latestContact?.created_at ?? null,
-        isSaved: savedProfileIds.has(profileId),
-        relationships,
-        profileId,
-        slug: (profile.slug as string) ?? null,
-      });
-    }
-
-    // Then, add booked artists — merging with marketplace profile if found by user_id/slug
-    for (const [artistId, booking] of artistBookings.entries()) {
-      const { artist, eventIds: artistEventIds, dates } = booking;
-      if (!artist) continue;
+    for (const [key, booking] of bookingMap.entries()) {
+      const { name, partyId, eventIds: artistEventIds, dates } = booking;
 
       const sortedDates = [...dates].sort(
         (a, b) => new Date(b).getTime() - new Date(a).getTime()
       );
       const lastCollabDate = sortedDates[0] ?? null;
 
-      // Check if this artist has a marketplace profile we already know about
-      // We match by slug (artists.slug == marketplace_profiles.slug is possible)
-      // Simple approach: check if any marketplace profile has same display_name (best effort)
-      // For now, treat booked artists as separate contacts unless they have a marketplace profile
+      let avatarUrl: string | null = null;
+      let spotifyUrl: string | null = null;
+      let slug: string | null = null;
+      let contactEmail: string | null = null;
+      let contactPhone: string | null = null;
+      let instagramHandle: string | null = null;
 
-      const key = `artist:${artistId}`;
-      // Don't add if we already have this as a marketplace contact with matching name
-      // (rough dedup — marketplace profiles are the canonical source)
-
-      if (!contactMap.has(key)) {
-        const location = (artist.metadata?.location as string) ?? null;
-
-        contactMap.set(key, {
-          id: artistId,
-          name: artist.name,
-          type: "artist",
-          avatarUrl: null,
-          city: location,
-          email: null,
-          phone: null,
-          instagramHandle: null,
-          soundcloudUrl: null,
-          spotifyUrl: artist.spotify ?? null,
-          websiteUrl: null,
-          eventsWorked: artistEventIds.length,
-          lastCollabDate,
-          isSaved: false,
-          relationships: ["Booked"],
-          profileId: null,
-          slug: artist.slug ?? null,
-        });
-      } else {
-        // Already exists as marketplace profile — update booking info
-        const existing = contactMap.get(key)!;
-        existing.eventsWorked = artistEventIds.length;
-        if (!existing.relationships.includes("Booked")) {
-          existing.relationships.unshift("Booked");
+      if (partyId) {
+        const ap = artistProfileMap.get(partyId);
+        if (ap) {
+          spotifyUrl = ap.spotify ?? null;
+          slug = ap.slug ?? null;
+          avatarUrl = ap.photo_url ?? null;
         }
-        if (
-          lastCollabDate &&
-          (!existing.lastCollabDate ||
-            new Date(lastCollabDate) > new Date(existing.lastCollabDate))
-        ) {
-          existing.lastCollabDate = lastCollabDate;
+
+        const cms = contactMethodsByParty.get(partyId) ?? [];
+        for (const cm of cms) {
+          if (cm.type === "email" && !contactEmail) contactEmail = cm.value;
+          if (cm.type === "phone" && !contactPhone) contactPhone = cm.value;
+          if (cm.type === "instagram" && !instagramHandle) instagramHandle = cm.value;
         }
       }
+
+      contactMap.set(key, {
+        id: partyId ?? key,
+        name,
+        type: "artist",
+        avatarUrl,
+        city: null,
+        email: contactEmail,
+        phone: contactPhone,
+        instagramHandle,
+        soundcloudUrl: null,
+        spotifyUrl,
+        websiteUrl: null,
+        eventsWorked: artistEventIds.length,
+        lastCollabDate,
+        isSaved: false,
+        relationships: ["Booked"],
+        profileId: partyId,
+        slug,
+      });
     }
 
     // ── Sort: Booked (most recent first) → Saved → Connected ─────────────────

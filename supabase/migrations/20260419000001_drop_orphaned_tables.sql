@@ -23,8 +23,10 @@ DROP TABLE IF EXISTS public.segments CASCADE;
 DROP TABLE IF EXISTS public.split_items CASCADE;
 DROP TABLE IF EXISTS public.transactions CASCADE;
 
--- Add missing index on messages(channel_id, created_at).
--- Current queries load all messages in a channel ordered by created_at with no limit.
--- Without this index, Postgres full-scans the messages table on every channel load.
-CREATE INDEX IF NOT EXISTS idx_messages_channel_created
-  ON public.messages (channel_id, created_at);
+-- Add missing index on messages(channel_id, created_at) if the table exists.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'messages') THEN
+    CREATE INDEX IF NOT EXISTS idx_messages_channel_created ON public.messages (channel_id, created_at);
+  END IF;
+END $$;

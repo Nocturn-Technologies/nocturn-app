@@ -2223,11 +2223,7 @@ export default function NewEventPage() {
         venueCity: formData.venueCity || "",
         venueCapacity: typeof formData.venueCapacity === "number" ? formData.venueCapacity : 0,
         tiers: validTiers,
-        eventMode: formData.isFree ? "rsvp" : "ticketed",
         isFree: formData.isFree,
-        // Event currency = per-event override; createEvent falls back to the
-        // collective's default_currency if null.
-        currency: budgetDraft.eventCurrency,
         // Venue cost + deposit are authoritatively stored on events.venue_cost
         // and events.venue_deposit columns (not in the expenses table). The
         // wizard's local state carries them as scalar fields in the event

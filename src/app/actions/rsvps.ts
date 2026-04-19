@@ -4,6 +4,13 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
 import { revalidatePath } from "next/cache";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+// rsvps and event_rsvp_counts are not yet reflected in the generated schema
+// types. Access them through the untyped SupabaseClient overload.
+function untypedFrom(admin: ReturnType<typeof createAdminClient>, table: string) {
+  return (admin as unknown as SupabaseClient).from(table);
+}
 
 // ── Types ──
 
@@ -104,11 +111,10 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
     if (input.rsvpToken) {
       const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       if (uuidRe.test(input.rsvpToken)) {
-        const { data: tokenRow } = await adminClient
-          .from("rsvps")
+        const { data: tokenRow } = await untypedFrom(adminClient, "rsvps")
           .select("id, event_id, email, phone, full_name")
           .eq("access_token", input.rsvpToken)
-          .maybeSingle();
+          .maybeSingle() as { data: { id: string; event_id: string; email: string | null; phone: string | null; full_name: string | null } | null };
         if (tokenRow && tokenRow.event_id === input.eventId) {
           tokenRsvpId = tokenRow.id;
           // Backfill any missing fields from the existing row — this is
@@ -137,7 +143,7 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
       const { data: profile } = await adminClient
         .from("users")
         .select("id, full_name, email, phone")
-        .eq("auth_id", user.id)
+        .eq("id", user.id)
         .maybeSingle();
       if (profile) {
         if (!fullName) fullName = profile.full_name ?? null;
@@ -161,9 +167,8 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
     // Verify event exists and is published (or preview-able)
     const { data: event, error: eventErr } = await admin
       .from("events")
-      .select("id, title, status, collective_id, event_mode, slug, starts_at, venue_id")
+      .select("id, title, status, collective_id, slug, starts_at, venue_name, venue_address")
       .eq("id", input.eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     if (eventErr) {
@@ -173,10 +178,22 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
     if (!event) return { error: "Event not found" };
     if (event.status !== "published") return { error: "This event is not accepting RSVPs" };
 
-    // Upsert: one RSVP per (event, user) or (event, email)
+    // Upsert: one RSVP per (event, holder_party_id) or (event, email)
+    // rsvps table uses holder_party_id (→ parties.id) instead of user_id.
+    // We resolve holder_party_id from the users.party_id when logged in.
+    let holderPartyId: string | null = null;
+    if (user) {
+      const { data: userRow } = await admin
+        .from("users")
+        .select("party_id")
+        .eq("id", user.id)
+        .maybeSingle();
+      holderPartyId = userRow?.party_id ?? null;
+    }
+
     const row = {
       event_id: input.eventId,
-      user_id: user?.id ?? null,
+      holder_party_id: holderPartyId,
       email,
       phone,
       full_name: fullName,
@@ -189,15 +206,14 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
     // specific row directly — no conflict key needed, and we preserve the
     // token so the SAME deep link keeps working across multiple changes.
     //
-    // Otherwise: upsert on (event_id, user_id) for logged-in users or
+    // Otherwise: upsert on (event_id, holder_party_id) for logged-in users or
     // (event_id, email) for guests, so repeat RSVPs replace instead of
     // duplicate.
     let upserted: { id: string; access_token: string } | null = null;
     let error: { message: string } | null = null;
 
     if (tokenRsvpId) {
-      const { data: updated, error: updateError } = await admin
-        .from("rsvps")
+      const { data: updated, error: updateError } = await untypedFrom(admin, "rsvps")
         .update({
           status: input.status,
           plus_ones: plusOnes,
@@ -209,18 +225,17 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
         })
         .eq("id", tokenRsvpId)
         .select("id, access_token")
-        .maybeSingle();
-      upserted = (updated as { id: string; access_token: string } | null) ?? null;
-      error = updateError ? { message: updateError.message } : null;
+        .maybeSingle() as { data: { id: string; access_token: string } | null; error: { message: string } | null };
+      upserted = updated;
+      error = updateError;
     } else {
-      const onConflict = user ? "event_id,user_id" : "event_id,email";
-      const { data: upsertData, error: upsertError } = await admin
-        .from("rsvps")
+      const onConflict = holderPartyId ? "event_id,holder_party_id" : "event_id,email";
+      const { data: upsertData, error: upsertError } = await untypedFrom(admin, "rsvps")
         .upsert(row, { onConflict, ignoreDuplicates: false })
         .select("id, access_token")
-        .maybeSingle();
-      upserted = (upsertData as { id: string; access_token: string } | null) ?? null;
-      error = upsertError ? { message: upsertError.message } : null;
+        .maybeSingle() as { data: { id: string; access_token: string } | null; error: { message: string } | null };
+      upserted = upsertData;
+      error = upsertError;
     }
 
     if (error) {
@@ -248,7 +263,6 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
             collectiveId: event.collective_id,
             email: fanEmail,
             fullName,
-            phone,
             userId: user?.id ?? null,
             eventId: event.id,
             eventTitle: event.title ?? null,
@@ -277,15 +291,14 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
           status: input.status,
         });
 
-        // Resolve collective name + venue for a nicer email
-        const [{ data: collective }, { data: venue }] = await Promise.all([
-          event.collective_id
-            ? admin.from("collectives").select("name, slug").eq("id", event.collective_id).maybeSingle()
-            : Promise.resolve({ data: null }),
-          event.venue_id
-            ? admin.from("venues").select("name, city").eq("id", event.venue_id).maybeSingle()
-            : Promise.resolve({ data: null }),
-        ]);
+        // Resolve collective name for a nicer email.
+        // Venue info is now stored directly on the event (venue_name, venue_address).
+        const { data: collective } = event.collective_id
+          ? await admin.from("collectives").select("name, slug").eq("id", event.collective_id).maybeSingle()
+          : { data: null };
+        const venue = event.venue_name
+          ? { name: event.venue_name, city: null as string | null }
+          : null;
 
         // Include the access_token on the email link so when the guest
         // clicks through they land back on the event page with their
@@ -360,10 +373,9 @@ export async function getRsvpCounts(eventId: string): Promise<{
     }
 
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("event_rsvp_counts")
+    const { data, error } = await untypedFrom(admin, "event_rsvp_counts")
       .select("status, count")
-      .eq("event_id", eventId);
+      .eq("event_id", eventId) as { data: Array<{ status: string; count: number | string }> | null; error: { message: string } | null };
 
     if (error) {
       console.error("[getRsvpCounts]", error);
@@ -413,11 +425,21 @@ export async function getRsvpByToken(
     }
 
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("rsvps")
+    const { data, error } = await untypedFrom(admin, "rsvps")
       .select("id, status, plus_ones, full_name, email, phone, event_id")
       .eq("access_token", token)
-      .maybeSingle();
+      .maybeSingle() as {
+        data: {
+          id: string;
+          status: string;
+          plus_ones: number | null;
+          full_name: string | null;
+          email: string | null;
+          phone: string | null;
+          event_id: string;
+        } | null;
+        error: { message: string } | null;
+      };
 
     if (error) {
       console.error("[getRsvpByToken]", error);
@@ -458,12 +480,24 @@ export async function getMyRsvp(eventId: string): Promise<{
     if (!user) return { error: null, rsvp: null };
 
     const admin = createAdminClient();
-    const { data, error } = await admin
-      .from("rsvps")
+
+    // Resolve the user's party_id to match against holder_party_id in rsvps
+    const { data: userRow } = await admin
+      .from("users")
+      .select("party_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!userRow?.party_id) return { error: null, rsvp: null };
+
+    const { data, error } = await untypedFrom(admin, "rsvps")
       .select("status, plus_ones")
       .eq("event_id", eventId)
-      .eq("user_id", user.id)
-      .maybeSingle();
+      .eq("holder_party_id", userRow.party_id)
+      .maybeSingle() as {
+        data: { status: string; plus_ones: number | null } | null;
+        error: { message: string } | null;
+      };
 
     if (error) {
       console.error("[getMyRsvp]", error);
@@ -519,24 +553,31 @@ export async function listPublicEventRsvps(eventId: string): Promise<{
 
     const admin = createAdminClient();
 
-    // Don't leak attendee lists for draft / cancelled / deleted events.
+    // Don't leak attendee lists for draft / cancelled events.
     const { data: event } = await admin
       .from("events")
       .select("id, status")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
     if (!event || event.status !== "published") {
       return { error: null, rsvps: [] };
     }
 
-    const { data, error } = await admin
-      .from("rsvps")
+    const { data, error } = await untypedFrom(admin, "rsvps")
       .select("id, status, full_name, plus_ones, created_at")
       .eq("event_id", eventId)
       .in("status", ["yes", "maybe"])
       .order("created_at", { ascending: false })
-      .limit(500);
+      .limit(500) as {
+        data: Array<{
+          id: string;
+          status: string;
+          full_name: string | null;
+          plus_ones: number | null;
+          created_at: string;
+        }> | null;
+        error: { message: string } | null;
+      };
 
     if (error) {
       console.error("[listPublicEventRsvps]", error);
@@ -598,11 +639,21 @@ export async function listEventRsvps(eventId: string): Promise<{
       .is("deleted_at", null);
     if (!memberCount || memberCount === 0) return { error: "Not authorized", rsvps: [] };
 
-    const { data, error } = await admin
-      .from("rsvps")
+    const { data, error } = await untypedFrom(admin, "rsvps")
       .select("id, status, full_name, email, plus_ones, message, created_at")
       .eq("event_id", eventId)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: false }) as {
+        data: Array<{
+          id: string;
+          status: string;
+          full_name: string | null;
+          email: string | null;
+          plus_ones: number | null;
+          message: string | null;
+          created_at: string;
+        }> | null;
+        error: { message: string } | null;
+      };
 
     if (error) {
       console.error("[listEventRsvps]", error);

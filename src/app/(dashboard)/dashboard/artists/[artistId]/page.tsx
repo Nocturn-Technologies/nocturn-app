@@ -25,7 +25,7 @@ interface Artist {
   name: string;
   slug: string;
   bio: string | null;
-  genre: string[];
+  genre: string[] | null;
   spotify: string | null;
   booking_email: string | null;
   default_fee: number | null;
@@ -43,7 +43,6 @@ interface Booking {
     title: string;
     starts_at: string;
     status: string;
-    venues: { name: string; city: string } | null;
   };
 }
 
@@ -63,22 +62,34 @@ export default function ArtistDetailPage() {
 
   async function loadArtist() {
     const { data: artistData } = await supabase
-      .from("artists")
+      .from("artist_profiles")
       .select(
-        "id, name, slug, bio, genre, spotify, booking_email, default_fee"
+        "id, slug, bio, genre, spotify, booking_email, default_fee, parties(display_name)"
       )
       .eq("id", artistId)
       .maybeSingle();
 
-    if (artistData) setArtist(artistData as Artist);
+    if (artistData) {
+      const party = artistData.parties as unknown as { display_name: string } | null;
+      setArtist({
+        id: artistData.id,
+        name: party?.display_name ?? "",
+        slug: artistData.slug,
+        bio: artistData.bio,
+        genre: artistData.genre,
+        spotify: artistData.spotify,
+        booking_email: artistData.booking_email,
+        default_fee: artistData.default_fee,
+      });
+    }
 
     // Get all bookings for this artist with event details
     const { data: bookingData } = await supabase
       .from("event_artists")
       .select(
-        "id, fee, set_time, set_duration, status, notes, events(id, title, starts_at, status, venues(name, city))"
+        "id, fee, set_time, set_duration, status, notes, events(id, title, starts_at, status)"
       )
-      .eq("artist_id", artistId)
+      .eq("party_id", artistId)
       .order("created_at", { ascending: false });
 
     setBookings((bookingData ?? []) as unknown as Booking[]);
@@ -180,9 +191,9 @@ export default function ArtistDetailPage() {
         </div>
         <div className="min-w-0">
           <h1 className="text-2xl font-bold font-heading truncate">{artist.name}</h1>
-          {artist.genre?.length > 0 && (
+          {(artist.genre?.length ?? 0) > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
-              {artist.genre.map((g) => (
+              {(artist.genre ?? []).map((g) => (
                 <span
                   key={g}
                   className="rounded-full bg-nocturn/10 px-2 py-0.5 text-xs font-medium text-nocturn"
@@ -350,9 +361,6 @@ function BookingCard({
           <div className="flex-1 min-w-0">
             <p className="font-medium truncate">{booking.events.title}</p>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {booking.events.venues && (
-                <span>{booking.events.venues.name}</span>
-              )}
               {booking.fee && <span>${booking.fee}</span>}
               {booking.set_duration && <span>{booking.set_duration}min</span>}
             </div>

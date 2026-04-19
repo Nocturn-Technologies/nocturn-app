@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh variable *)",
+      "Bash(gh secret *)",
+      "Bash(gh api *)",
+      "Bash(gh auth *)",
+      "Bash(gh pr *)",
+      "Bash(vercel --version)",
+      "Bash(git add *)",
+      "Bash(awk '/^      [a-z_]+: \\\\{/{table=$0} /artist_fees_total:|total_artist_fees:/{print table\": \"$0}' src/lib/supabase/database.types.ts)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(npx supabase *)"
+    ]
+  }
+}
