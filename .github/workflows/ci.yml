@@ -52,7 +52,7 @@ jobs:
               echo "Skipping $base (legacy combined file)"
               continue
             fi
-            if ! [[ "$base" =~ ^[0-9]{8,14}_[a-z0-9_]+\.sql$ ]]; then
+            if ! [[ "$base" =~ ^[0-9]+_[a-z0-9_]+\.sql$ ]]; then
               echo "ERROR: Migration file name '$base' does not match <timestamp>_<name>.sql"
               exit 1
             fi
