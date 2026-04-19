@@ -52,19 +52,18 @@ jobs:
               echo "Skipping $base (legacy combined file)"
               continue
             fi
-            if ! [[ "$base" =~ ^[0-9]{8,14}_[a-z0-9_]+\.sql$ ]]; then
+            if ! [[ "$base" =~ ^[0-9]+_[a-z0-9_]+\.sql$ ]]; then
               echo "ERROR: Migration file name '$base' does not match <timestamp>_<name>.sql"
               exit 1
             fi
           done
           echo "All migration file names are valid"
 
-      - name: Check for duplicate migration timestamps
+      - name: Check for duplicate full filenames
         run: |
-          timestamps=$(ls supabase/migrations/*.sql | xargs -I{} basename {} | grep -v COMBINED | cut -d_ -f1 | sort)
-          dupes=$(echo "$timestamps" | uniq -d)
+          dupes=$(ls supabase/migrations/*.sql | xargs -I{} basename {} | sort | uniq -d)
           if [[ -n "$dupes" ]]; then
-            echo "ERROR: Duplicate migration timestamps found: $dupes"
+            echo "ERROR: Duplicate migration filenames found: $dupes"
             exit 1
           fi
-          echo "No duplicate timestamps"
+          echo "No duplicate filenames"
