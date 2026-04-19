@@ -172,7 +172,7 @@ export default async function FinancePage() {
               </div>
               <div>
                 <p className="text-lg font-bold">
-                  Create your first event to start tracking your money.
+                  Throw your first night to start tracking your money.
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Once you sell tickets and complete an event, your financial

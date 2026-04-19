@@ -64,7 +64,7 @@ export function welcomeEmail(name: string, collectiveName: string): string {
     <p>You've just set up <span class="highlight">${safeCollective}</span> on Nocturn — AI that runs the business while you run the night.</p>
     <div class="card">
       <p style="color: #FAFAFA; margin: 0 0 8px 0; font-weight: 600;">What's next?</p>
-      <p style="margin: 0;">→ Create your first event<br>→ Add your team members<br>→ Connect Stripe for payments</p>
+      <p style="margin: 0;">→ Throw your first night<br>→ Add your crew<br>→ Connect Stripe for payments</p>
     </div>
     <a href="https://app.trynocturn.com/dashboard" class="btn">Open Dashboard →</a>
     <p>Need help? Just reply to this email.</p>
