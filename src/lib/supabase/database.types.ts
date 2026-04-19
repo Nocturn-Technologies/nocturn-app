@@ -3134,6 +3134,99 @@ export type Database = {
         }
         Relationships: []
       }
+      door_buy_tokens: {
+        Row: {
+          nonce: string
+          event_id: string
+          tier_id: string
+          staff_user_id: string
+          quantity: number
+          expires_at: string
+          consumed_at: string | null
+          consumed_ticket_ids: string[] | null
+          created_at: string
+        }
+        Insert: {
+          nonce: string
+          event_id: string
+          tier_id: string
+          staff_user_id: string
+          quantity: number
+          expires_at: string
+          consumed_at?: string | null
+          consumed_ticket_ids?: string[] | null
+          created_at?: string
+        }
+        Update: {
+          nonce?: string
+          event_id?: string
+          tier_id?: string
+          staff_user_id?: string
+          quantity?: number
+          expires_at?: string
+          consumed_at?: string | null
+          consumed_ticket_ids?: string[] | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      door_events: {
+        Row: {
+          id: string
+          event_id: string
+          collective_id: string
+          staff_user_id: string
+          ticket_id: string | null
+          tier_id: string | null
+          action: "sale_card" | "sale_cash" | "sale_comp" | "void" | "capacity_override"
+          payment_method: "card" | "cash" | "comp" | null
+          quantity: number
+          amount_cents: number
+          currency: string
+          reason: string | null
+          buyer_email: string | null
+          buyer_phone: string | null
+          over_capacity: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event_id: string
+          collective_id: string
+          staff_user_id: string
+          ticket_id?: string | null
+          tier_id?: string | null
+          action: "sale_card" | "sale_cash" | "sale_comp" | "void" | "capacity_override"
+          payment_method?: "card" | "cash" | "comp" | null
+          quantity?: number
+          amount_cents?: number
+          currency?: string
+          reason?: string | null
+          buyer_email?: string | null
+          buyer_phone?: string | null
+          over_capacity?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string
+          collective_id?: string
+          staff_user_id?: string
+          ticket_id?: string | null
+          tier_id?: string | null
+          action?: "sale_card" | "sale_cash" | "sale_comp" | "void" | "capacity_override"
+          payment_method?: "card" | "cash" | "comp" | null
+          quantity?: number
+          amount_cents?: number
+          currency?: string
+          reason?: string | null
+          buyer_email?: string | null
+          buyer_phone?: string | null
+          over_capacity?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       event_dashboard: {
@@ -3226,9 +3319,26 @@ export type Database = {
           },
         ]
       }
+      door_sale_summary: {
+        Row: {
+          event_id: string | null
+          card_count: number | null
+          card_cents: number | null
+          cash_count: number | null
+          cash_cents: number | null
+          comp_count: number | null
+          void_count: number | null
+          over_capacity_count: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       acquire_ticket_lock: { Args: { p_tier_id: string }; Returns: boolean }
+      consume_door_buy_token: {
+        Args: { p_nonce: string }
+        Returns: Json
+      }
       check_and_reserve_capacity: {
         Args: { p_quantity: number; p_tier_id: string }
         Returns: Json

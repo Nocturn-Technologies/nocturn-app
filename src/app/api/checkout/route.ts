@@ -22,6 +22,7 @@ interface CheckoutBody {
   buyerPhone: string;
   promoCode?: string;
   referrerToken?: string;
+  doorBuyToken?: string; // Short-lived nonce minted by door staff scanner
 }
 
 // Phone validation — allow +, digits, spaces, dashes, parens, dots; require 7-15 digits
@@ -95,6 +96,33 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createAdminClient();
+
+    // Door buy token — single-use nonce from staff scanner. If present,
+    // atomically consume it and verify the checkout payload matches what
+    // staff minted (event, tier, quantity). Prevents QR-screenshot replay.
+    let doorSellerId: string | null = null;
+    if (body.doorBuyToken) {
+      if (typeof body.doorBuyToken !== "string" || body.doorBuyToken.length > 64) {
+        return NextResponse.json({ error: "Invalid door link" }, { status: 400 });
+      }
+      const { data: consumed, error: consumeErr } = await supabase.rpc("consume_door_buy_token", {
+        p_nonce: body.doorBuyToken,
+      });
+      const result = consumed as { success: boolean; error?: string; event_id?: string; tier_id?: string; staff_user_id?: string; quantity?: number } | null;
+      if (consumeErr || !result?.success) {
+        return NextResponse.json(
+          { error: result?.error || "Door link expired or already used" },
+          { status: 410 }
+        );
+      }
+      if (result.event_id !== eventId || result.tier_id !== tierId || result.quantity !== quantity) {
+        return NextResponse.json(
+          { error: "Door link doesn't match this purchase" },
+          { status: 400 }
+        );
+      }
+      doorSellerId = result.staff_user_id ?? null;
+    }
 
     // Validate referrer user actually exists (prevents FK constraint violation)
     if (referrerToken) {
@@ -412,6 +440,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Stamp door-sale attribution on the pending tickets so the ticket
+    // metadata itself records who sold it and that it came from the door.
+    // The door_events audit row is written below, once eventCurrency is
+    // resolved. If the buyer abandons checkout, payment_intent.failed
+    // deletes the pending ticket and the FK SETs door_events.ticket_id
+    // NULL — which excludes it from paid-card counts in door_sale_summary.
+    if (doorSellerId && pendingTicketIds.length > 0) {
+      for (const pid of pendingTicketIds) {
+        const { data: current } = await supabaseAdmin
+          .from("tickets")
+          .select("metadata")
+          .eq("id", pid)
+          .maybeSingle();
+        const existingMeta = (current?.metadata as Record<string, unknown>) || {};
+        await supabaseAdmin
+          .from("tickets")
+          .update({
+            metadata: {
+              ...existingMeta,
+              registration_type: "door_card",
+              sold_by: doorSellerId,
+            },
+          })
+          .eq("id", pid);
+      }
+    }
+
     const referer = request.headers.get("referer");
     let cancelUrl = APP_URL;
     if (referer) {
@@ -451,6 +506,33 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    // Door-card attribution: one audit row pointing at the first pending
+    // ticket. Excluded from paid-card counts until the webhook fulfills;
+    // if the buyer abandons, the pending ticket is deleted and the FK
+    // SETs ticket_id NULL (removing it from reconciliation totals).
+    if (doorSellerId && pendingTicketIds.length > 0) {
+      try {
+        await supabaseAdmin.from("door_events").insert({
+          event_id: eventId,
+          collective_id: event.collective_id,
+          staff_user_id: doorSellerId,
+          ticket_id: pendingTicketIds[0],
+          tier_id: tierId,
+          action: "sale_card",
+          payment_method: "card",
+          quantity,
+          amount_cents: totalPerTicketCents * quantity,
+          currency: eventCurrency,
+          reason: null,
+          buyer_email: buyerEmail,
+          buyer_phone: buyerPhone,
+          over_capacity: false,
+        });
+      } catch (auditErr) {
+        console.error("[checkout] door_events audit insert failed (non-blocking):", auditErr);
+      }
     }
 
     // Latch the event's currency on first sale. If the collective later

@@ -16,9 +16,11 @@ const QrScanner = dynamic(() => import("@/components/qr-scanner").then(m => m.Qr
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, ScanLine, CheckCircle2, XCircle, AlertTriangle, Users, RotateCcw, Keyboard, Volume2, VolumeX } from "lucide-react";
+import { ArrowLeft, ScanLine, CheckCircle2, XCircle, AlertTriangle, Users, RotateCcw, Keyboard, Volume2, VolumeX, Plus } from "lucide-react";
 import Link from "next/link";
 import { haptic } from "@/lib/haptics";
+import { DoorSaleSheet } from "@/components/door-sale/door-sale-sheet";
+import { DoorReconciliationWidget } from "@/components/door-sale/door-reconciliation";
 
 type ScanResult = {
   type: "success" | "error" | "duplicate" | "queued";
@@ -105,6 +107,10 @@ export default function CheckInScannerPage() {
   // Unified door list: ticket holders + guest list entries (#25)
   const [guests, setGuests] = useState<{ name: string; status: string; type: "ticket" | "guest"; email?: string }[]>([]);
   const [doorListError, setDoorListError] = useState<string | null>(null);
+
+  // Door sales (v1) — "+ Sell" button opens bottom sheet
+  const [doorSaleOpen, setDoorSaleOpen] = useState(false);
+  const [reconciliationReloadToken, setReconciliationReloadToken] = useState(0);
 
   const loadDoorList = useCallback(async () => {
     try {
@@ -481,6 +487,9 @@ export default function CheckInScannerPage() {
         </CardContent>
       </Card>
 
+      {/* Door Sales reconciliation — collapsible, visible to everyone */}
+      <DoorReconciliationWidget eventId={eventId} reloadToken={reconciliationReloadToken} />
+
       {/* QR Scanner */}
       <div className="relative">
         <QrScanner onScan={handleScan} paused={processing} />
@@ -617,6 +626,29 @@ export default function CheckInScannerPage() {
           </div>
         </div>
       )}
+
+      {/* Floating "+ Sell" pill — persistent thumb-reach action */}
+      <button
+        onClick={() => setDoorSaleOpen(true)}
+        className="fixed bottom-5 right-5 z-40 flex h-14 items-center gap-2 rounded-full bg-nocturn px-5 text-base font-semibold text-white shadow-lg shadow-nocturn/30 hover:bg-nocturn-light active:scale-95 transition-transform"
+        aria-label="Sell a ticket at the door"
+      >
+        <Plus className="h-5 w-5" />
+        <span>Sell</span>
+      </button>
+
+      {/* Bottom sheet — Card / Cash / Comp */}
+      <DoorSaleSheet
+        open={doorSaleOpen}
+        onOpenChange={setDoorSaleOpen}
+        eventId={eventId}
+        onSaleComplete={() => {
+          setReconciliationReloadToken((t) => t + 1);
+          // Also refresh door list + stats so the new admitted guest shows up
+          getCheckInStats(eventId).then(setStats).catch(() => {});
+          loadDoorList();
+        }}
+      />
 
       {/* Unified Door List (#25) */}
       {doorListError && (
