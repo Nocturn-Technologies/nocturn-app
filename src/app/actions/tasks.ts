@@ -98,22 +98,14 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
       // Try to auto-assign based on role
       const assignedTo = t.default_assignee_role ? (membersByRole.get(t.default_assignee_role) || membersByRole.get("admin") || null) : null;
 
-      // Determine priority: tasks due within 72 hours of event are high priority
-      const isHighPriority = Math.abs(offsetHours) <= 72;
-
       return {
         event_id: eventId,
         title: t.title,
         description: t.description,
         status: "todo",
-        priority: isHighPriority ? "high" : "medium",
         assigned_to: assignedTo,
         due_at: dueDate.toISOString(),
-        metadata: {
-          created_by: user.id,
-          source_template_id: t.id,
-          position: t.position,
-        },
+        created_by: user.id,
       };
     });
 
@@ -195,13 +187,9 @@ export async function createEventTask(input: {
       event_id: input.eventId,
       title: input.title,
       description: input.description || null,
-      priority: input.priority || "medium",
       assigned_to: input.assignedTo || null,
       due_at: input.dueDate || null,
-      metadata: {
-        created_by: user.id,
-        category: input.category || "general",
-      },
+      created_by: user.id,
     });
 
     if (error) return { error: "Failed to create task" };
@@ -241,13 +229,12 @@ export async function updateTaskStatus(taskId: string, status: string) {
     if (taskCheckError) return { error: "Failed to verify task" };
     if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
 
-    const updates: Record<string, unknown> = {
-      status,
-      updated_at: new Date().toISOString(),
-    };
+    const updates: Record<string, unknown> = { status };
 
     if (status === "done") {
       updates.completed_at = new Date().toISOString();
+    } else if (status === "todo" || status === "in_progress") {
+      updates.completed_at = null;
     }
 
     const { data: task, error } = await admin
@@ -289,10 +276,12 @@ export async function updateTaskDetails(taskId: string, updates: { assignedTo?: 
     if (taskCheckError) return { error: "Failed to verify task" };
     if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
 
-    const dbUpdates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const dbUpdates: Record<string, unknown> = {};
     if (updates.assignedTo !== undefined) dbUpdates.assigned_to = updates.assignedTo;
     if (updates.dueAt !== undefined) dbUpdates.due_at = updates.dueAt;
     if (updates.description !== undefined) dbUpdates.description = updates.description;
+
+    if (Object.keys(dbUpdates).length === 0) return { error: null };
 
     const { error } = await admin.from("event_tasks").update(dbUpdates).eq("id", taskId);
     if (error) return { error: "Failed to update task" };
@@ -520,10 +509,9 @@ export async function getMyTasks(limit = 10) {
     const admin = createAdminClient();
     const { data, error } = await admin
       .from("event_tasks")
-      .select("id, title, status, priority, due_at, metadata, event_id, events!event_tasks_event_id_fkey(title, starts_at)")
+      .select("id, title, status, due_at, event_id, events!event_tasks_event_id_fkey(title, starts_at)")
       .eq("assigned_to", user.id)
       .in("status", ["todo", "in_progress"])
-      .is("deleted_at", null)
       .order("due_at", { ascending: true, nullsFirst: false })
       .limit(clampedLimit);
 
@@ -569,8 +557,7 @@ export async function getEventTaskProgress(eventId: string) {
     const { data, error } = await admin
       .from("event_tasks")
       .select("status")
-      .eq("event_id", eventId)
-      .is("deleted_at", null);
+      .eq("event_id", eventId);
 
     if (error) {
       console.error("[getEventTaskProgress]", error);
