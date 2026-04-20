@@ -1,0 +1,5 @@
+# Nocturn — Code Owners
+# andrewmancan must approve all PRs merging into qa or main
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+* @andrewmancan

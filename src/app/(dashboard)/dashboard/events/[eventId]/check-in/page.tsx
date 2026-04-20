@@ -113,16 +113,15 @@ export default function CheckInScannerPage() {
       const [{ data: ticketHolders, error: ticketErr }, { data: guestEntries, error: guestErr }] = await Promise.all([
         supabase
           .from("tickets")
-          .select("id, status, metadata, ticket_tiers(name)")
+          .select("id, status, tier_id, ticket_tiers(name)")
           .eq("event_id", eventId)
           .in("status", ["paid", "checked_in"])
           .order("created_at", { ascending: false })
           .limit(200),
         supabase
           .from("guest_list")
-          .select("id, name, status, email, plus_ones")
+          .select("id, name, checked_in, email, plus_ones")
           .eq("event_id", eventId)
-          .is("deleted_at", null)
           .order("created_at", { ascending: false })
           .limit(200),
       ]);
@@ -135,20 +134,18 @@ export default function CheckInScannerPage() {
 
       const combined: typeof guests = [];
       for (const t of ticketHolders || []) {
-        const meta = t.metadata as Record<string, unknown> | null;
-        const email = (meta?.customer_email ?? meta?.buyer_email ?? "") as string;
         const tier = t.ticket_tiers as unknown as { name: string } | null;
         combined.push({
-          name: email || tier?.name || "Ticket holder",
+          name: tier?.name || "Ticket holder",
           status: t.status,
           type: "ticket",
-          email: email || undefined,
+          email: undefined,
         });
       }
       for (const g of guestEntries || []) {
         combined.push({
           name: g.name + ((g.plus_ones ?? 0) > 0 ? ` +${g.plus_ones}` : ""),
-          status: g.status ?? "pending",
+          status: g.checked_in ? "checked_in" : "pending",
           type: "guest",
           email: g.email || undefined,
         });

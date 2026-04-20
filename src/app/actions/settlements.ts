@@ -6,7 +6,6 @@ import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { isValidUUID } from "@/lib/utils";
 import { isAcceptedExpenseCategory } from "@/lib/expense-categories";
-import { convertBetween } from "@/lib/currency";
 
 // Generate a settlement for a completed event
 export async function generateSettlement(eventId: string) {
@@ -20,24 +19,15 @@ export async function generateSettlement(eventId: string) {
 
   const admin = createAdminClient();
 
-  // Get event with collective + the event's charge currency, so we can
-  // normalize any cross-currency inputs (artist fees entered in USD when
-  // the event charges in CAD, etc.) before the profit math.
+  // Get event with collective_id and status
   const { data: event } = await admin
     .from("events")
-    .select("id, title, collective_id, status, currency, collectives(default_currency)")
+    .select("id, title, collective_id, status")
     .eq("id", eventId)
     .maybeSingle();
 
   if (!event) return { error: "Event not found" };
   if (event.status !== "completed") return { error: "Event must be completed before settlement" };
-
-  const eventCurrency = (
-    event.currency ||
-    (event.collectives as unknown as { default_currency: string | null } | null)
-      ?.default_currency ||
-    "usd"
-  ).toLowerCase();
 
   // Verify user is a member of this collective
   const { count: memberCount } = await admin
@@ -58,115 +48,71 @@ export async function generateSettlement(eventId: string) {
 
   if (existing) return { error: "Settlement already exists", settlementId: existing.id };
 
-  // Fetch tickets, refunded tickets, artist bookings, and expenses in parallel
-  const [{ data: tickets }, { data: refundedTickets }, { data: bookings }, { data: expenses }] = await Promise.all([
+  // Fetch paid orders, artist bookings, and expenses in parallel
+  const [{ data: paidOrders }, { data: bookings }, { data: expenses }] = await Promise.all([
     admin
-      .from("tickets")
-      .select("price_paid, buyer_fee")
+      .from("orders")
+      .select("id, total, platform_fee, stripe_fee")
       .eq("event_id", eventId)
-      .in("status", ["paid", "checked_in"]),
-    admin
-      .from("tickets")
-      .select("price_paid")
-      .eq("event_id", eventId)
-      .eq("status", "refunded"),
+      .eq("status", "paid"),
     admin
       .from("event_artists")
-      .select("artist_id, fee, fee_currency, artists(name)")
-      .eq("event_id", eventId)
-      .eq("status", "confirmed"),
+      .select("id, name, fee")
+      .eq("event_id", eventId),
     admin
-      .from("expenses")
-      .select("id, description, amount, category, currency")
-      .eq("event_id", eventId)
-      .is("deleted_at", null),
+      .from("event_expenses")
+      .select("id, description, amount, category")
+      .eq("event_id", eventId),
   ]);
 
-  const grossRevenue = (tickets ?? []).reduce(
-    (sum, t) => sum + (Number(t.price_paid) || 0),
+  // Revenue = sum of paid orders (orders.total = subtotal + buyer-paid fees)
+  // total_revenue on the settlement = organizer gross = sum of order subtotals
+  const grossRevenue = (paidOrders ?? []).reduce(
+    (sum, o) => sum + (Number(o.total) || 0),
     0
   );
 
-  // Buyer-paid 7%+$0.50 service fee sum (auto-computed via DB trigger from price_paid).
-  // Stored separately on the settlement for clean operator-P&L reporting:
-  // gross_revenue (face value) = what operator earns; buyer_fees_collected = Nocturn's take.
-  const buyerFeesCollected = (tickets ?? []).reduce(
-    (sum, t) => sum + (Number(t.buyer_fee) || 0),
+  // Platform and Stripe fees are buyer-paid (added on top of ticket price).
+  // Record them for Nocturn-side reporting on the settlement.
+  const totalPlatformFee = (paidOrders ?? []).reduce(
+    (sum, o) => sum + (Number(o.platform_fee) || 0),
+    0
+  );
+  const totalStripeFee = (paidOrders ?? []).reduce(
+    (sum, o) => sum + (Number(o.stripe_fee) || 0),
     0
   );
 
-  const refundsTotal = (refundedTickets ?? []).reduce(
-    (sum, t) => sum + (Number(t.price_paid) || 0),
+  // Artist fees
+  const totalArtistFees = (bookings ?? []).reduce(
+    (sum, b) => sum + (Number(b.fee) || 0),
     0
   );
 
-  // Nocturn is merchant of record — buyer pays the 7%+$0.50 service fee on
-  // top, and Nocturn absorbs Stripe (2.9% + $0.30). Neither is deducted from
-  // the organizer's net. Stripe + Nocturn revenue lines are kept on the
-  // settlement record for Nocturn-side reporting only; they do not flow into
-  // `netRevenue` or `profit`.
-  const ticketCount = tickets?.length ?? 0;
-  const stripeFees = Math.round((grossRevenue * 0.029 + ticketCount * 0.30) * 100) / 100;
-  const platformFee = 0; // Organizer keeps 100% of ticket price
-  const nocturnRevenue = Math.round((grossRevenue * (PLATFORM_FEE_PERCENT / 100) + ticketCount * (PLATFORM_FEE_FLAT_CENTS / 100)) * 100) / 100;
-
-  // Normalize artist fees to the event currency. `event_artists.fee_currency`
-  // lets operators enter fees in the artist's contract currency (e.g. USD
-  // for an international DJ) even when the event charges in CAD. If
-  // fee_currency is null/blank we assume the fee is already in the event
-  // currency (common case). convertBetween() uses cross-rate via USD and
-  // falls back to the raw amount if a rate is unavailable.
-  const artistFeeConversions = await Promise.all(
-    (bookings ?? []).map(async (b) => {
-      const raw = Number(b.fee) || 0;
-      const from = (b.fee_currency || eventCurrency).toLowerCase();
-      if (raw === 0 || from === eventCurrency) {
-        return { converted: raw, from };
-      }
-      const { amount: converted } = await convertBetween(raw, from, eventCurrency);
-      return { converted, from };
-    })
-  );
-  const totalArtistFees = artistFeeConversions.reduce(
-    (sum, c) => sum + c.converted,
+  // Expenses
+  const totalExpenses = (expenses ?? []).reduce(
+    (sum, e) => sum + (Number(e.amount) || 0),
     0
   );
 
-  // Normalize expenses to the event currency. Each expense stores its
-  // own currency (defaulted to event currency at insert time in
-  // addEventExpense, but operators can override for e.g. a USD hotel
-  // booking on a CAD event). Convert anything mismatched via ECB cross-
-  // rates.
-  const expenseConversions = await Promise.all(
-    (expenses ?? []).map(async (e) => {
-      const raw = Number(e.amount) || 0;
-      const from = (e.currency || eventCurrency).toLowerCase();
-      if (raw === 0 || from === eventCurrency) return raw;
-      const { amount } = await convertBetween(raw, from, eventCurrency);
-      return amount;
-    })
-  );
-  const totalExpenses = expenseConversions.reduce((sum, v) => sum + v, 0);
+  // Net payout = gross revenue minus artist fees and expenses.
+  // Stripe and Nocturn platform fees are buyer-paid — they don't come out of
+  // the organizer's payout, but we record them on the settlement for reporting.
+  const netPayout = Math.round(
+    (grossRevenue - totalArtistFees - totalExpenses) * 100
+  ) / 100;
 
-  // Organizer-side net = gross − refunds only. No Stripe deduction (was the
-  // old bug — phantom $400+ phantom subtraction on a typical event).
-  // net_profit is a GENERATED column on settlements — auto-computed from source fields.
-  const netRevenue = grossRevenue - refundsTotal;
-
-  // Create settlement
+  // Create settlement with new schema columns
   const { data: settlement, error: settlementError } = await admin
     .from("settlements")
     .insert({
       event_id: eventId,
       collective_id: event.collective_id,
       status: "draft",
-      gross_revenue: grossRevenue,
-      buyer_fees_collected: Math.round(buyerFeesCollected * 100) / 100,
-      stripe_fees: stripeFees,
-      platform_fee: platformFee,
-      net_revenue: netRevenue,
-      total_costs: totalExpenses,
-      artist_fees_total: totalArtistFees,
+      total_revenue: Math.round(grossRevenue * 100) / 100,
+      platform_fee: Math.round(totalPlatformFee * 100) / 100,
+      stripe_fee: Math.round(totalStripeFee * 100) / 100,
+      net_payout: netPayout,
     })
     .select("id")
     .maybeSingle();
@@ -189,53 +135,67 @@ export async function generateSettlement(eventId: string) {
     return { error: "Failed to create settlement" };
   }
 
-  // Create line items
+  // Create line items using the new settlement_lines schema:
+  // { settlement_id, order_id?, ticket_id?, description, amount, type }
   const lines: Array<{
     settlement_id: string;
+    order_id?: string | null;
+    ticket_id?: string | null;
     description: string;
     amount: number;
-    category?: string;
-    metadata?: { type: string; recipient_type?: string; recipient_id?: string };
+    type: string;
   }> = [];
 
-  // Stripe fee line
-  lines.push({
-    settlement_id: settlement.id,
-    description: "Stripe processing fees",
-    amount: stripeFees,
-    category: "stripe_fee",
-    metadata: { type: "stripe_fee", recipient_type: "platform" },
-  });
+  // Per-order revenue lines
+  for (const order of paidOrders ?? []) {
+    lines.push({
+      settlement_id: settlement.id,
+      order_id: order.id,
+      description: "Ticket order revenue",
+      amount: Number(order.total) || 0,
+      type: "revenue",
+    });
+  }
 
-  // Nocturn service fee (paid by buyer, not deducted from collective)
-  lines.push({
-    settlement_id: settlement.id,
-    description: `Nocturn service fee (${PLATFORM_FEE_PERCENT}% + $0.50/ticket — paid by buyer)`,
-    amount: nocturnRevenue,
-    category: "platform_fee",
-    metadata: { type: "platform_fee", recipient_type: "platform" },
-  });
+  // Stripe fee line (buyer-paid, recorded for reporting)
+  if (totalStripeFee > 0) {
+    lines.push({
+      settlement_id: settlement.id,
+      description: "Stripe processing fees (buyer-paid)",
+      amount: Math.round(totalStripeFee * 100) / 100,
+      type: "stripe_fee",
+    });
+  }
+
+  // Nocturn platform fee line (buyer-paid, recorded for reporting)
+  if (totalPlatformFee > 0) {
+    lines.push({
+      settlement_id: settlement.id,
+      description: `Nocturn service fee (${PLATFORM_FEE_PERCENT}% + $${(PLATFORM_FEE_FLAT_CENTS / 100).toFixed(2)}/ticket — buyer-paid)`,
+      amount: Math.round(totalPlatformFee * 100) / 100,
+      type: "platform_fee",
+    });
+  }
 
   // Artist fee lines
   for (const booking of bookings ?? []) {
-    const artist = booking.artists as unknown as { name: string } | null;
-    lines.push({
-      settlement_id: settlement.id,
-      description: `Artist fee: ${artist?.name ?? "Unknown"}`,
-      amount: Number(booking.fee) || 0,
-      category: "artist_fee",
-      metadata: { type: "artist_fee", recipient_type: "artist", recipient_id: booking.artist_id },
-    });
+    if ((Number(booking.fee) || 0) > 0) {
+      lines.push({
+        settlement_id: settlement.id,
+        description: `Artist fee: ${booking.name ?? "Unknown"}`,
+        amount: Number(booking.fee) || 0,
+        type: "artist_fee",
+      });
+    }
   }
 
   // Expense lines
   for (const expense of expenses ?? []) {
     lines.push({
       settlement_id: settlement.id,
-      description: `${expense.category}: ${expense.description}`,
+      description: `${expense.category}: ${expense.description ?? ""}`,
       amount: Number(expense.amount),
-      category: "expense",
-      metadata: { type: "expense" },
+      type: "expense",
     });
   }
 
@@ -254,8 +214,8 @@ export async function generateSettlement(eventId: string) {
       eventId,
       settlementId: settlement.id,
       grossRevenue,
-      profit: netRevenue - totalArtistFees - totalExpenses,
-      ticketCount,
+      profit: netPayout,
+      orderCount: (paidOrders ?? []).length,
     });
   } catch (trackErr) {
     console.error("[generateSettlement] Tracking failed:", trackErr);
@@ -268,7 +228,7 @@ export async function generateSettlement(eventId: string) {
   }
 }
 
-// Approve a settlement
+// Approve/finalize a settlement
 export async function approveSettlement(settlementId: string) {
   try {
   if (!settlementId?.trim()) return { error: "Settlement ID is required" };
@@ -289,9 +249,7 @@ export async function approveSettlement(settlementId: string) {
 
   if (!settlement) return { error: "Settlement not found" };
 
-  // Role check: only owners/admins can approve a settlement. Approval is
-  // the gate to payout — letting any collective member approve would let
-  // a regular member trigger a transfer on bad P&L numbers.
+  // Role check: only owners/admins can approve a settlement
   const { data: membership } = await admin
     .from("collective_members")
     .select("role")
@@ -305,12 +263,12 @@ export async function approveSettlement(settlementId: string) {
     return { error: "Only collective owners and admins can approve settlements" };
   }
 
+  // New schema uses 'finalized' status and finalized_at timestamp
   const { data: updated, error } = await admin
     .from("settlements")
     .update({
-      status: "approved",
-      approved_by: user.id,
-      approved_at: new Date().toISOString(),
+      status: "finalized",
+      finalized_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", settlementId)
@@ -399,25 +357,13 @@ export async function addEventExpense(input: {
   category: string;
   description: string;
   amount: number;
-  /** ISO 4217 code, e.g. "usd", "cad". Defaults to the event's currency. */
-  currency?: string;
 }) {
   try {
-  // Input validation — category list is shared via `@/lib/expense-categories`
-  // so this file, event-financials.ts, and the wizard all agree on what
-  // "valid" means (they used to diverge — `supply` and `travel` were only
-  // accepted here, `dj`/`artist` only on event-financials, etc.)
   if (!input.eventId || typeof input.eventId !== "string") return { error: "Invalid event ID" };
   if (!isValidUUID(input.eventId)) return { error: "Invalid event ID format" };
   if (!isAcceptedExpenseCategory(input.category)) return { error: "Invalid expense category" };
   if (!input.description || input.description.length > 500) return { error: "Description is required and must be under 500 characters" };
   if (!Number.isFinite(input.amount) || input.amount <= 0 || input.amount > 1000000) return { error: "Amount must be between $0.01 and $1,000,000" };
-
-  // Currency validation: 3-letter ISO 4217. Optional — default at insert
-  // time below (after we know the event's currency).
-  if (input.currency && (typeof input.currency !== "string" || !/^[a-z]{3}$/i.test(input.currency))) {
-    return { error: "Invalid currency code" };
-  }
 
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -425,14 +371,9 @@ export async function addEventExpense(input: {
 
   const admin = createAdminClient();
 
-  // Get collective_id + status + currency. Default the expense's
-  // currency to the event's currency if not explicitly provided — 99%
-  // of expenses are in the local currency anyway, and this keeps the
-  // operator-side form simple (they only pick currency when it's
-  // actually different).
   const { data: event } = await admin
     .from("events")
-    .select("collective_id, status, currency, collectives(default_currency)")
+    .select("collective_id, status")
     .eq("id", input.eventId)
     .maybeSingle();
 
@@ -440,14 +381,6 @@ export async function addEventExpense(input: {
   if (event.status !== "draft" && event.status !== "published") {
     return { error: "Can't add expenses to a completed or archived event. Regenerate the settlement instead." };
   }
-
-  const resolvedCurrency = (
-    input.currency ||
-    event.currency ||
-    (event.collectives as unknown as { default_currency: string | null } | null)
-      ?.default_currency ||
-    "usd"
-  ).toLowerCase();
 
   // Verify user is a member of this collective
   const { count } = await admin
@@ -459,16 +392,14 @@ export async function addEventExpense(input: {
 
   if (!count || count === 0) return { error: "You don't have permission to add expenses to this event" };
 
-  // expenses is the canonical table — has collective_id (required) and paid_by
-  // for attributability. No reason to keep the old event_expenses fork.
-  const { error } = await admin.from("expenses").insert({
+  // event_expenses schema: event_id, category, description, amount, is_paid, created_by
+  const { error } = await admin.from("event_expenses").insert({
     event_id: input.eventId,
-    collective_id: event.collective_id,
-    paid_by: user.id,
     category: input.category,
     description: input.description.slice(0, 500),
     amount: Math.round(input.amount * 100) / 100,
-    currency: resolvedCurrency,
+    is_paid: false,
+    created_by: user.id,
   });
 
   if (error) {
@@ -533,10 +464,9 @@ export async function getEventExpenses(eventId: string) {
   }
 
   const { data, error: expensesError } = await admin
-    .from("expenses")
+    .from("event_expenses")
     .select("*")
     .eq("event_id", eventId)
-    .is("deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (expensesError) {

@@ -81,7 +81,7 @@ export async function runPostPurchaseHooks(input: {
   try {
     // Get current sold count + capacity
     const [{ count: totalSold }, { data: tiers }] = await Promise.all([
-      sb.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", input.eventId).in("status", ["paid", "checked_in"]),
+      sb.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", input.eventId).in("status", ["valid", "checked_in"]),
       sb.from("ticket_tiers").select("capacity").eq("event_id", input.eventId),
     ]);
 

@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
     "security-check": "bash scripts/security-check.sh",
     "pre-deploy": "npm run lint && npm run test && npm run security-check && npm run build",
     "generate-icons": "node scripts/generate-icons.js"
@@ -47,6 +49,7 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4",
     "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",

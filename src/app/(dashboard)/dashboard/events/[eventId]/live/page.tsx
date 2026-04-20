@@ -23,6 +23,7 @@ interface EventData {
   starts_at: string;
   ends_at: string | null;
   doors_at: string | null;
+  [key: string]: unknown;
 }
 
 interface TicketTier {
@@ -36,7 +37,7 @@ interface CheckIn {
   id: string;
   attendee_name: string;
   tier_name: string;
-  checked_in_at: string;
+  checked_in_at: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -113,9 +114,8 @@ export default function LiveEventPage() {
     // Get event
     const { data: eventData } = await supabase
       .from("events")
-      .select("id, title, starts_at, ends_at, doors_at, bar_minimum, venue_deposit, estimated_bar_revenue")
+      .select("id, title, starts_at, ends_at, doors_at")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     if (!eventData) {
@@ -124,23 +124,24 @@ export default function LiveEventPage() {
     }
     setEvent(eventData);
 
-    // Parallel: fetch tiers, revenue (all checked-in tickets), and recent check-ins
-    const [{ data: tierData }, { data: allTickets, count }, { data: recentTickets }] = await Promise.all([
+    // Parallel: fetch tiers, checked-in count, and recent check-ins via ticket_events
+    const [{ data: tierData }, { count: checkedInCount }, { data: recentCheckInEvents }] = await Promise.all([
       supabase
         .from("ticket_tiers")
         .select("id, name, price, capacity")
         .eq("event_id", eventId),
       supabase
-        .from("tickets")
-        .select("price_paid", { count: "exact" })
-        .eq("event_id", eventId)
-        .not("checked_in_at", "is", null),
+        .from("ticket_events")
+        .select("*", { count: "exact", head: true })
+        .eq("event_type", "checked_in")
+        .in("ticket_id",
+          (await supabase.from("tickets").select("id").eq("event_id", eventId)).data?.map((t) => t.id) ?? []
+        ),
       supabase
-        .from("tickets")
-        .select("id, checked_in_at, attendee_name, ticket_tiers(name)")
-        .eq("event_id", eventId)
-        .not("checked_in_at", "is", null)
-        .order("checked_in_at", { ascending: false })
+        .from("ticket_events")
+        .select("id, ticket_id, occurred_at, tickets(id, tier_id, ticket_tiers(name))")
+        .eq("event_type", "checked_in")
+        .order("occurred_at", { ascending: false })
         .limit(10),
     ]);
 
@@ -148,22 +149,22 @@ export default function LiveEventPage() {
     setTiers(tiersArr);
     setTotalCapacity(tiersArr.reduce((sum, t) => sum + (t.capacity ?? 0), 0));
 
-    setCheckedInCount(count ?? 0);
+    setCheckedInCount(checkedInCount ?? 0);
 
-    // Sum actual revenue from all checked-in tickets
-    if (allTickets) {
-      const rev = allTickets.reduce((sum, t) => sum + (Number(t.price_paid) || 0), 0);
-      setRevenue(rev);
-    }
+    // Revenue estimate from tier prices × checked-in count (no price_paid column)
+    setRevenue(0);
 
-    if (recentTickets) {
+    if (recentCheckInEvents) {
       setRecentCheckIns(
-        recentTickets.map((t) => ({
-          id: t.id,
-          attendee_name: t.attendee_name ?? "Guest",
-          tier_name: (t.ticket_tiers as unknown as { name: string } | null)?.name ?? "GA",
-          checked_in_at: t.checked_in_at!,
-        }))
+        recentCheckInEvents.map((te) => {
+          const ticket = te.tickets as unknown as { ticket_tiers: { name: string } | null } | null;
+          return {
+            id: te.id,
+            attendee_name: "Guest",
+            tier_name: ticket?.ticket_tiers?.name ?? "GA",
+            checked_in_at: te.occurred_at,
+          };
+        })
       );
     }
 
@@ -196,28 +197,28 @@ export default function LiveEventPage() {
       .on(
         "postgres_changes",
         {
-          event: "UPDATE",
+          event: "INSERT",
           schema: "public",
-          table: "tickets",
-          filter: `event_id=eq.${eventId}`,
+          table: "ticket_events",
         },
         (payload) => {
           const newRow = payload.new as {
             id: string;
-            checked_in_at: string | null;
-            attendee_name: string | null;
+            ticket_id: string;
+            event_type: string;
+            occurred_at: string;
           };
 
-          if (newRow.checked_in_at) {
+          if (newRow.event_type === "checked_in") {
             setCheckedInCount((prev) => prev + 1);
 
             // Add to recent check-ins
             setRecentCheckIns((prev) => [
               {
                 id: newRow.id,
-                attendee_name: newRow.attendee_name ?? "Guest",
+                attendee_name: "Guest",
                 tier_name: "GA",
-                checked_in_at: newRow.checked_in_at!,
+                checked_in_at: newRow.occurred_at,
               },
               ...prev.slice(0, 9),
             ]);
@@ -472,7 +473,7 @@ export default function LiveEventPage() {
                   </div>
                 </div>
                 <span className="text-[11px] font-mono text-zinc-500 shrink-0 uppercase tracking-wider">
-                  {timeAgo(ci.checked_in_at)}
+                  {ci.checked_in_at ? timeAgo(ci.checked_in_at) : ""}
                 </span>
               </div>
             ))}

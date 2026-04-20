@@ -1,5 +1,6 @@
 "use server";
 
+import { randomUUID } from "crypto";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
@@ -27,12 +28,11 @@ export async function searchCollectives(query: string, myCollectiveId: string) {
 
     let builder = sb
       .from("collectives")
-      .select("id, name, slug, logo_url, city, description")
+      .select("id, name, slug, logo_url, city, bio")
       .neq("id", myCollectiveId)
       .order("name");
 
     if (query.trim()) {
-      // TODO(audit): replace inline sanitizer with shared sanitizePostgRESTInput() from @/lib/utils + length cap
       // Sanitize input to prevent PostgREST filter injection
       const sanitized = query.replace(/\\/g, "").replace(/[%_.,()'"`]/g, "").trim();
       if (sanitized) {
@@ -56,6 +56,8 @@ export async function searchCollectives(query: string, myCollectiveId: string) {
 /**
  * Start a collab chat with another collective.
  * Creates a channel visible to both collectives.
+ * Channel name encodes both collective IDs so we can find existing channels.
+ * Convention: "collab:{sortedId1}:{sortedId2}"
  */
 export async function startCollabChat(myCollectiveId: string, partnerCollectiveId: string) {
   try {
@@ -85,68 +87,47 @@ export async function startCollabChat(myCollectiveId: string, partnerCollectiveI
       return { error: "Only admins and promoters can start collab chats", channelId: null };
     }
 
-    // Check if a collab channel already exists between these two
+    // Build a deterministic channel name encoding both collective IDs (sorted so direction doesn't matter)
+    const [idA, idB] = [myCollectiveId, partnerCollectiveId].sort();
+    const collabChannelName = `collab:${idA}:${idB}`;
+
+    // Check if a collab channel already exists between these two collectives
     const { data: existing } = await sb
       .from("channels")
       .select("id")
-      .eq("collective_id", myCollectiveId)
-      .eq("partner_collective_id", partnerCollectiveId)
+      .eq("name", collabChannelName)
       .eq("type", "collab")
       .maybeSingle();
 
     if (existing) return { error: null, channelId: existing.id };
 
-    // Also check the reverse direction
-    const { data: existingReverse } = await sb
-      .from("channels")
-      .select("id")
-      .eq("collective_id", partnerCollectiveId)
-      .eq("partner_collective_id", myCollectiveId)
-      .eq("type", "collab")
-      .maybeSingle();
-
-    if (existingReverse) return { error: null, channelId: existingReverse.id };
-
-    // Get partner collective name for the channel
-    const { data: partner } = await sb
-      .from("collectives")
-      .select("name")
-      .eq("id", partnerCollectiveId)
-      .maybeSingle();
-
-    const { data: myCollective } = await sb
-      .from("collectives")
-      .select("name")
-      .eq("id", myCollectiveId)
-      .maybeSingle();
+    // Fetch display names for both collectives
+    const [{ data: myCollective }, { data: partner }] = await Promise.all([
+      sb.from("collectives").select("name").eq("id", myCollectiveId).maybeSingle(),
+      sb.from("collectives").select("name").eq("id", partnerCollectiveId).maybeSingle(),
+    ]);
 
     if (!partner || !myCollective) return { error: "Collective not found", channelId: null };
 
-    // Create the collab channel (owned by initiator, partner linked)
+    // Create the collab channel — collective_id is nullable, so we set it to the initiator's
     const { data: channel, error } = await sb
       .from("channels")
       .insert({
         collective_id: myCollectiveId,
-        partner_collective_id: partnerCollectiveId,
-        name: `${myCollective.name} × ${partner.name}`,
+        name: collabChannelName,
         type: "collab",
-        metadata: {
-          initiated_by: user.id,
-          my_collective_name: myCollective.name,
-          partner_collective_name: partner.name,
-        },
+        created_by: user.id,
       })
       .select("id")
       .maybeSingle();
 
     if (error || !channel) return { error: "Failed to create collab channel", channelId: null };
 
-    // Send a welcome message
+    // Send a welcome message (no type column on messages — content only)
     await sb.from("messages").insert({
       channel_id: channel.id,
       user_id: user.id,
       content: `Started a collab chat between ${myCollective.name} and ${partner.name}. Let's make something happen! 🌙`,
-      type: "system",
     });
 
     return { error: null, channelId: channel.id };
@@ -157,7 +138,8 @@ export async function startCollabChat(myCollectiveId: string, partnerCollectiveI
 }
 
 /**
- * Get collab channels where this collective is either owner or partner.
+ * Get collab channels where this collective is involved.
+ * Channels use the naming convention "collab:{idA}:{idB}" where IDs are sorted.
  */
 export async function getCollabChannels(collectiveId: string) {
   try {
@@ -179,29 +161,19 @@ export async function getCollabChannels(collectiveId: string) {
 
     if (!memberCount || memberCount === 0) return [];
 
-    // Channels where we're the owner
-    const { data: owned, error: ownedError } = await sb
+    // Find all collab channels that embed this collective's ID in the name
+    // Pattern: "collab:<idA>:<idB>" where either idA or idB equals collectiveId
+    const { data, error } = await sb
       .from("channels")
       .select("*")
-      .eq("collective_id", collectiveId)
-      .eq("type", "collab");
+      .eq("type", "collab")
+      .or(`name.ilike.collab:${collectiveId}:%,name.ilike.collab:%:${collectiveId}`);
 
-    if (ownedError) {
-      console.error("[getCollabChannels] owned query error:", ownedError.message);
+    if (error) {
+      console.error("[getCollabChannels] query error:", error.message);
     }
 
-    // Channels where we're the partner
-    const { data: partnered, error: partneredError } = await sb
-      .from("channels")
-      .select("*")
-      .eq("partner_collective_id", collectiveId)
-      .eq("type", "collab");
-
-    if (partneredError) {
-      console.error("[getCollabChannels] partnered query error:", partneredError.message);
-    }
-
-    return [...(owned ?? []), ...(partnered ?? [])];
+    return data ?? [];
   } catch (err) {
     console.error("[getCollabChannels]", err);
     return [];
@@ -246,36 +218,30 @@ export async function inviteToCollab(myCollectiveId: string, email: string) {
       return { error: "Only admins and owners can invite collab partners" };
     }
 
-    // Check if already invited
+    // Check if already invited (filter by collective + email + collab role)
     const { data: existing } = await sb
       .from("invitations")
-      .select("id, status")
+      .select("id, accepted_at")
       .eq("collective_id", myCollectiveId)
       .eq("email", normalizedEmail)
-      .eq("type", "collab")
+      .eq("role", "collab")
+      .is("accepted_at", null)
       .maybeSingle();
 
-    if (existing?.status === "pending") {
+    if (existing) {
       return { error: "Already invited" };
     }
 
-    // Create or update invitation
-    if (existing) {
-      const { error } = await sb
-        .from("invitations")
-        .update({ status: "pending", invited_by: user.id, expires_at: new Date(Date.now() + 7 * 86400000).toISOString() })
-        .eq("id", existing.id);
-      if (error) return { error: "Failed to send invitation" };
-    } else {
-      const { error } = await sb.from("invitations").insert({
-        collective_id: myCollectiveId,
-        email: normalizedEmail,
-        role: "collab",
-        type: "collab",
-        invited_by: user.id,
-      });
-      if (error) return { error: "Failed to send invitation" };
-    }
+    // Create invitation with a unique token
+    const { error } = await sb.from("invitations").insert({
+      collective_id: myCollectiveId,
+      email: normalizedEmail,
+      role: "collab",
+      invited_by: user.id,
+      token: randomUUID(),
+      expires_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+    });
+    if (error) return { error: "Failed to send invitation" };
 
     return { error: null };
   } catch (err) {

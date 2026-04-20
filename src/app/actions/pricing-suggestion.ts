@@ -62,30 +62,26 @@ export async function getTicketPricingSuggestion(input: {
       // Events same week in same city
       admin
         .from("events")
-        .select("id, title, starts_at, venues(city, capacity)")
+        .select("id, title, starts_at, city, capacity")
         .in("status", ["published", "completed"])
         .gte("starts_at", weekBefore)
-        .lte("starts_at", weekAfter)
-        .is("deleted_at", null),
+        .lte("starts_at", weekAfter),
       // Historical events in same city
       admin
         .from("events")
-        .select("id, starts_at, venues(city, capacity)")
+        .select("id, starts_at, city, capacity")
         .in("status", ["published", "completed"])
-        .gte("starts_at", ninetyDaysAgo)
-        .is("deleted_at", null),
+        .gte("starts_at", ninetyDaysAgo),
     ]);
 
     // Filter to same city
     const cityLower = input.city.toLowerCase();
     const sameCityNearby = (nearbyEvents ?? []).filter((e) => {
-      const v = e.venues as unknown as { city: string; capacity: number } | null;
-      return v?.city?.toLowerCase().includes(cityLower);
+      return e.city?.toLowerCase().includes(cityLower);
     });
 
     const sameCityHistorical = (historicalEvents ?? []).filter((e) => {
-      const v = e.venues as unknown as { city: string; capacity: number } | null;
-      return v?.city?.toLowerCase().includes(cityLower);
+      return e.city?.toLowerCase().includes(cityLower);
     });
 
     // Get ticket tiers for these events

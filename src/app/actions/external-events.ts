@@ -1,10 +1,9 @@
 "use server";
 
-import { randomUUID } from "crypto";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 
-function detectPlatform(url: string): string {
+function detectSource(url: string): string {
   try {
     const host = new URL(url).hostname.toLowerCase();
     if (host.includes("eventbrite")) return "eventbrite";
@@ -19,12 +18,10 @@ function detectPlatform(url: string): string {
   }
 }
 
-function generateToken(): string {
-  // Short, URL-safe token: 8 chars from UUID
-  return randomUUID().replace(/-/g, "").slice(0, 8);
-}
-
-// TODO(audit): add length caps, eventDate ISO validation, platform enum, ticketsSold/revenue bounds
+/**
+ * Save an external event reference for the collective's competitive intelligence feed.
+ * The external_events table stores scraped/submitted event data with no Stripe attachment.
+ */
 export async function addExternalEvent(data: {
   title: string;
   externalUrl: string;
@@ -51,66 +48,48 @@ export async function addExternalEvent(data: {
     }
 
     const admin = createAdminClient();
-    const platform = detectPlatform(data.externalUrl);
 
-    // Create external event
+    // Resolve the user's collective (use their primary collective from users table)
+    const { data: userRow } = await admin
+      .from("users")
+      .select("collective_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const source = detectSource(data.externalUrl);
+
+    // Insert into external_events — schema: collective_id, title, source, source_url,
+    // venue_name, city, starts_at, ticket_price, metadata, scraped_at
     const { data: extEvent, error: insertError } = await admin
       .from("external_events")
       .insert({
-        promoter_id: user.id,
-        title: data.title,
-        external_url: data.externalUrl,
-        platform,
-        event_date: data.eventDate || null,
-        venue_name: data.venueName || null,
+        collective_id: userRow?.collective_id ?? null,
+        title: data.title.trim().slice(0, 255),
+        source,
+        source_url: data.externalUrl,
+        venue_name: data.venueName?.trim().slice(0, 255) ?? null,
+        starts_at: data.eventDate ?? null,
+        metadata: { submitted_by: user.id },
       })
       .select("id")
       .maybeSingle();
 
     if (insertError || !extEvent) {
+      console.error("[addExternalEvent] insert error:", insertError);
       return { error: "Failed to create event", link: null };
     }
 
-    // Create tracked promo link with collision retry
-    let token = "";
-    let linkError = null;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      token = generateToken();
-      const { error } = await admin
-        .from("promo_links")
-        .insert({
-          promoter_id: user.id,
-          external_event_id: extEvent.id,
-          token,
-        });
-
-      if (!error) {
-        linkError = null;
-        break;
-      }
-
-      // 23505 = unique_violation — retry with a new token
-      if (error.code === "23505") {
-        linkError = error;
-        continue;
-      }
-
-      // Any other error — bail immediately
-      return { error: "Failed to create promo link", link: null };
-    }
-
-    if (linkError) {
-      return { error: "Failed to generate unique link. Please try again.", link: null };
-    }
-
-    const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
-    return { error: null, link: `${APP_URL}/go/${token}` };
+    // Return the source URL as the canonical link (no promo tracking on external events)
+    return { error: null, link: data.externalUrl };
   } catch (err) {
     console.error("[addExternalEvent]", err);
     return { error: "Something went wrong", link: null };
   }
 }
 
+/**
+ * Get external events for the current user's collective.
+ */
 export async function getPromoterExternalEvents() {
   try {
     const supabase = await createServerClient();
@@ -119,35 +98,48 @@ export async function getPromoterExternalEvents() {
 
     const admin = createAdminClient();
 
+    const { data: userRow } = await admin
+      .from("users")
+      .select("collective_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!userRow?.collective_id) return [];
+
     const { data, error } = await admin
       .from("external_events")
-      .select("id, title, external_url, platform, event_date, venue_name, promo_links(token, click_count)")
-      .eq("promoter_id", user.id)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false });
+      .select("id, title, source, source_url, venue_name, city, starts_at, ticket_price, scraped_at")
+      .eq("collective_id", userRow.collective_id)
+      .order("scraped_at", { ascending: false })
+      .limit(100);
 
     if (error) {
       console.error("[getPromoterExternalEvents] query error:", error.message);
       return [];
     }
 
-    return ((data ?? []) as unknown as {
+    return ((data ?? []) as Array<{
       id: string;
       title: string;
-      external_url: string;
-      platform: string | null;
-      event_date: string | null;
+      source: string | null;
+      source_url: string | null;
       venue_name: string | null;
-      promo_links: { token: string; click_count: number }[] | null;
-    }[]).map((e) => ({
+      city: string | null;
+      starts_at: string | null;
+      ticket_price: number | null;
+      scraped_at: string;
+    }>).map((e) => ({
       id: e.id,
       title: e.title,
-      externalUrl: e.external_url,
-      platform: e.platform,
-      eventDate: e.event_date,
+      externalUrl: e.source_url,
+      platform: e.source,
+      eventDate: e.starts_at,
       venueName: e.venue_name,
-      token: e.promo_links?.[0]?.token ?? null,
-      clickCount: e.promo_links?.[0]?.click_count ?? 0,
+      city: e.city,
+      ticketPrice: e.ticket_price,
+      scrapedAt: e.scraped_at,
+      token: null as string | null,
+      clickCount: 0,
     }));
   } catch (err) {
     console.error("[getPromoterExternalEvents]", err);
@@ -155,6 +147,10 @@ export async function getPromoterExternalEvents() {
   }
 }
 
+/**
+ * Delete an external event record.
+ * Only members of the associated collective can delete.
+ */
 export async function deleteExternalEvent(eventId: string) {
   try {
     if (!eventId?.trim()) return { error: "Event ID is required" };
@@ -165,12 +161,32 @@ export async function deleteExternalEvent(eventId: string) {
 
     const admin = createAdminClient();
 
-    // Soft delete — only if owned by this user
+    // Verify ownership via collective membership
+    const { data: extEvent } = await admin
+      .from("external_events")
+      .select("collective_id")
+      .eq("id", eventId)
+      .maybeSingle();
+
+    if (!extEvent) return { error: "Event not found" };
+
+    if (extEvent.collective_id) {
+      const { count: memberCount } = await admin
+        .from("collective_members")
+        .select("*", { count: "exact", head: true })
+        .eq("collective_id", extEvent.collective_id)
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+
+      if (!memberCount || memberCount === 0) {
+        return { error: "Not authorized" };
+      }
+    }
+
     const { error } = await admin
       .from("external_events")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", eventId)
-      .eq("promoter_id", user.id);
+      .delete()
+      .eq("id", eventId);
 
     if (error) return { error: "Failed to delete event" };
     return { error: null };

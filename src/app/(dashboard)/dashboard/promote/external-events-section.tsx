@@ -12,7 +12,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 interface ExternalEvent {
   id: string;
   title: string;
-  externalUrl: string;
+  externalUrl: string | null;
   platform: string | null;
   eventDate: string | null;
   venueName: string | null;

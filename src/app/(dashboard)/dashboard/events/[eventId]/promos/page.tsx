@@ -94,7 +94,6 @@ export default function PromosPage() {
       discountType,
       discountValue: value,
       maxUses: maxUses ? parseInt(maxUses) : null,
-      promoterId: promoterId.trim() || null,
       expiresAt: expiresAt || null,
     });
 
@@ -403,11 +402,6 @@ export default function PromosPage() {
                       {isMaxedOut && (
                         <span className="rounded-full bg-yellow-500/10 text-yellow-500 px-2 py-0.5 text-[11px] font-medium">
                           Maxed Out
-                        </span>
-                      )}
-                      {promo.promoter_id && (
-                        <span className="text-[11px] text-muted-foreground">
-                          Promoter linked
                         </span>
                       )}
                       {promo.expires_at && !isExpired && (

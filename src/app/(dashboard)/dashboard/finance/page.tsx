@@ -72,7 +72,7 @@ export default async function FinancePage() {
     collectiveIds.length > 0
       ? admin
           .from("settlements")
-          .select("*, events(title, starts_at, venue_id)")
+          .select("*, events(title, starts_at, venue_name)")
           .in("collective_id", collectiveIds)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: null }),
@@ -83,7 +83,6 @@ export default async function FinancePage() {
           .select("id, title, starts_at")
           .in("collective_id", collectiveIds)
           .eq("status", "completed")
-          .is("deleted_at", null)
           .order("starts_at", { ascending: false })
       : Promise.resolve({ data: null }),
   ]);
@@ -101,18 +100,15 @@ export default async function FinancePage() {
     id: string;
     event_id: string;
     status: string;
-    gross_revenue: number;
-    net_revenue: number;
-    net_profit: number;
+    total_revenue: number;
     platform_fee: number;
-    stripe_fees: number;
-    artist_fees_total: number;
-    total_costs: number;
+    stripe_fee: number;
+    net_payout: number;
     created_at: string;
     events: {
       title: string;
       starts_at: string;
-      venue_id: string | null;
+      venue_name: string | null;
     } | null;
   };
 

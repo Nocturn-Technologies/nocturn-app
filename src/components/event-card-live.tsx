@@ -73,7 +73,7 @@ export function EventCardLive({ channelId: _channelId, eventId }: EventCardLiveP
         if (queryError) {
           setError(true);
         } else if (data && data.length > 0) {
-          setCard(data[0] as EventCardData);
+          setCard(data[0] as unknown as EventCardData);
         }
         setLoading(false);
       });
