@@ -135,7 +135,7 @@ export async function updateTicketTier(
       .from("tickets")
       .select("*", { count: "exact", head: true })
       .eq("tier_id", tierId)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     const sold = soldCount ?? 0;
     if (data.capacity < sold) {
@@ -161,7 +161,7 @@ export async function updateTicketTier(
       .from("tickets")
       .select("*", { count: "exact", head: true })
       .eq("tier_id", tierId)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     const actualSold = postUpdateSold ?? 0;
     if (data.capacity < actualSold) {
@@ -276,7 +276,7 @@ export async function deleteTicketTier(tierId: string) {
       .from("tickets")
       .select("*", { count: "exact", head: true })
       .eq("tier_id", tierId)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     if (soldCount && soldCount > 0) {
       return {

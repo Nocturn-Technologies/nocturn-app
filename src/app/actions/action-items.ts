@@ -62,7 +62,6 @@ export async function getActionItems(): Promise<ActionItem[]> {
       .in("collective_id", collectiveIds)
       .in("status", ["published", "upcoming", "completed"])
       .lt("ends_at", nowISO)
-      .is("deleted_at", null)
       .order("ends_at", { ascending: false })
       .limit(10),
 
@@ -72,7 +71,6 @@ export async function getActionItems(): Promise<ActionItem[]> {
       .select("id, title")
       .in("collective_id", collectiveIds)
       .eq("status", "draft")
-      .is("deleted_at", null)
       .limit(10),
 
     // 3. Events this week (published, starts within 7 days)
@@ -83,7 +81,6 @@ export async function getActionItems(): Promise<ActionItem[]> {
       .in("status", ["published", "upcoming"])
       .gte("starts_at", nowISO)
       .lte("starts_at", sevenDaysFromNow)
-      .is("deleted_at", null)
       .order("starts_at", { ascending: true })
       .limit(10),
 
@@ -95,7 +92,6 @@ export async function getActionItems(): Promise<ActionItem[]> {
       .in("status", ["published", "upcoming"])
       .gte("starts_at", nowISO)
       .lte("starts_at", fourteenDaysFromNow)
-      .is("deleted_at", null)
       .order("starts_at", { ascending: true })
       .limit(10),
 
@@ -186,7 +182,7 @@ export async function getActionItems(): Promise<ActionItem[]> {
         .from("tickets")
         .select("event_id")
         .in("event_id", soonIds)
-        .in("status", ["paid", "checked_in"]),
+        .in("status", ["valid", "checked_in"]),
     ]);
 
     // Aggregate capacity per event

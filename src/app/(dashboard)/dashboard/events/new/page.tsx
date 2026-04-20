@@ -1345,6 +1345,18 @@ function scaleBudgetTiers(
   }));
 }
 
+function multiplyBudgetTiers(
+  suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning?: string }>,
+  multiplier: number
+): TicketTier[] {
+  if (suggestedTiers.length === 0) return [];
+  return suggestedTiers.map((tier) => ({
+    name: tier.name,
+    price: Math.max(0, Math.round(tier.price * multiplier)),
+    capacity: tier.capacity,
+  }));
+}
+
 // ─── Collapsible Section Helper ────────────────────────────────────────────
 
 function CollapsibleSection({ label, children, defaultOpen = false }: { label: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -1520,7 +1532,7 @@ interface BudgetStepProps {
   onCalculate: () => void;
   onSuggestTravel: () => void;
   tiers: TicketTier[];
-  onApplySuggestedTiers: () => void;
+  onApplySuggestedTiers: (tiers: TicketTier[]) => void;
 }
 
 function BudgetStep({
@@ -1535,6 +1547,7 @@ function BudgetStep({
   // out the prices that landed so the operator doesn't have to bounce to the
   // Tickets step to confirm what changed.
   const [appliedNote, setAppliedNote] = useState<string | null>(null);
+  const [priceMultiplier, setPriceMultiplier] = useState(1);
   const hasAnyExpense =
     draft.talentFee.amount > 0 ||
     draft.venueRental > 0 ||
@@ -1574,6 +1587,40 @@ function BudgetStep({
   // Which prod chips are still available (already-added ones disappear from the tray).
   const addedCategories = new Set(draft.prodItems.map(p => p.category));
   const availableChips = PROD_CHIPS.filter(c => !addedCategories.has(c.category));
+  const suggestedPreview = result
+    ? multiplyBudgetTiers(result.suggestedTiers, priceMultiplier)
+    : [];
+  const suggestedCapacity = suggestedPreview.reduce((sum, tier) => sum + tier.capacity, 0);
+  const suggestedRevenue = suggestedPreview.reduce((sum, tier) => sum + tier.price * tier.capacity, 0);
+  const suggestedAvgPrice = suggestedCapacity > 0 ? suggestedRevenue / suggestedCapacity : 0;
+  const barShareRevenue =
+    typeof projectedBarSales === "number" && Number.isFinite(projectedBarSales)
+      ? projectedBarSales * ((typeof barPercent === "number" ? barPercent : 0) / 100)
+      : 0;
+  const liveScenarios = result
+    ? [
+        { label: "50%", rate: 0.5 },
+        { label: "75%", rate: 0.75 },
+        { label: "100%", rate: 1.0 },
+      ].map((scenario) => {
+        const projection = cascadeScenario(
+          suggestedPreview.map((tier, index) => ({
+            name: tier.name,
+            price: tier.price,
+            capacity: tier.capacity,
+            sort_order: index,
+          })),
+          scenario.rate
+        );
+        const gross = projection.revenue + barShareRevenue;
+        return {
+          label: scenario.label,
+          ticketsSold: projection.ticketsSold,
+          gross,
+          profit: gross - result.totalExpenses,
+        };
+      })
+    : [];
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -1893,30 +1940,86 @@ function BudgetStep({
             </p>
 
             <div className="space-y-1">
-              {result.scenarios.map((s, i) => (
+              {liveScenarios.map((s, i) => (
                 <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{s.label}</span>
+                  <span className="text-muted-foreground">{s.label} <span className="text-[11px] text-zinc-500">({s.ticketsSold} tix)</span></span>
                   <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {s.profit >= 0 ? "+" : ""}{s.profit.toLocaleString()} {result.eventCurrency.toUpperCase()}
+                    {s.profit >= 0 ? "+" : ""}{Math.round(s.profit).toLocaleString()} {result.eventCurrency.toUpperCase()}
                   </span>
                 </div>
               ))}
             </div>
 
-            {result.suggestedTiers.length > 0 && tiers.length > 0 && (
-              <button
-                onClick={() => {
-                  const note = result.suggestedTiers
-                    .map((t) => `${t.name} ${result.eventCurrency.toUpperCase()} ${t.price} (${t.capacity} tix)`)
-                    .join(" · ");
-                  onApplySuggestedTiers();
-                  setAppliedNote(note);
-                  setTimeout(() => setAppliedNote(null), 7000);
-                }}
-                className="text-xs text-nocturn hover:text-nocturn-light transition-colors"
-              >
-                Apply suggested tiers ({result.suggestedTiers.length} tiers)
-              </button>
+            {result.suggestedTiers.length > 0 && (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Recommended tiers</p>
+                    <p className="text-[11px] text-muted-foreground">Simulate pricing here, then use the version you want for the event draft.</p>
+                  </div>
+                  <span className="rounded-full bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300">
+                    {suggestedCapacity} cap • {fmtCurrency(suggestedAvgPrice)} avg
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Price sensitivity</span>
+                    <span className="font-medium text-nocturn">{priceMultiplier.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.7}
+                    max={1.4}
+                    step={0.05}
+                    value={priceMultiplier}
+                    onChange={(e) => setPriceMultiplier(parseFloat(e.target.value))}
+                    className="w-full h-1.5 rounded-full appearance-none bg-zinc-800 accent-[#7B2FF7] cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[11px] text-muted-foreground/70">
+                    <span>Lower</span>
+                    <span>Base</span>
+                    <span>Higher</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {suggestedPreview.map((tier, index) => {
+                    const original = result.suggestedTiers[index];
+                    return (
+                      <div key={`${tier.name}-${index}`} className="flex items-center justify-between rounded-lg border border-white/6 bg-zinc-900/70 px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium text-white">{tier.name}</p>
+                          <p className="text-[11px] text-muted-foreground">{tier.capacity} tickets</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-nocturn">{result.eventCurrency.toUpperCase()} {tier.price}</p>
+                          {original && original.price !== tier.price && (
+                            <p className="text-[11px] text-muted-foreground line-through">
+                              {result.eventCurrency.toUpperCase()} {original.price}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const note = suggestedPreview
+                      .map((t) => `${t.name} ${result.eventCurrency.toUpperCase()} ${t.price} (${t.capacity} tix)`)
+                      .join(" · ");
+                    onApplySuggestedTiers(suggestedPreview);
+                    setAppliedNote(note);
+                    setTimeout(() => setAppliedNote(null), 7000);
+                  }}
+                  className="w-full bg-nocturn hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px]"
+                >
+                  Use these tiers in event draft
+                </Button>
+              </div>
             )}
 
             {appliedNote && (
@@ -3006,11 +3109,8 @@ export default function NewEventPage() {
             onCalculate={handleCalculateBudget}
             onSuggestTravel={handleSuggestTravel}
             tiers={tiers}
-            onApplySuggestedTiers={() => {
-              if (!budgetResult) return;
-              const firstPrice = tiers[0]?.price;
-              const scaled = scaleBudgetTiers(budgetResult.suggestedTiers, firstPrice);
-              setTiers(scaled);
+            onApplySuggestedTiers={(nextTiers) => {
+              setTiers(nextTiers);
             }}
           />
         )}

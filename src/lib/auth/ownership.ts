@@ -42,7 +42,6 @@ export async function verifyEventOwnership(
       .from("events")
       .select("collective_id")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
     if (eventError) {
       console.error("[verifyEventOwnership] event lookup error:", eventError);

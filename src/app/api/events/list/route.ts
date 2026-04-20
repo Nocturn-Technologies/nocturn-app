@@ -41,7 +41,6 @@ export async function GET(request: Request) {
       .from("events")
       .select("id, title, status, starts_at", { count: "exact" })
       .in("collective_id", collectiveIds)
-      .is("deleted_at", null)
       .order("starts_at", { ascending: false })
       .range(offset, offset + limit - 1);
 

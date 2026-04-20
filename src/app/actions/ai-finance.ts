@@ -121,7 +121,7 @@ export async function generateEventForecast(
         .from("tickets")
         .select("*", { count: "exact", head: true })
         .eq("tier_id", tier.id)
-        .in("status", ["paid", "checked_in"]);
+        .in("status", ["valid", "checked_in"]);
 
       const sold = count ?? 0;
       return {
@@ -269,7 +269,7 @@ export async function generateEventForecast(
       .from("tickets")
       .select("created_at")
       .eq("event_id", eventId)
-      .in("status", ["paid", "checked_in"])
+      .in("status", ["valid", "checked_in"])
       .order("created_at", { ascending: true })
       .limit(1)
       .maybeSingle();
@@ -416,7 +416,7 @@ export async function getTicketSalesTrajectory(
             .from("tickets")
             .select("*", { count: "exact", head: true })
             .eq("tier_id", tier.id)
-            .in("status", ["paid", "checked_in"]);
+            .in("status", ["valid", "checked_in"]);
           return { ...tier, sold: count ?? 0 };
         })
       ),
@@ -425,7 +425,7 @@ export async function getTicketSalesTrajectory(
         .from("tickets")
         .select("created_at")
         .eq("event_id", eventId)
-        .in("status", ["paid", "checked_in"])
+        .in("status", ["valid", "checked_in"])
         .order("created_at", { ascending: true }),
     ]);
 
@@ -640,7 +640,7 @@ export async function generatePostEventRecap(eventId: string): Promise<{
       .from("tickets")
       .select("*", { count: "exact", head: true })
       .in("event_id", pastEventIds)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     avgPastSellThrough = (pastTicketCount ?? 0) / pastEvents.length;
   }

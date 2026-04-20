@@ -95,12 +95,16 @@ export interface EventArtist {
 
 export interface Settlement {
   id: string;
+  collective_id: string;
   event_id: string;
   total_revenue: number;
-  total_costs: number;
-  net_profit: number;
-  status: "pending" | "approved" | "paid";
+  platform_fee: number;
+  stripe_fee: number;
+  net_payout: number;
+  status: string;
+  finalized_at: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface SplitItem {

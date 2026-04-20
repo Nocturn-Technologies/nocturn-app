@@ -440,8 +440,7 @@ export async function getContacts(
     const { count: eventCount } = await admin
       .from("events")
       .select("*", { count: "exact", head: true })
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     const totalCollectiveEvents = eventCount ?? 0;
 
@@ -542,8 +541,7 @@ export async function getContactDetail(
   const { data: events } = await admin
     .from("events")
     .select("id, title, starts_at")
-    .eq("collective_id", contact.collectiveId)
-    .is("deleted_at", null);
+    .eq("collective_id", contact.collectiveId);
 
   const eventIds = events?.map((e) => e.id) ?? [];
   const eventMap = new Map(
@@ -1070,7 +1068,6 @@ export async function getEventFanEmails(
       .from("events")
       .select("collective_id")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
     if (!event) return { error: "Event not found", emails: [] };
 
@@ -1159,8 +1156,7 @@ export async function generateReachInsights(
     const { count: eventCount } = await admin
       .from("events")
       .select("*", { count: "exact", head: true })
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     const totalEvents = eventCount ?? 0;
     const insights: ReachInsight[] = [];
@@ -1277,8 +1273,7 @@ export async function syncContactMetrics(
     const { data: events } = await admin
       .from("events")
       .select("id, starts_at")
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     if (!events || events.length === 0) return { error: null, synced: 0 };
 

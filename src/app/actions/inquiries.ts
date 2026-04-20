@@ -119,10 +119,12 @@ export async function acceptInquiry(
         if (!isValidUUID(myMembership.collective_id) || !isValidUUID(senderMembership.collective_id)) {
           return { error: "Invalid collective id on membership record", channelId: null };
         }
+        // TODO: needs schema decision — partner_collective_id removed from channels in schema rebuild.
+        // Fall through to create a new collab channel. Deduplicate by name instead.
         const { data: existing } = await sb
           .from("channels")
           .select("id")
-          .or(`and(collective_id.eq.${myMembership.collective_id},partner_collective_id.eq.${senderMembership.collective_id}),and(collective_id.eq.${senderMembership.collective_id},partner_collective_id.eq.${myMembership.collective_id})`)
+          .eq("collective_id", myMembership.collective_id)
           .eq("type", "collab")
           .limit(1)
           .maybeSingle();
@@ -142,15 +144,8 @@ export async function acceptInquiry(
             .from("channels")
             .insert({
               collective_id: myMembership.collective_id,
-              partner_collective_id: senderMembership.collective_id,
               name: `${myCollectiveName} × ${partnerName}`,
               type: "collab",
-              metadata: {
-                initiated_by: user.id,
-                from_inquiry_id: inquiryId,
-                my_collective_name: myCollectiveName,
-                partner_collective_name: partnerName,
-              },
             })
             .select("id")
             .maybeSingle();
@@ -165,15 +160,8 @@ export async function acceptInquiry(
           .from("channels")
           .insert({
             collective_id: myMembership.collective_id,
-            partner_collective_id: null,
             name: `${myCollectiveName} × ${senderName}`,
             type: "collab",
-            metadata: {
-              initiated_by: user.id,
-              from_inquiry_id: inquiryId,
-              sender_user_id: fromUserId,
-              sender_name: senderName,
-            },
           })
           .select("id")
           .maybeSingle();
@@ -189,13 +177,8 @@ export async function acceptInquiry(
         .from("channels")
         .insert({
           collective_id: myMembership.collective_id,
-          partner_collective_id: null,
           name: `${myCollectiveName} × Inquiry`,
           type: "collab",
-          metadata: {
-            initiated_by: user.id,
-            from_inquiry_id: inquiryId,
-          },
         })
         .select("id")
         .maybeSingle();

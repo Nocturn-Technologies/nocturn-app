@@ -37,7 +37,7 @@ export async function generateContentPlaybook(eventId: string): Promise<{
     // Get event details
     const { data: event, error: eventError } = await admin
       .from("events")
-      .select("title, slug, starts_at, description, vibe_tags, venues(name, city), collective_id, collectives(name, slug)")
+      .select("title, slug, starts_at, description, vibe_tags, venue_name, city, collective_id, collectives(name, slug)")
       .eq("id", eventId)
       .maybeSingle();
 
@@ -63,11 +63,10 @@ export async function generateContentPlaybook(eventId: string): Promise<{
     const eventDate = new Date(event.starts_at);
     const now = new Date();
     const daysUntil = Math.ceil((eventDate.getTime() - now.getTime()) / 86400000);
-    const venue = event.venues as unknown as { name: string; city: string } | null;
     const collective = event.collectives as unknown as { name: string; slug: string } | null;
     const title = event.title;
-    const venueName = venue?.name ?? "the venue";
-    const city = venue?.city ?? "the city";
+    const venueName = event.venue_name ?? "the venue";
+    const city = event.city ?? "the city";
     const collectiveName = collective?.name ?? "the collective";
     const vibes = (event.vibe_tags as string[]) ?? [];
     const vibeStr = vibes.length > 0 ? vibes.slice(0, 3).join(", ") : "underground";

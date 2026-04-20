@@ -50,7 +50,6 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 interface Channel {
   id: string;
   collective_id: string | null;
-  partner_collective_id?: string | null;
   name: string | null;
   type: string;
   created_at: string;
@@ -307,7 +306,6 @@ export default function ChatPage() {
       .from("events")
       .select("id, title, starts_at")
       .eq("collective_id", collectiveId)
-      .is("deleted_at", null)
       .order("starts_at", { ascending: true });
 
     if (events && events.length > 0) {

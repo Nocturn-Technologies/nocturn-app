@@ -349,7 +349,6 @@ export async function getRevenueForecast(): Promise<{
     .in("collective_id", collectiveIds)
     .in("status", ["published"])
     .gte("starts_at", todayStart.toISOString())
-    .is("deleted_at", null)
     .order("starts_at", { ascending: true });
 
   if (!upcomingEvents || upcomingEvents.length === 0) {

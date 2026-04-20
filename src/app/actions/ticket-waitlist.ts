@@ -41,7 +41,7 @@ export async function joinWaitlist(eventId: string, tierId: string, waitlistEmai
       .from("tickets")
       .select("id", { count: "exact", head: true })
       .eq("tier_id", tierId)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     const remaining = (tier.capacity ?? 0) - (soldCount ?? 0);
     if (remaining > 0) {

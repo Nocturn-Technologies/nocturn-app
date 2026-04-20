@@ -64,12 +64,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const { data: eventRaw } = await supabase
     .from("events")
-    .select("title, description, flyer_url, starts_at, venues(name, city)")
+    .select("title, description, flyer_url, starts_at, venue_name, city")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
-    .is("deleted_at", null)
     .maybeSingle();
-  const event = eventRaw as { title: string; description: string | null; flyer_url: string | null; starts_at: string; venues: { name: string; city: string } | null } | null;
+  const event = eventRaw as { title: string; description: string | null; flyer_url: string | null; starts_at: string; venue_name: string | null; city: string | null } | null;
 
   if (!event) return { title: "Event Not Found" };
 
@@ -83,16 +82,16 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   // social platforms that enforce 1.91:1 aspect ratio. The generator composites
   // the flyer as a left panel and renders title/date/venue in the right panel,
   // guaranteeing every share preview is readable regardless of flyer orientation.
-  const venue = event.venues;
   const dateStr = event.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })
     : "";
   const flyerIsValidUrl = event.flyer_url && event.flyer_url.startsWith("http");
+  const venueDisplay = [event.venue_name, event.city].filter(Boolean).join(", ");
   const ogParams: Record<string, string> = {
     title: event.title,
     collective: collective.name,
     date: dateStr,
-    venue: venue ? `${venue.name}, ${venue.city}` : "",
+    venue: venueDisplay,
     price: "Tickets Available",
   };
   if (flyerIsValidUrl) {
@@ -162,12 +161,11 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // Fetch event with venue + metadata
   const { data: eventRaw2 } = await supabase
     .from("events")
-    .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, event_mode, is_free, venues(name, address, city, capacity)")
+    .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, is_free, venue_name, venue_address, city, capacity")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
-    .is("deleted_at", null)
     .maybeSingle();
-  const event = eventRaw2 as { id: string; title: string; slug: string; description: string | null; starts_at: string; ends_at: string | null; doors_at: string | null; status: string; flyer_url: string | null; vibe_tags: string[] | null; min_age: number | null; metadata: Record<string, string> | null; collective_id: string; event_mode: string | null; is_free: boolean | null; venues: { name: string; address: string; city: string; capacity: number } | null } | null;
+  const event = eventRaw2 as { id: string; title: string; slug: string; description: string | null; starts_at: string; ends_at: string | null; doors_at: string | null; status: string; flyer_url: string | null; vibe_tags: string[] | null; min_age: number | null; metadata: Record<string, string> | null; collective_id: string; is_free: boolean | null; venue_name: string | null; venue_address: string | null; city: string | null; capacity: number | null } | null;
 
   if (!event || event.status === "draft") notFound();
 
@@ -187,14 +185,13 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   ] = await Promise.all([
     supabase.from("ticket_tiers").select("*").eq("event_id", event.id).order("sort_order"),
     supabase.from("event_artists").select("party_id, name, set_time, role").eq("event_id", event.id).order("set_time"),
-    supabase.from("events").select("*", { count: "exact", head: true }).eq("collective_id", collective.id).in("status", ["published", "completed"]).is("deleted_at", null),
-    supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).is("deleted_at", null).order("starts_at", { ascending: false }).limit(6),
+    supabase.from("events").select("*", { count: "exact", head: true }).eq("collective_id", collective.id).in("status", ["published", "completed"]),
+    supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).order("starts_at", { ascending: false }).limit(6),
     supabase.from("events")
       .select("title, slug, flyer_url, starts_at, collective_id, collectives(name, slug), venue_name, city")
       .eq("status", "published")
       .neq("id", event.id)
       .neq("collective_id", collective.id)
-      .is("deleted_at", null)
       .gte("starts_at", now.toISOString())
       .lte("starts_at", weekFromNow)
       .order("starts_at", { ascending: true })
@@ -232,7 +229,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // tier is $0 (or there are no tiers, or is_free is explicitly set), we treat the event
   // as RSVP-only for display. This guarantees the public page never shows "$0+ Get Tickets"
   // on a free event, and always shows the RSVP widget which collects guest name + email.
-  const rawMode = (event.event_mode ?? "ticketed") as "ticketed" | "rsvp" | "hybrid";
+  const rawMode = ((event as unknown as Record<string, unknown>).event_mode ?? "ticketed") as "ticketed" | "rsvp" | "hybrid";
   const allTiersFree = !!tiers && tiers.length > 0 && tiers.every((t) => Number(t.price) === 0);
   const noTiers = !tiers || tiers.length === 0;
   const isEffectivelyFree = event.is_free === true || allTiersFree || noTiers;
@@ -283,7 +280,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     }
   }
 
-  const venue = event.venues;
+  const venue = event.venue_name ? { name: event.venue_name, address: event.venue_address, city: event.city } : null;
 
   const eventDate = new Date(event.starts_at);
   const endsAt = event.ends_at ? new Date(event.ends_at) : null;

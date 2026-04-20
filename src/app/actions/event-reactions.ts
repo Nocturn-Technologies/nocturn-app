@@ -29,7 +29,6 @@ export async function addReaction(input: {
       .from("events")
       .select("id")
       .eq("id", input.eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     if (eventError) {

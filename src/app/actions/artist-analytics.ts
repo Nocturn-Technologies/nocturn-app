@@ -48,8 +48,7 @@ export async function getArtistPerformanceAnalytics(): Promise<{
     // Get all events for this collective (include metadata for external ticket data)
     const { data: events, error: eventsError } = await admin.from("events")
       .select("id, metadata")
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     if (eventsError) {
       console.error("[getArtistPerformanceAnalytics] events lookup failed:", eventsError);

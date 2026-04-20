@@ -191,7 +191,7 @@ export async function GET(request: Request) {
 
       // Get ticket stats
       const [{ count: ticketsSold }, { data: tiers }, { data: orderRevenue }] = await Promise.all([
-        sb.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
+        sb.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["valid", "checked_in"]),
         sb.from("ticket_tiers").select("capacity, price").eq("event_id", event.id),
         sb.from("orders").select("total").eq("event_id", event.id).eq("status", "paid"),
       ]);

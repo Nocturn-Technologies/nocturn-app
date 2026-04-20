@@ -11,7 +11,8 @@ interface EventItem {
   starts_at: string;
   status: string;
   flyer_url: string | null;
-  venues: { name: string; city: string } | null;
+  venue_name: string | null;
+  city: string | null;
 }
 
 interface CollapsibleEventSectionProps {

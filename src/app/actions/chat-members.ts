@@ -6,8 +6,9 @@ import { revalidatePath } from "next/cache";
 import { sanitizePostgRESTInput } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// channel_members columns role/last_seen_at/is_online and channels.event_id
-// exist in the database but are not yet reflected in the generated types.
+// channel_members columns role/last_seen_at/is_online exist in the database
+// but are not yet reflected in the generated types.
+// Note: channels.event_id was dropped in the schema rebuild.
 function untypedFrom(sb: ReturnType<typeof createAdminClient>, table: string) {
   return (sb as unknown as SupabaseClient).from(table);
 }
@@ -330,12 +331,13 @@ export async function searchInvitableUsers(
 
     const sb = createAdminClient();
 
-    // Get channel details — event_id exists in DB but not in generated types, cast.
-    const { data: channel } = await untypedFrom(sb, "channels")
-      .select("id, type, collective_id, event_id")
+    // Get channel details
+    const { data: channel } = await sb
+      .from("channels")
+      .select("id, type, collective_id")
       .eq("id", channelId)
       .maybeSingle() as {
-        data: { id: string; type: string; collective_id: string | null; event_id: string | null } | null;
+        data: { id: string; type: string; collective_id: string | null } | null;
       };
 
     if (!channel || !channel.collective_id) return [];
@@ -398,58 +400,10 @@ export async function searchInvitableUsers(
       }
     }
 
-    // For event channels, also include event_artists that have a linked party/user
-    if (channel.type === "event" && channel.event_id) {
-      const { data: eventArtists } = await sb
-        .from("event_artists")
-        .select("id, name, party_id")
-        .eq("event_id", channel.event_id)
-        .not("party_id", "is", null)
-        .limit(50);
-
-      if (eventArtists) {
-        // Batch-fetch users by party_id to find linked user accounts
-        const partyIds = eventArtists
-          .map((ea) => ea.party_id)
-          .filter((p): p is string => p !== null);
-
-        if (partyIds.length > 0) {
-          const { data: artistUsers } = await sb
-            .from("users")
-            .select("id, party_id, full_name, email")
-            .in("party_id", partyIds);
-
-          const partyToUser = new Map(
-            (artistUsers ?? []).map((u) => [u.party_id, u])
-          );
-
-          for (const ea of eventArtists) {
-            if (!ea.party_id) continue;
-            const linkedUser = partyToUser.get(ea.party_id);
-            if (!linkedUser || existingUserIds.has(linkedUser.id)) continue;
-
-            // Apply search filter for artists too
-            if (query?.trim()) {
-              const lowerQuery = query.toLowerCase().trim();
-              const nameMatch =
-                ea.name?.toLowerCase().includes(lowerQuery) ||
-                linkedUser.full_name?.toLowerCase().includes(lowerQuery) ||
-                linkedUser.email?.toLowerCase().includes(lowerQuery);
-              if (!nameMatch) continue;
-            }
-
-            results.push({
-              id: linkedUser.id,
-              name: linkedUser.full_name ?? ea.name ?? null,
-              email: linkedUser.email ?? null,
-              role: "artist",
-              source: "artist",
-            });
-            existingUserIds.add(linkedUser.id);
-          }
-        }
-      }
-    }
+    // TODO: needs schema decision — event_id was dropped from channels in the schema rebuild.
+    // We can no longer look up event_artists for an event channel without a separate
+    // events lookup by channel name. Skip this enrichment for now.
+    // if (channel.type === "event") { ... look up artists by event title ... }
 
     // For event channels with a search query, also search platform-wide artists and collectives
     if (channel.type === "event" && query?.trim()) {
@@ -658,14 +612,22 @@ export async function syncEventMembers(
 
     const sb = createAdminClient();
 
-    // Find the event channel — event_id exists in DB but not in generated types, cast.
-    const { data: eventChannel } = await untypedFrom(sb, "channels")
+    // event_id was dropped from channels in the schema rebuild.
+    // Look up the event channel by collective_id + type='event' + name=event.title.
+    const { data: eventRow } = await sb
+      .from("events")
+      .select("title, collective_id")
+      .eq("id", eventId)
+      .maybeSingle();
+    if (!eventRow) return { error: "Event not found" };
+
+    const { data: eventChannel } = await sb
+      .from("channels")
       .select("id, collective_id")
-      .eq("event_id", eventId)
+      .eq("collective_id", eventRow.collective_id)
       .eq("type", "event")
-      .maybeSingle() as {
-        data: { id: string; collective_id: string | null } | null;
-      };
+      .eq("name", eventRow.title)
+      .maybeSingle();
 
     if (!eventChannel || !eventChannel.collective_id) return { error: "Event channel not found" };
 

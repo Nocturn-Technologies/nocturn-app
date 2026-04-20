@@ -21,7 +21,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     .from("events")
     .select("slug, updated_at, collective_id, collectives(slug)")
     .in("status", ["published", "completed"])
-    .is("deleted_at", null)
     .order("updated_at", { ascending: false })
     .limit(500);
 

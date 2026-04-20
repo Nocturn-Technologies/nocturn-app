@@ -72,8 +72,7 @@ export async function analyzeTicketSalesPatterns(
     const { data: events, error: eventsError } = await admin
       .from("events")
       .select("id, starts_at")
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     if (eventsError || !events || events.length === 0) {
       return { error: "No events found for this collective.", data: null };
@@ -87,7 +86,7 @@ export async function analyzeTicketSalesPatterns(
       .from("tickets")
       .select("id, event_id, created_at")
       .in("event_id", eventIds)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     if (ticketsError) {
       return { error: "Failed to fetch ticket sales data", data: null };
@@ -316,7 +315,6 @@ export async function getAudienceInsights(
       .from("events")
       .select("id, title, starts_at")
       .eq("collective_id", collectiveId)
-      .is("deleted_at", null)
       .order("starts_at", { ascending: true });
 
     if (eventsError || !events || events.length === 0) {
@@ -330,7 +328,7 @@ export async function getAudienceInsights(
       .from("tickets")
       .select("id, event_id, created_at, order_lines(unit_price, orders(metadata))")
       .in("event_id", eventIds)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     if (ticketsError) {
       return { error: "Failed to fetch ticket data", data: null };

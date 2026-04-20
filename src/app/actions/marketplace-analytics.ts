@@ -64,8 +64,7 @@ export async function getProfilePerformanceWithCollective(
     // Get collective's events
     const { data: events } = await admin.from("events")
       .select("id")
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     if (!events || (events as { id: string }[]).length === 0) return null;
     const eventIds = (events as { id: string }[]).map((e) => e.id);

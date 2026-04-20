@@ -86,7 +86,6 @@ export default function LineupPage() {
       .from("events")
       .select("title")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
     if (event) setEventTitle(event.title);
 
