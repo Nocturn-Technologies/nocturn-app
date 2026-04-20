@@ -600,12 +600,6 @@ export default async function AdminPage({ searchParams }: Props) {
                               >
                                 Approve
                               </a>
-                              <a
-                                href={generateApprovalUrls(user.id).denyUrl}
-                                className="inline-flex items-center min-h-[44px] text-red-400 hover:text-red-300 font-medium transition-colors"
-                              >
-                                Deny
-                              </a>
                             </td>
                           </tr>
                         );
@@ -786,20 +780,12 @@ export default async function AdminPage({ searchParams }: Props) {
                         </td>
                         <td className="px-4 py-3 space-x-3">
                           {!approved && (
-                            <>
-                              <a
-                                href={generateApprovalUrls(user.id).approveUrl}
-                                className="inline-flex items-center min-h-[44px] text-green-400 hover:text-green-300 font-medium transition-colors"
-                              >
-                                Approve
-                              </a>
-                              <a
-                                href={generateApprovalUrls(user.id).denyUrl}
-                                className="inline-flex items-center min-h-[44px] text-red-400 hover:text-red-300 font-medium transition-colors"
-                              >
-                                Deny
-                              </a>
-                            </>
+                            <a
+                              href={generateApprovalUrls(user.id).approveUrl}
+                              className="inline-flex items-center min-h-[44px] text-green-400 hover:text-green-300 font-medium transition-colors"
+                            >
+                              Approve
+                            </a>
                           )}
                           {approved && <span className="text-zinc-600 text-xs">\u2014</span>}
                         </td>

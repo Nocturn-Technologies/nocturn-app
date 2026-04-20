@@ -27,16 +27,16 @@ export async function signUpUser(formData: {
   const admin = createAdminClient();
   const userType = formData.userType ?? "collective";
 
-  // Collective signups require manual approval; all others are instant.
-  const requiresApproval = userType === "collective";
-  const isApproved = !requiresApproval;
+  // Beta gate: all new signups require manual approval.
+  const requiresApproval = true;
+  const isApproved = false;
 
   // Create user with auto-confirm via admin API (no email confirmation needed)
   const { data: newUser, error: createError } = await admin.auth.admin.createUser({
     email: formData.email,
     password: formData.password,
     email_confirm: true,
-    user_metadata: { full_name: formData.fullName, user_type: userType, is_approved: isApproved },
+    user_metadata: { full_name: formData.fullName, user_type: userType },
   });
 
   if (createError) {
@@ -308,6 +308,7 @@ export async function createCollective(formData: {
       id: user.id,
       email: user.email ?? "",
       full_name: user.user_metadata?.full_name ?? (user.email ? user.email.split("@")[0] : "User"),
+      is_approved: true,
     });
   }
 
@@ -416,7 +417,7 @@ async function sendApprovalRequestEmail(userId: string, email: string, name: str
 
   // Use HMAC-signed tokens instead of raw secret in URLs
   const { generateApprovalUrls } = await import("@/app/api/approve-user/route");
-  const { approveUrl, denyUrl } = generateApprovalUrls(userId);
+  const { approveUrl } = generateApprovalUrls(userId);
   const safeName = escapeHtml(name);
   const safeEmail = escapeHtml(email);
 
@@ -440,12 +441,9 @@ async function sendApprovalRequestEmail(userId: string, email: string, name: str
         <a href="${approveUrl}" style="display: inline-block; background: #2DD4BF; color: #09090B; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px;">
           Approve
         </a>
-        <a href="${denyUrl}" style="display: inline-block; background: #FB7185; color: #09090B; padding: 14px 32px; border-radius: 12px; text-decoration: none; font-weight: 700; font-size: 15px;">
-          Deny
-        </a>
       </div>
       <p style="color: #71717A; font-size: 12px; margin-top: 32px;">
-        Click Approve to give them full access. Click Deny to remove their account.
+        Click Approve to give them full access.
       </p>
     </div>
   `;
