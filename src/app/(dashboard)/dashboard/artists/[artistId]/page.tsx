@@ -11,7 +11,6 @@ import {
 import {
   ArrowLeft,
   Music,
-  Instagram,
   Mail,
   DollarSign,
   Calendar,
@@ -26,9 +25,7 @@ interface Artist {
   name: string;
   slug: string;
   bio: string | null;
-  genre: string[];
-  instagram: string | null;
-  soundcloud: string | null;
+  genre: string[] | null;
   spotify: string | null;
   booking_email: string | null;
   default_fee: number | null;
@@ -46,7 +43,6 @@ interface Booking {
     title: string;
     starts_at: string;
     status: string;
-    venues: { name: string; city: string } | null;
   };
 }
 
@@ -66,22 +62,34 @@ export default function ArtistDetailPage() {
 
   async function loadArtist() {
     const { data: artistData } = await supabase
-      .from("artists")
+      .from("artist_profiles")
       .select(
-        "id, name, slug, bio, genre, instagram, soundcloud, spotify, booking_email, default_fee"
+        "id, slug, bio, genre, spotify, booking_email, default_fee, parties(display_name)"
       )
       .eq("id", artistId)
       .maybeSingle();
 
-    if (artistData) setArtist(artistData as Artist);
+    if (artistData) {
+      const party = artistData.parties as unknown as { display_name: string } | null;
+      setArtist({
+        id: artistData.id,
+        name: party?.display_name ?? "",
+        slug: artistData.slug,
+        bio: artistData.bio,
+        genre: artistData.genre,
+        spotify: artistData.spotify,
+        booking_email: artistData.booking_email,
+        default_fee: artistData.default_fee,
+      });
+    }
 
     // Get all bookings for this artist with event details
     const { data: bookingData } = await supabase
       .from("event_artists")
       .select(
-        "id, fee, set_time, set_duration, status, notes, events(id, title, starts_at, status, venues(name, city))"
+        "id, fee, set_time, set_duration, status, notes, events(id, title, starts_at, status)"
       )
-      .eq("artist_id", artistId)
+      .eq("party_id", artistId)
       .order("created_at", { ascending: false });
 
     setBookings((bookingData ?? []) as unknown as Booking[]);
@@ -157,7 +165,7 @@ export default function ArtistDetailPage() {
 
   const statusColors: Record<string, string> = {
     pending: "bg-yellow-500/10 text-yellow-500",
-    confirmed: "bg-green-500/10 text-green-500",
+    confirmed: "bg-emerald-500/10 text-emerald-500",
     declined: "bg-red-500/10 text-red-500",
     cancelled: "bg-muted text-muted-foreground",
   };
@@ -183,9 +191,9 @@ export default function ArtistDetailPage() {
         </div>
         <div className="min-w-0">
           <h1 className="text-2xl font-bold font-heading truncate">{artist.name}</h1>
-          {artist.genre?.length > 0 && (
+          {(artist.genre?.length ?? 0) > 0 && (
             <div className="flex flex-wrap gap-1 mt-1">
-              {artist.genre.map((g) => (
+              {(artist.genre ?? []).map((g) => (
                 <span
                   key={g}
                   className="rounded-full bg-nocturn/10 px-2 py-0.5 text-xs font-medium text-nocturn"
@@ -204,19 +212,6 @@ export default function ArtistDetailPage() {
           {artist.bio && (
             <div className="sm:col-span-2">
               <p className="text-sm text-muted-foreground">{artist.bio}</p>
-            </div>
-          )}
-          {artist.instagram && (
-            <div className="flex items-center gap-2 text-sm">
-              <Instagram className="h-4 w-4 text-muted-foreground" />
-              <a
-                href={`https://instagram.com/${artist.instagram.replace("@", "")}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-nocturn hover:underline"
-              >
-                {artist.instagram}
-              </a>
             </div>
           )}
           {artist.booking_email && (
@@ -240,30 +235,11 @@ export default function ArtistDetailPage() {
       </Card>
 
       {/* Music Links */}
-      {(artist.soundcloud || artist.spotify) && (
+      {artist.spotify && (
         <Card>
           <CardContent className="p-4 space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Listen</p>
             <div className="flex flex-col gap-2">
-              {artist.soundcloud && (
-                <a
-                  href={artist.soundcloud.startsWith("http") ? artist.soundcloud : `https://soundcloud.com/${artist.soundcloud}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 rounded-lg border border-orange-500/20 bg-orange-500/5 p-3 hover:bg-orange-500/10 transition-colors"
-                >
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-500/20">
-                    <svg className="h-5 w-5 text-orange-400" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M11.56 8.87V17h8.76c1.85 0 2.68-1.22 2.68-2.68 0-2.3-1.73-3.38-3.38-3.38-.58 0-.87.08-1.15.17-.38-2.49-2.49-3.24-3.82-3.24-1.3 0-2.42.6-3.09 1z"/>
-                      <path d="M10.5 9.56V17h.5V8.87c-.17.17-.33.4-.5.69zm-1.5 2.4V17h.75V11.12c-.25.23-.5.5-.75.84zm-1.5 1.97V17h.75v-2.37c-.2.17-.45.4-.75.7zM6 15.27V17h.75v-1.73c-.18.12-.42.3-.75.55zM4.5 16.18V17h.75v-.82c-.25.15-.5.37-.75.55zM3 16.73V17h.75v-.27c-.25.1-.5.2-.75.3z"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-orange-400">SoundCloud</p>
-                    <p className="text-xs text-muted-foreground">Listen to tracks</p>
-                  </div>
-                </a>
-              )}
               {artist.spotify && (
                 <a
                   href={artist.spotify.startsWith("http") ? artist.spotify : `https://open.spotify.com/artist/${artist.spotify}`}
@@ -385,9 +361,6 @@ function BookingCard({
           <div className="flex-1 min-w-0">
             <p className="font-medium truncate">{booking.events.title}</p>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {booking.events.venues && (
-                <span>{booking.events.venues.name}</span>
-              )}
               {booking.fee && <span>${booking.fee}</span>}
               {booking.set_duration && <span>{booking.set_duration}min</span>}
             </div>

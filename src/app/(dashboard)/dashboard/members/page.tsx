@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { inviteMember, getTeamMembers, getPendingInvitations, cancelInvitation } from "@/app/actions/members";
+import { inviteMember, getTeamMembers, getPendingInvitations, cancelInvitation, removeCollectiveMember } from "@/app/actions/members";
 import { searchCollectives, startCollabChat } from "@/app/actions/collab";
-import { getReferralCode } from "@/app/actions/referral-program";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,10 +62,8 @@ interface PendingInvite {
   id: string;
   email: string;
   role: string;
-  status: string;
   created_at: string;
-  expires_at: string;
-  token: string;
+  expires_at: string | null;
 }
 
 interface CollectiveResult {
@@ -74,7 +72,7 @@ interface CollectiveResult {
   slug: string;
   logo_url: string | null;
   city: string | null;
-  description: string | null;
+  bio: string | null;
 }
 
 const roleLabels: Record<Role, string> = {
@@ -164,12 +162,11 @@ export default function MembersPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // Load referral code when switching to referral tab
+  // Referral codes are generated per-event via getReferralLink; no collective-level code yet
   useEffect(() => {
     if (activeTab === "referral" && collectiveId && !referralCode) {
-      getReferralCode(collectiveId).then((result) => {
-        if (!result.error && result.code) setReferralCode(result.code);
-      });
+      // Placeholder: show collective slug as referral identifier until per-collective codes land
+      setReferralCode(null);
     }
   }, [activeTab, collectiveId, referralCode]);
 
@@ -211,6 +208,13 @@ export default function MembersPage() {
 
   // Cancel a pending invite
   async function handleCancelInvite(inviteId: string) {
+    const ok = await confirm({
+      title: "Cancel this invitation?",
+      description: "The invited person won't be able to join.",
+      confirmText: "Cancel invitation",
+      destructive: true,
+    });
+    if (!ok) return;
     setCancellingInviteId(inviteId);
     const result = await cancelInvitation(inviteId);
     if (result.error) {
@@ -253,23 +257,13 @@ export default function MembersPage() {
       destructive: true,
     });
     if (!ok) return;
-    const member = members.find((m) => m.id === memberId);
-    if (member?.role === "admin") {
-      const adminCount = members.filter((m) => m.role === "admin").length;
-      if (adminCount <= 1) {
-        setError("Can't remove the last admin. Promote another member first.");
-        return;
-      }
-    }
 
     setRemovingId(memberId);
-    const { error } = await supabase
-      .from("collective_members")
-      .delete()
-      .eq("id", memberId);
+    // Server-side auth: verifies caller is admin/owner + prevents last-admin removal
+    const { error } = await removeCollectiveMember(memberId);
 
     if (error) {
-      setError(error.message);
+      setError(error);
       setRemovingId(null);
       return;
     }
@@ -413,13 +407,13 @@ export default function MembersPage() {
       {error && (
         <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive flex items-center justify-between animate-in fade-in duration-200">
           {error}
-          <button onClick={() => setError(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-destructive/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
+          <button aria-label="Dismiss" onClick={() => setError(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-destructive/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
         </div>
       )}
       {success && (
         <div className="rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-500 flex items-center justify-between animate-in fade-in duration-200">
           {success}
-          <button onClick={() => setSuccess(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-emerald-500/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
+          <button aria-label="Dismiss" onClick={() => setSuccess(null)} className="min-h-[44px] min-w-[44px] flex items-center justify-center shrink-0 rounded-md hover:bg-emerald-500/10 transition-colors duration-200 active:scale-[0.95]"><X className="h-4 w-4" /></button>
         </div>
       )}
 
@@ -486,8 +480,8 @@ export default function MembersPage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {pendingInvites.map((invite) => {
-                  const expiresAt = new Date(invite.expires_at);
-                  const daysLeft = Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 86400000));
+                  const expiresAt = invite.expires_at ? new Date(invite.expires_at) : null;
+                  const daysLeft = expiresAt ? Math.max(0, Math.ceil((expiresAt.getTime() - Date.now()) / 86400000)) : 7;
                   return (
                     <div
                       key={invite.id}
@@ -684,9 +678,9 @@ export default function MembersPage() {
                         {c.city && (
                           <p className="text-xs text-muted-foreground">{c.city}</p>
                         )}
-                        {c.description && (
+                        {c.bio && (
                           <p className="text-xs text-muted-foreground truncate mt-0.5">
-                            {c.description}
+                            {c.bio}
                           </p>
                         )}
                       </div>

@@ -138,7 +138,7 @@ function TicketSuccess({
       </div>
 
       {/* Subtle share hint */}
-      <p className="text-[11px] text-muted-foreground/50 text-center">
+      <p className="text-[11px] text-muted-foreground/70 text-center">
         📸 Screenshot and post to your story
       </p>
     </div>
@@ -278,7 +278,7 @@ function CheckoutForm({
         </Button>
       </div>
 
-      <p className="text-center text-[11px] text-muted-foreground/60">
+      <p className="text-center text-[11px] text-muted-foreground/70">
         By purchasing, you agree to the{" "}
         <a href="/legal/terms" target="_blank" className="underline hover:text-muted-foreground">Terms of Service</a>
         {" "}and{" "}

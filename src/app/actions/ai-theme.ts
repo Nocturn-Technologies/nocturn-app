@@ -19,6 +19,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { verifyEventOwnership } from "@/lib/auth/ownership";
 import { generateWithClaudeVision } from "@/lib/claude";
 import { revalidatePath } from "next/cache";
 import type { Json } from "@/lib/supabase/database.types";
@@ -93,26 +94,19 @@ function parseThemeJson(raw: string | null): EventTheme {
   }
 }
 
+// ai-theme callers need the event row (for its id / collective_id), not
+// just a boolean. Delegate the membership + soft-delete check to the
+// shared helper, then fetch the row once the gate passes.
 async function verifyEventAccess(userId: string, eventId: string) {
+  const ok = await verifyEventOwnership(userId, eventId);
+  if (!ok) return null;
   const admin = createAdminClient();
-
   const { data: event, error: eventErr } = await admin
     .from("events")
     .select("id, collective_id")
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
-
   if (eventErr || !event) return null;
-
-  const { count } = await admin
-    .from("collective_members")
-    .select("*", { count: "exact", head: true })
-    .eq("collective_id", event.collective_id)
-    .eq("user_id", userId)
-    .is("deleted_at", null);
-
-  if (!count || count === 0) return null;
   return event;
 }
 
@@ -246,7 +240,6 @@ Rules:
       .from("events")
       .select("metadata")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     const existingMetadata = (currentEvent?.metadata ?? {}) as Record<string, unknown>;
@@ -264,8 +257,7 @@ Rules:
         // Cast to satisfy the generated Json type — metadata is jsonb.
         metadata: newMetadata as unknown as { [key: string]: Json | undefined },
       })
-      .eq("id", eventId)
-      .is("deleted_at", null);
+      .eq("id", eventId);
 
     if (updateErr) {
       console.error("[ai-theme] event update error:", updateErr.message);
@@ -314,7 +306,6 @@ export async function clearEventFlyer(
       .from("events")
       .select("metadata")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     const existingMetadata = (currentEvent?.metadata ?? {}) as Record<string, unknown>;
@@ -327,8 +318,7 @@ export async function clearEventFlyer(
         flyer_url: null,
         metadata: newMetadata as unknown as { [key: string]: Json | undefined },
       })
-      .eq("id", eventId)
-      .is("deleted_at", null);
+      .eq("id", eventId);
 
     if (error) {
       console.error("[clearEventFlyer] update error:", error.message);

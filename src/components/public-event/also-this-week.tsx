@@ -18,7 +18,7 @@ export function AlsoThisWeek({ events, city }: { events: NearbyEvent[]; city?: s
   return (
     <section className="border-t border-white/5 bg-[#09090B] px-6 py-10">
       <div className="mx-auto max-w-[640px]">
-        <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40 mb-5">
+        <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/60 mb-5">
           Also happening{city ? ` in ${city}` : " this week"}
         </h2>
         <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-none">
@@ -50,7 +50,7 @@ export function AlsoThisWeek({ events, city }: { events: NearbyEvent[]; city?: s
 
                 {/* Info */}
                 <div className="p-3 space-y-1">
-                  <p className="text-xs text-white/40">
+                  <p className="text-xs text-white/60">
                     {dayName} {monthDay}
                     {event.venueName && <span> · {event.venueName}</span>}
                   </p>

@@ -41,6 +41,8 @@ import { LiveTicketStats } from "@/components/events/live-ticket-stats";
 import { EventUpdatesComposer } from "@/components/events/event-updates-composer";
 import { listEventUpdatesPublic } from "@/app/actions/event-updates";
 import { RsvpLiveList } from "@/components/events/rsvp-live-list";
+import { TicketHoldersLiveList } from "@/components/events/ticket-holders-live-list";
+import { listEventTicketHolders } from "@/app/actions/ticket-holders";
 import { listEventRsvps } from "@/app/actions/rsvps";
 
 interface Props {
@@ -58,8 +60,8 @@ const statusConfig: Record<
   },
   published: {
     label: "Published",
-    color: "bg-green-500/10 text-green-500 ring-green-500/20",
-    dotColor: "bg-green-500",
+    color: "bg-emerald-500/10 text-emerald-500 ring-emerald-500/20",
+    dotColor: "bg-emerald-500",
   },
   upcoming: {
     label: "Upcoming",
@@ -89,7 +91,7 @@ const statusConfig: Record<
 const actionTones = {
   nocturn: "bg-nocturn/10 text-nocturn group-hover:bg-nocturn/15",
   glow: "bg-nocturn-glow/10 text-nocturn-glow group-hover:bg-nocturn-glow/15",
-  green: "bg-green-400/10 text-green-400 group-hover:bg-green-400/15",
+  green: "bg-emerald-400/10 text-emerald-400 group-hover:bg-emerald-400/15",
   amber: "bg-nocturn-amber/10 text-nocturn-amber group-hover:bg-nocturn-amber/15",
   muted: "bg-muted text-muted-foreground group-hover:bg-muted/80",
 } as const;
@@ -158,28 +160,36 @@ export default async function EventDetailPage({ params }: Props) {
   // Use admin client to bypass RLS
   const admin = createAdminClient();
 
-  // Verify user owns this event via collective membership
-  const { data: memberships } = await admin
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-
-  const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
-
-  if (collectiveIds.length === 0) notFound();
-
-  // Fetch event with venue
+  // Fetch event with flat venue columns. is_free drives whether we render
+  // the RSVPs widget (free/rsvp events) or the Ticket Holders widget
+  // (ticketed events) below.
   const { data: event } = await admin
     .from("events")
     .select(
-      "id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, collective_id, venues(name, address, city, capacity)"
+      "id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, collective_id, is_free, venue_name, venue_address, city, capacity"
     )
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
 
-  if (!event || !collectiveIds.includes(event.collective_id)) notFound();
+  if (!event) notFound();
+
+  // Verify the caller belongs to the exact collective that owns this event.
+  // This is more robust than fetching a broader membership list first and
+  // avoids false 404s when the dashboard is working against rebuilt-schema
+  // data with stale assumptions.
+  const { count: membershipCount, error: membershipError } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("collective_id", event.collective_id)
+    .is("deleted_at", null);
+
+  if (membershipError) {
+    console.error("[EventDetailPage] membership query error:", membershipError.message);
+    notFound();
+  }
+
+  if (!membershipCount) notFound();
 
   // Get collective slug for public link
   const { data: collective } = await admin
@@ -201,15 +211,15 @@ export default async function EventDetailPage({ params }: Props) {
     const tierIds = rawTiers.map((t) => t.id);
     const { data: soldData } = await admin
       .from("tickets")
-      .select("ticket_tier_id")
-      .in("ticket_tier_id", tierIds)
-      .in("status", ["paid", "checked_in"]);
+      .select("tier_id")
+      .in("tier_id", tierIds)
+      .in("status", ["valid", "checked_in"]);
 
     if (soldData) {
       for (const ticket of soldData) {
-        if (!ticket.ticket_tier_id) continue;
-        tierSoldCounts[ticket.ticket_tier_id] =
-          (tierSoldCounts[ticket.ticket_tier_id] ?? 0) + 1;
+        if (!ticket.tier_id) continue;
+        tierSoldCounts[ticket.tier_id] =
+          (tierSoldCounts[ticket.tier_id] ?? 0) + 1;
       }
     }
   }
@@ -234,20 +244,18 @@ export default async function EventDetailPage({ params }: Props) {
     .eq("event_id", eventId)
     .eq("status", "refunded");
 
-  // Get disputed ticket count
+  // Get disputed ticket count (voided = potential dispute indicator)
   const { count: disputedCount } = await admin
     .from("tickets")
     .select("*", { count: "exact", head: true })
     .eq("event_id", eventId)
-    .eq("status", "cancelled")
-    .filter("metadata->>disputed", "eq", "true");
+    .eq("status", "voided");
 
   // Fetch task progress for playbook
   const { data: taskStats } = await admin
     .from("event_tasks")
     .select("status")
-    .eq("event_id", eventId)
-    .is("deleted_at", null);
+    .eq("event_id", eventId);
 
   const taskTotal = taskStats?.length ?? 0;
   const taskDone = taskStats?.filter((t: { status: string | null }) => t.status === "done").length ?? 0;
@@ -256,15 +264,29 @@ export default async function EventDetailPage({ params }: Props) {
   // Fetch existing updates for the composer
   const { updates: existingUpdates } = await listEventUpdatesPublic(eventId);
 
-  // Fetch RSVPs (with contact info — only visible to collective members)
-  const { rsvps: initialRsvps } = await listEventRsvps(eventId);
+  // Free events show the RSVPs widget. Ticketed events show the
+  // Ticket Holders widget (who actually paid + checked-in status + CSV).
+  // Fetch both lazily — only the active one is rendered, but keeping both
+  // fetches cheap avoids a conditional data-flow that breaks component
+  // initial state.
+  const isTicketedMode = !event.is_free;
 
-  const venue = event.venues as unknown as {
-    name: string;
-    address: string;
-    city: string;
-    capacity: number;
-  } | null;
+  const { rsvps: initialRsvps } = isTicketedMode
+    ? { rsvps: [] }
+    : await listEventRsvps(eventId);
+
+  const { holders: initialHolders } = isTicketedMode
+    ? await listEventTicketHolders(eventId)
+    : { holders: [] };
+
+  const venue = event.venue_name
+    ? {
+        name: event.venue_name,
+        address: event.venue_address ?? "",
+        city: event.city ?? "",
+        capacity: event.capacity ?? 0,
+      }
+    : null;
 
   const eventDate = new Date(event.starts_at);
   const endsAt = event.ends_at ? new Date(event.ends_at) : null;
@@ -599,20 +621,27 @@ export default async function EventDetailPage({ params }: Props) {
       {/* External Ticket Data */}
       <ExternalTicketsFormWrapper eventId={event.id} />
 
-      {/* RSVPs — live updates from the public page */}
+      {/* Attendees widget — RSVPs for free/rsvp-mode events, Ticket holders
+          for ticketed events. Header label + content both switch based on
+          mode so "Going (17)" doesn't confuse operators looking at a paid
+          event's attendee list. */}
       <Card className="rounded-2xl border-border hover:border-nocturn/20 transition-all duration-200">
         <CardHeader className="pb-4">
           <CardTitle className="flex items-center gap-2 text-lg font-bold">
             <Users className="h-4 w-4 text-nocturn" />
-            RSVPs
+            {isTicketedMode ? "Ticket holders" : "RSVPs"}
             <span className="ml-auto inline-flex items-center gap-1.5 text-xs font-normal text-muted-foreground">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               Live
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <RsvpLiveList eventId={event.id} initialRsvps={initialRsvps} />
+          {isTicketedMode ? (
+            <TicketHoldersLiveList eventId={event.id} initialHolders={initialHolders} />
+          ) : (
+            <RsvpLiveList eventId={event.id} initialRsvps={initialRsvps} />
+          )}
         </CardContent>
       </Card>
 

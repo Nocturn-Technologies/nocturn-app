@@ -60,22 +60,22 @@ export default async function AnalyticsPage() {
     { count: waitlistEntries },
   ] = await Promise.all([
     admin.from("collectives").select("*", { count: "exact", head: true }),
-    admin.from("events").select("*", { count: "exact", head: true }).is("deleted_at", null),
-    admin.from("events").select("*", { count: "exact", head: true }).eq("status", "published").is("deleted_at", null),
-    admin.from("events").select("*", { count: "exact", head: true }).eq("status", "completed").is("deleted_at", null),
+    admin.from("events").select("*", { count: "exact", head: true }),
+    admin.from("events").select("*", { count: "exact", head: true }).eq("status", "published"),
+    admin.from("events").select("*", { count: "exact", head: true }).eq("status", "completed"),
     admin.from("tickets").select("*", { count: "exact", head: true }),
-    admin.from("tickets").select("*", { count: "exact", head: true }).in("status", ["paid", "checked_in"]),
-    admin.from("tickets").select("*", { count: "exact", head: true }).eq("status", "free"),
+    admin.from("tickets").select("*", { count: "exact", head: true }).in("status", ["valid", "checked_in"]),
+    admin.from("tickets").select("*", { count: "exact", head: true }).eq("status", "voided"),
     admin.from("tickets").select("*", { count: "exact", head: true }).eq("status", "checked_in"),
     admin.from("users").select("*", { count: "exact", head: true }),
-    admin.from("artists").select("*", { count: "exact", head: true }),
-    admin.from("venues").select("*", { count: "exact", head: true }),
-    // Last 30 days tickets
-    admin.from("tickets").select("created_at, price_paid").in("status", ["paid", "checked_in"]).gte("created_at", thirtyDaysAgo),
-    // Previous 30 days tickets (for comparison)
-    admin.from("tickets").select("created_at, price_paid").in("status", ["paid", "checked_in"]).gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
+    admin.from("artist_profiles").select("*", { count: "exact", head: true }),
+    admin.from("venue_profiles").select("*", { count: "exact", head: true }),
+    // Last 30 days paid orders
+    admin.from("orders").select("created_at, total").eq("status", "paid").gte("created_at", thirtyDaysAgo),
+    // Previous 30 days paid orders (for comparison)
+    admin.from("orders").select("created_at, total").eq("status", "paid").gte("created_at", sixtyDaysAgo).lt("created_at", thirtyDaysAgo),
     // All settlements
-    admin.from("settlements").select("gross_revenue, net_revenue, platform_fee, profit, status"),
+    admin.from("settlements").select("total_revenue, net_payout, platform_fee, status"),
     // New collectives last 30d
     admin.from("collectives").select("*", { count: "exact", head: true }).gte("created_at", thirtyDaysAgo),
     // New users last 30d
@@ -83,21 +83,21 @@ export default async function AnalyticsPage() {
     // Top collectives by event count
     admin.from("collectives").select("id, name, slug").limit(10),
     // Recent events
-    admin.from("events").select("id, title, starts_at, status, collective_id, collectives(name)").is("deleted_at", null).order("created_at", { ascending: false }).limit(10),
+    admin.from("events").select("id, title, starts_at, status, collective_id, collectives(name)").order("created_at", { ascending: false }).limit(10),
     // Waitlist
-    admin.from("ticket_waitlist").select("*", { count: "exact", head: true }),
+    admin.from("waitlist_entries").select("*", { count: "exact", head: true }),
   ]);
 
   // Revenue calculations
-  const recentTicketRows = (recentTickets ?? []) as { created_at: string; price_paid: number }[];
-  const previousTicketRows = (previousTickets ?? []) as { created_at: string; price_paid: number }[];
-  const totalGMV = recentTicketRows.reduce((s, t) => s + Number(t.price_paid || 0), 0);
-  const prevGMV = previousTicketRows.reduce((s, t) => s + Number(t.price_paid || 0), 0);
+  const recentTicketRows = (recentTickets ?? []) as { created_at: string; total: number }[];
+  const previousTicketRows = (previousTickets ?? []) as { created_at: string; total: number }[];
+  const totalGMV = recentTicketRows.reduce((s, t) => s + Number(t.total || 0), 0);
+  const prevGMV = previousTicketRows.reduce((s, t) => s + Number(t.total || 0), 0);
   const gmvGrowth = prevGMV > 0 ? ((totalGMV - prevGMV) / prevGMV) * 100 : totalGMV > 0 ? 100 : 0;
 
-  const settlementRows = (settlements ?? []) as { gross_revenue: number; net_revenue: number; platform_fee: number; profit: number; status: string }[];
+  const settlementRows = (settlements ?? []) as { total_revenue: number; net_payout: number; platform_fee: number; status: string }[];
   const totalPlatformFees = settlementRows.reduce((s, r) => s + Number(r.platform_fee || 0), 0);
-  const totalGrossRevenue = settlementRows.reduce((s, r) => s + Number(r.gross_revenue || 0), 0);
+  const totalGrossRevenue = settlementRows.reduce((s, r) => s + Number(r.total_revenue || 0), 0);
 
   const recentTicketCount = recentTicketRows.length;
   const prevTicketCount = previousTicketRows.length;
@@ -247,7 +247,7 @@ export default async function AnalyticsPage() {
                   </p>
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
-                  e.status === "published" ? "bg-green-500/10 text-green-500" :
+                  e.status === "published" ? "bg-emerald-500/10 text-emerald-500" :
                   e.status === "completed" ? "bg-blue-500/10 text-blue-500" :
                   e.status === "draft" ? "bg-yellow-500/10 text-yellow-500" :
                   "bg-muted text-muted-foreground"
@@ -280,7 +280,7 @@ function KPICard({ label, value, sub, growth, icon }: {
         <p className="text-xl font-bold truncate">{value}</p>
         <div className="flex items-center gap-1 mt-0.5">
           {growth !== undefined && growth !== 0 && (
-            <span className={`text-xs flex items-center gap-0.5 ${growth > 0 ? "text-green-500" : "text-red-400"}`}>
+            <span className={`text-xs flex items-center gap-0.5 ${growth > 0 ? "text-emerald-500" : "text-red-400"}`}>
               {growth > 0 ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
               {Math.abs(Math.round(growth))}%
             </span>

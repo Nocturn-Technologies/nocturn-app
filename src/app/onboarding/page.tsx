@@ -50,6 +50,7 @@ export default function OnboardingPage() {
   const [error, setError] = useState<string | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
   const [isPaidEvent, setIsPaidEvent] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Live name availability check (debounced).
   // "idle" = nothing typed yet or just changed; "checking" = request in flight;
@@ -74,9 +75,12 @@ export default function OnboardingPage() {
           // Restore date as Date object
           setEventData({ ...data.eventData, date: new Date(data.eventData.date) });
         }
-        // Restore to the step they were on (but not "creating" or "share")
+        // Restore to the step they were on (but not "creating" or "share").
+        // If step is "event" but eventData didn't restore, fall back to "vibe"
+        // to avoid a blank screen with no CTA.
         if (data.step && data.step !== "creating" && data.step !== "share") {
-          setStep(data.step);
+          const restoredStep = data.step === "event" && !data.eventData ? "vibe" : data.step;
+          setStep(restoredStep);
         }
       }
     } catch {}
@@ -144,7 +148,8 @@ export default function OnboardingPage() {
     setEventData(createInitialEventData(vibe, name));
   }
 
-  async function handleCreate() {
+  async function handleCreate(skipEventOverride?: boolean) {
+    setIsSubmitting(true);
     setStep("creating");
     setError(null);
 
@@ -170,6 +175,7 @@ export default function OnboardingPage() {
 
     if (result.error) {
       setError(result.error);
+      setIsSubmitting(false);
       const isNameConflict = result.error.toLowerCase().includes("already taken");
       // Name conflict → back to Screen 1 to edit the name.
       // Anything else → back to wherever they were so they can retry.
@@ -178,7 +184,9 @@ export default function OnboardingPage() {
     }
 
     // 2. Create event (if not skipped)
-    if (!skipEvent && eventData) {
+    // Use skipEventOverride when passed (avoids stale-closure issue from handleSkipEvent)
+    const shouldSkip = skipEventOverride ?? skipEvent;
+    if (!shouldSkip && eventData) {
       const eventResult = await createOnboardingEvent({
         collectiveSlug: slug,
         title: eventData.title,
@@ -199,7 +207,7 @@ export default function OnboardingPage() {
     }
 
     // Track if this is a paid event (created as draft, not live)
-    if (!skipEvent && eventData && eventData.tierPrice > 0) {
+    if (!shouldSkip && eventData && eventData.tierPrice > 0) {
       setIsPaidEvent(true);
     }
 
@@ -209,7 +217,9 @@ export default function OnboardingPage() {
 
   function handleSkipEvent() {
     setSkipEvent(true);
-    handleCreate();
+    // Pass skip=true explicitly — React state update is async so skipEvent
+    // would still be false inside handleCreate if we relied on the state value.
+    handleCreate(true);
   }
 
   function goToDashboard() {
@@ -218,7 +228,7 @@ export default function OnboardingPage() {
     router.refresh();
   }
 
-  const currentStep = step === "name_city" ? 1 : step === "vibe" ? 2 : step === "event" ? 3 : step === "share" ? 3 : 0;
+  const currentStep = step === "name_city" ? 1 : step === "vibe" ? 2 : step === "event" ? 3 : step === "creating" ? 3 : step === "share" ? 3 : 0;
   const totalSteps = 3;
 
   // Show loading spinner until auth check completes
@@ -261,12 +271,13 @@ export default function OnboardingPage() {
           {/* Screen 1: Name + City */}
           {step === "name_city" && (
             <div className="space-y-6 animate-fade-in-up">
-              <div className="text-center space-y-2">
-                <h2 className="text-2xl font-bold font-heading tracking-tight">
-                  What&apos;s your collective called?
+              <div className="space-y-3">
+                <div className="section-label-mono">01 / YOUR CREW</div>
+                <h2 className="text-3xl md:text-4xl font-bold font-heading tracking-[-0.025em] leading-[1.05]">
+                  What&apos;s the crew<br/>called?
                 </h2>
                 <p className="text-sm text-muted-foreground">
-                  You can always change this later
+                  You can always change this later.
                 </p>
               </div>
 
@@ -280,9 +291,9 @@ export default function OnboardingPage() {
                     autoFocus
                   />
                   {slug && (
-                    <p className="text-xs text-muted-foreground px-1 flex items-center gap-2">
+                    <p className="text-xs text-muted-foreground px-1 flex items-center gap-2 font-mono">
                       <span>
-                        nocturn.app/<span className="text-nocturn font-medium">{slug}</span>
+                        nocturn.app/<span className="text-nocturn-glow font-medium">{slug}</span>
                       </span>
                       {nameCheck.status === "checking" && (
                         <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
@@ -303,7 +314,7 @@ export default function OnboardingPage() {
                 </div>
 
                 <Input
-                  placeholder="Where are you based? (e.g. Toronto)"
+                  placeholder="Your city — Toronto, Brooklyn, CDMX…"
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
                   className="text-base h-12"
@@ -393,6 +404,7 @@ export default function OnboardingPage() {
 
               <Button
                 onClick={() => handleCreate()}
+                disabled={isSubmitting}
                 className="w-full bg-nocturn hover:bg-nocturn-light py-5 text-base min-h-[48px]"
               >
                 <Sparkles className="mr-2 h-4 w-4" />

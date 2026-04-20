@@ -29,12 +29,11 @@ export async function sendCampaignEmail(input: {
 
   const sb = createAdminClient();
 
-  // Get event to verify ownership
+  // Get event to verify ownership and get collective_id
   const { data: event } = await sb
     .from("events")
     .select("id, title, collective_id")
     .eq("id", input.eventId)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event) return { error: "Event not found", sent: 0 };
@@ -51,19 +50,18 @@ export async function sendCampaignEmail(input: {
 
   if (!membership) return { error: "Only admins and promoters can send campaigns", sent: 0 };
 
-  // Get all attendee emails for this event
-  const { data: tickets } = await sb
-    .from("tickets")
-    .select("metadata")
-    .eq("event_id", input.eventId)
-    .in("status", ["paid", "checked_in"]);
+  // Get all attendee emails for this collective from attendee_profiles
+  // attendee_profiles has email directly and is scoped to collective_id
+  const { data: attendees } = await sb
+    .from("attendee_profiles")
+    .select("email")
+    .eq("collective_id", event.collective_id)
+    .not("email", "is", null);
 
   // Deduplicate emails
   const emails = new Set<string>();
-  for (const ticket of tickets ?? []) {
-    const meta = ticket.metadata as Record<string, unknown> | null;
-    const email = (meta?.customer_email as string) || (meta?.buyer_email as string);
-    if (email) emails.add(email.toLowerCase().trim());
+  for (const attendee of attendees ?? []) {
+    if (attendee.email) emails.add(attendee.email.toLowerCase().trim());
   }
 
   if (emails.size === 0) {

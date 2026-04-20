@@ -43,37 +43,54 @@ export async function POST() {
 
     const sb = createAdminClient();
 
-    const venues = MOCK_VENUES.map((v) => ({
-      name: v.name,
-      slug: slugify(v.name),
-      address: v.address,
-      city: v.city,
-      capacity: v.capacity,
-      contact_email: null,
-      latitude: v.latitude,
-      longitude: v.longitude,
-      metadata: {
-        venue_type: v.venue_type,
-        neighbourhood: v.neighbourhood,
-        rating: v.rating,
-        review_count: v.review_count,
-        phone: v.phone,
-        website: v.website,
-        hours: v.hours,
-      },
-    }));
+    let seeded = 0;
 
-    const { data, error } = await sb
-      .from("venues")
-      .upsert(venues, { onConflict: "slug" })
-      .select("id, name");
+    for (const v of MOCK_VENUES) {
+      const slug = slugify(v.name);
 
-    if (error) {
-      console.error("[seed-venues] Upsert failed:", error);
-      return NextResponse.json({ error: "Failed to seed venues" }, { status: 500 });
+      // Check if a venue_profile with this slug already exists
+      const { data: existing } = await sb
+        .from("venue_profiles")
+        .select("id")
+        .eq("slug", slug)
+        .maybeSingle();
+
+      if (existing) continue;
+
+      // Create party first
+      const { data: party, error: partyError } = await sb
+        .from("parties")
+        .insert({ display_name: v.name, type: "venue" })
+        .select("id")
+        .single();
+
+      if (partyError || !party) {
+        console.error("[seed-venues] Failed to insert party:", partyError);
+        continue;
+      }
+
+      // Create venue_profile linked to party
+      const { error: profileError } = await sb
+        .from("venue_profiles")
+        .insert({
+          party_id: party.id,
+          slug,
+          name: v.name,
+          city: v.city,
+          address: v.address,
+          capacity: v.capacity,
+          photo_url: v.photo_url,
+        });
+
+      if (profileError) {
+        console.error("[seed-venues] Failed to insert venue_profile:", profileError);
+        continue;
+      }
+
+      seeded++;
     }
 
-    return NextResponse.json({ seeded: data?.length ?? 0 });
+    return NextResponse.json({ seeded });
   } catch (err) {
     console.error("[seed-venues]", err);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });

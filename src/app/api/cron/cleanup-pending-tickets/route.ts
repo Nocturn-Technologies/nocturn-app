@@ -16,7 +16,6 @@ function safeCompare(a: string, b: string): boolean {
  */
 export async function GET(request: NextRequest) {
   // Verify cron secret to prevent unauthorized access.
-  // TODO(audit): log successful auth for audit trail
   const authHeader = request.headers.get("authorization") ?? "";
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
@@ -26,6 +25,7 @@ export async function GET(request: NextRequest) {
   if (!safeCompare(authHeader, `Bearer ${cronSecret}`)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+  console.info(`[cleanup-pending-tickets] cron triggered at ${new Date().toISOString()}`);
 
   const supabase = createAdminClient();
 
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       .delete()
       .eq("status", "pending")
       .lt("created_at", thirtyMinAgo)
-      .select("id, event_id, ticket_tier_id");
+      .select("id, event_id, tier_id");
 
     if (error) {
       console.error("[cleanup-pending-tickets] Delete failed:", error);
@@ -46,12 +46,11 @@ export async function GET(request: NextRequest) {
 
     const count = deleted?.length ?? 0;
     if (count > 0) {
-      console.info(`[cleanup-pending-tickets] Cleaned up ${count} expired pending ticket(s)`);
-
       // Release promo claims for expired pending tickets if they had promos
       // (Promo claims are released on payment_intent.payment_failed, but abandoned checkouts
       // where the user just closes the tab never trigger that webhook)
     }
+    console.info(`[cleanup-pending-tickets] completed — cleaned ${count} expired pending ticket(s)`);
 
     return NextResponse.json({ cleaned: count });
   } catch (err) {

@@ -8,8 +8,12 @@ import { rateLimitStrict } from "@/lib/rate-limit";
 
 /**
  * Refund a ticket — marks as refunded in DB and issues Stripe refund.
- * Only works for paid tickets with a stripe_payment_intent_id.
- * Free tickets are just cancelled (no Stripe refund needed).
+ * Only works for valid/checked_in tickets linked to an order with a stripe_payment_intent_id.
+ * Free tickets are just voided (no Stripe refund needed).
+ *
+ * New schema: price lives on order_lines.unit_price, Stripe PI on orders.stripe_payment_intent_id.
+ * After refunding: inserts a ticket_events record, updates order_lines.refunded_quantity,
+ * and updates orders.status to 'refunded' or 'partially_refunded'.
  */
 export async function refundTicket(ticketId: string) {
   try {
@@ -25,10 +29,33 @@ export async function refundTicket(ticketId: string) {
 
     const sb = createAdminClient();
 
-    // Get ticket with event info for ownership check
+    // Get ticket with event info and order data for price/PI lookup
     const { data: ticket, error: ticketError } = await sb
       .from("tickets")
-      .select("id, event_id, ticket_tier_id, status, price_paid, stripe_payment_intent_id, metadata, events(collective_id, metadata)")
+      .select(`
+        id,
+        event_id,
+        tier_id,
+        status,
+        holder_party_id,
+        qr_code,
+        order_line_id,
+        events:event_id (collective_id, metadata),
+        order_lines:order_line_id (
+          id,
+          unit_price,
+          quantity,
+          refunded_quantity,
+          order_id,
+          orders:order_id (
+            id,
+            stripe_payment_intent_id,
+            status,
+            metadata,
+            promo_code_id
+          )
+        )
+      `)
       .eq("id", ticketId)
       .maybeSingle();
 
@@ -46,23 +73,48 @@ export async function refundTicket(ticketId: string) {
     if (eventMeta.refunds_enabled === false) {
       return { error: "Refunds are disabled for this event. The organizer has set a no-refund policy." };
     }
+
+    // Admin-only. Previously admin+promoter, but refunds move real money —
+    // a compromised promoter account could drain revenue before an admin
+    // notices. Aligns with toggleRefundPolicy's admin-only gate.
     const { data: membership } = await sb
       .from("collective_members")
       .select("role")
       .eq("user_id", user.id)
       .eq("collective_id", event.collective_id)
-      .in("role", ["admin", "promoter"])
+      .eq("role", "admin")
       .is("deleted_at", null)
       .maybeSingle();
 
-    if (!membership) return { error: "Only active admins and promoters can issue refunds" };
+    if (!membership) return { error: "Only active admins can issue refunds" };
 
-    // Can only refund paid or checked_in tickets
-    if (!["paid", "checked_in"].includes(ticket.status)) {
+    // Can only refund valid or checked_in tickets
+    if (!["valid", "checked_in"].includes(ticket.status)) {
       return { error: `Cannot refund a ticket with status "${ticket.status}"` };
     }
 
-    const pricePaid = Number(ticket.price_paid) || 0;
+    // Resolve price and Stripe PI from the linked order
+    const orderLine = ticket.order_lines as unknown as {
+      id: string;
+      unit_price: number;
+      quantity: number;
+      refunded_quantity: number;
+      order_id: string;
+      orders: {
+        id: string;
+        stripe_payment_intent_id: string | null;
+        status: string;
+        metadata: Record<string, unknown> | null;
+        promo_code_id: string | null;
+      } | null;
+    } | null;
+
+    const order = orderLine?.orders ?? null;
+    const pricePaid = Number(orderLine?.unit_price ?? 0);
+    const stripePaymentIntentId = order?.stripe_payment_intent_id ?? null;
+    const orderLineId = orderLine?.id ?? null;
+    const orderId = order?.id ?? null;
+    const promoCodeId = order?.promo_code_id ?? null;
 
     // SECURITY: Atomically claim the ticket for refund FIRST, then issue Stripe refund.
     // This prevents double-refund race conditions where two concurrent requests
@@ -71,15 +123,9 @@ export async function refundTicket(ticketId: string) {
       .from("tickets")
       .update({
         status: "refunded",
-        metadata: {
-          ...(ticket.metadata as Record<string, unknown>),
-          refunded_at: new Date().toISOString(),
-          refunded_by: user.id,
-          refund_amount: pricePaid,
-        },
       })
       .eq("id", ticketId)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     if (updateError) {
       return { error: "Failed to update ticket status" };
@@ -89,12 +135,62 @@ export async function refundTicket(ticketId: string) {
       return { error: "Ticket was already refunded or status changed. No action taken." };
     }
 
+    // Insert ticket_events audit record for the refund
+    void sb
+      .from("ticket_events")
+      .insert({
+        ticket_id: ticketId,
+        event_type: "refunded",
+        party_id: null,
+        metadata: {
+          refunded_at: new Date().toISOString(),
+          refunded_by_user_id: user.id,
+          refund_amount: pricePaid,
+          stripe_payment_intent_id: stripePaymentIntentId,
+        },
+      })
+      .then(() => {}, (e: unknown) => console.error("[refundTicket] ticket_events insert failed (non-blocking):", e));
+
+    // Update order_lines.refunded_quantity
+    if (orderLineId) {
+      const currentRefunded = orderLine?.refunded_quantity ?? 0;
+      void sb
+        .from("order_lines")
+        .update({ refunded_quantity: currentRefunded + 1 })
+        .eq("id", orderLineId)
+        .then(() => {}, (e: unknown) => console.error("[refundTicket] order_lines update failed (non-blocking):", e));
+    }
+
+    // Update orders.status based on whether all tickets in all lines are refunded.
+    // Re-fetch after the order_lines update above to get current values.
+    if (orderId) {
+      try {
+        const { data: allLines } = await sb
+          .from("order_lines")
+          .select("quantity, refunded_quantity")
+          .eq("order_id", orderId);
+
+        if (allLines) {
+          const totalQty = allLines.reduce((sum, ol) => sum + ol.quantity, 0);
+          const totalRefunded = allLines.reduce((sum, ol) => sum + (ol.refunded_quantity ?? 0), 0);
+          const newOrderStatus: "refunded" | "partially_refunded" =
+            totalRefunded >= totalQty ? "refunded" : "partially_refunded";
+          await sb
+            .from("orders")
+            .update({ status: newOrderStatus })
+            .eq("id", orderId);
+        }
+      } catch (orderStatusErr) {
+        console.error("[refundTicket] Failed to update order status (non-blocking):", orderStatusErr);
+      }
+    }
+
     // Issue Stripe refund AFTER atomic status claim (safe from double-refund)
-    if (ticket.stripe_payment_intent_id && pricePaid > 0) {
+    if (stripePaymentIntentId && pricePaid > 0) {
       try {
         const stripe = getStripe();
         await stripe.refunds.create({
-          payment_intent: ticket.stripe_payment_intent_id,
+          payment_intent: stripePaymentIntentId,
           // Refund the ticket price portion only (service fee is non-refundable)
           amount: Math.round(pricePaid * 100),
           reason: "requested_by_customer",
@@ -108,11 +204,6 @@ export async function refundTicket(ticketId: string) {
           .from("tickets")
           .update({
             status: ticket.status, // Revert to original status
-            metadata: {
-              ...(ticket.metadata as Record<string, unknown>),
-              refund_failed_at: new Date().toISOString(),
-              refund_error: "Stripe refund failed",
-            },
           })
           .eq("id", ticketId)
           .eq("status", "refunded");
@@ -120,9 +211,32 @@ export async function refundTicket(ticketId: string) {
       }
     }
 
+    // Release the promo slot (if any).
+    // current_uses tracking is handled via DB trigger / RPC in this schema.
+    // Log the promo release in order metadata for auditing.
+    if (promoCodeId && orderId) {
+      const { data: currentOrder } = await sb
+        .from("orders")
+        .select("metadata")
+        .eq("id", orderId)
+        .maybeSingle();
+      if (currentOrder) {
+        await sb
+          .from("orders")
+          .update({
+            metadata: {
+              ...((currentOrder.metadata as Record<string, unknown>) ?? {}),
+              promo_released_at: new Date().toISOString(),
+            },
+          })
+          .eq("id", orderId)
+          .then(() => {}, () => { /* non-blocking */ });
+      }
+    }
+
     // Notify next person on waitlist (non-blocking)
     try {
-      const tierId = ticket.ticket_tier_id;
+      const tierId = ticket.tier_id;
       if (tierId) {
         const { notifyNextOnWaitlist } = await import("@/app/actions/ticket-waitlist");
         await notifyNextOnWaitlist(ticket.event_id, tierId);
@@ -146,15 +260,15 @@ export async function refundTicket(ticketId: string) {
     // Analytics tracking
     try {
       const { trackTicketRefunded } = await import("@/lib/analytics");
-      trackTicketRefunded(ticket.event_id, 1, pricePaid);
+      if (ticket.tier_id) trackTicketRefunded(ticket.tier_id, 1);
     } catch (analyticsErr) {
       console.error("[refundTicket] Analytics tracking failed:", analyticsErr);
     }
 
     // Send refund notification email
     try {
-      const meta = ticket.metadata as Record<string, unknown>;
-      const buyerEmail = (meta?.customer_email as string) || (meta?.buyer_email as string);
+      const orderMeta = order?.metadata ?? {};
+      const buyerEmail = (orderMeta?.customer_email as string) || (orderMeta?.buyer_email as string);
       if (buyerEmail) {
         const { sendEmail } = await import("@/lib/email/send");
         const { data: eventData } = await sb
@@ -195,6 +309,8 @@ export async function refundTicket(ticketId: string) {
 
 /**
  * Get refundable tickets for an event.
+ * In the new schema, price lives on order_lines.unit_price.
+ * Buyer email lives in orders.metadata.
  */
 export async function getRefundableTickets(eventId: string) {
   try {
@@ -227,9 +343,23 @@ export async function getRefundableTickets(eventId: string) {
 
     const { data: tickets, error: ticketsError } = await sb
       .from("tickets")
-      .select("id, price_paid, status, metadata, created_at, ticket_tiers(name)")
+      .select(`
+        id,
+        status,
+        created_at,
+        tier_id,
+        ticket_tiers:tier_id (name),
+        order_lines:order_line_id (
+          id,
+          unit_price,
+          orders:order_id (
+            id,
+            metadata
+          )
+        )
+      `)
       .eq("event_id", eventId)
-      .in("status", ["paid", "checked_in"])
+      .in("status", ["valid", "checked_in"])
       .order("created_at", { ascending: false });
 
     if (ticketsError) return { error: "Failed to load tickets", tickets: [] };
@@ -237,13 +367,18 @@ export async function getRefundableTickets(eventId: string) {
     return {
       error: null,
       tickets: (tickets ?? []).map((t) => {
-        const meta = t.metadata as Record<string, unknown>;
         const tier = t.ticket_tiers as unknown as { name: string } | null;
+        const orderLine = t.order_lines as unknown as {
+          id: string;
+          unit_price: number;
+          orders: { id: string; metadata: Record<string, unknown> | null } | null;
+        } | null;
+        const orderMeta = orderLine?.orders?.metadata ?? {};
         return {
           id: t.id,
-          email: (meta?.customer_email as string) || (meta?.buyer_email as string) || "Unknown",
+          email: (orderMeta?.customer_email as string) || (orderMeta?.buyer_email as string) || "Unknown",
           tierName: tier?.name || "General",
-          pricePaid: Number(t.price_paid),
+          pricePaid: Number(orderLine?.unit_price ?? 0),
           status: t.status,
           purchasedAt: t.created_at,
         };
@@ -257,6 +392,7 @@ export async function getRefundableTickets(eventId: string) {
 
 /**
  * Get refunded tickets for an event (refund history).
+ * Refund details sourced from ticket_events audit log.
  */
 export async function getRefundedTickets(eventId: string) {
   try {
@@ -289,24 +425,58 @@ export async function getRefundedTickets(eventId: string) {
 
     const { data: tickets, error: ticketsError } = await sb
       .from("tickets")
-      .select("id, price_paid, status, metadata, created_at, updated_at, ticket_tiers(name)")
+      .select(`
+        id,
+        status,
+        created_at,
+        tier_id,
+        ticket_tiers:tier_id (name),
+        order_lines:order_line_id (
+          id,
+          unit_price,
+          orders:order_id (
+            id,
+            metadata
+          )
+        ),
+        ticket_events (
+          event_type,
+          occurred_at,
+          metadata
+        )
+      `)
       .eq("event_id", eventId)
       .eq("status", "refunded")
-      .order("updated_at", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (ticketsError) return { error: "Failed to load refund history", tickets: [] };
 
     return {
       error: null,
       tickets: (tickets ?? []).map((t) => {
-        const meta = t.metadata as Record<string, unknown>;
         const tier = t.ticket_tiers as unknown as { name: string } | null;
+        const orderLine = t.order_lines as unknown as {
+          id: string;
+          unit_price: number;
+          orders: { id: string; metadata: Record<string, unknown> | null } | null;
+        } | null;
+        const orderMeta = orderLine?.orders?.metadata ?? {};
+
+        // Find the refund event for timing and amount
+        const ticketEvents = (t.ticket_events as unknown as Array<{
+          event_type: string;
+          occurred_at: string;
+          metadata: Record<string, unknown> | null;
+        }>) ?? [];
+        const refundEvent = ticketEvents.find((te) => te.event_type === "refunded");
+        const refundMeta = refundEvent?.metadata ?? {};
+
         return {
           id: t.id,
-          email: (meta?.customer_email as string) || (meta?.buyer_email as string) || "Unknown",
+          email: (orderMeta?.customer_email as string) || (orderMeta?.buyer_email as string) || "Unknown",
           tierName: tier?.name || "General",
-          amountRefunded: Number(meta?.refund_amount ?? t.price_paid ?? 0),
-          refundedAt: (meta?.refunded_at as string) || t.updated_at || t.created_at,
+          amountRefunded: Number((refundMeta?.refund_amount as number | null) ?? orderLine?.unit_price ?? 0),
+          refundedAt: refundEvent?.occurred_at || t.created_at,
         };
       }),
     };
@@ -330,27 +500,36 @@ export async function toggleRefundPolicy(eventId: string, enabled: boolean) {
 
     const sb = createAdminClient();
 
-    // Get current event metadata
+    // Get current event metadata + status. Status check prevents
+    // operators from flipping refund policy on an already-completed /
+    // archived event — those rows feed settlement calculations, and
+    // retroactive policy changes silently shift P&L on closed books.
     const { data: event, error: eventError } = await sb
       .from("events")
-      .select("metadata, collective_id")
+      .select("metadata, collective_id, status")
       .eq("id", eventId)
       .maybeSingle();
 
     if (eventError) return { error: "Failed to look up event" };
     if (!event) return { error: "Event not found" };
 
-    // Verify admin/promoter
+    if (event.status !== "draft" && event.status !== "published") {
+      return { error: "Refund policy can only be changed while the event is draft or published." };
+    }
+
+    // Verify admin only — promoters can issue individual refunds (admin/promoter
+    // role on refundTicket) but policy-level changes are a finance owner
+    // decision, not a promoter one.
     const { data: membership } = await sb
       .from("collective_members")
       .select("role")
       .eq("user_id", user.id)
       .eq("collective_id", event.collective_id)
-      .in("role", ["admin", "promoter"])
+      .eq("role", "admin")
       .is("deleted_at", null)
       .maybeSingle();
 
-    if (!membership) return { error: "Only admins and promoters can change refund policy" };
+    if (!membership) return { error: "Only admins can change refund policy" };
 
     const currentMeta = (event.metadata as Record<string, unknown>) || {};
     const { error } = await sb

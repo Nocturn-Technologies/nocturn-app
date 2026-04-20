@@ -17,6 +17,7 @@ import {
   ExternalLink,
   Check,
   Video,
+  UserCircle2,
 } from "lucide-react";
 import { validateFileUpload, ALLOWED_IMAGE_TYPES } from "@/lib/utils";
 
@@ -27,9 +28,6 @@ interface ProfileData {
   bio: string | null;
   city: string | null;
   user_type: string;
-  instagram_handle: string | null;
-  website_url: string | null;
-  soundcloud_url: string | null;
   spotify_url: string | null;
   genres: string[] | null;
   services: string[] | null;
@@ -89,15 +87,11 @@ export default function MyProfilePage() {
       setDisplayName(p.display_name ?? "");
       setBio(p.bio ?? "");
       setCity(p.city ?? "");
-      setInstagram(p.instagram_handle ?? "");
-      setWebsite(p.website_url ?? "");
-      setSoundcloud(p.soundcloud_url ?? "");
       setSpotify(p.spotify_url ?? "");
       setRateRange(p.rate_range ?? "");
       setAvailability(p.availability ?? "");
       setAvatarUrl(p.avatar_url ?? null);
       setCoverPhotoUrl(p.cover_photo_url ?? null);
-      // Load media from portfolio_urls
       setMediaFiles(p.portfolio_urls ?? []);
     }
     setLoading(false);
@@ -186,7 +180,6 @@ export default function MyProfilePage() {
       if (result?.error) setError(result.error);
     }
     setUploading(null);
-    // Reset input so same file can be re-selected
     if (mediaRef.current) mediaRef.current.value = "";
   }
 
@@ -203,9 +196,6 @@ export default function MyProfilePage() {
       displayName: displayName || undefined,
       bio: bio || null,
       city: city || null,
-      instagramHandle: instagram || null,
-      websiteUrl: website || null,
-      soundcloudUrl: soundcloud || null,
       spotifyUrl: spotify || null,
       rateRange: rateRange || null,
       availability: availability || null,
@@ -222,24 +212,43 @@ export default function MyProfilePage() {
   if (loading) {
     return (
       <div className="space-y-6 max-w-2xl animate-in fade-in duration-300">
+        {/* Header skeleton */}
         <div className="space-y-2">
           <div className="h-7 w-36 rounded-lg bg-muted animate-pulse" />
           <div className="h-4 w-48 rounded-lg bg-muted animate-pulse" />
         </div>
-        <div className="rounded-xl border border-border p-6 space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="h-20 w-20 rounded-full bg-muted animate-pulse shrink-0" />
-            <div className="space-y-2 flex-1">
-              <div className="h-5 w-32 rounded bg-muted animate-pulse" />
-              <div className="h-4 w-24 rounded bg-muted animate-pulse" />
-            </div>
+
+        {/* Cover + avatar skeleton */}
+        <div className="relative">
+          <div className="h-40 rounded-2xl bg-muted animate-pulse" />
+          <div className="absolute -bottom-8 left-4 h-20 w-20 rounded-full bg-muted animate-pulse border-4 border-background" />
+        </div>
+
+        <div className="pt-8" />
+
+        {/* Basic info card skeleton */}
+        <div className="rounded-2xl border border-border p-6 space-y-4">
+          <div className="h-5 w-24 rounded bg-muted animate-pulse" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="h-10 rounded-md bg-muted animate-pulse" />
+            <div className="h-10 rounded-md bg-muted animate-pulse" />
           </div>
-          <div className="space-y-3">
-            <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
-            <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
-            <div className="h-10 w-full rounded-md bg-muted animate-pulse" />
+          <div className="h-24 rounded-md bg-muted animate-pulse" />
+        </div>
+
+        {/* Media skeleton */}
+        <div className="rounded-2xl border border-border p-6 space-y-4">
+          <div className="h-5 w-32 rounded bg-muted animate-pulse" />
+          <div className="grid grid-cols-3 gap-2">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="aspect-square rounded-xl bg-muted animate-pulse" />
+            ))}
           </div>
-          <div className="h-10 w-28 rounded-md bg-muted animate-pulse ml-auto" />
+        </div>
+
+        {/* Save skeleton */}
+        <div className="flex justify-end">
+          <div className="h-11 w-32 rounded-md bg-muted animate-pulse" />
         </div>
       </div>
     );
@@ -247,11 +256,20 @@ export default function MyProfilePage() {
 
   if (!profile) {
     return (
-      <div className="space-y-4 text-center py-20">
-        <h2 className="text-xl font-bold">No profile yet</h2>
-        <p className="text-muted-foreground">Complete your marketplace onboarding to create your profile.</p>
+      <div className="animate-in fade-in duration-300 flex flex-col items-center justify-center py-24 gap-5 text-center max-w-sm mx-auto">
+        <div className="h-16 w-16 rounded-2xl bg-nocturn/10 flex items-center justify-center">
+          <UserCircle2 className="h-8 w-8 text-nocturn" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="text-xl font-bold font-heading">No profile yet</h2>
+          <p className="text-sm text-muted-foreground">
+            Complete your marketplace onboarding to create your public profile and get discovered by collectives.
+          </p>
+        </div>
         <a href="/onboarding/marketplace">
-          <Button className="bg-nocturn hover:bg-nocturn-light">Set up profile</Button>
+          <Button className="bg-nocturn hover:bg-nocturn-light active:scale-[0.97] transition-all duration-200 min-h-[44px]">
+            Set up profile
+          </Button>
         </a>
       </div>
     );
@@ -260,10 +278,11 @@ export default function MyProfilePage() {
   const isMediaType = ["photographer", "videographer"].includes(profile.user_type);
 
   return (
-    <div className="space-y-6 max-w-2xl overflow-x-hidden">
+    <div className="space-y-6 max-w-2xl overflow-x-hidden animate-in fade-in duration-300">
+      {/* ── Page header ── */}
       <div>
         <h1 className="text-2xl font-bold font-heading">My Profile</h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground truncate">
           {TYPE_LABELS[profile.user_type] ?? profile.user_type} · Visible on Discover
         </p>
       </div>
@@ -271,7 +290,7 @@ export default function MyProfilePage() {
       {/* ── Cover Photo ── */}
       <div className="relative">
         <div
-          className="h-40 rounded-xl bg-gradient-to-br from-nocturn/30 to-nocturn/10 overflow-hidden cursor-pointer"
+          className="group h-40 rounded-2xl bg-gradient-to-br from-nocturn/30 to-nocturn/10 overflow-hidden cursor-pointer transition-opacity duration-200 hover:opacity-90 active:opacity-75"
           onClick={() => coverRef.current?.click()}
         >
           {coverPhotoUrl ? (
@@ -282,6 +301,13 @@ export default function MyProfilePage() {
               Add cover photo
             </div>
           )}
+          {/* Hover overlay */}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-200 flex items-center justify-center">
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 bg-black/60 rounded-full px-3 py-1.5 flex items-center gap-1.5 text-white text-xs">
+              <Camera className="h-3.5 w-3.5" />
+              Change cover
+            </div>
+          </div>
           {uploading === "cover" && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
               <Loader2 className="h-6 w-6 animate-spin text-white" />
@@ -292,7 +318,7 @@ export default function MyProfilePage() {
 
         {/* Avatar */}
         <div
-          className="absolute -bottom-8 left-4 h-20 w-20 rounded-full border-4 border-background bg-card cursor-pointer overflow-hidden"
+          className="group absolute -bottom-8 left-4 h-20 w-20 rounded-full border-4 border-background bg-card cursor-pointer overflow-hidden transition-opacity duration-200 hover:opacity-90 active:opacity-75"
           onClick={() => avatarRef.current?.click()}
         >
           {avatarUrl ? (
@@ -302,6 +328,9 @@ export default function MyProfilePage() {
               <Camera className="h-5 w-5 text-nocturn" />
             </div>
           )}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all duration-200 flex items-center justify-center">
+            <Camera className="h-4 w-4 text-white opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
+          </div>
           {uploading === "avatar" && (
             <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
               <Loader2 className="h-4 w-4 animate-spin text-white" />
@@ -313,8 +342,10 @@ export default function MyProfilePage() {
 
       <div className="pt-8" />
 
-      {/* ── Basic Info ── */}
-      <div className="space-y-4">
+      {/* ── Basic Info card ── */}
+      <div className="rounded-2xl border border-border p-6 space-y-4">
+        <h2 className="text-lg font-bold font-heading">Basic info</h2>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Display name</Label>
@@ -329,7 +360,7 @@ export default function MyProfilePage() {
         <div className="space-y-2">
           <Label>Bio</Label>
           <textarea
-            className="flex w-full rounded-xl border border-input bg-background px-3 py-2.5 text-base md:text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[100px] resize-none"
+            className="flex w-full rounded-xl border border-input bg-background px-3 py-2.5 text-base md:text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-h-[100px] resize-none transition-colors duration-200"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             placeholder="Tell collectives about yourself and what you do..."
@@ -339,12 +370,12 @@ export default function MyProfilePage() {
         </div>
       </div>
 
-      {/* ── Photos & Videos ── */}
-      <div className="space-y-3">
+      {/* ── Photos & Videos card ── */}
+      <div className="rounded-2xl border border-border p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <Label className="text-base">
+          <h2 className="text-lg font-bold font-heading">
             {isMediaType ? "Portfolio" : "Photos & Videos"}
-          </Label>
+          </h2>
           <span className="text-xs text-muted-foreground">{mediaFiles.length}/10</span>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -357,7 +388,7 @@ export default function MyProfilePage() {
           {mediaFiles.map((url, i) => {
             const isVideo = /\.(mp4|mov|webm)$/i.test(url);
             return (
-              <div key={i} className="relative aspect-square rounded-lg overflow-hidden bg-card group">
+              <div key={i} className="relative aspect-square rounded-xl overflow-hidden bg-card group">
                 {isVideo ? (
                   <video src={url} className="w-full h-full object-cover" muted />
                 ) : (
@@ -381,7 +412,7 @@ export default function MyProfilePage() {
                 )}
                 <button
                   onClick={() => removeMedia(url)}
-                  className="absolute top-1 right-1 min-h-[44px] min-w-[44px] h-11 w-11 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute top-1 right-1 min-h-[44px] min-w-[44px] h-11 w-11 rounded-full bg-black/70 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 active:scale-90"
                 >
                   <X className="h-3 w-3 text-white" />
                 </button>
@@ -398,7 +429,7 @@ export default function MyProfilePage() {
             <button
               onClick={() => mediaRef.current?.click()}
               disabled={uploading === "media"}
-              className="aspect-square rounded-lg border-2 border-dashed border-border hover:border-nocturn/50 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-nocturn transition-colors"
+              className="aspect-square rounded-xl border-2 border-dashed border-border hover:border-nocturn/50 hover:bg-nocturn/5 flex flex-col items-center justify-center gap-1 text-muted-foreground hover:text-nocturn transition-all duration-200 active:scale-[0.97]"
             >
               {uploading === "media" ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -421,9 +452,9 @@ export default function MyProfilePage() {
         />
       </div>
 
-      {/* ── Social Links ── */}
-      <div className="space-y-3">
-        <Label className="text-base">Links</Label>
+      {/* ── Social Links card ── */}
+      <div className="rounded-2xl border border-border p-6 space-y-4">
+        <h2 className="text-lg font-bold font-heading">Links</h2>
         <div className="space-y-3">
           <div className="flex items-center gap-2">
             <Instagram className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -468,30 +499,33 @@ export default function MyProfilePage() {
         </div>
       </div>
 
-      {/* ── Rate & Availability ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label>Rate range</Label>
-          <Input
-            value={rateRange}
-            onChange={(e) => setRateRange(e.target.value)}
-            placeholder="e.g. $200-500/event"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label>Availability</Label>
-          <Input
-            value={availability}
-            onChange={(e) => setAvailability(e.target.value)}
-            placeholder="e.g. Weekends only"
-          />
+      {/* ── Rate & Availability card ── */}
+      <div className="rounded-2xl border border-border p-6 space-y-4">
+        <h2 className="text-lg font-bold font-heading">Rate & availability</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Rate range</Label>
+            <Input
+              value={rateRange}
+              onChange={(e) => setRateRange(e.target.value)}
+              placeholder="e.g. $200-500/event"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Availability</Label>
+            <Input
+              value={availability}
+              onChange={(e) => setAvailability(e.target.value)}
+              placeholder="e.g. Weekends only"
+            />
+          </div>
         </div>
       </div>
 
       {/* ── View Public Profile Link ── */}
       <a
         href={`/dashboard/discover/${profile.slug}`}
-        className="inline-flex items-center gap-1.5 text-sm text-nocturn hover:underline"
+        className="inline-flex items-center gap-1.5 text-sm text-nocturn hover:text-nocturn-light transition-colors duration-200 hover:underline"
       >
         <ExternalLink className="h-3.5 w-3.5" />
         View public profile
@@ -499,22 +533,28 @@ export default function MyProfilePage() {
 
       {/* ── Error message ── */}
       {error && (
-        <div className="rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+        <div className="animate-in fade-in slide-in-from-top-1 duration-200 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
       {/* ── Save Button ── */}
-      <div className="flex justify-end pt-2">
+      <div className="flex justify-end pt-2 pb-8">
         <Button
           onClick={handleSave}
           disabled={saving || !displayName.trim()}
-          className="bg-nocturn hover:bg-nocturn-light min-w-[120px] min-h-[44px]"
+          className={`min-w-[120px] min-h-[44px] transition-all duration-200 active:scale-[0.97] ${
+            saved
+              ? "bg-green-600 hover:bg-green-600"
+              : "bg-nocturn hover:bg-nocturn-light"
+          }`}
         >
           {saving ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : saved ? (
-            <span className="flex items-center gap-1.5"><Check className="h-4 w-4" /> Saved</span>
+            <span className="flex items-center gap-1.5 animate-in fade-in duration-200">
+              <Check className="h-4 w-4" /> Saved
+            </span>
           ) : (
             "Save changes"
           )}

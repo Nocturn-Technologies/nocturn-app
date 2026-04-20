@@ -7,13 +7,9 @@ import { rateLimitStrict } from "@/lib/rate-limit";
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-// Per-field length caps for marketplace profile input. A rogue client sending
-// a 10KB "city" would otherwise sail straight into the DB and blow up every
-// downstream ilike() and Claude prompt that interpolates the field.
 const MAX_DISPLAY_NAME = 100;
 const MAX_BIO = 500;
 const MAX_CITY = 80;
-const MAX_INSTAGRAM_HANDLE = 60;
 const MAX_RATE_RANGE = 100;
 const MAX_AVAILABILITY = 200;
 const MAX_GENRE_OR_SERVICE = 50;
@@ -48,7 +44,7 @@ function slugify(text: string): string {
     .replace(/(^-|-$)/g, "");
 }
 
-/** Validate an optional URL: must start with http(s)://, no javascript: protocol, max 500 chars. Returns null if invalid. */
+/** Validate a URL: must start with http(s)://, no javascript: protocol, max 500 chars. */
 function sanitizeUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   if (url.length > 500) return null;
@@ -57,15 +53,40 @@ function sanitizeUrl(url: string | null | undefined): string | null {
   return url;
 }
 
+function sanitizeSearchInput(input: string): string {
+  return input
+    .replace(/\\/g, "\\\\")
+    .replace(/%/g, "\\%")
+    .replace(/_/g, "\\_")
+    .replace(/[.,()]/g, "")
+    .slice(0, 100);
+}
+
+/**
+ * Look up the current user's party_id from the users table.
+ * Returns null if the user has no party yet.
+ */
+async function getUserPartyId(userId: string): Promise<string | null> {
+  const admin = createAdminClient();
+  const { data } = await admin
+    .from("users")
+    .select("party_id")
+    .eq("id", userId)
+    .maybeSingle();
+  return (data?.party_id as string | null) ?? null;
+}
+
 // ── Actions ──────────────────────────────────────────────────────────
 
+/**
+ * Create an artist profile on the marketplace.
+ * Uses users.party_id to link the artist profile to the current user.
+ * If the user has no party yet, creates one and updates the users row.
+ */
 export async function createMarketplaceProfile(data: {
   displayName: string;
   city?: string | null;
   bio?: string | null;
-  instagramHandle?: string | null;
-  websiteUrl?: string | null;
-  soundcloudUrl?: string | null;
   spotifyUrl?: string | null;
   genres?: string[] | null;
   services?: string[] | null;
@@ -90,43 +111,56 @@ export async function createMarketplaceProfile(data: {
 
   const admin = createAdminClient();
 
-  // Get user_type from auth metadata (avoids PostgREST schema cache issues)
-  const userType = user.user_metadata?.user_type ?? "artist";
-
-  // Check for existing marketplace profile
-  const { data: existing } = await admin.from("marketplace_profiles")
-    .select("id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (existing) {
-    return { error: "You already have a marketplace profile", slug: null };
+  // Check for existing artist_profile via users.party_id
+  const existingPartyId = await getUserPartyId(user.id);
+  if (existingPartyId) {
+    const { data: existing } = await admin
+      .from("artist_profiles")
+      .select("id")
+      .eq("party_id", existingPartyId)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (existing) {
+      return { error: "You already have a marketplace profile", slug: null };
+    }
   }
 
   if (data.bio && data.bio.length > 500) {
     return { error: "Bio must be under 500 characters", slug: null };
   }
 
-  const slug =
-    slugify(data.displayName) +
-    "-" +
-    Math.random().toString(36).slice(2, 8);
+  const displayName = data.displayName.trim().slice(0, MAX_DISPLAY_NAME);
+  const slug = slugify(displayName) + "-" + Math.random().toString(36).slice(2, 8);
 
-  // Length-cap every field before the insert. Previously only bio/displayName
-  // were checked; city/instagram/rateRange/availability/genres/services could
-  // all pass through 10KB garbage from a rogue client straight into the row.
-  const { error } = await admin.from("marketplace_profiles").insert({
-    user_id: user.id,
-    user_type: userType,
-    display_name: data.displayName.trim().slice(0, MAX_DISPLAY_NAME),
+  // 1. Get or create the party for this user
+  let partyId = existingPartyId;
+  if (!partyId) {
+    const { data: party, error: partyError } = await admin
+      .from("parties")
+      .insert({ display_name: displayName, type: "person" })
+      .select("id")
+      .maybeSingle();
+
+    if (partyError || !party) {
+      console.error("[createMarketplaceProfile] party insert error:", partyError?.message);
+      return { error: "Something went wrong", slug: null };
+    }
+    partyId = party.id;
+
+    // Link party to the user row
+    await admin
+      .from("users")
+      .update({ party_id: partyId })
+      .eq("id", user.id);
+  }
+
+  // 2. Create artist_profile
+  const { error } = await admin.from("artist_profiles").insert({
+    party_id: partyId,
     slug,
     bio: capString(data.bio, MAX_BIO),
-    city: capString(data.city, MAX_CITY),
-    instagram_handle: capString(data.instagramHandle, MAX_INSTAGRAM_HANDLE),
-    website_url: sanitizeUrl(data.websiteUrl),
-    soundcloud_url: sanitizeUrl(data.soundcloudUrl),
-    spotify_url: sanitizeUrl(data.spotifyUrl),
-    genres: capStringArray(data.genres, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY),
+    spotify: sanitizeUrl(data.spotifyUrl),
+    genre: capStringArray(data.genres, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY),
     services: capStringArray(data.services, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY),
     rate_range: capString(data.rateRange, MAX_RATE_RANGE),
     availability: capString(data.availability, MAX_AVAILABILITY),
@@ -134,12 +168,19 @@ export async function createMarketplaceProfile(data: {
       .map((u) => sanitizeUrl(u))
       .filter((u): u is string => !!u),
     past_venues: capStringArray(data.pastVenues, MAX_PAST_VENUE, MAX_PAST_VENUES_ARRAY),
+    is_active: true,
   });
 
   if (error) {
     console.error("[createMarketplaceProfile]", error);
     return { error: "Something went wrong", slug: null };
   }
+
+  // 3. Ensure the party has an 'artist' role
+  await admin.from("party_roles").insert({
+    party_id: partyId,
+    role: "artist",
+  });
 
   revalidatePath("/dashboard/discover");
   return { error: null, slug };
@@ -149,13 +190,13 @@ export async function createMarketplaceProfile(data: {
   }
 }
 
+/**
+ * Update the current user's artist profile.
+ */
 export async function updateMarketplaceProfile(data: {
   displayName?: string;
   city?: string | null;
   bio?: string | null;
-  instagramHandle?: string | null;
-  websiteUrl?: string | null;
-  soundcloudUrl?: string | null;
   spotifyUrl?: string | null;
   genres?: string[] | null;
   services?: string[] | null;
@@ -179,19 +220,36 @@ export async function updateMarketplaceProfile(data: {
     return { error: "Bio must be under 500 characters" };
   }
 
+  // Find this user's artist profile via users.party_id
+  const partyId = await getUserPartyId(user.id);
+  if (!partyId) return { error: "Profile not found" };
+
+  const { data: artistProfile } = await admin
+    .from("artist_profiles")
+    .select("id")
+    .eq("party_id", partyId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (!artistProfile) return { error: "Profile not found" };
+
   const updates: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
   };
 
-  // Length-cap every field — same rationale as createMarketplaceProfile.
-  if (data.displayName !== undefined) updates.display_name = capString(data.displayName, MAX_DISPLAY_NAME);
-  if (data.city !== undefined) updates.city = capString(data.city, MAX_CITY);
+  if (data.displayName !== undefined && data.displayName !== null) {
+    const cappedName = capString(data.displayName, MAX_DISPLAY_NAME);
+    if (cappedName) {
+      // Update the party display_name
+      await admin
+        .from("parties")
+        .update({ display_name: cappedName })
+        .eq("id", partyId);
+    }
+  }
   if (data.bio !== undefined) updates.bio = capString(data.bio, MAX_BIO);
-  if (data.instagramHandle !== undefined) updates.instagram_handle = capString(data.instagramHandle, MAX_INSTAGRAM_HANDLE);
-  if (data.websiteUrl !== undefined) updates.website_url = sanitizeUrl(data.websiteUrl);
-  if (data.soundcloudUrl !== undefined) updates.soundcloud_url = sanitizeUrl(data.soundcloudUrl);
-  if (data.spotifyUrl !== undefined) updates.spotify_url = sanitizeUrl(data.spotifyUrl);
-  if (data.genres !== undefined) updates.genres = capStringArray(data.genres, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY);
+  if (data.spotifyUrl !== undefined) updates.spotify = sanitizeUrl(data.spotifyUrl);
+  if (data.genres !== undefined) updates.genre = capStringArray(data.genres, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY);
   if (data.services !== undefined) updates.services = capStringArray(data.services, MAX_GENRE_OR_SERVICE, MAX_GENRE_OR_SERVICE_ARRAY);
   if (data.rateRange !== undefined) updates.rate_range = capString(data.rateRange, MAX_RATE_RANGE);
   if (data.availability !== undefined) updates.availability = capString(data.availability, MAX_AVAILABILITY);
@@ -200,12 +258,13 @@ export async function updateMarketplaceProfile(data: {
       .map((u) => sanitizeUrl(u))
       .filter((u): u is string => !!u);
   if (data.pastVenues !== undefined) updates.past_venues = capStringArray(data.pastVenues, MAX_PAST_VENUE, MAX_PAST_VENUES_ARRAY);
-  if (data.avatarUrl !== undefined) updates.avatar_url = sanitizeUrl(data.avatarUrl);
+  if (data.avatarUrl !== undefined) updates.photo_url = sanitizeUrl(data.avatarUrl);
   if (data.coverPhotoUrl !== undefined) updates.cover_photo_url = sanitizeUrl(data.coverPhotoUrl);
 
-  const { error } = await admin.from("marketplace_profiles")
+  const { error } = await admin
+    .from("artist_profiles")
     .update(updates)
-    .eq("user_id", user.id);
+    .eq("id", artistProfile.id);
 
   if (error) {
     console.error("[updateMarketplaceProfile]", error);
@@ -220,6 +279,9 @@ export async function updateMarketplaceProfile(data: {
   }
 }
 
+/**
+ * Get the current user's artist profile (or null).
+ */
 export async function getMarketplaceProfile() {
   try {
   const supabase = await createServerClient();
@@ -230,9 +292,14 @@ export async function getMarketplaceProfile() {
 
   const admin = createAdminClient();
 
-  const { data, error: queryError } = await admin.from("marketplace_profiles")
-    .select("*")
-    .eq("user_id", user.id)
+  const partyId = await getUserPartyId(user.id);
+  if (!partyId) return null;
+
+  const { data, error: queryError } = await admin
+    .from("artist_profiles")
+    .select("id, slug, party_id, bio, genre, services, spotify, rate_range, availability, portfolio_urls, past_venues, photo_url, cover_photo_url, is_active, is_verified, booking_email, created_at, updated_at, parties(display_name)")
+    .eq("party_id", partyId)
+    .is("deleted_at", null)
     .maybeSingle();
 
   if (queryError) {
@@ -240,47 +307,71 @@ export async function getMarketplaceProfile() {
     return null;
   }
 
-  return data ?? null;
+  if (!data) return null;
+
+  const party = data.parties as { display_name: string } | null;
+  return {
+    ...(data as unknown as Record<string, unknown>),
+    display_name: party?.display_name ?? null,
+  };
   } catch (err) {
     console.error("[getMarketplaceProfile] Unexpected error:", err);
     return null;
   }
 }
 
+/**
+ * Get a profile (artist or venue) by slug.
+ */
 export async function getProfileBySlug(slug: string) {
   try {
   if (!slug || typeof slug !== "string" || slug.length > 200) return null;
 
   const admin = createAdminClient();
 
-  const { data, error: queryError } = await admin.from("marketplace_profiles")
-    .select("id, slug, user_type, user_id, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, is_verified, created_at, users(full_name)")
+  // Try artist_profiles first
+  const { data: artistProfile } = await admin
+    .from("artist_profiles")
+    .select("id, slug, party_id, bio, genre, services, spotify, rate_range, availability, portfolio_urls, past_venues, photo_url, cover_photo_url, is_active, is_verified, booking_email, created_at, parties(display_name)")
+    .eq("slug", slug)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (artistProfile) {
+    const party = artistProfile.parties as { display_name: string } | null;
+    return {
+      ...(artistProfile as unknown as Record<string, unknown>),
+      display_name: party?.display_name ?? null,
+      user_type: "artist",
+    };
+  }
+
+  // Then try venue_profiles
+  const { data: venueProfile } = await admin
+    .from("venue_profiles")
+    .select("id, slug, party_id, name, city, address, capacity, amenities, photo_url, cover_photo_url, is_active, is_verified, created_at, parties(display_name)")
     .eq("slug", slug)
     .maybeSingle();
 
-  if (queryError) {
-    console.error("[getProfileBySlug]", queryError);
-    return null;
+  if (venueProfile) {
+    const party = venueProfile.parties as { display_name: string } | null;
+    return {
+      ...(venueProfile as unknown as Record<string, unknown>),
+      display_name: party?.display_name ?? (venueProfile as unknown as { name: string }).name,
+      user_type: "venue",
+    };
   }
 
-  return data ?? null;
+  return null;
   } catch (err) {
     console.error("[getProfileBySlug] Unexpected error:", err);
     return null;
   }
 }
 
-// TODO(audit): replace inline sanitizer with shared sanitizePostgRESTInput() from @/lib/utils + length cap
-/** Escape special Postgres LIKE/ILIKE pattern chars and PostgREST filter delimiters */
-function sanitizeSearchInput(input: string): string {
-  return input
-    .replace(/\\/g, "\\\\") // backslash first
-    .replace(/%/g, "\\%")   // wildcard %
-    .replace(/_/g, "\\_")   // wildcard _
-    .replace(/[.,()]/g, "") // PostgREST filter delimiters
-    .slice(0, 100);         // cap length
-}
-
+/**
+ * Search artist_profiles and venue_profiles where is_active=true.
+ */
 export async function searchProfiles(filters: {
   query?: string | null;
   type?: string | null;
@@ -288,11 +379,13 @@ export async function searchProfiles(filters: {
   page?: number;
 }): Promise<{ profiles: Record<string, unknown>[]; total: number }> {
   try {
-    // Input validation
     if (filters.query && typeof filters.query !== "string") return { profiles: [], total: 0 };
     if (filters.type && typeof filters.type !== "string") return { profiles: [], total: 0 };
     if (filters.city && typeof filters.city !== "string") return { profiles: [], total: 0 };
-    if (filters.page !== undefined && (typeof filters.page !== "number" || filters.page < 1 || !Number.isFinite(filters.page))) {
+    if (
+      filters.page !== undefined &&
+      (typeof filters.page !== "number" || filters.page < 1 || !Number.isFinite(filters.page))
+    ) {
       return { profiles: [], total: 0 };
     }
 
@@ -302,45 +395,90 @@ export async function searchProfiles(filters: {
     const from = (page - 1) * perPage;
     const to = from + perPage - 1;
 
-    let query = admin.from("marketplace_profiles")
-      .select("id, slug, user_type, display_name, bio, city, instagram_handle, website_url, soundcloud_url, spotify_url, genres, services, rate_range, availability, portfolio_urls, past_venues, avatar_url, cover_photo_url, is_active, created_at", { count: "exact" })
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .range(from, to);
+    const profileType = filters.type ?? "all";
+    const profiles: Record<string, unknown>[] = [];
+    let total = 0;
 
-    if (filters.type) {
-      query = query.eq("user_type", filters.type);
+    if (profileType === "all" || profileType === "artist") {
+      let artistQuery = admin
+        .from("artist_profiles")
+        .select(
+          "id, slug, party_id, bio, genre, services, spotify, rate_range, availability, portfolio_urls, past_venues, photo_url, cover_photo_url, is_active, is_verified, booking_email, created_at, parties(display_name)",
+          { count: "exact" }
+        )
+        .eq("is_active", true)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (filters.query) {
+        const safeQuery = sanitizeSearchInput(filters.query);
+        artistQuery = artistQuery.ilike("bio", `%${safeQuery}%`);
+      }
+
+      const { data: artistData, count: artistCount, error: artistError } = await artistQuery;
+
+      if (!artistError && artistData) {
+        for (const ap of artistData) {
+          const party = (ap as { parties: { display_name: string } | null }).parties;
+          profiles.push({
+            ...(ap as unknown as Record<string, unknown>),
+            display_name: party?.display_name ?? null,
+            user_type: "artist",
+          });
+        }
+        total += artistCount ?? 0;
+      }
     }
 
-    if (filters.city) {
-      const safeCity = sanitizeSearchInput(filters.city);
-      query = query.ilike("city", `%${safeCity}%`);
+    if (profileType === "all" || profileType === "venue") {
+      let venueQuery = admin
+        .from("venue_profiles")
+        .select(
+          "id, slug, party_id, name, city, address, capacity, amenities, photo_url, cover_photo_url, is_active, is_verified, created_at, parties(display_name)",
+          { count: "exact" }
+        )
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (filters.city) {
+        const safeCity = sanitizeSearchInput(filters.city);
+        venueQuery = venueQuery.ilike("city", `%${safeCity}%`);
+      }
+
+      if (filters.query) {
+        const safeQuery = sanitizeSearchInput(filters.query);
+        venueQuery = venueQuery.ilike("name", `%${safeQuery}%`);
+      }
+
+      const { data: venueData, count: venueCount, error: venueError } = await venueQuery;
+
+      if (!venueError && venueData) {
+        for (const vp of venueData) {
+          const party = (vp as { parties: { display_name: string } | null }).parties;
+          profiles.push({
+            ...(vp as unknown as Record<string, unknown>),
+            display_name: party?.display_name ?? (vp as unknown as { name: string }).name,
+            user_type: "venue",
+          });
+        }
+        total += venueCount ?? 0;
+      }
     }
 
-    if (filters.query) {
-      const safeQuery = sanitizeSearchInput(filters.query);
-      query = query.or(
-        `display_name.ilike.%${safeQuery}%,bio.ilike.%${safeQuery}%`
-      );
-    }
-
-    const { data, count, error } = await query;
-
-    if (error) {
-      console.error("[searchProfiles]", error);
-      return { profiles: [], total: 0 };
-    }
-
-    return {
-      profiles: (data ?? []) as Record<string, unknown>[],
-      total: (count as number) ?? 0,
-    };
+    return { profiles, total };
   } catch (err) {
     console.error("[searchProfiles]", err);
     return { profiles: [], total: 0 };
   }
 }
 
+/**
+ * Save a profile (artist_profiles.id).
+ * Stored as a party_roles row with role='platform_user' on the target party.
+ * Uses saved_venues for venue profiles.
+ */
 export async function saveProfile(
   profileId: string
 ): Promise<{ error: string | null }> {
@@ -357,51 +495,66 @@ export async function saveProfile(
 
   const admin = createAdminClient();
 
-  const { error } = await admin.from("marketplace_saved").insert({
-    user_id: user.id,
-    profile_id: profileId,
-  });
+  // Find the target party_id from artist_profiles
+  const { data: artistProfile } = await admin
+    .from("artist_profiles")
+    .select("id, party_id")
+    .eq("id", profileId)
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  // Ignore duplicate key (23505) — idempotent save
-  if (error && (error as { code?: string }).code !== "23505") {
-    console.error("[saveProfile]", error);
-    return { error: "Something went wrong" };
-  }
-
-  // Contact upsert — best-effort industry sync for saved marketplace profile
-  try {
-    // Fetch the saved profile details + owner email for contact record
-    const { data: savedProfile } = await admin.from("marketplace_profiles")
-      .select("id, display_name, instagram_handle, user_type, users(email)")
+  if (!artistProfile) {
+    // Try venue_profiles — save via saved_venues
+    const { data: venueProfile } = await admin
+      .from("venue_profiles")
+      .select("id, party_id")
       .eq("id", profileId)
       .maybeSingle();
 
-    if (savedProfile?.users?.email) {
-      // Get the saver's collective (first one they belong to)
-      const { data: membership } = await admin
-        .from("collective_members")
-        .select("collective_id")
-        .eq("user_id", user.id)
-        .is("deleted_at", null)
-        .limit(1)
-        .maybeSingle();
+    if (!venueProfile) return { error: "Profile not found" };
 
-      if (membership?.collective_id) {
-        await admin.from("contacts").upsert({
-          collective_id: membership.collective_id,
-          contact_type: "industry",
-          email: savedProfile.users.email.toLowerCase().trim(),
-          full_name: savedProfile.display_name ?? null,
-          source: "marketplace",
-          instagram: savedProfile.instagram_handle ?? null,
-          marketplace_profile_id: savedProfile.id,
-          last_seen_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "collective_id,email", ignoreDuplicates: false });
-      }
+    // Check for existing save
+    const { count: existingSave } = await admin
+      .from("saved_venues")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("venue_party_id", venueProfile.party_id);
+
+    if (!existingSave || existingSave === 0) {
+      await admin.from("saved_venues").insert({
+        user_id: user.id,
+        venue_party_id: venueProfile.party_id,
+      });
     }
-  } catch (contactErr) {
-    console.error("[marketplace] Contact upsert on save failed (non-blocking):", contactErr);
+
+    revalidatePath("/dashboard/discover");
+    return { error: null };
+  }
+
+  // Prevent self-save
+  const currentUserPartyId = await getUserPartyId(user.id);
+  if (currentUserPartyId && currentUserPartyId === artistProfile.party_id) {
+    return { error: "You cannot save your own profile" };
+  }
+
+  // Store as a platform_user party_role on the target party.
+  // No unique constraint exists — deduplicate by scanning metadata in-memory.
+  const { data: existingRoles } = await admin
+    .from("party_roles")
+    .select("id, metadata")
+    .eq("role", "platform_user")
+    .eq("party_id", artistProfile.party_id);
+
+  const alreadySaved = (existingRoles ?? []).some(
+    (r) => (r.metadata as Record<string, unknown> | null)?.saved_by_user_id === user.id
+  );
+
+  if (!alreadySaved) {
+    await admin.from("party_roles").insert({
+      party_id: artistProfile.party_id,
+      role: "platform_user",
+      metadata: { saved_by_user_id: user.id, saved_at: new Date().toISOString() },
+    });
   }
 
   revalidatePath("/dashboard/discover");
@@ -428,14 +581,44 @@ export async function unsaveProfile(
 
   const admin = createAdminClient();
 
-  const { error } = await admin.from("marketplace_saved")
-    .delete()
-    .eq("user_id", user.id)
-    .eq("profile_id", profileId);
+  // Try artist profile first
+  const { data: artistProfile } = await admin
+    .from("artist_profiles")
+    .select("party_id")
+    .eq("id", profileId)
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  if (error) {
-    console.error("[unsaveProfile]", error);
-    return { error: "Something went wrong" };
+  if (artistProfile?.party_id) {
+    // Find and delete the platform_user role with this user's saved marker
+    const { data: roles } = await admin
+      .from("party_roles")
+      .select("id, metadata")
+      .eq("role", "platform_user")
+      .eq("party_id", artistProfile.party_id);
+
+    const toDelete = (roles ?? [])
+      .filter((r) => (r.metadata as Record<string, unknown> | null)?.saved_by_user_id === user.id)
+      .map((r) => r.id);
+
+    for (const id of toDelete) {
+      await admin.from("party_roles").delete().eq("id", id);
+    }
+  } else {
+    // Try venue profile
+    const { data: venueProfile } = await admin
+      .from("venue_profiles")
+      .select("party_id")
+      .eq("id", profileId)
+      .maybeSingle();
+
+    if (venueProfile?.party_id) {
+      await admin
+        .from("saved_venues")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("venue_party_id", venueProfile.party_id);
+    }
   }
 
   revalidatePath("/dashboard/discover");
@@ -460,12 +643,43 @@ export async function isProfileSaved(profileId: string): Promise<boolean> {
 
   const admin = createAdminClient();
 
-  const { count } = await admin.from("marketplace_saved")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .eq("profile_id", profileId);
+  // Try artist profile
+  const { data: artistProfile } = await admin
+    .from("artist_profiles")
+    .select("party_id")
+    .eq("id", profileId)
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  return (count ?? 0) > 0;
+  if (artistProfile?.party_id) {
+    const { data: roles } = await admin
+      .from("party_roles")
+      .select("id, metadata")
+      .eq("role", "platform_user")
+      .eq("party_id", artistProfile.party_id);
+
+    return (roles ?? []).some(
+      (r) => (r.metadata as Record<string, unknown> | null)?.saved_by_user_id === user.id
+    );
+  }
+
+  // Try venue profile
+  const { data: venueProfile } = await admin
+    .from("venue_profiles")
+    .select("party_id")
+    .eq("id", profileId)
+    .maybeSingle();
+
+  if (venueProfile?.party_id) {
+    const { count } = await admin
+      .from("saved_venues")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("venue_party_id", venueProfile.party_id);
+    return (count ?? 0) > 0;
+  }
+
+  return false;
   } catch (err) {
     console.error("[isProfileSaved] Unexpected error:", err);
     return false;
@@ -485,26 +699,56 @@ export async function getSavedProfiles(): Promise<{
 
   const admin = createAdminClient();
 
-  const { data, error } = await admin.from("marketplace_saved")
-    .select("profile_id, marketplace_profiles(*)")
-    .eq("user_id", user.id)
+  // Fetch all platform_user roles (saved artist profiles) and filter in-memory
+  // to find those saved by this user.
+  const { data: platformRoles, error } = await admin
+    .from("party_roles")
+    .select("id, party_id, metadata, parties(id, display_name, artist_profiles(id, slug, bio, genre, photo_url, cover_photo_url, is_active))")
+    .eq("role", "platform_user")
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("[marketplace] getSavedProfiles error:", error.message);
+    console.error("[getSavedProfiles] error:", error.message);
     return { profiles: [], savedIds: [] };
   }
 
-  const rows = (data ?? []) as {
-    profile_id: string;
-    marketplace_profiles: Record<string, unknown>;
-  }[];
+  const profiles: Record<string, unknown>[] = [];
+  const savedIds: string[] = [];
 
-  const profiles = rows
-    .map((r) => r.marketplace_profiles)
-    .filter(Boolean);
+  for (const row of (platformRoles ?? []) as {
+    id: string;
+    party_id: string;
+    metadata: Record<string, unknown> | null;
+    parties: {
+      id: string;
+      display_name: string;
+      artist_profiles:
+        | {
+            id: string;
+            slug: string;
+            bio: string | null;
+            genre: string[] | null;
+            photo_url: string | null;
+            cover_photo_url: string | null;
+            is_active: boolean;
+          }[]
+        | null;
+    } | null;
+  }[]) {
+    if (row.metadata?.saved_by_user_id !== user.id) continue;
 
-  const savedIds = rows.map((r) => r.profile_id);
+    const artistProfileArr = row.parties?.artist_profiles;
+    const ap = Array.isArray(artistProfileArr) ? artistProfileArr[0] : null;
+    if (ap) {
+      savedIds.push(ap.id);
+      profiles.push({
+        ...ap,
+        display_name: row.parties?.display_name ?? null,
+        party_id: row.party_id,
+        user_type: "artist",
+      });
+    }
+  }
 
   return { profiles, savedIds };
   } catch (err) {
@@ -533,49 +777,52 @@ export async function sendInquiry(data: {
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not logged in" };
 
-  // Rate limit: 5 inquiries per minute per user (sends email notifications)
   const { success: rlOk } = await rateLimitStrict(`inquiry:${user.id}`, 5, 60_000);
   if (!rlOk) return { error: "Too many messages. Please wait a moment." };
+  const { success: pairOk } = await rateLimitStrict(
+    `inquiry:pair:${user.id}:${data.toProfileId}`,
+    1,
+    86_400_000,
+  );
+  if (!pairOk) return { error: "You've already messaged this collective today. Wait for their reply." };
 
-  const admin = createAdminClient();
-
-  // Prevent self-inquiry
-  const { data: targetProfile } = await admin.from("marketplace_profiles")
-    .select("user_id")
-    .eq("id", data.toProfileId)
-    .maybeSingle();
-
-  if (targetProfile?.user_id === user.id) {
-    return { error: "You cannot send an inquiry to yourself" };
-  }
-
-  if (data.message && data.message.length > 5000) {
+  if (data.message.length > 5000) {
     return { error: "Message is too long" };
   }
 
-  const { error } = await admin.from("marketplace_inquiries").insert({
-    from_user_id: user.id,
-    to_profile_id: data.toProfileId,
-    event_id: data.eventId ?? null,
-    message: data.message ?? null,
-    inquiry_type: data.inquiryType ?? "general",
-    status: "pending",
-  });
+  const admin = createAdminClient();
 
-  if (error) {
-    console.error("[sendInquiry]", error);
-    return { error: "Something went wrong" };
-  }
-
-  // Fire-and-forget: email the profile owner about the inquiry
-  const { data: profile } = await admin.from("marketplace_profiles")
-    .select("user_id, display_name, users(email)")
+  // Find artist profile + booking email, and prevent self-inquiry
+  const { data: targetProfile } = await admin
+    .from("artist_profiles")
+    .select("id, party_id, booking_email, parties(display_name)")
     .eq("id", data.toProfileId)
+    .is("deleted_at", null)
     .maybeSingle();
 
-  // SECURITY: never fall back to CRON_SECRET — these serve different trust boundaries.
-  // If INTERNAL_API_SECRET is unset, skip the email entirely rather than sending
-  // unauthenticated internal requests.
+  if (targetProfile) {
+    const currentUserPartyId = await getUserPartyId(user.id);
+    if (currentUserPartyId && currentUserPartyId === targetProfile.party_id) {
+      return { error: "You cannot send an inquiry to yourself" };
+    }
+  }
+
+  // Get recipient email: booking_email first, then party_contact_methods
+  let recipientEmail = targetProfile?.booking_email ?? null;
+  const recipientName =
+    (targetProfile?.parties as { display_name: string } | null)?.display_name ?? null;
+
+  if (!recipientEmail && targetProfile?.party_id) {
+    const { data: emailMethod } = await admin
+      .from("party_contact_methods")
+      .select("value")
+      .eq("party_id", targetProfile.party_id)
+      .eq("type", "email")
+      .eq("is_primary", true)
+      .maybeSingle();
+    recipientEmail = emailMethod?.value ?? null;
+  }
+
   const internalSecret = process.env.INTERNAL_API_SECRET;
   const internalSecretOk = !!internalSecret && internalSecret.length >= 16;
   if (!internalSecretOk) {
@@ -584,12 +831,7 @@ export async function sendInquiry(data: {
     );
   }
 
-  if (profile?.users?.email && internalSecretOk) {
-    // Must `await` the email fetch — on Vercel the lambda freezes after the
-    // server action returns, which silently kills any in-flight requests.
-    // Pattern previously caused inquiry emails to fail ~100% of the time in
-    // production (same bug fixed in actions/rsvps.ts during MVP audit).
-    // Wrapped in try/catch so email failure never blocks inquiry success.
+  if (recipientEmail && internalSecretOk) {
     try {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.trynocturn.com";
       const emailController = new AbortController();
@@ -603,8 +845,8 @@ export async function sendInquiry(data: {
             "Authorization": `Bearer ${internalSecret}`,
           },
           body: JSON.stringify({
-            toEmail: profile.users.email,
-            toName: profile.display_name,
+            toEmail: recipientEmail,
+            toName: recipientName,
             fromUserId: user.id,
             senderName: user.user_metadata?.full_name ?? user.email ?? "Someone",
             message: data.message,
@@ -615,39 +857,8 @@ export async function sendInquiry(data: {
         clearTimeout(emailTimeout);
       }
     } catch (emailErr) {
-      // Inquiry row is already inserted — surface the failure in logs but
-      // don't turn it into a user-visible error. The recipient can still see
-      // the inquiry in-app; only the notification email failed.
       console.error("[sendInquiry] notification email failed (non-blocking):", emailErr);
     }
-  }
-
-  // Contact upsert — best-effort industry sync for inquiry recipient
-  try {
-    if (profile?.users?.email) {
-      const { data: membership } = await admin
-        .from("collective_members")
-        .select("collective_id")
-        .eq("user_id", user.id)
-        .is("deleted_at", null)
-        .limit(1)
-        .maybeSingle();
-
-      if (membership?.collective_id) {
-        await admin.from("contacts").upsert({
-          collective_id: membership.collective_id,
-          contact_type: "industry",
-          email: profile.users.email.toLowerCase().trim(),
-          full_name: profile.display_name ?? null,
-          source: "marketplace",
-          marketplace_profile_id: data.toProfileId,
-          last_seen_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "collective_id,email", ignoreDuplicates: false });
-      }
-    }
-  } catch (contactErr) {
-    console.error("[marketplace] Contact upsert on inquiry failed (non-blocking):", contactErr);
   }
 
   revalidatePath("/dashboard/discover");

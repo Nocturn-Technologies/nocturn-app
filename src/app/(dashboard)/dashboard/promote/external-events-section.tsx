@@ -12,7 +12,7 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 interface ExternalEvent {
   id: string;
   title: string;
-  externalUrl: string;
+  externalUrl: string | null;
   platform: string | null;
   eventDate: string | null;
   venueName: string | null;
@@ -130,7 +130,7 @@ export function ExternalEventsSection({
                     >
                       {copiedId === event.id ? (
                         <>
-                          <Check className="h-3 w-3 text-green-500" />
+                          <Check className="h-3 w-3 text-emerald-500" />
                           Copied!
                         </>
                       ) : (

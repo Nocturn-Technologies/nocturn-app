@@ -101,7 +101,7 @@ export function EventFinancialsDashboard({ financials, forecast, trajectory }: P
               </p>
               <p
                 className={`text-4xl font-bold font-mono tabular-nums ${
-                  isProfitable ? "text-green-400" : "text-red-400"
+                  isProfitable ? "text-emerald-400" : "text-red-400"
                 }`}
               >
                 {isProfitable ? "" : "-"}
@@ -116,10 +116,10 @@ export function EventFinancialsDashboard({ financials, forecast, trajectory }: P
             <div className="space-y-2 pt-3 border-t border-border">
               <div className="flex items-center justify-between text-sm">
                 <span className="flex items-center gap-1.5 text-muted-foreground">
-                  <TrendingUp className="h-3.5 w-3.5 text-green-400" />
+                  <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
                   Gross revenue
                 </span>
-                <span className="font-mono tabular-nums text-green-400">
+                <span className="font-mono tabular-nums text-emerald-400">
                   {formatCurrency(financials.grossRevenue)}
                 </span>
               </div>
@@ -129,7 +129,7 @@ export function EventFinancialsDashboard({ financials, forecast, trajectory }: P
                     <span className="flex items-center gap-1.5 text-muted-foreground pl-5">
                       + Bar revenue
                     </span>
-                    <span className="font-mono tabular-nums text-green-400/70">
+                    <span className="font-mono tabular-nums text-emerald-400/70">
                       {formatCurrency(financials.estimatedBarRevenue)}
                     </span>
                   </div>
@@ -279,7 +279,7 @@ export function EventFinancialsDashboard({ financials, forecast, trajectory }: P
                             <td className="px-3 py-2 text-right text-xs font-mono tabular-nums">
                               <span
                                 className={
-                                  s.profit >= 0 ? "text-green-400" : "text-red-400"
+                                  s.profit >= 0 ? "text-emerald-400" : "text-red-400"
                                 }
                               >
                                 {s.profit >= 0 ? "" : "-"}
@@ -299,7 +299,7 @@ export function EventFinancialsDashboard({ financials, forecast, trajectory }: P
                     className={`rounded-lg p-2.5 text-xs flex items-start gap-2 ${
                       forecast.depositAtRisk
                         ? "bg-red-500/10 text-red-300"
-                        : "bg-green-500/10 text-green-300"
+                        : "bg-green-500/10 text-emerald-300"
                     }`}
                   >
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />

@@ -7,12 +7,12 @@ import { getTicketsBySessionId, fulfillPaymentIntent } from "@/app/actions/ticke
 import { useConfetti } from "@/components/celebrations";
 
 interface TicketStub {
-  ticket_token: string;
+  ticket_token: string | null;
   status: string;
   created_at: string;
   price_paid?: number | null;
   ticket_tiers?: { name: string; price: number } | null;
-  events?: { id: string; title: string; starts_at: string; venues: { name: string; city: string | null } | null } | null;
+  events?: { id: string; title: string; starts_at: string; venue_name?: string | null; city?: string | null } | null;
 }
 
 function SuccessContent() {
@@ -165,7 +165,7 @@ function SuccessContent() {
   }
 
   return (
-    <div className="min-h-dvh flex items-center justify-center bg-background px-4">
+    <div className="min-h-dvh flex items-center justify-center bg-background px-4 overflow-x-hidden">
       <div className="max-w-md w-full text-center space-y-6">
         {/* Confetti-style decorative element */}
         <div className="text-6xl mb-2">
@@ -215,10 +215,10 @@ function SuccessContent() {
                 minute: "2-digit",
               })}
             </p>
-            {tickets[0].events.venues && (
+            {tickets[0].events.venue_name && (
               <p className="text-sm text-muted-foreground">
-                {tickets[0].events.venues.name}
-                {tickets[0].events.venues.city ? `, ${tickets[0].events.venues.city}` : ""}
+                {tickets[0].events.venue_name}
+                {tickets[0].events.city ? `, ${tickets[0].events.city}` : ""}
               </p>
             )}
           </div>
@@ -245,8 +245,8 @@ function SuccessContent() {
             <div className="space-y-2">
               {tickets.map((t, i) => (
                 <Link
-                  key={t.ticket_token}
-                  href={`/ticket/${t.ticket_token}`}
+                  key={t.ticket_token ?? i}
+                  href={`/ticket/${t.ticket_token ?? ""}`}
                   className="flex items-center justify-between rounded-lg border border-border px-4 py-3 hover:bg-muted/50 transition-colors group"
                 >
                   <span className="text-sm text-foreground">
@@ -283,7 +283,7 @@ function SuccessContent() {
         <div className="pt-4 space-y-3">
           {!loading && tickets.length > 0 && tickets[0].events && (
             <Link
-              href={`/ticket/${tickets[0].ticket_token}`}
+              href={`/ticket/${tickets[0].ticket_token ?? ""}`}
               className="inline-flex items-center justify-center rounded-lg border border-border bg-card hover:bg-muted/50 text-foreground font-medium px-6 py-3 transition-colors w-full"
             >
               View Your Ticket

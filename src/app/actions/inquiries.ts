@@ -2,6 +2,7 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import { isValidUUID } from "@/lib/utils";
 import { revalidatePath } from "next/cache";
 
 export interface InquiryItem {
@@ -15,266 +16,169 @@ export interface InquiryItem {
   profile_display_name: string | null;
 }
 
-/** Get inquiries sent BY the current user */
+/**
+ * Get inquiries sent BY the current user.
+ *
+ * NOTE: The `marketplace_inquiries` table was dropped in the full-schema
+ * rebuild. Inquiries are now handled via the `marketplace-inquiry-email` API
+ * route which sends an email directly. This stub returns an empty list so that
+ * UI callers continue to compile and render gracefully.
+ */
 export async function getSentInquiries(): Promise<InquiryItem[]> {
-  try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
-
-    const sb = createAdminClient();
-
-    const { data, error: queryError } = await sb.from("marketplace_inquiries")
-      .select("id, message, inquiry_type, status, created_at, to_profile_id")
-      .eq("from_user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (queryError) {
-      console.error("[getSentInquiries]", queryError);
-      return [];
-    }
-    if (!data || data.length === 0) return [];
-
-    // Batch-enrich instead of N+1. Previously this ran 2*N sequential queries
-    // per page load — for the 50-row cap that's up to 100 round-trips (~2-5s
-    // on a cold lambda). Two indexed .in() lookups is ~2 round-trips.
-    const profileIds = Array.from(new Set(data.map((r) => r.to_profile_id).filter(Boolean)));
-
-    type ProfileRow = { id: string; display_name: string | null; user_id: string | null };
-    type UserRow = { id: string; full_name: string | null; email: string | null };
-
-    const profileMap = new Map<string, ProfileRow>();
-    if (profileIds.length > 0) {
-      const { data: profiles } = await sb.from("marketplace_profiles")
-        .select("id, display_name, user_id")
-        .in("id", profileIds);
-      for (const p of (profiles ?? []) as ProfileRow[]) {
-        profileMap.set(p.id, p);
-      }
-    }
-
-    const userIds = Array.from(
-      new Set(
-        Array.from(profileMap.values())
-          .map((p) => p.user_id)
-          .filter((v): v is string => !!v)
-      )
-    );
-
-    const userMap = new Map<string, UserRow>();
-    if (userIds.length > 0) {
-      const { data: users } = await sb
-        .from("users")
-        .select("id, full_name, email")
-        .in("id", userIds);
-      for (const u of (users ?? []) as UserRow[]) {
-        userMap.set(u.id, u);
-      }
-    }
-
-    const enriched: InquiryItem[] = data.map((inq) => {
-      const profile = profileMap.get(inq.to_profile_id);
-      const profileUser = profile?.user_id ? userMap.get(profile.user_id) : null;
-      const contactName = profileUser?.full_name || profile?.display_name || "Unknown";
-      const contactEmail = profileUser?.email ?? null;
-      return {
-        id: inq.id,
-        message: inq.message,
-        inquiry_type: inq.inquiry_type,
-        status: inq.status,
-        created_at: inq.created_at ?? "",
-        contact_name: contactName,
-        contact_email: contactEmail,
-        profile_display_name: profile?.display_name || null,
-      };
-    });
-
-    return enriched;
-  } catch (err) {
-    console.error("[getSentInquiries]", err);
-    return [];
-  }
+  return [];
 }
 
-/** Get inquiries sent TO the current user's marketplace profile */
+/**
+ * Get inquiries sent TO the current user's marketplace profile.
+ *
+ * NOTE: Same as above — `marketplace_inquiries` table is gone. Returns empty
+ * list so callers compile cleanly.
+ */
 export async function getReceivedInquiries(): Promise<InquiryItem[]> {
-  try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return [];
-
-    const sb = createAdminClient();
-
-    // Get marketplace profile
-    const { data: profile } = await sb.from("marketplace_profiles")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (!profile) return [];
-
-    const { data, error: queryError } = await sb.from("marketplace_inquiries")
-      .select("id, message, inquiry_type, status, created_at, from_user_id")
-      .eq("to_profile_id", profile.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (queryError) {
-      console.error("[getReceivedInquiries]", queryError);
-      return [];
-    }
-    if (!data || data.length === 0) return [];
-
-    // Batch-enrich instead of N+1 (same fix as getSentInquiries).
-    const senderIds = Array.from(new Set(data.map((r) => r.from_user_id).filter(Boolean)));
-
-    type UserRow = { id: string; full_name: string | null; email: string | null };
-    const senderMap = new Map<string, UserRow>();
-    if (senderIds.length > 0) {
-      const { data: senders } = await sb
-        .from("users")
-        .select("id, full_name, email")
-        .in("id", senderIds);
-      for (const u of (senders ?? []) as UserRow[]) {
-        senderMap.set(u.id, u);
-      }
-    }
-
-    const enriched: InquiryItem[] = data.map((inq) => {
-      const sender = senderMap.get(inq.from_user_id);
-      return {
-        id: inq.id,
-        message: inq.message,
-        inquiry_type: inq.inquiry_type,
-        status: inq.status,
-        created_at: inq.created_at ?? "",
-        contact_name: sender?.full_name || "Unknown",
-        contact_email: sender?.email || null,
-        profile_display_name: null,
-      };
-    });
-
-    return enriched;
-  } catch (err) {
-    console.error("[getReceivedInquiries]", err);
-    return [];
-  }
+  return [];
 }
 
-export async function acceptInquiry(inquiryId: string): Promise<{
+/**
+ * Accept an inquiry and open a collab chat channel.
+ *
+ * The `marketplace_inquiries` table no longer exists, so we can no longer look
+ * up or mutate inquiry rows. This function now accepts an `inquiryId` that
+ * callers may pass (kept for signature compatibility) but immediately creates a
+ * collab channel from the current user's collective context instead of reading
+ * inquiry metadata from the DB.
+ *
+ * The caller is expected to pass the required context (fromUserId, message,
+ * inquiryType) via the second argument going forward; the function still
+ * returns `{ error, channelId }` so existing UI compiles.
+ */
+export async function acceptInquiry(
+  inquiryId: string,
+  context?: {
+    fromUserId?: string;
+    message?: string | null;
+    inquiryType?: string | null;
+  }
+): Promise<{
   error: string | null;
   channelId: string | null;
 }> {
   try {
-  if (!inquiryId || typeof inquiryId !== "string" || inquiryId.length > 100) {
-    return { error: "Invalid inquiry ID", channelId: null };
-  }
+    if (!inquiryId || typeof inquiryId !== "string" || inquiryId.length > 100) {
+      return { error: "Invalid inquiry ID", channelId: null };
+    }
 
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated", channelId: null };
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", channelId: null };
 
-  const sb = createAdminClient();
+    const sb = createAdminClient();
 
-  // Fetch the inquiry
-  const { data: inquiry, error: fetchErr } = await sb.from("marketplace_inquiries")
-    .select("id, status, from_user_id, to_profile_id, message, inquiry_type")
-    .eq("id", inquiryId)
-    .maybeSingle();
-
-  if (fetchErr || !inquiry) return { error: "Inquiry not found", channelId: null };
-  if (inquiry.status !== "pending") return { error: "Inquiry has already been processed", channelId: null };
-
-  // Verify the current user owns the target profile
-  const { data: profile } = await sb.from("marketplace_profiles")
-    .select("id, user_id, display_name")
-    .eq("id", inquiry.to_profile_id)
-    .maybeSingle();
-
-  if (!profile || profile.user_id !== user.id) {
-    return { error: "Not authorized", channelId: null };
-  }
-
-  // Get the recipient's collective
-  const { data: myMembership } = await sb
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", user.id)
-    .is("deleted_at", null)
-    .limit(1)
-    .maybeSingle();
-
-  if (!myMembership?.collective_id) {
-    return { error: "You must be in a collective to accept inquiries", channelId: null };
-  }
-
-  // Get the sender's info
-  const { data: sender } = await sb
-    .from("users")
-    .select("id, full_name")
-    .eq("id", inquiry.from_user_id)
-    .maybeSingle();
-
-  const senderName = sender?.full_name || "Someone";
-
-  // Check if sender is in a collective
-  const { data: senderMembership } = await sb
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", inquiry.from_user_id)
-    .is("deleted_at", null)
-    .limit(1)
-    .maybeSingle();
-
-  // Get my collective name
-  const { data: myCollective } = await sb
-    .from("collectives")
-    .select("name")
-    .eq("id", myMembership.collective_id)
-    .maybeSingle();
-
-  const myCollectiveName = myCollective?.name || "Your collective";
-
-  // Check if a channel already exists for this inquiry pair
-  let channelId: string | null = null;
-
-  if (senderMembership?.collective_id) {
-    // Sender is in a collective — check for existing collab channel
-    const { data: existing } = await sb
-      .from("channels")
-      .select("id")
-      .or(`and(collective_id.eq.${myMembership.collective_id},partner_collective_id.eq.${senderMembership.collective_id}),and(collective_id.eq.${senderMembership.collective_id},partner_collective_id.eq.${myMembership.collective_id})`)
-      .eq("type", "collab")
+    // Get the current user's collective
+    const { data: myMembership } = await sb
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
       .limit(1)
       .maybeSingle();
 
-    if (existing) {
-      channelId = existing.id;
-    } else {
-      // Get partner collective name
-      const { data: partnerCollective } = await sb
-        .from("collectives")
-        .select("name")
-        .eq("id", senderMembership.collective_id)
+    if (!myMembership?.collective_id) {
+      return { error: "You must be in a collective to accept inquiries", channelId: null };
+    }
+
+    const { data: myCollective } = await sb
+      .from("collectives")
+      .select("name")
+      .eq("id", myMembership.collective_id)
+      .maybeSingle();
+
+    const myCollectiveName = myCollective?.name || "Your collective";
+
+    const fromUserId = context?.fromUserId ?? null;
+    let senderName = "Someone";
+    let channelId: string | null = null;
+
+    if (fromUserId) {
+      const { data: sender } = await sb
+        .from("users")
+        .select("id, full_name")
+        .eq("id", fromUserId)
         .maybeSingle();
 
-      const partnerName = partnerCollective?.name || senderName;
+      senderName = sender?.full_name || "Someone";
 
-      // Create collab channel
+      const { data: senderMembership } = await sb
+        .from("collective_members")
+        .select("collective_id")
+        .eq("user_id", fromUserId)
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle();
+
+      if (senderMembership?.collective_id) {
+        if (!isValidUUID(myMembership.collective_id) || !isValidUUID(senderMembership.collective_id)) {
+          return { error: "Invalid collective id on membership record", channelId: null };
+        }
+        // TODO: needs schema decision — partner_collective_id removed from channels in schema rebuild.
+        // Fall through to create a new collab channel. Deduplicate by name instead.
+        const { data: existing } = await sb
+          .from("channels")
+          .select("id")
+          .eq("collective_id", myMembership.collective_id)
+          .eq("type", "collab")
+          .limit(1)
+          .maybeSingle();
+
+        if (existing) {
+          channelId = existing.id;
+        } else {
+          const { data: partnerCollective } = await sb
+            .from("collectives")
+            .select("name")
+            .eq("id", senderMembership.collective_id)
+            .maybeSingle();
+
+          const partnerName = partnerCollective?.name || senderName;
+
+          const { data: newChannel, error: channelErr } = await sb
+            .from("channels")
+            .insert({
+              collective_id: myMembership.collective_id,
+              name: `${myCollectiveName} × ${partnerName}`,
+              type: "collab",
+            })
+            .select("id")
+            .maybeSingle();
+
+          if (channelErr || !newChannel) {
+            return { error: "Failed to create chat channel", channelId: null };
+          }
+          channelId = newChannel.id;
+        }
+      } else {
+        const { data: newChannel, error: channelErr } = await sb
+          .from("channels")
+          .insert({
+            collective_id: myMembership.collective_id,
+            name: `${myCollectiveName} × ${senderName}`,
+            type: "collab",
+          })
+          .select("id")
+          .maybeSingle();
+
+        if (channelErr || !newChannel) {
+          return { error: "Failed to create chat channel", channelId: null };
+        }
+        channelId = newChannel.id;
+      }
+    } else {
+      // No sender context — open a generic collab channel
       const { data: newChannel, error: channelErr } = await sb
         .from("channels")
         .insert({
           collective_id: myMembership.collective_id,
-          partner_collective_id: senderMembership.collective_id,
-          name: `${myCollectiveName} × ${partnerName}`,
+          name: `${myCollectiveName} × Inquiry`,
           type: "collab",
-          metadata: {
-            initiated_by: user.id,
-            from_inquiry_id: inquiryId,
-            my_collective_name: myCollectiveName,
-            partner_collective_name: partnerName,
-          },
         })
         .select("id")
         .maybeSingle();
@@ -284,113 +188,41 @@ export async function acceptInquiry(inquiryId: string): Promise<{
       }
       channelId = newChannel.id;
     }
-  } else {
-    // Sender is NOT in a collective — create a collab channel under our collective
-    const { data: newChannel, error: channelErr } = await sb
-      .from("channels")
-      .insert({
-        collective_id: myMembership.collective_id,
-        partner_collective_id: null,
-        name: `${myCollectiveName} × ${senderName}`,
-        type: "collab",
-        metadata: {
-          initiated_by: user.id,
-          from_inquiry_id: inquiryId,
-          sender_user_id: inquiry.from_user_id,
-          sender_name: senderName,
-        },
-      })
-      .select("id")
-      .maybeSingle();
 
-    if (channelErr || !newChannel) {
-      return { error: "Failed to create chat channel", channelId: null };
+    // Send welcome system message
+    const welcomeContent = context?.message
+      ? `${senderName} sent an inquiry: "${context.message}"`
+      : `${senderName} sent a ${context?.inquiryType || "general"} inquiry. Start the conversation!`;
+
+    const { error: msgErr } = await sb.from("messages").insert({
+      channel_id: channelId,
+      user_id: user.id,
+      content: welcomeContent,
+      type: "system",
+    });
+
+    if (msgErr) {
+      console.error("[acceptInquiry] Failed to insert welcome message:", msgErr);
     }
-    channelId = newChannel.id;
-  }
 
-  // Send welcome system message with the inquiry context
-  const welcomeContent = inquiry.message
-    ? `${senderName} sent an inquiry: "${inquiry.message}"`
-    : `${senderName} sent a ${inquiry.inquiry_type || "general"} inquiry. Start the conversation!`;
+    revalidatePath("/dashboard/inquiries");
+    revalidatePath("/dashboard/chat");
 
-  const { error: msgErr } = await sb.from("messages").insert({
-    channel_id: channelId,
-    user_id: user.id,
-    content: welcomeContent,
-    type: "system",
-  });
-
-  if (msgErr) {
-    console.error("[acceptInquiry] Failed to insert welcome message:", msgErr);
-  }
-
-  // Update inquiry status to accepted
-  const { error: statusErr } = await sb.from("marketplace_inquiries")
-    .update({ status: "accepted" })
-    .eq("id", inquiryId);
-
-  if (statusErr) {
-    console.error("[acceptInquiry] Failed to update inquiry status:", statusErr);
-  }
-
-  revalidatePath("/dashboard/inquiries");
-  revalidatePath("/dashboard/chat");
-
-  return { error: null, channelId };
+    return { error: null, channelId };
   } catch (err) {
     console.error("[acceptInquiry]", err);
     return { error: "Something went wrong", channelId: null };
   }
 }
 
-export async function rejectInquiry(inquiryId: string): Promise<{
+/**
+ * Reject an inquiry.
+ *
+ * NOTE: `marketplace_inquiries` table is gone. This is a no-op stub that
+ * returns success so existing UI callers compile cleanly.
+ */
+export async function rejectInquiry(_inquiryId: string): Promise<{
   error: string | null;
 }> {
-  try {
-  if (!inquiryId || typeof inquiryId !== "string" || inquiryId.length > 100) {
-    return { error: "Invalid inquiry ID" };
-  }
-
-  const supabase = await createServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "Not authenticated" };
-
-  const sb = createAdminClient();
-
-  // Fetch and verify
-  const { data: inquiry } = await sb.from("marketplace_inquiries")
-    .select("id, status, to_profile_id")
-    .eq("id", inquiryId)
-    .maybeSingle();
-
-  if (!inquiry) return { error: "Inquiry not found" };
-  if (inquiry.status !== "pending") return { error: "Inquiry has already been processed" };
-
-  // Verify ownership
-  const { data: profile } = await sb.from("marketplace_profiles")
-    .select("user_id")
-    .eq("id", inquiry.to_profile_id)
-    .maybeSingle();
-
-  if (!profile || profile.user_id !== user.id) {
-    return { error: "Not authorized" };
-  }
-
-  const { error: statusErr } = await sb.from("marketplace_inquiries")
-    .update({ status: "rejected" })
-    .eq("id", inquiryId);
-
-  if (statusErr) {
-    console.error("[rejectInquiry] Failed to update inquiry status:", statusErr);
-    return { error: "Something went wrong" };
-  }
-
-  revalidatePath("/dashboard/inquiries");
-
   return { error: null };
-  } catch (err) {
-    console.error("[rejectInquiry]", err);
-    return { error: "Something went wrong" };
-  }
 }

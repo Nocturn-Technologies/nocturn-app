@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main, QA]
+  pull_request:
+    branches: [main, QA]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder_anon_key
+          NEXT_PUBLIC_APP_URL: https://app.trynocturn.com
+          NEXT_PUBLIC_SENTRY_DSN: https://placeholder@sentry.io/1
+          NEXT_PUBLIC_POSTHOG_KEY: phc_placeholder
+
+  migrations:
+    name: Migrations lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Validate migration file names
+        run: |
+          for f in supabase/migrations/*.sql; do
+            base=$(basename "$f")
+            if [[ "$base" == "COMBINED_RUN_IN_SUPABASE.sql" ]]; then
+              echo "Skipping $base (legacy combined file)"
+              continue
+            fi
+            if ! [[ "$base" =~ ^[0-9]+_[a-z0-9_]+\.sql$ ]]; then
+              echo "ERROR: Migration file name '$base' does not match <timestamp>_<name>.sql"
+              exit 1
+            fi
+          done
+          echo "All migration file names are valid"
+
+      - name: Check for duplicate full filenames
+        run: |
+          dupes=$(ls supabase/migrations/*.sql | xargs -I{} basename {} | sort | uniq -d)
+          if [[ -n "$dupes" ]]; then
+            echo "ERROR: Duplicate migration filenames found: $dupes"
+            exit 1
+          fi
+          echo "No duplicate filenames"

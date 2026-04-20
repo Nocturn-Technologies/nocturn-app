@@ -159,7 +159,7 @@ export function AskNocturn({ collectiveId }: AskNocturnProps) {
                         setInput(suggestion);
                         setTimeout(() => inputRef.current?.focus(), 0);
                       }}
-                      className="rounded-full border border-nocturn/20 bg-nocturn/5 px-3 py-1.5 text-xs font-medium text-nocturn hover:bg-nocturn/10 transition-colors min-h-[36px]"
+                      className="rounded-full border border-nocturn/20 bg-nocturn/5 px-3 py-1.5 text-xs font-medium text-nocturn hover:bg-nocturn/10 transition-colors min-h-[44px]"
                     >
                       {suggestion}
                     </button>

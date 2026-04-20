@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect } from "react";
+import { useState, useTransition, useRef, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
 } from "lucide-react";
 import type { EventFinancials } from "@/app/actions/event-financials";
+import { cascadeScenario } from "@/lib/ticket-forecast";
 import {
   addExpense,
   updateExpense,
@@ -29,12 +30,30 @@ import {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-  }).format(amount);
+/**
+ * Build a currency-aware formatter for a single event's P&L. Previously
+ * hardcoded USD, which misled operators whose event was denominated in
+ * CAD/EUR/etc. — exports (PNG/PDF) went out labeled "$" and their
+ * accountant treated CAD numbers as USD.
+ *
+ * Uses Intl.NumberFormat's currency mode; falls back to a generic
+ * symbol-less format if the browser doesn't know the code (rare for
+ * ISO 4217 majors).
+ */
+function makeFormatter(currency: string): (amount: number) => string {
+  const code = (currency || "usd").toUpperCase();
+  try {
+    const fmt = new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+      minimumFractionDigits: 2,
+    });
+    return (amount) => fmt.format(amount);
+  } catch {
+    // Unknown currency code — fall back to a plain numeric + code suffix.
+    const fmt = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2 });
+    return (amount) => `${fmt.format(amount)} ${code}`;
+  }
 }
 
 const EXPENSE_CATEGORIES = [
@@ -77,10 +96,13 @@ function EditableAmountCell({
   value,
   onSave,
   disabled,
+  format,
 }: {
   value: number;
   onSave: (newValue: number) => Promise<void>;
   disabled?: boolean;
+  /** Per-event currency formatter; falls back to USD if not provided. */
+  format?: (amount: number) => string;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value.toString());
@@ -169,7 +191,7 @@ function EditableAmountCell({
       }`}
       disabled={disabled}
     >
-      {formatCurrency(value)}
+      {(format ?? makeFormatter("usd"))(value)}
       {!disabled && (
         <Pencil className="h-3 w-3 opacity-0 group-hover:opacity-50 transition-opacity" />
       )}
@@ -525,6 +547,11 @@ export function EventPnlSpreadsheet({ financials }: Props) {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
+  // Per-event currency formatter. Captured here once and reused across the
+  // spreadsheet so a CAD event doesn't render $-prefixed amounts (the old
+  // hardcoded-USD bug that misled operators on exports).
+  const formatCurrency = useMemo(() => makeFormatter(financials.currency), [financials.currency]);
+
   // Auto-clear errors
   useEffect(() => {
     if (!error) return;
@@ -613,9 +640,18 @@ export function EventPnlSpreadsheet({ financials }: Props) {
 
   const isProfitable = financials.profitLoss >= 0;
 
-  // ── Forecast scenarios ──────────────────────────────────────────────
+  // ── Forecast scenarios (cascade sell-through) ───────────────────────
+  // Tiers drain in sort order — Early Bird fills first, then T1, then T2,
+  // then Door. The 125% column caps at inventory and surfaces waitlist
+  // demand as a secondary signal (was previously fake "over-sold" revenue).
+  //
+  // Gross includes `estimatedBarRevenue` when set — the bar take is real
+  // revenue to the organizer (minus what the venue keeps). Previously the
+  // forecast understated gross by excluding it entirely, which mis-
+  // anchored the profit outlook on events with sizable bar contribution.
   const fRates = [0.5, 0.75, 1.0, 1.25];
-  const fLabels = ["50%", "75%", "100%", "125%"];
+  const fLabels = ["50%", "75%", "Sell-out", "Waitlist"];
+  const estimatedBar = financials.estimatedBarRevenue ?? 0;
   const totalFixedCosts =
     (financials.venueCost ?? 0) +
     (financials.venueDeposit ?? 0) +
@@ -624,15 +660,41 @@ export function EventPnlSpreadsheet({ financials }: Props) {
     financials.barShortfall;
 
   const forecasts = fRates.map((rate) => {
-    const tierRevs = financials.ticketTiers.map((t) => {
-      const sold = Math.min(Math.round(t.capacity * rate), Math.round(t.capacity * 1.25));
-      return t.price * sold;
-    });
-    const ticketRev = tierRevs.reduce((s, r) => s + r, 0);
-    const gross = ticketRev + financials.additionalRevenue;
+    const result = cascadeScenario(
+      financials.ticketTiers.map((t, i) => ({
+        name: t.name,
+        price: t.price,
+        capacity: t.capacity,
+        sort_order: i,
+      })),
+      rate,
+    );
+    const ticketRev = result.revenue;
+    const gross = ticketRev + financials.additionalRevenue + estimatedBar;
     const profit = gross - totalFixedCosts;
-    return { tierRevs, gross, profit };
+    return {
+      tierRevs: result.perTier.map((p) => p.revenue),
+      tierSold: result.perTier.map((p) => p.sold),
+      ticketsSold: result.ticketsSold,
+      waitlist: result.waitlistCount,
+      gross,
+      profit,
+    };
   });
+
+  // Pre-event deposit-at-risk: when the bar minimum is higher than the
+  // operator's own estimated bar revenue, the deposit is effectively on
+  // the line. Surfaced as a warning cue so operators see the risk before
+  // the night of the event (previously barShortfall only computed after
+  // the fact from actualBarRevenue).
+  const depositAtRisk =
+    financials.barMinimum != null &&
+    financials.barMinimum > 0 &&
+    estimatedBar > 0 &&
+    estimatedBar < financials.barMinimum &&
+    financials.actualBarRevenue == null
+      ? financials.venueDeposit ?? 0
+      : 0;
 
   return (
     <div className="space-y-4">
@@ -678,11 +740,13 @@ export function EventPnlSpreadsheet({ financials }: Props) {
           value={financials.grossRevenue}
           subtitle={`${financials.totalTicketsSold} tickets sold`}
           positive
+          format={formatCurrency}
         />
         <SummaryCard
           label="Total Costs"
           value={financials.totalExpenses + financials.totalArtistFees}
           subtitle="Your out-of-pocket"
+          format={formatCurrency}
         />
         <SummaryCard
           label="Profit / Loss"
@@ -690,6 +754,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
           subtitle={isProfitable ? "In the green" : "In the red"}
           positive={isProfitable}
           highlighted
+          format={formatCurrency}
         />
       </div>
 
@@ -781,10 +846,19 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   <th
                     key={i}
                     className={`px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider w-[100px] ${
-                      i === 2 ? "text-nocturn" : "text-muted-foreground/60"
+                      i === 2 ? "text-nocturn" : "text-muted-foreground/70"
                     }`}
                   >
-                    {label}
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span>{label}</span>
+                      {/* Ticket-count cue per scenario — shows the cascade math */}
+                      <span className="text-[11px] font-normal text-muted-foreground/70 tabular-nums normal-case">
+                        {forecasts[i].ticketsSold} tix
+                        {forecasts[i].waitlist > 0 && (
+                          <span className="text-nocturn/70 ml-0.5">+{forecasts[i].waitlist}</span>
+                        )}
+                      </span>
+                    </div>
                   </th>
                 ))}
                 <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[60px]">
@@ -882,6 +956,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                         onSave={async (v) => {
                           await handleUpdateRevenue(line.id, "amount", v);
                         }}
+                        format={formatCurrency}
                       />
                     </div>
                   </td>
@@ -1003,54 +1078,78 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                 </tr>
               )}
 
-              {/* Custom Expenses (Editable) */}
-              {financials.expenses.map((expense) => (
-                <tr
-                  key={expense.id}
-                  className="border-b border-border/50 hover:bg-muted/20 transition-colors group"
-                >
-                  <td className="px-4 py-1.5 text-muted-foreground text-xs">
-                    {categoryLabel(expense.category)}
-                  </td>
-                  <td className="px-4 py-1.5">
-                    <EditableTextCell
-                      value={expense.description}
-                      onSave={async (v) => {
-                        await handleUpdateExpense(expense.id, "description", v);
-                      }}
-                    />
-                  </td>
-                  <td className="px-4 py-1.5 text-right">
-                    <div className="flex items-center justify-end">
-                      <span className="text-red-400 mr-1">(</span>
-                      <EditableAmountCell
-                        value={expense.amount}
+              {/* Custom Expenses (Editable). When a row was entered in a
+                  different currency than the event's reporting currency, a
+                  small secondary line surfaces the original amount + the FX
+                  rate captured at entry so operators can reconcile against
+                  the DJ invoice / bank statement without mental math. */}
+              {financials.expenses.map((expense) => {
+                const hasFxSnapshot =
+                  expense.originalAmount != null &&
+                  expense.originalCurrency != null &&
+                  expense.fxRate != null &&
+                  // Only flag when the origin actually diverged from the event currency.
+                  // Rows entered natively in the event currency carry a rate of 1.
+                  expense.fxRate !== 1;
+                return (
+                  <tr
+                    key={expense.id}
+                    className="border-b border-border/50 hover:bg-muted/20 transition-colors group"
+                  >
+                    <td className="px-4 py-1.5 text-muted-foreground text-xs align-top">
+                      {categoryLabel(expense.category)}
+                    </td>
+                    <td className="px-4 py-1.5">
+                      <EditableTextCell
+                        value={expense.description}
                         onSave={async (v) => {
-                          await handleUpdateExpense(expense.id, "amount", v);
+                          await handleUpdateExpense(expense.id, "description", v);
                         }}
                       />
-                      <span className="text-red-400 ml-0.5">)</span>
-                    </div>
-                  </td>
-                  {fLabels.map((_, i) => (
-                    <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-red-400/30">
-                      ({formatCurrency(expense.amount)})
+                      {hasFxSnapshot && (
+                        <p
+                          className="text-[11px] text-muted-foreground/70 mt-0.5"
+                          title={`Entered ${expense.originalAmount?.toLocaleString()} ${expense.originalCurrency?.toUpperCase()} at rate ${expense.fxRate?.toFixed(4)}${expense.fxLockedAt ? ` on ${new Date(expense.fxLockedAt).toISOString().slice(0, 10)}` : ""}`}
+                        >
+                          {expense.originalAmount?.toLocaleString()} {expense.originalCurrency?.toUpperCase()}
+                          {" · "}
+                          @ {expense.fxRate?.toFixed(3)}
+                        </p>
+                      )}
                     </td>
-                  ))}
-                  <td className="px-4 py-1.5 text-center">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Delete expense"
-                      className="h-7 w-7 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all"
-                      onClick={() => handleDeleteExpense(expense.id)}
-                      disabled={isPending}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-4 py-1.5 text-right align-top">
+                      <div className="flex items-center justify-end">
+                        <span className="text-red-400 mr-1">(</span>
+                        <EditableAmountCell
+                          value={expense.amount}
+                          onSave={async (v) => {
+                            await handleUpdateExpense(expense.id, "amount", v);
+                          }}
+                          format={formatCurrency}
+                        />
+                        <span className="text-red-400 ml-0.5">)</span>
+                      </div>
+                    </td>
+                    {fLabels.map((_, i) => (
+                      <td key={i} className="px-3 py-1.5 text-right text-sm font-mono text-red-400/30 align-top">
+                        ({formatCurrency(expense.amount)})
+                      </td>
+                    ))}
+                    <td className="px-4 py-1.5 text-center align-top">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Delete expense"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 hover:bg-red-400/10 transition-all"
+                        onClick={() => handleDeleteExpense(expense.id)}
+                        disabled={isPending}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
 
               {/* Add Expense Row */}
               <AddExpenseRow eventId={financials.eventId} />
@@ -1225,6 +1324,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
               onSave={async (v) => {
                 await handleUpdateBarSettings("barMinimum", v);
               }}
+              format={formatCurrency}
             />
           </div>
           <div className="rounded-lg border border-border bg-background/50 p-3">
@@ -1236,6 +1336,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
               onSave={async (v) => {
                 await handleUpdateBarSettings("actualBarRevenue", v);
               }}
+              format={formatCurrency}
             />
           </div>
         </div>
@@ -1246,14 +1347,18 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                 ? "text-amber-400"
                 : financials.actualBarRevenue != null
                   ? "text-green-400"
-                  : "text-muted-foreground"
+                  : depositAtRisk > 0
+                    ? "text-amber-400"
+                    : "text-muted-foreground"
             }`}
           >
             {financials.barShortfall > 0
               ? `${formatCurrency(financials.barShortfall)} short — added to expenses`
               : financials.actualBarRevenue != null
                 ? "Minimum met"
-                : "Enter actual bar revenue to track shortfall"}
+                : depositAtRisk > 0
+                  ? `Your estimated bar (${formatCurrency(estimatedBar)}) is below the minimum — ${formatCurrency(depositAtRisk)} deposit at risk`
+                  : "Enter actual bar revenue to track shortfall"}
           </p>
         )}
       </div>
@@ -1269,12 +1374,15 @@ function SummaryCard({
   subtitle,
   positive,
   highlighted,
+  format,
 }: {
   label: string;
   value: number;
   subtitle?: string;
   positive?: boolean;
   highlighted?: boolean;
+  /** Per-event currency formatter; falls back to USD. */
+  format?: (amount: number) => string;
 }) {
   return (
     <div className={`rounded-xl border p-4 ${
@@ -1294,7 +1402,7 @@ function SummaryCard({
             : "text-red-400"
           : "text-foreground"
       }`}>
-        {formatCurrency(value)}
+        {(format ?? makeFormatter("usd"))(value)}
       </p>
       {subtitle && (
         <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>

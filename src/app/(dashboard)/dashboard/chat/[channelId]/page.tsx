@@ -93,7 +93,7 @@ export default function ChatRoomPage() {
       .eq("id", channelId)
       .maybeSingle()
       .then(({ data }) => {
-        if (data && mountedRef.current) setChannel(data as Channel);
+        if (data && mountedRef.current) setChannel(data as unknown as Channel);
       });
 
     // Load messages, THEN start realtime subscription
@@ -104,7 +104,7 @@ export default function ChatRoomPage() {
       .order("created_at", { ascending: true })
       .then(({ data }) => {
         if (!mountedRef.current) return;
-        setMessages((data ?? []) as Message[]);
+        setMessages((data ?? []) as unknown as Message[]);
         setLoading(false);
         initialLoadDoneRef.current = true;
         setTimeout(scrollToBottom, 100);
@@ -135,10 +135,10 @@ export default function ChatRoomPage() {
           (payload) => {
             setMessages((prev) => {
               const existing = prev.find(
-                (m) => m.id === (payload.new as Message).id
+                (m) => m.id === (payload.new as unknown as Message).id
               );
               if (existing) return prev;
-              return [...prev, payload.new as Message];
+              return [...prev, payload.new as unknown as Message];
             });
             setTimeout(scrollToBottom, 50);
           }
@@ -257,7 +257,7 @@ export default function ChatRoomPage() {
             const withoutOptimistic = prev.filter((m) => m.id !== optimisticId);
             const alreadyDelivered = withoutOptimistic.some((m) => m.id === data.id);
             if (alreadyDelivered) return withoutOptimistic;
-            return [...withoutOptimistic, data as Message];
+            return [...withoutOptimistic, data as unknown as Message];
           });
         }
       });
@@ -405,7 +405,7 @@ export default function ChatRoomPage() {
       setMessages((prev) => {
         const exists = prev.find((m) => m.id === data.id);
         if (exists) return prev;
-        return [...prev, data as Message];
+        return [...prev, data as unknown as Message];
       });
     }
   };
@@ -616,7 +616,7 @@ export default function ChatRoomPage() {
                 }
               }}
               placeholder={channel?.type === "general" ? "Ask Nocturn anything..." : "Message your team... (@ai for Nocturn)"}
-              className="w-full bg-transparent text-[16px] placeholder:text-muted-foreground/50 resize-none outline-none max-h-[120px] leading-5"
+              className="w-full bg-transparent text-[16px] placeholder:text-muted-foreground/70 resize-none outline-none max-h-[120px] leading-5"
               rows={1}
               style={{ fontSize: "16px" }}
             />
@@ -736,7 +736,7 @@ const MessageBubble = memo(function MessageBubble({
   if (msg.type === "system") {
     return (
       <div className="flex justify-center py-1 animate-in fade-in duration-200">
-        <span className="text-[12px] text-muted-foreground/60 text-center px-3">
+        <span className="text-[12px] text-muted-foreground/70 text-center px-3">
           {msg.content}
         </span>
       </div>

@@ -27,7 +27,8 @@ export default async function EventsPage() {
     starts_at: string;
     status: string;
     flyer_url: string | null;
-    venues: { name: string; city: string } | null;
+    venue_name: string | null;
+    city: string | null;
   };
 
   let collectiveIds: string[] = [];
@@ -53,9 +54,8 @@ export default async function EventsPage() {
       collectiveIds.length > 0
         ? admin
             .from("events")
-            .select("id, title, slug, starts_at, status, flyer_url, venues(name, city)")
+            .select("id, title, slug, starts_at, status, flyer_url, venue_name, city")
             .in("collective_id", collectiveIds)
-            .is("deleted_at", null)
             .order("starts_at", { ascending: false })
         : Promise.resolve({ data: null, error: null }),
       primaryCollectiveId
@@ -179,7 +179,7 @@ export default async function EventsPage() {
             <CollapsibleEventSection
               title="Published"
               events={published}
-              dotColor="bg-green-500"
+              dotColor="bg-emerald-500"
               defaultOpen={true}
             />
           )}

@@ -19,7 +19,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { updateEventDesign, getEventDesign } from "@/app/actions/events";
-import { generatePosterPrompt } from "@/app/actions/ai-poster";
 import { uploadFlyerAndExtractTheme, type EventTheme } from "@/app/actions/ai-theme";
 
 const VIBE_OPTIONS = [
@@ -123,7 +122,7 @@ export default function EventDesignPage() {
       setVibeTags((e.vibe_tags as string[]) ?? []);
       setMinAge(e.min_age ? String(e.min_age) : "");
       setEventTitle(e.title);
-      setEventSlug(e.slug);
+      setEventSlug(e.slug ?? "");
       setCollectiveSlug(e.collectiveSlug ?? "");
       const meta = (e.metadata ?? {}) as Record<string, unknown>;
       setDressCode((meta.dressCode as string) ?? "");
@@ -186,19 +185,16 @@ export default function EventDesignPage() {
     setGeneratedUrl(null);
 
     try {
-      // Step 1: Claude crafts prompt for BACKGROUND ART ONLY (no text)
-      const { prompt } = await generatePosterPrompt({
-        title: eventTitle,
-        genre: vibeTags,
-        venueName: posterVenue || undefined,
-        styleDirection: posterStyle || undefined,
-      });
-
-      // Step 2: Replicate generates the background art
+      // Generate poster: prompt is generated server-side, then Replicate renders background art
       const res = await fetch("/api/generate-poster", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({
+          eventId,
+          vibeTags,
+          venueName: posterVenue || undefined,
+          styleDirection: posterStyle || undefined,
+        }),
       });
 
       const data = await res.json();
@@ -209,7 +205,7 @@ export default function EventDesignPage() {
         return;
       }
 
-      // Step 3: Composite text on top using canvas
+      // Composite text on top using canvas
       const composited = await compositeTextOnPoster(data.imageUrl, {
         title: eventTitle,
         djs: posterDJs,
@@ -568,7 +564,7 @@ export default function EventDesignPage() {
                         AI-extracted theme
                       </span>
                       {extractedTheme.mood && (
-                        <span className="text-[11px] text-muted-foreground/60 italic">
+                        <span className="text-[11px] text-muted-foreground/70 italic">
                           {extractedTheme.mood}
                         </span>
                       )}
@@ -589,7 +585,7 @@ export default function EventDesignPage() {
                             }`}
                             style={{ backgroundColor: extractedTheme[key] }}
                           />
-                          <span className="block text-[11px] uppercase text-muted-foreground/60">
+                          <span className="block text-[11px] uppercase text-muted-foreground/70">
                             {key}
                           </span>
                         </button>
@@ -756,7 +752,7 @@ export default function EventDesignPage() {
                 {/* Style reference upload */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Style reference (optional)</label>
-                  <p className="text-[11px] text-muted-foreground/60">Upload a poster you like as inspiration</p>
+                  <p className="text-[11px] text-muted-foreground/70">Upload a poster you like as inspiration</p>
                   <div className="flex items-center gap-3">
                     <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-4 py-2.5 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
                       <Upload className="h-4 w-4" />
@@ -849,7 +845,7 @@ export default function EventDesignPage() {
                       ))}
                     </div>
                     {unsplashResults.length > 0 && (
-                      <p className="text-[11px] text-muted-foreground/50 text-center">
+                      <p className="text-[11px] text-muted-foreground/70 text-center">
                         Photos by Unsplash
                       </p>
                     )}
@@ -1087,9 +1083,9 @@ export default function EventDesignPage() {
                   <div className="rounded-xl border border-white/5 bg-white/[0.02] p-3">
                     <div className="flex items-center gap-3">
                       <div className="flex flex-col items-center rounded-lg bg-white/5 px-2.5 py-1.5">
-                        <span className="text-[11px] font-semibold uppercase text-white/40">SAT</span>
+                        <span className="text-[11px] font-semibold uppercase text-white/60">SAT</span>
                         <span className="text-sm font-bold text-white">25</span>
-                        <span className="text-[11px] font-semibold uppercase text-white/40">APR</span>
+                        <span className="text-[11px] font-semibold uppercase text-white/60">APR</span>
                       </div>
                       <div className="text-xs text-white/60">
                         10:00 PM — 2:00 AM
@@ -1104,7 +1100,7 @@ export default function EventDesignPage() {
                   )}
 
                   {dressCode && (
-                    <p className="text-[11px] text-white/40">
+                    <p className="text-[11px] text-white/60">
                       Dress code: {dressCode}
                     </p>
                   )}
@@ -1117,7 +1113,7 @@ export default function EventDesignPage() {
                     Get Tickets
                   </div>
 
-                  <p className="text-center text-[11px] text-white/40">
+                  <p className="text-center text-[11px] text-white/60">
                     Powered by <span style={{ color: themeColor }}>nocturn.</span>
                   </p>
                 </div>

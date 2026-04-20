@@ -15,7 +15,8 @@ interface EventItem {
   starts_at: string;
   status: string;
   flyer_url?: string | null;
-  venues: { name: string; city: string } | null;
+  venue_name: string | null;
+  city: string | null;
 }
 
 export function SwipeableEventList({ events, stagger = false }: { events: EventItem[]; stagger?: boolean }) {
@@ -135,10 +136,10 @@ function SwipeableEventCard({ event }: { event: EventItem }) {
         <div className="flex-1 min-w-0">
           <p className="font-bold truncate">{event.title}</p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-            {event.venues && (
+            {event.venue_name && (
               <span className="flex items-center gap-1 truncate">
                 <MapPin className="h-3 w-3 shrink-0" />
-                <span className="truncate">{event.venues.name}</span>
+                <span className="truncate">{event.venue_name}</span>
               </span>
             )}
             <span className="flex items-center gap-1 shrink-0">

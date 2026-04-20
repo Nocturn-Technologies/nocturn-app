@@ -49,7 +49,7 @@ import { haptic } from "@/lib/haptics";
 const statusIcons: Record<string, React.ReactNode> = {
   todo: <Circle className="h-5 w-5 text-muted-foreground transition-all duration-200" />,
   in_progress: <Clock className="h-5 w-5 text-blue-500 transition-all duration-200" />,
-  done: <Check className="h-5 w-5 text-green-500 transition-all duration-200" />,
+  done: <Check className="h-5 w-5 text-emerald-500 transition-all duration-200" />,
   blocked: <AlertTriangle className="h-5 w-5 text-red-500 transition-all duration-200" />,
 };
 
@@ -129,14 +129,14 @@ function CompletionCelebration({ show, is100 }: { show: boolean; is100: boolean 
       <div className="animate-scale-in flex flex-col items-center gap-2">
         {is100 ? (
           <>
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-green-500/20 animate-bounce">
-              <PartyPopper className="h-10 w-10 text-green-400" />
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/20 animate-bounce">
+              <PartyPopper className="h-10 w-10 text-emerald-400" />
             </div>
-            <p className="text-lg font-bold text-green-400 animate-fade-in-up">All tasks complete!</p>
+            <p className="text-lg font-bold text-emerald-400 animate-fade-in-up">All tasks complete!</p>
           </>
         ) : (
-          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-green-500/20">
-            <Check className="h-7 w-7 text-green-400" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20">
+            <Check className="h-7 w-7 text-emerald-400" />
           </div>
         )}
       </div>
@@ -527,11 +527,11 @@ function EventTasksPageInner() {
         <div className="animate-fade-in-up">
           <div className="flex items-center justify-between text-sm mb-2">
             <span className="text-muted-foreground">{doneTasks.length} of {tasks.length} tasks done</span>
-            <span className={`font-bold ${progress === 100 ? "text-green-400" : "text-nocturn"}`}>{progress}%</span>
+            <span className={`font-bold ${progress === 100 ? "text-emerald-400" : "text-nocturn"}`}>{progress}%</span>
           </div>
           <div className="h-2 rounded-full bg-muted overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${progress === 100 ? "bg-green-500" : "bg-nocturn"}`}
+              className={`h-full rounded-full transition-all duration-500 ${progress === 100 ? "bg-emerald-500" : "bg-nocturn"}`}
               style={{ width: `${progress}%` }}
             />
           </div>
@@ -945,7 +945,7 @@ function CategoryGroup({
         </span>
         <div className="flex-1 h-1 rounded-full bg-muted ml-2 overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-300 ${doneCount === tasks.length ? "bg-green-500" : "bg-nocturn"}`}
+            className={`h-full rounded-full transition-all duration-300 ${doneCount === tasks.length ? "bg-emerald-500" : "bg-nocturn"}`}
             style={{ width: tasks.length > 0 ? `${(doneCount / tasks.length) * 100}%` : "0%" }}
           />
         </div>
@@ -997,6 +997,23 @@ function TaskCard({
   const dueLabel = relativeDue(task);
   const hasNote = typeof task.description === "string" && task.description.length > 0;
 
+  // "In progress" pop-in hint — the circle → clock → check cycle isn't obvious
+  // from the icon alone, so when the user lands on the intermediate state we
+  // briefly show a pill telling them to tap again to finish.
+  const [showInProgressHint, setShowInProgressHint] = useState(false);
+  const prevStatusRef = useRef<string>(task.status as string);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const curr = task.status as string;
+    if (curr === "in_progress" && prev !== "in_progress") {
+      setShowInProgressHint(true);
+      const t = setTimeout(() => setShowInProgressHint(false), 1800);
+      prevStatusRef.current = curr;
+      return () => clearTimeout(t);
+    }
+    prevStatusRef.current = curr;
+  }, [task.status]);
+
   useEffect(() => {
     if (editingNote && noteRef.current) noteRef.current.focus();
   }, [editingNote]);
@@ -1008,20 +1025,36 @@ function TaskCard({
 
   return (
     <div
-      className={`rounded-lg border p-3 transition-all duration-200 hover:border-nocturn/20 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : ""}`}
+      className={`relative rounded-lg border p-3 transition-all duration-200 hover:border-nocturn/20 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : ""}`}
     >
       <div className="flex items-start gap-3">
+        <div className="relative shrink-0">
+          <button
+            onClick={() => onStatusChange(task.id as string, nextStatus)}
+            className="min-w-[44px] min-h-[44px] mt-0.5 flex items-center justify-center rounded-full active:scale-90 active:bg-white/10 transition-all duration-150"
+          >
+            {statusIcons[task.status as string]}
+          </button>
+          {showInProgressHint && (
+            <span
+              role="status"
+              className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-blue-500 text-white text-[11px] font-semibold px-2.5 py-1 shadow-lg shadow-blue-500/30 animate-in-progress-pop z-10"
+            >
+              In progress — tap again to finish
+              <span className="absolute left-1/2 -top-1 -translate-x-1/2 w-2 h-2 bg-blue-500 rotate-45" />
+            </span>
+          )}
+        </div>
         <button
-          onClick={() => onStatusChange(task.id as string, nextStatus)}
-          className="shrink-0 mt-0.5 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full active:scale-90 active:bg-white/10 transition-all duration-150"
+          type="button"
+          className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
+          onClick={() => setShowActions(!showActions)}
+          aria-expanded={showActions}
         >
-          {statusIcons[task.status as string]}
-        </button>
-        <div className="flex-1 min-w-0" onClick={() => setShowActions(!showActions)}>
-          <p className={`text-sm font-medium cursor-pointer ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}>
+          <span className={`block text-sm font-medium ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}>
             {String(task.title)}
-          </p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
+          </span>
+          <span className="flex items-center gap-2 mt-1 flex-wrap">
             {dueLabel && (
               <span className={`text-[11px] font-medium ${overdue ? "text-red-400" : "text-muted-foreground"}`}>
                 {overdue ? "🔴 " : ""}{dueLabel}
@@ -1037,8 +1070,8 @@ function TaskCard({
                 <StickyNote className="h-2.5 w-2.5 inline" /> {String(task.description)}
               </span>
             )}
-          </div>
-        </div>
+          </span>
+        </button>
       </div>
 
       {/* Inline actions — assign + due date + note */}
@@ -1170,11 +1203,16 @@ function ContentTaskCard({
       {/* Top row */}
       <div className="flex items-start gap-3">
         <span className="text-lg shrink-0 mt-0.5">{emoji}</span>
-        <div className="flex-1 min-w-0 cursor-pointer" onClick={() => setShowActions(!showActions)}>
-          <p className={`text-sm font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
+        <button
+          type="button"
+          className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
+          onClick={() => setShowActions(!showActions)}
+          aria-expanded={showActions}
+        >
+          <span className={`block text-sm font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
             {String(task.title)}
-          </p>
-          <div className="flex items-center gap-2 mt-1 flex-wrap">
+          </span>
+          <span className="flex items-center gap-2 mt-1 flex-wrap">
             <span className="rounded-full bg-white/5 border border-white/10 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
               {phase}
             </span>
@@ -1186,8 +1224,8 @@ function ContentTaskCard({
             {assignee && (
               <span className="text-[11px] text-muted-foreground">→ {assignee.full_name ?? assignee.email}</span>
             )}
-          </div>
-        </div>
+          </span>
+        </button>
         <Button
           size="sm"
           variant={isDone ? "default" : "outline"}

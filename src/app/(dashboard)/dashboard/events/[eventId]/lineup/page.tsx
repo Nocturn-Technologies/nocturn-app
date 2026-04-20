@@ -29,23 +29,20 @@ import Link from "next/link";
 
 interface EventArtist {
   id: string;
-  artist_id: string;
+  party_id: string | null;
+  name: string;
   fee: number | null;
   set_time: string | null;
-  set_duration: number | null;
-  status: string;
+  set_length: number | null;
+  role: string | null;
+  status?: string;
   notes: string | null;
-  artists: {
-    name: string;
-    genre: string[];
-    instagram: string | null;
-  };
 }
 
 interface Artist {
   id: string;
   name: string;
-  genre: string[];
+  genre: string[] | null;
   default_fee: number | null;
 }
 
@@ -89,25 +86,31 @@ export default function LineupPage() {
       .from("events")
       .select("title")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
     if (event) setEventTitle(event.title);
 
     // Get lineup
     const { data: lineupData } = await supabase
       .from("event_artists")
-      .select("id, artist_id, fee, set_time, set_duration, status, notes, artists(name, genre, instagram)")
+      .select("id, party_id, name, fee, set_time, set_length, role, notes")
       .eq("event_id", eventId)
-      .order("set_time");
+      .order("sort_order");
     setLineup((lineupData ?? []) as unknown as EventArtist[]);
 
-    // Get all artists for the dropdown
+    // Get all artist profiles for the dropdown
     const { data: artistData } = await supabase
-      .from("artists")
-      .select("id, name, genre, default_fee")
-      .is("deleted_at", null)
-      .order("name");
-    setAllArtists((artistData ?? []) as Artist[]);
+      .from("artist_profiles")
+      .select("id, genre, default_fee, parties(display_name)")
+      .eq("is_active", true)
+      .order("slug");
+    setAllArtists(
+      (artistData ?? []).map((a) => ({
+        id: a.id,
+        name: (a.parties as unknown as { display_name: string } | null)?.display_name ?? "",
+        genre: a.genre,
+        default_fee: a.default_fee,
+      }))
+    );
 
     setLoading(false);
   }
@@ -189,13 +192,13 @@ export default function LineupPage() {
   }
 
   // Filter out already-booked artists
-  const bookedIds = lineup.map((l) => l.artist_id);
+  const bookedIds = lineup.map((l) => l.party_id);
   const availableArtists = allArtists.filter((a) => !bookedIds.includes(a.id));
 
 
   const statusColors: Record<string, string> = {
     pending: "bg-yellow-500/10 text-yellow-500",
-    confirmed: "bg-green-500/10 text-green-500",
+    confirmed: "bg-emerald-500/10 text-emerald-500",
     declined: "bg-red-500/10 text-red-500",
     cancelled: "bg-muted text-muted-foreground",
   };
@@ -467,7 +470,7 @@ export default function LineupPage() {
                   />
                 </div>
                 {newEmail && (
-                  <label className="flex items-start gap-2 rounded-md border border-border bg-card/50 p-3 text-xs cursor-pointer">
+                  <label className="flex items-start gap-2 rounded-md border border-border bg-card/50 p-3 text-xs cursor-pointer min-h-[44px]">
                     <input
                       type="checkbox"
                       checked={sendInvite}
@@ -521,7 +524,7 @@ export default function LineupPage() {
             {lineup.length} Artist{lineup.length !== 1 ? "s" : ""} Booked
           </h2>
           {lineup.map((item) => {
-            const StatusIcon = statusIcons[item.status] ?? Clock;
+            const StatusIcon = statusIcons[item.status ?? ""] ?? Clock;
             return (
               <Card key={item.id}>
                 <CardContent className="flex items-center gap-4 p-4">
@@ -529,18 +532,16 @@ export default function LineupPage() {
                     <Music className="h-5 w-5 text-nocturn" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{item.artists.name}</p>
+                    <p className="font-medium truncate">{item.name}</p>
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      {item.artists.genre?.length > 0 && (
-                        <span>{item.artists.genre.join(", ")}</span>
-                      )}
+                      {item.role && <span>{item.role}</span>}
                       {item.fee && <span>${item.fee}</span>}
-                      {item.set_duration && <span>{item.set_duration}min</span>}
+                      {item.set_length && <span>{item.set_length}min</span>}
                     </div>
                   </div>
                   <span
                     className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-                      statusColors[item.status] ?? ""
+                      statusColors[item.status ?? ""] ?? ""
                     }`}
                   >
                     <StatusIcon className="h-3 w-3" />
@@ -551,19 +552,19 @@ export default function LineupPage() {
                       {changingStatusId === item.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <MoreVertical className="h-4 w-4" />}
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      {item.status !== "confirmed" && (
+                      {(item.status ?? "") !== "confirmed" && (
                         <DropdownMenuItem onClick={() => handleStatusChange(item.id, "confirmed")} disabled={!!changingStatusId}>
-                          <Check className="mr-2 h-4 w-4 text-green-500" />
+                          <Check className="mr-2 h-4 w-4 text-emerald-500" />
                           Confirm
                         </DropdownMenuItem>
                       )}
-                      {item.status !== "declined" && (
+                      {(item.status ?? "") !== "declined" && (
                         <DropdownMenuItem onClick={() => handleStatusChange(item.id, "declined")} disabled={!!changingStatusId}>
                           <X className="mr-2 h-4 w-4 text-red-500" />
                           Decline
                         </DropdownMenuItem>
                       )}
-                      {item.status !== "cancelled" && (
+                      {(item.status ?? "") !== "cancelled" && (
                         <DropdownMenuItem onClick={() => handleStatusChange(item.id, "cancelled")} disabled={!!changingStatusId}>
                           Cancel booking
                         </DropdownMenuItem>

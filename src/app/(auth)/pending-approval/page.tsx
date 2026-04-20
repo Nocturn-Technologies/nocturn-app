@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Clock, LogOut, RefreshCw, XCircle, Mail } from "lucide-react";
+import { Clock, LogOut, RefreshCw, Mail } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 export default function PendingApprovalPage() {
@@ -11,53 +11,24 @@ export default function PendingApprovalPage() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
-  const [isDenied, setIsDenied] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) {
         setEmail(user.email ?? null);
-        if (user.user_metadata?.is_denied) {
-          setIsDenied(true);
-        }
       }
     });
   }, [supabase]);
 
-  // Auto-redirect to login 5 seconds after denial
-  useEffect(() => {
-    if (!isDenied) return;
-    const timer = setTimeout(() => {
-      router.push("/login");
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [isDenied, router]);
-
   async function handleCheck() {
     setChecking(true);
     const { data: { user } } = await supabase.auth.getUser();
-    if (user?.user_metadata?.is_denied) {
-      setIsDenied(true);
-      setChecking(false);
-      return;
-    }
-
-    if (user?.user_metadata?.is_approved) {
-      router.push("/dashboard");
-      return;
-    }
 
     if (user) {
       const { data } = await supabase.from("users")
-        .select("is_approved, is_denied")
+        .select("is_approved")
         .eq("id", user.id)
         .maybeSingle();
-
-      if (data?.is_denied) {
-        setIsDenied(true);
-        setChecking(false);
-        return;
-      }
 
       if (data?.is_approved) {
         router.push("/dashboard");
@@ -96,32 +67,18 @@ export default function PendingApprovalPage() {
           {/* Status icon */}
           <div className="flex justify-center mb-5">
             <div
-              className={`flex h-14 w-14 items-center justify-center rounded-full ${
-                isDenied
-                  ? "bg-red-500/10 ring-1 ring-red-500/20"
-                  : "bg-amber-500/10 ring-1 ring-amber-500/20"
-              }`}
+              className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10 ring-1 ring-amber-500/20"
             >
-              {isDenied ? (
-                <XCircle className="h-7 w-7 text-red-400" />
-              ) : (
-                <Clock className="h-7 w-7 text-amber-400" />
-              )}
+              <Clock className="h-7 w-7 text-amber-400" />
             </div>
           </div>
 
           {/* Heading */}
-          <h1 className="text-center text-lg font-semibold text-white mb-2">
-            {isDenied
-              ? "Application not approved"
-              : "Pending approval"}
-          </h1>
+          <h1 className="text-center text-lg font-semibold text-white mb-2">Pending approval</h1>
 
           {/* Description */}
           <p className="text-center text-sm text-zinc-400 leading-relaxed mb-1">
-            {isDenied
-              ? "Your account was not approved at this time. If you think this is an error, reach out to us."
-              : "We review every account to keep quality high. You'll get an email once approved — usually within 24 hours."}
+            We review every account to keep quality high. You'll get an email once approved — usually within 24 hours.
           </p>
 
           {/* Email badge */}
@@ -142,7 +99,7 @@ export default function PendingApprovalPage() {
             <Button
               className="w-full h-11 rounded-xl bg-nocturn hover:bg-nocturn-light text-white text-sm font-medium"
               onClick={handleCheck}
-              disabled={checking || isDenied}
+              disabled={checking}
             >
               <RefreshCw
                 className={`mr-2 h-4 w-4 ${checking ? "animate-spin" : ""}`}
@@ -160,18 +117,6 @@ export default function PendingApprovalPage() {
           </div>
         </div>
 
-        {/* Contact link */}
-        {isDenied && (
-          <p className="text-center text-xs text-zinc-500 mt-4">
-            Questions?{" "}
-            <a
-              href="mailto:shawn@trynocturn.com"
-              className="text-nocturn hover:underline"
-            >
-              shawn@trynocturn.com
-            </a>
-          </p>
-        )}
       </div>
     </div>
   );

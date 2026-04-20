@@ -414,11 +414,11 @@ export function TicketTierEditor({
               </span>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-1 shrink-0 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity duration-200">
+              <div className="flex items-center gap-2 shrink-0 md:opacity-0 md:group-hover:opacity-100 md:focus-within:opacity-100 transition-opacity duration-200">
                 <button
                   onClick={() => startEditing(tier)}
                   disabled={isPending}
-                  className="rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                  className="rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                   aria-label="Edit tier"
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -429,7 +429,7 @@ export function TicketTierEditor({
                     <button
                       onClick={() => handleDelete(tier.id)}
                       disabled={isPending}
-                      className="rounded-lg p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors"
+                      className="rounded-lg p-2 text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                       aria-label="Confirm delete"
                     >
                       {isPending ? (
@@ -441,7 +441,7 @@ export function TicketTierEditor({
                     <button
                       onClick={() => setDeleteConfirmId(null)}
                       disabled={isPending}
-                      className="rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                      className="rounded-lg p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                       aria-label="Cancel delete"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -460,7 +460,7 @@ export function TicketTierEditor({
                       }
                     }}
                     disabled={isPending}
-                    className="rounded-lg p-2 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    className="rounded-lg p-2 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center"
                     aria-label="Delete tier"
                   >
                     <Trash2 className="h-3.5 w-3.5" />

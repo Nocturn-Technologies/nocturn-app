@@ -5,11 +5,29 @@ import { Card } from "@/components/ui/card";
 import { User, MapPin, Bookmark, MessageSquare, CheckCircle2 } from "lucide-react";
 import { TYPE_LABELS_SHORT } from "@/lib/marketplace-constants";
 
-// ─── Props ──────────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
+
+export interface DiscoverProfile {
+  id: string;
+  slug: string;
+  display_name: string;
+  user_type?: string | null;
+  type?: string | null;
+  city?: string | null;
+  bio?: string | null;
+  genres?: string[] | null;
+  services?: string[] | null;
+  rate_range?: string | null;
+  avatar_url?: string | null;
+  cover_photo_url?: string | null;
+  instagram_handle?: string | null;
+  website_url?: string | null;
+  soundcloud_url?: string | null;
+  spotify_url?: string | null;
+}
 
 interface ProfileCardProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  profile: any;
+  profile: DiscoverProfile;
   isSaved: boolean;
   onSave: () => void;
   onUnsave: () => void;

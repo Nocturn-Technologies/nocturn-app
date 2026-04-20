@@ -40,10 +40,9 @@ export async function getEventSuggestions(
   // Fetch past events for this collective to analyze patterns
   const { data: pastEvents, error: pastEventsError } = await admin
     .from("events")
-    .select("id, title, starts_at, status, venues(name, city)")
+    .select("id, title, starts_at, status, venue_name, city")
     .eq("collective_id", collectiveId)
     .in("status", ["completed", "published"])
-    .is("deleted_at", null)
     .order("starts_at", { ascending: false })
     .limit(20);
 
@@ -58,7 +57,6 @@ export async function getEventSuggestions(
     .select("starts_at")
     .eq("collective_id", collectiveId)
     .gte("starts_at", now)
-    .is("deleted_at", null)
     .order("starts_at", { ascending: true });
 
   if (upcomingError) {
@@ -85,7 +83,8 @@ export async function getEventSuggestions(
     title: string;
     starts_at: string;
     status: string;
-    venues: { name: string; city: string } | null;
+    venue_name: string | null;
+    city: string | null;
   }>;
 
   // Analyze past event patterns
@@ -93,9 +92,9 @@ export async function getEventSuggestions(
   const titleWords: Record<string, number> = {};
 
   for (const event of events) {
-    if (event.venues?.name) {
-      venueFrequency[event.venues.name] =
-        (venueFrequency[event.venues.name] ?? 0) + 1;
+    if (event.venue_name) {
+      venueFrequency[event.venue_name] =
+        (venueFrequency[event.venue_name] ?? 0) + 1;
     }
     // Extract vibe words from titles
     const words = event.title.toLowerCase().split(/\s+/);
@@ -179,7 +178,7 @@ export async function getEventSuggestions(
       title: `${bestEvent.title} Vol. 2`,
       vibe: topVibe,
       suggestedDate: date1,
-      suggestedVenue: bestEvent.venues?.name ?? topVenue,
+      suggestedVenue: bestEvent.venue_name ?? topVenue,
       reason: `Your last "${bestEvent.title}" had ${bestCount} ticket${bestCount === 1 ? "" : "s"} sold -- run it back.`,
       confidence: "high",
     });

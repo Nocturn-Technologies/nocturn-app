@@ -10,7 +10,7 @@ interface HostMessageProps {
 export function HostMessage({ message, hostName, hostAvatarUrl, accentColor }: HostMessageProps) {
   return (
     <div className="space-y-3">
-      <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/40">
+      <h2 className="font-heading text-sm font-semibold uppercase tracking-wider text-white/60">
         From the host
       </h2>
       <div
@@ -41,7 +41,7 @@ export function HostMessage({ message, hostName, hostAvatarUrl, accentColor }: H
               {hostName.charAt(0).toUpperCase()}
             </div>
           )}
-          <span className="text-xs font-medium text-white/40">— {hostName}</span>
+          <span className="text-xs font-medium text-white/60">— {hostName}</span>
         </div>
       </div>
     </div>

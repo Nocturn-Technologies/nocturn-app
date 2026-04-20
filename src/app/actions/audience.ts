@@ -90,124 +90,82 @@ export async function getPostEventInsights(eventId: string): Promise<{
   const allEventIds = collectiveEvents?.map((e) => e.id) ?? [];
   const totalCollectiveEvents = allEventIds.length;
 
-  // Get attendees of THIS event
+  // Get attendee_profiles for this collective — these are our audience records
+  const { data: allProfiles } = await admin
+    .from("attendee_profiles")
+    .select("id, email, full_name, party_id, user_id, total_events, first_seen_at, last_seen_at")
+    .eq("collective_id", event.collective_id)
+    .not("email", "is", null);
+
+  type ProfileRow = {
+    id: string;
+    email: string | null;
+    full_name: string | null;
+    party_id: string | null;
+    user_id: string | null;
+    total_events: number;
+    first_seen_at: string | null;
+    last_seen_at: string | null;
+  };
+
+  const profiles = (allProfiles ?? []) as ProfileRow[];
+
+  // Get tickets for THIS event to identify who attended
   const { data: thisEventTickets } = await admin
     .from("tickets")
-    .select("id, user_id, metadata, referred_by")
+    .select("id, holder_party_id")
     .eq("event_id", eventId)
     .in("status", ["paid", "checked_in"]);
 
-  if (!thisEventTickets || thisEventTickets.length === 0) {
+  type TicketRow = { id: string; holder_party_id: string | null };
+  const thisEventTicketRows = (thisEventTickets ?? []) as TicketRow[];
+
+  if (thisEventTicketRows.length === 0) {
     return { error: null, insights: [] };
   }
 
-  // Extract emails from this event
-  const thisEventEmails = new Set<string>();
-  const emailToName = new Map<string, string | null>();
+  // Build set of party_ids that attended this event
+  const thisEventPartyIds = new Set(
+    thisEventTicketRows.map((t) => t.holder_party_id).filter((pid): pid is string => !!pid)
+  );
 
-  for (const t of thisEventTickets) {
-    const meta = t.metadata as Record<string, unknown> | null;
-    const email = ((meta?.customer_email ?? meta?.buyer_email ?? meta?.email) as string)?.toLowerCase().trim();
-    if (email) {
-      thisEventEmails.add(email);
-      if (!emailToName.has(email)) {
-        emailToName.set(email, (meta?.customer_name ?? meta?.buyer_name ?? meta?.name) as string | null);
-      }
-    }
-  }
-
-  // Get ALL tickets across collective events to find repeat attendees
-  const { data: allTickets } = await admin
-    .from("tickets")
-    .select("id, event_id, metadata, referred_by")
-    .in("event_id", allEventIds)
-    .in("status", ["paid", "checked_in"]);
-
-  // Count events per email across the collective
-  const emailEventCount = new Map<string, Set<string>>();
-  const referralCountByEmail = new Map<string, number>();
-
-  for (const t of allTickets ?? []) {
-    const meta = t.metadata as Record<string, unknown> | null;
-    const email = ((meta?.customer_email ?? meta?.buyer_email ?? meta?.email) as string)?.toLowerCase().trim();
-    if (!email) continue;
-
-    if (!emailEventCount.has(email)) emailEventCount.set(email, new Set());
-    const eventCount = emailEventCount.get(email);
-    if (eventCount) eventCount.add(t.event_id);
-
-    // Count referrals they've generated
-    if (t.referred_by) {
-      // We'll match by user_id later
-    }
-  }
-
-  // Count referrals from this event's attendees
-  for (const t of allTickets ?? []) {
-    if (t.referred_by) {
-      // Find the referrer's email from their tickets
-      // Simplified: count by referred_by user_id
-      const key = t.referred_by as string;
-      referralCountByEmail.set(key, (referralCountByEmail.get(key) ?? 0) + 1);
-    }
+  // Build profile lookup by party_id
+  const profileByPartyId = new Map<string, ProfileRow>();
+  for (const p of profiles) {
+    if (p.party_id) profileByPartyId.set(p.party_id, p);
   }
 
   const insights: PostEventInsight[] = [];
 
   // 1. Repeat attendees (attended 2+ events from this collective, including this one)
-  for (const email of thisEventEmails) {
-    const eventCount = emailEventCount.get(email)?.size ?? 0;
+  for (const partyId of thisEventPartyIds) {
+    const profile = profileByPartyId.get(partyId);
+    if (!profile?.email) continue;
+
+    const eventCount = profile.total_events;
     if (eventCount >= 2) {
       insights.push({
         type: "repeat_attendee",
-        email,
-        name: emailToName.get(email) ?? null,
+        email: profile.email,
+        name: profile.full_name ?? null,
         detail: `Attended ${eventCount} of your events`,
         value: eventCount,
       });
     }
   }
 
-  // 2. Top referrers from this event
-  const thisEventReferrers = new Map<string, number>();
-  for (const t of thisEventTickets) {
-    if (t.referred_by) {
-      const ref = t.referred_by as string;
-      thisEventReferrers.set(ref, (thisEventReferrers.get(ref) ?? 0) + 1);
-    }
-  }
-
-  // Get referrer user info
-  const referrerIds = Array.from(thisEventReferrers.keys());
-  if (referrerIds.length > 0) {
-    const { data: referrerUsers } = await admin
-      .from("users")
-      .select("id, display_name, email")
-      .in("id", referrerIds);
-
-    for (const ru of referrerUsers ?? []) {
-      const count = thisEventReferrers.get(ru.id) ?? 0;
-      if (count >= 1) {
-        insights.push({
-          type: "top_referrer",
-          email: ru.email ?? "unknown",
-          name: ru.display_name ?? null,
-          detail: `Brought ${count} friend${count !== 1 ? "s" : ""} to this event`,
-          value: count,
-        });
-      }
-    }
-  }
-
-  // 3. Core fans — attended every event (or nearly every) if 2+ events exist
+  // 2. Core fans — attended every event (or nearly every) if 2+ events exist
   if (totalCollectiveEvents >= 2) {
-    for (const email of thisEventEmails) {
-      const eventCount = emailEventCount.get(email)?.size ?? 0;
+    for (const partyId of thisEventPartyIds) {
+      const profile = profileByPartyId.get(partyId);
+      if (!profile?.email) continue;
+
+      const eventCount = profile.total_events;
       if (eventCount >= totalCollectiveEvents) {
         insights.push({
           type: "core_fan",
-          email,
-          name: emailToName.get(email) ?? null,
+          email: profile.email,
+          name: profile.full_name ?? null,
           detail: `Attended all ${totalCollectiveEvents} events — true core fan`,
           value: totalCollectiveEvents,
         });

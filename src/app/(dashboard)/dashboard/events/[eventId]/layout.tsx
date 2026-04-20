@@ -34,7 +34,6 @@ export default async function EventIdLayout({ params, children }: Props) {
     .from("events")
     .select("collective_id")
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event?.collective_id) {

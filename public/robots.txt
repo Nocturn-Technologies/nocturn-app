@@ -3,6 +3,6 @@ Allow: /e/
 Disallow: /dashboard/
 Disallow: /api/
 Disallow: /onboarding
-Disallow: /legal/
+
 
 Sitemap: https://app.trynocturn.com/sitemap.xml

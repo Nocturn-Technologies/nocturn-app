@@ -5,8 +5,14 @@ import { createAdminClient } from "@/lib/supabase/config";
 import { sendEmail } from "@/lib/email/send";
 import { escapeHtml } from "@/lib/html";
 import { DEFAULT_TIMEZONE } from "@/lib/utils";
+import { verifyCollectiveRole } from "@/lib/auth/ownership";
 
-/** Verify the caller is an admin/member of the collective that owns this event */
+// Guest-list ops require a role stricter than plain membership —
+// door_staff / promoter / admin can manage the list, regular members
+// cannot. Composes the shared `verifyCollectiveRole` with an event
+// lookup rather than maintaining a second copy of the membership query.
+const GUEST_LIST_ROLES = ["admin", "promoter", "door_staff"] as const;
+
 async function verifyEventAccess(eventId: string): Promise<{ error: string | null; userId: string | null }> {
   try {
     const supabase = await createServerClient();
@@ -14,8 +20,6 @@ async function verifyEventAccess(eventId: string): Promise<{ error: string | nul
     if (!user) return { error: "Not authenticated", userId: null };
 
     const admin = createAdminClient();
-
-    // Get the event's collective
     const { data: event, error: eventError } = await admin
       .from("events")
       .select("collective_id")
@@ -28,21 +32,8 @@ async function verifyEventAccess(eventId: string): Promise<{ error: string | nul
     }
     if (!event) return { error: "Event not found", userId: null };
 
-    // Check membership with role verification
-    const { data: membership, error: memberError } = await admin
-      .from("collective_members")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("collective_id", event.collective_id)
-      .in("role", ["admin", "promoter", "door_staff"])
-      .is("deleted_at", null)
-      .maybeSingle();
-
-    if (memberError) {
-      console.error("[verifyEventAccess]", memberError);
-      return { error: "Something went wrong", userId: null };
-    }
-    if (!membership) return { error: "You don't have access to this event", userId: null };
+    const hasRole = await verifyCollectiveRole(user.id, event.collective_id, GUEST_LIST_ROLES);
+    if (!hasRole) return { error: "You don't have access to this event", userId: null };
 
     return { error: null, userId: user.id };
   } catch (err) {
@@ -51,18 +42,60 @@ async function verifyEventAccess(eventId: string): Promise<{ error: string | nul
   }
 }
 
+/**
+ * Guest interface presented to the UI.
+ *
+ * The DB schema (`guest_list`) stores only `checked_in` (boolean) and has no
+ * `status`, `phone`, or `checked_in_at` columns. We derive `status` from the
+ * boolean and return `null` for fields that no longer exist so that existing
+ * UI code compiles without changes.
+ */
 export interface Guest {
   id: string;
   event_id: string;
   name: string;
   email: string | null;
+  /** Derived from `checked_in` boolean. Values: "pending" | "checked_in". */
+  status: "pending" | "confirmed" | "checked_in" | "no_show";
   phone: string | null;
   plus_ones: number;
-  status: "pending" | "confirmed" | "checked_in" | "no_show";
+  /** Always null — column removed in schema rebuild. */
+  checked_in_at: string | null;
   notes: string | null;
   added_by: string | null;
-  checked_in_at: string | null;
+  party_id: string | null;
   created_at: string;
+}
+
+// Internal DB row type matching the current schema
+interface GuestRow {
+  id: string;
+  event_id: string;
+  name: string;
+  email: string | null;
+  checked_in: boolean;
+  plus_ones: number;
+  notes: string | null;
+  added_by: string | null;
+  party_id: string | null;
+  created_at: string;
+}
+
+function rowToGuest(row: GuestRow): Guest {
+  return {
+    id: row.id,
+    event_id: row.event_id,
+    name: row.name,
+    email: row.email,
+    status: row.checked_in ? "checked_in" : "pending",
+    phone: null,
+    plus_ones: row.plus_ones,
+    checked_in_at: null,
+    notes: row.notes,
+    added_by: row.added_by,
+    party_id: row.party_id,
+    created_at: row.created_at,
+  };
 }
 
 // TODO(audit): add name length cap, email format, phone format, plusOnes bounds 0-20
@@ -70,6 +103,7 @@ export async function addGuest(input: {
   eventId: string;
   name: string;
   email?: string | null;
+  /** Ignored — `phone` column removed in schema rebuild. Kept for UI compatibility. */
   phone?: string | null;
   plusOnes?: number;
   notes?: string | null;
@@ -86,13 +120,22 @@ export async function addGuest(input: {
 
     if (input.notes && input.notes.length > 500) return { error: "Notes must be under 500 characters" };
 
+    // Status guard — guest-list edits on completed/archived events shouldn't
+    // silently change attendance records after the fact. Draft/published only.
+    const { data: eventRow } = await supabase
+      .from("events")
+      .select("status")
+      .eq("id", input.eventId)
+      .maybeSingle();
+    if (eventRow && eventRow.status !== "draft" && eventRow.status !== "published") {
+      return { error: "Can't add guests to a completed or archived event." };
+    }
+
     const { error } = await supabase.from("guest_list").insert({
       event_id: input.eventId,
       name: input.name.trim(),
       email: input.email?.trim() || null,
-      phone: input.phone?.trim() || null,
       plus_ones: input.plusOnes ?? 0,
-      status: "pending",
       notes: input.notes?.trim() || null,
       added_by: userId,
     });
@@ -105,12 +148,11 @@ export async function addGuest(input: {
       try {
         const { data: event } = await supabase
           .from("events")
-          .select("title, starts_at, venues(name, city)")
+          .select("title, starts_at, venue_name, city")
           .eq("id", input.eventId)
           .maybeSingle();
 
         if (event) {
-          const venue = event.venues as unknown as { name: string; city: string } | null;
           const eventDate = new Date(event.starts_at);
           const tz = DEFAULT_TIMEZONE;
 
@@ -128,7 +170,7 @@ export async function addGuest(input: {
                 <h3 style="margin: 0 0 12px; font-size: 18px; font-weight: 700;">${escapeHtml(event.title)}</h3>
                 <p style="color: #A1A1AA; margin: 4px 0;">📅 ${eventDate.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", timeZone: tz })}</p>
                 <p style="color: #A1A1AA; margin: 4px 0;">⏰ ${eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz })}</p>
-                ${venue ? `<p style="color: #A1A1AA; margin: 4px 0;">📍 ${escapeHtml(venue.name)}, ${escapeHtml(venue.city)}</p>` : ""}
+                ${event.venue_name ? `<p style="color: #A1A1AA; margin: 4px 0;">📍 ${escapeHtml(event.venue_name)}${event.city ? `, ${escapeHtml(event.city)}` : ""}</p>` : ""}
               </div>
 
               <p style="color: #A1A1AA; line-height: 1.6; font-size: 15px;">
@@ -171,7 +213,7 @@ export async function getGuestList(eventId: string): Promise<Guest[]> {
 
     const { data, error } = await supabase
       .from("guest_list")
-      .select("*")
+      .select("id, event_id, name, email, checked_in, plus_ones, notes, added_by, party_id, created_at")
       .eq("event_id", eventId)
       .order("created_at", { ascending: false });
 
@@ -180,7 +222,7 @@ export async function getGuestList(eventId: string): Promise<Guest[]> {
       return [];
     }
 
-    return (data ?? []) as Guest[];
+    return (data ?? []).map((row) => rowToGuest(row as GuestRow));
   } catch (err) {
     console.error("[getGuestList]", err);
     return [];
@@ -221,12 +263,9 @@ export async function checkInGuest(guestId: string) {
     // Atomic status guard — only check in if not already checked in
     const { data: updated, error } = await supabase
       .from("guest_list")
-      .update({
-        status: "checked_in",
-        checked_in_at: new Date().toISOString(),
-      })
+      .update({ checked_in: true })
       .eq("id", guestId)
-      .neq("status", "checked_in")
+      .eq("checked_in", false)
       .select("id");
 
     if (error) return { error: "Failed to check in guest" };
@@ -238,6 +277,14 @@ export async function checkInGuest(guestId: string) {
   }
 }
 
+/**
+ * Update guest status. The DB only stores `checked_in` (boolean), so we map
+ * the status enum from the UI to that column:
+ *   "checked_in" → checked_in = true
+ *   "pending" | "confirmed" | "no_show" → checked_in = false
+ *
+ * Kept for UI compatibility — callers pass the full status enum.
+ */
 export async function updateGuestStatus(
   guestId: string,
   status: "pending" | "confirmed" | "checked_in" | "no_show"
@@ -253,15 +300,9 @@ export async function updateGuestStatus(
 
     const supabase = createAdminClient();
 
-    const updates: Record<string, unknown> = { status };
-
-    if (status === "checked_in") {
-      updates.checked_in_at = new Date().toISOString();
-    }
-
     const { error } = await supabase
       .from("guest_list")
-      .update(updates)
+      .update({ checked_in: status === "checked_in" })
       .eq("id", guestId);
 
     if (error) return { error: "Failed to update guest status" };

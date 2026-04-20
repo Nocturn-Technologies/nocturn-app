@@ -19,6 +19,8 @@ export interface EventUpdate {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // ── Post an update (collective members only) ──
+// Updates are stored in event_activity with action="update" and
+// metadata carrying { email_sent, recipient_count }.
 
 export async function postEventUpdate(
   eventId: string,
@@ -62,15 +64,18 @@ export async function postEventUpdate(
       return { error: "Not authorized", updateId: null };
     }
 
-    // Insert the update
+    // Insert the update into event_activity
     const { data: inserted, error } = await admin
-      .from("event_updates")
+      .from("event_activity")
       .insert({
         event_id: eventId,
-        author_id: user.id,
-        body: trimmed,
-        email_sent: false,
-        recipient_count: 0,
+        user_id: user.id,
+        action: "update",
+        description: trimmed,
+        metadata: {
+          email_sent: false,
+          recipient_count: 0,
+        },
       })
       .select("id")
       .maybeSingle();
@@ -88,7 +93,7 @@ export async function postEventUpdate(
           updateId: inserted.id,
           eventId,
           eventTitle: event.title,
-          eventSlug: event.slug,
+          eventSlug: event.slug ?? "",
           collectiveName: collective?.name ?? "Nocturn",
           collectiveSlug: collective?.slug ?? "",
           body: trimmed,
@@ -121,9 +126,10 @@ export async function listEventUpdatesPublic(eventId: string): Promise<{
 
     const admin = createAdminClient();
     const { data, error } = await admin
-      .from("event_updates")
-      .select("id, body, created_at, email_sent, recipient_count, author_id")
+      .from("event_activity")
+      .select("id, description, created_at, metadata, user_id")
       .eq("event_id", eventId)
+      .eq("action", "update")
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -134,17 +140,15 @@ export async function listEventUpdatesPublic(eventId: string): Promise<{
 
     const rows = (data ?? []) as Array<{
       id: string;
-      body: string;
+      description: string | null;
       created_at: string;
-      email_sent: boolean;
-      recipient_count: number;
-      author_id: string | null;
+      metadata: Record<string, unknown> | null;
+      user_id: string | null;
     }>;
 
-    // Look up author names in a single batch query (FK points to auth.users,
-    // so we can't use PostgREST's embedded join to public.users).
+    // Look up author names in a single batch query
     const authorIds = Array.from(
-      new Set(rows.map((r) => r.author_id).filter((id): id is string => !!id))
+      new Set(rows.map((r) => r.user_id).filter((id): id is string => !!id))
     );
     const authorNames = new Map<string, string | null>();
     if (authorIds.length > 0) {
@@ -161,11 +165,11 @@ export async function listEventUpdatesPublic(eventId: string): Promise<{
       error: null,
       updates: rows.map((r) => ({
         id: r.id,
-        body: r.body,
-        author_name: r.author_id ? authorNames.get(r.author_id) ?? null : null,
+        body: r.description ?? "",
+        author_name: r.user_id ? authorNames.get(r.user_id) ?? null : null,
         created_at: r.created_at,
-        email_sent: r.email_sent,
-        recipient_count: r.recipient_count,
+        email_sent: (r.metadata as { email_sent?: boolean } | null)?.email_sent ?? false,
+        recipient_count: (r.metadata as { recipient_count?: number } | null)?.recipient_count ?? 0,
       })),
     };
   } catch (err) {
@@ -186,13 +190,14 @@ export async function deleteEventUpdate(updateId: string): Promise<{ error: stri
 
     const admin = createAdminClient();
     const { data: row } = await admin
-      .from("event_updates")
-      .select("author_id, event_id")
+      .from("event_activity")
+      .select("user_id, event_id")
       .eq("id", updateId)
+      .eq("action", "update")
       .maybeSingle();
     if (!row) return { error: "Update not found" };
 
-    if (row.author_id !== user.id) {
+    if (row.user_id !== user.id) {
       // Allow collective admins to delete too
       const { data: event } = await admin
         .from("events")
@@ -213,7 +218,7 @@ export async function deleteEventUpdate(updateId: string): Promise<{ error: stri
       }
     }
 
-    const { error } = await admin.from("event_updates").delete().eq("id", updateId);
+    const { error } = await admin.from("event_activity").delete().eq("id", updateId);
     if (error) return { error: "Failed to delete update" };
 
     revalidatePath(`/dashboard/events/${row.event_id}`);
@@ -224,7 +229,7 @@ export async function deleteEventUpdate(updateId: string): Promise<{ error: stri
   }
 }
 
-// ── Internal: send update emails to all RSVPs + ticket holders ──
+// ── Internal: send update emails to all ticket holders ──
 
 interface SendUpdateEmailsInput {
   updateId: string;
@@ -246,60 +251,61 @@ async function sendUpdateEmails(input: SendUpdateEmailsInput): Promise<void> {
 
   const admin = createAdminClient();
 
-  // Collect recipient emails from both rsvps and tickets (dedupe)
-  const [rsvpRes, ticketEmailsRes] = await Promise.all([
-    admin
-      .from("rsvps")
-      .select("email, user_id")
-      .eq("event_id", input.eventId)
-      .in("status", ["yes", "maybe"]),
-    admin
-      .from("tickets")
-      .select("buyer_email")
-      .eq("event_id", input.eventId)
-      .in("status", ["paid", "checked_in", "free"]),
-  ]);
-
   const emails = new Set<string>();
-  const userIdsNeedingLookup: string[] = [];
 
-  // Explicit row types — Supabase's Promise.all + .in() inference can break and return
-  // SelectQueryError sentinel types which don't overlap with our row shape, so we must
-  // cast via `unknown` first to satisfy TypeScript.
-  const rsvpRows = (rsvpRes.data ?? []) as unknown as Array<{ email: string | null; user_id: string | null }>;
-  const ticketRows = (ticketEmailsRes.data ?? []) as unknown as Array<{ buyer_email: string | null }>;
+  // Resolve collective_id for this event to look up attendee_profiles
+  const { data: eventMeta } = await admin
+    .from("events")
+    .select("collective_id")
+    .eq("id", input.eventId)
+    .maybeSingle();
 
-  for (const row of rsvpRows) {
-    const addr = (row.email ?? "").trim().toLowerCase();
-    if (addr && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) {
-      emails.add(addr);
-    } else if (row.user_id) {
-      userIdsNeedingLookup.push(row.user_id);
-    }
-  }
-
-  // For logged-in RSVPers without a stored email, fetch from public.users
-  if (userIdsNeedingLookup.length > 0) {
-    const { data: users } = await admin
-      .from("users")
+  // Collect recipient emails from attendee_profiles — populated at purchase time
+  if (eventMeta?.collective_id) {
+    const { data: attendeeRows } = await admin
+      .from("attendee_profiles")
       .select("email")
-      .in("id", userIdsNeedingLookup);
-    for (const u of users ?? []) {
-      const addr = (u.email ?? "").trim().toLowerCase();
+      .eq("collective_id", eventMeta.collective_id);
+
+    for (const row of (attendeeRows ?? []) as Array<{ email: string | null }>) {
+      const addr = (row.email ?? "").trim().toLowerCase();
       if (addr && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) emails.add(addr);
     }
   }
 
-  for (const row of ticketRows) {
-    const addr = (row.buyer_email ?? "").trim().toLowerCase();
-    if (addr && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) emails.add(addr);
+  // Also collect from ticket holders via party_contact_methods
+  const { data: ticketRows } = await admin
+    .from("tickets")
+    .select("holder_party_id")
+    .eq("event_id", input.eventId)
+    .in("status", ["paid", "checked_in", "free"]);
+
+  const partyIds = Array.from(
+    new Set(
+      (ticketRows ?? [])
+        .map((t: { holder_party_id: string | null }) => t.holder_party_id)
+        .filter((id): id is string => !!id)
+    )
+  );
+
+  if (partyIds.length > 0) {
+    const { data: contactRows } = await admin
+      .from("party_contact_methods")
+      .select("value")
+      .in("party_id", partyIds)
+      .eq("type", "email");
+
+    for (const row of (contactRows ?? []) as Array<{ value: string }>) {
+      const addr = (row.value ?? "").trim().toLowerCase();
+      if (addr && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) emails.add(addr);
+    }
   }
 
   const recipients = Array.from(emails);
   if (recipients.length === 0) {
     await admin
-      .from("event_updates")
-      .update({ email_sent: true, emailed_at: new Date().toISOString(), recipient_count: 0 })
+      .from("event_activity")
+      .update({ metadata: { email_sent: true, emailed_at: new Date().toISOString(), recipient_count: 0 } })
       .eq("id", input.updateId);
     return;
   }
@@ -328,7 +334,7 @@ async function sendUpdateEmails(input: SendUpdateEmailsInput): Promise<void> {
         View event
       </a>
       <p style="color: #52525B; font-size: 11px; margin-top: 32px; line-height: 1.5;">
-        You&apos;re getting this because you RSVP&apos;d or grabbed a ticket to this event on Nocturn.
+        You&apos;re getting this because you have a ticket to this event on Nocturn.
       </p>
     </div>
   `;
@@ -366,11 +372,13 @@ async function sendUpdateEmails(input: SendUpdateEmailsInput): Promise<void> {
   }
 
   await admin
-    .from("event_updates")
+    .from("event_activity")
     .update({
-      email_sent: sent > 0,
-      emailed_at: new Date().toISOString(),
-      recipient_count: sent,
+      metadata: {
+        email_sent: sent > 0,
+        emailed_at: new Date().toISOString(),
+        recipient_count: sent,
+      },
     })
     .eq("id", input.updateId);
 }

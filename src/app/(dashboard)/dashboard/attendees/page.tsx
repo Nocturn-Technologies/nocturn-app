@@ -206,8 +206,8 @@ export default function AttendeesPage() {
         </Card>
         <Card className="rounded-2xl transition-colors duration-200 hover:border-nocturn/20">
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
-              <UserCheck className="h-5 w-5 text-green-500" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
+              <UserCheck className="h-5 w-5 text-emerald-500" />
             </div>
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground truncate">
@@ -273,12 +273,12 @@ export default function AttendeesPage() {
                       <p className="truncate font-medium text-sm">
                         {attendee.name || attendee.email}
                       </p>
-                      {attendee.source === "rsvp" && (
+                      {(attendee.source as string) === "rsvp" && (
                         <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
                           RSVP
                         </span>
                       )}
-                      {attendee.source === "both" && (
+                      {(attendee.source as string) === "both" && (
                         <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
                           VIP
                         </span>
@@ -323,12 +323,12 @@ export default function AttendeesPage() {
                         <p className="truncate font-medium text-sm">
                           {attendee.name || attendee.email}
                         </p>
-                        {attendee.source === "rsvp" && (
+                        {(attendee.source as string) === "rsvp" && (
                           <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
                             RSVP
                           </span>
                         )}
-                        {attendee.source === "both" && (
+                        {(attendee.source as string) === "both" && (
                           <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
                             VIP
                           </span>

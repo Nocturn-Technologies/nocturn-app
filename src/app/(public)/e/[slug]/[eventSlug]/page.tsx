@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Navigation, Music, MapPin } from "lucide-react";
+import { Navigation, Music, MapPin, CalendarPlus } from "lucide-react";
 import { TicketSection } from "@/components/public-event/ticket-section";
 import { ShareButton } from "@/components/public-event/share-button";
 import { PublicEventShareCard } from "@/components/public-event/public-event-share-card";
@@ -11,9 +11,10 @@ import { PastEvents } from "@/components/public-event/past-events";
 import { StickyTicketBar } from "@/components/public-event/sticky-ticket-bar";
 import { AlsoThisWeek } from "@/components/public-event/also-this-week";
 import { RsvpWidget } from "@/components/public-event/rsvp-widget";
+import { PublicRsvpList } from "@/components/public-event/public-rsvp-list";
 import { EventUpdatesFeed } from "@/components/public-event/event-updates-feed";
 import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
-import { getRsvpCounts, getMyRsvp, getRsvpByToken } from "@/app/actions/rsvps";
+import { getRsvpCounts, getMyRsvp, getRsvpByToken, listPublicEventRsvps } from "@/app/actions/rsvps";
 import { listEventUpdatesPublic } from "@/app/actions/event-updates";
 import type { Metadata } from "next";
 import Image from "next/image";
@@ -25,6 +26,21 @@ import Link from "next/link";
 // Revalidate public event pages every 10 seconds (ISR)
 // Short window reduces stale capacity data shown to buyers (Gap 16)
 export const revalidate = 10;
+
+function buildCalendarUrl(event: { title: string; starts_at: string; ends_at: string | null; description: string | null; }, venueName?: string) {
+  const start = new Date(event.starts_at).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const end = event.ends_at
+    ? new Date(event.ends_at).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")
+    : new Date(new Date(event.starts_at).getTime() + 4 * 60 * 60 * 1000).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: event.title,
+    dates: `${start}/${end}`,
+    details: event.description ?? "",
+    location: venueName ?? "",
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
 
 interface Props {
   params: Promise<{ slug: string; eventSlug: string }>;
@@ -48,12 +64,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const { data: eventRaw } = await supabase
     .from("events")
-    .select("title, description, flyer_url, starts_at, venues(name, city)")
+    .select("title, description, flyer_url, starts_at, venue_name, city")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
-    .is("deleted_at", null)
     .maybeSingle();
-  const event = eventRaw as { title: string; description: string | null; flyer_url: string | null; starts_at: string; venues: { name: string; city: string } | null } | null;
+  const event = eventRaw as { title: string; description: string | null; flyer_url: string | null; starts_at: string; venue_name: string | null; city: string | null } | null;
 
   if (!event) return { title: "Event Not Found" };
 
@@ -62,22 +77,27 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const appUrl = "https://app.trynocturn.com";
   const canonicalUrl = `${appUrl}/e/${slug}/${eventSlug}`;
 
-  // Use flyer if available, otherwise generate dynamic OG image
-  const venue = event.venues;
+  // Always use the dynamic OG generator — even when a flyer exists.
+  // Portrait flyers (1080×1350 for IG stories) get cropped unreadably by
+  // social platforms that enforce 1.91:1 aspect ratio. The generator composites
+  // the flyer as a left panel and renders title/date/venue in the right panel,
+  // guaranteeing every share preview is readable regardless of flyer orientation.
   const dateStr = event.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })
     : "";
-  // Only use flyer_url for OG if it's a real URL (not a base64 data URL)
   const flyerIsValidUrl = event.flyer_url && event.flyer_url.startsWith("http");
-  const ogImageUrl = flyerIsValidUrl
-    ? event.flyer_url!
-    : `${appUrl}/og-image/event?${new URLSearchParams({
-      title: event.title,
-      collective: collective.name,
-      date: dateStr,
-      venue: venue ? `${venue.name}, ${venue.city}` : "",
-      price: "Tickets Available",
-    }).toString()}`;
+  const venueDisplay = [event.venue_name, event.city].filter(Boolean).join(", ");
+  const ogParams: Record<string, string> = {
+    title: event.title,
+    collective: collective.name,
+    date: dateStr,
+    venue: venueDisplay,
+    price: "Tickets Available",
+  };
+  if (flyerIsValidUrl) {
+    ogParams.flyer = event.flyer_url!;
+  }
+  const ogImageUrl = `${appUrl}/og-image/event?${new URLSearchParams(ogParams).toString()}`;
 
   return {
     title,
@@ -141,12 +161,11 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // Fetch event with venue + metadata
   const { data: eventRaw2 } = await supabase
     .from("events")
-    .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, event_mode, is_free, venues(name, address, city, capacity)")
+    .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, is_free, venue_name, venue_address, city, capacity")
     .eq("collective_id", collective.id)
     .eq("slug", eventSlug)
-    .is("deleted_at", null)
     .maybeSingle();
-  const event = eventRaw2 as { id: string; title: string; slug: string; description: string | null; starts_at: string; ends_at: string | null; doors_at: string | null; status: string; flyer_url: string | null; vibe_tags: string[] | null; min_age: number | null; metadata: Record<string, string> | null; collective_id: string; event_mode: string | null; is_free: boolean | null; venues: { name: string; address: string; city: string; capacity: number } | null } | null;
+  const event = eventRaw2 as { id: string; title: string; slug: string; description: string | null; starts_at: string; ends_at: string | null; doors_at: string | null; status: string; flyer_url: string | null; vibe_tags: string[] | null; min_age: number | null; metadata: Record<string, string> | null; collective_id: string; is_free: boolean | null; venue_name: string | null; venue_address: string | null; city: string | null; capacity: number | null } | null;
 
   if (!event || event.status === "draft") notFound();
 
@@ -159,52 +178,44 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
   const [
     { data: tiersRaw },
-    { count: ticketsSold },
     { data: artistsRaw },
-    { data: reactionRowsRaw },
     { count: collectiveEventCount },
     { data: pastEventsRaw },
     { data: nearbyEventsRaw },
-    { data: tierTicketsRaw },
-    { data: pendingTierTicketsRaw },
   ] = await Promise.all([
     supabase.from("ticket_tiers").select("*").eq("event_id", event.id).order("sort_order"),
-    supabase.from("tickets").select("*", { count: "exact", head: true }).eq("event_id", event.id).in("status", ["paid", "checked_in"]),
-    supabase.from("event_artists").select("artist_id, set_time, artists(name, genre)").eq("event_id", event.id).eq("status", "confirmed").order("set_time"),
-    supabase.from("event_reactions").select("emoji").eq("event_id", event.id),
-    supabase.from("events").select("*", { count: "exact", head: true }).eq("collective_id", collective.id).in("status", ["published", "completed"]).is("deleted_at", null),
-    supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).is("deleted_at", null).order("starts_at", { ascending: false }).limit(6),
+    supabase.from("event_artists").select("party_id, name, set_time, role").eq("event_id", event.id).order("set_time"),
+    supabase.from("events").select("*", { count: "exact", head: true }).eq("collective_id", collective.id).in("status", ["published", "completed"]),
+    supabase.from("events").select("title, slug, flyer_url, starts_at").eq("collective_id", collective.id).eq("status", "completed").neq("id", event.id).order("starts_at", { ascending: false }).limit(6),
     supabase.from("events")
-      .select("title, slug, flyer_url, starts_at, collective_id, collectives(name, slug), venues(name, city)")
+      .select("title, slug, flyer_url, starts_at, collective_id, collectives(name, slug), venue_name, city")
       .eq("status", "published")
       .neq("id", event.id)
       .neq("collective_id", collective.id)
-      .is("deleted_at", null)
       .gte("starts_at", now.toISOString())
       .lte("starts_at", weekFromNow)
       .order("starts_at", { ascending: true })
       .limit(6),
-    supabase.from("tickets").select("ticket_tier_id").eq("event_id", event.id).in("status", ["paid", "checked_in"]),
-    supabase.from("tickets").select("ticket_tier_id").eq("event_id", event.id).eq("status", "pending").gte("created_at", new Date(Date.now() - 30 * 60 * 1000).toISOString()),
   ]);
 
-  const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number; sort_order: number }[] | null;
-  const artists = artistsRaw as { artist_id: string; set_time: string | null; artists: { name: string; genre: string[] | null } | null }[] | null;
+  // event_reactions exists in DB but not in generated types — use untyped client
+  const { data: reactionRowsRaw } = await (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> })
+    .from("event_reactions")
+    .select("emoji")
+    .eq("event_id", event.id);
+
+  const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number; sort_order: number; tickets_sold: number }[] | null;
+  const artists = artistsRaw as { party_id: string | null; name: string | null; set_time: string | null; role: string | null }[] | null;
   const reactionRows = reactionRowsRaw as { emoji: string }[] | null;
   const pastEvents = pastEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string }[] | null;
-  const nearbyEvents = nearbyEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string; collective_id: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string } | null }[] | null;
-  const tierTickets = tierTicketsRaw as { ticket_tier_id: string }[] | null;
-  const pendingTierTickets = pendingTierTicketsRaw as { ticket_tier_id: string }[] | null;
+  const nearbyEvents = nearbyEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string; collective_id: string; collectives: { name: string; slug: string } | null; venue_name: string | null; city: string | null }[] | null;
 
-  // Compute per-tier sold counts for accurate "remaining" display
-  // Include confirmed tickets + active pending reservations (< 30 min old) toward capacity
+  // Per-tier sold counts from tickets_sold counter on ticket_tiers
   const tierSoldCounts: Record<string, number> = {};
-  for (const t of tierTickets || []) {
-    tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
+  for (const t of tiers || []) {
+    tierSoldCounts[t.id] = t.tickets_sold ?? 0;
   }
-  for (const t of pendingTierTickets || []) {
-    tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
-  }
+  const ticketsSold = (tiers || []).reduce((sum, t) => sum + (t.tickets_sold ?? 0), 0);
 
 
   const reactionCounts: Record<string, number> = {};
@@ -218,7 +229,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // tier is $0 (or there are no tiers, or is_free is explicitly set), we treat the event
   // as RSVP-only for display. This guarantees the public page never shows "$0+ Get Tickets"
   // on a free event, and always shows the RSVP widget which collects guest name + email.
-  const rawMode = (event.event_mode ?? "ticketed") as "ticketed" | "rsvp" | "hybrid";
+  const rawMode = ((event as unknown as Record<string, unknown>).event_mode ?? "ticketed") as "ticketed" | "rsvp" | "hybrid";
   const allTiersFree = !!tiers && tiers.length > 0 && tiers.every((t) => Number(t.price) === 0);
   const noTiers = !tiers || tiers.length === 0;
   const isEffectivelyFree = event.is_free === true || allTiersFree || noTiers;
@@ -227,7 +238,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const showTickets = (eventMode === "ticketed" || eventMode === "hybrid") && !isEffectivelyFree;
 
   // RSVP counts + current user's RSVP + event updates — fetched in parallel for RSVP/hybrid events
-  const [rsvpCountsResult, myRsvpResult, updatesResult, currentUserResult] = await Promise.all([
+  const [rsvpCountsResult, myRsvpResult, updatesResult, currentUserResult, publicRsvpsResult] = await Promise.all([
     showRsvp ? getRsvpCounts(event.id) : Promise.resolve({ error: null, counts: { yes: 0, maybe: 0, no: 0 } }),
     showRsvp ? getMyRsvp(event.id) : Promise.resolve({ error: null, rsvp: null }),
     listEventUpdatesPublic(event.id),
@@ -236,11 +247,15 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       const { data: { user } } = await ssr.auth.getUser();
       return user;
     })(),
+    showRsvp
+      ? listPublicEventRsvps(event.id)
+      : Promise.resolve({ error: null, rsvps: [] as Awaited<ReturnType<typeof listPublicEventRsvps>>["rsvps"] }),
   ]);
   const rsvpCounts = rsvpCountsResult.counts;
   let myRsvpStatus = myRsvpResult.rsvp?.status ?? null;
   const eventUpdates = updatesResult.updates;
   const isLoggedIn = !!currentUserResult;
+  const initialPublicRsvps = publicRsvpsResult.rsvps;
 
   // Pre-fill phone from the logged-in user's profile so the confirm form
   // doesn't force them to retype it every time.
@@ -265,7 +280,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     }
   }
 
-  const venue = event.venues;
+  const venue = event.venue_name ? { name: event.venue_name, address: event.venue_address, city: event.city } : null;
 
   const eventDate = new Date(event.starts_at);
   const endsAt = event.ends_at ? new Date(event.ends_at) : null;
@@ -549,7 +564,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
         {dressCode && (
           <div className="py-4 border-t border-white/[0.04]">
-            <p className="text-[13px] text-white/40"><span className="text-white/40">Dress code</span> — {dressCode}</p>
+            <p className="text-[13px] text-white/60"><span className="text-white/60">Dress code</span> — {dressCode}</p>
           </div>
         )}
 
@@ -559,11 +574,10 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             <div className="relative">
               <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
                 {artists.map((a) => {
-                  const artist = a.artists;
-                  if (!artist) return null;
+                  if (!a.name) return null;
                   return (
                     <div
-                      key={a.artist_id}
+                      key={a.party_id ?? a.name}
                       className="flex-none rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 min-w-[150px] space-y-2.5 hover:border-white/[0.12] transition-all duration-300"
                     >
                       <div
@@ -573,9 +587,9 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                         <Music className="h-5 w-5" style={{ color: accentColor }} />
                       </div>
                       <p className="font-heading text-sm font-bold text-white tracking-tight">
-                        {artist.name}
+                        {a.name}
                       </p>
-                      {artist.genre && (
+                      {a.role && (
                         <span
                           className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium tracking-wide truncate"
                           style={{
@@ -583,7 +597,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                             color: `${accentColor}cc`,
                           }}
                         >
-                          {Array.isArray(artist.genre) ? artist.genre.join(" · ") : artist.genre}
+                          {a.role}
                         </span>
                       )}
                       {a.set_time && (
@@ -632,6 +646,20 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             </div>
           )}
 
+          {/* ═══ LIVE GUEST LIST (free events) ═══
+              Partiful-style: first name + last initial, live counter,
+              avatar stack, flash animation on new RSVPs. Server strips
+              last names before they leave the server. */}
+          {isUpcoming && showRsvp && (
+            <div className="pb-10 border-t border-white/[0.04] pt-10">
+              <PublicRsvpList
+                eventId={event.id}
+                accentColor={accentColor}
+                initialRsvps={initialPublicRsvps}
+              />
+            </div>
+          )}
+
           {/* ═══ TICKETS ═══ */}
           {isUpcoming && showTickets && tiers && tiers.length > 0 && (
             <div id="tickets" className="py-10 border-t border-white/[0.04]">
@@ -672,7 +700,18 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
           {/* ─── Share + About ─── */}
           <div className="space-y-6 py-8 border-t border-white/[0.04]">
-            <ShareButton url={publicUrl} title={event.title} />
+            <div className="flex items-center gap-3">
+              <ShareButton url={publicUrl} title={event.title} />
+              <a
+                href={buildCalendarUrl(event, shareCardVenue)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/[0.08] transition-colors min-h-[44px]"
+              >
+                <CalendarPlus className="h-4 w-4" />
+                Add to calendar
+              </a>
+            </div>
 
             <PublicEventShareCard
               event={{
@@ -724,7 +763,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       <AlsoThisWeek
         events={(nearbyEvents || []).map((e) => {
           const c = e.collectives;
-          const v = e.venues;
           return {
             title: e.title,
             slug: e.slug,
@@ -732,8 +770,8 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
             collectiveName: c?.name || "",
             startsAt: e.starts_at,
             flyerUrl: e.flyer_url,
-            venueName: v?.name || null,
-            venueCity: v?.city || null,
+            venueName: e.venue_name || null,
+            venueCity: e.city || null,
           };
         })}
         city={venue?.city || undefined}

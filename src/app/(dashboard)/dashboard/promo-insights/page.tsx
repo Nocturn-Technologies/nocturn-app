@@ -81,7 +81,6 @@ export default async function PromoInsightsPage() {
     .select("id, title, starts_at")
     .eq("collective_id", collectiveId)
     .gte("starts_at", new Date().toISOString())
-    .is("deleted_at", null)
     .order("starts_at", { ascending: true })
     .limit(1)
     .maybeSingle();

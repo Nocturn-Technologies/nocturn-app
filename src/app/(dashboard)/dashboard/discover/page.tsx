@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ProfileCard } from "./profile-card";
+import { ProfileCard, type DiscoverProfile } from "./profile-card";
 import { CollectiveCard } from "./collective-card";
 import { ContactDialog } from "./contact-dialog";
 import {
@@ -72,27 +72,6 @@ const PEOPLE_MORE = [
 
 const ALL_PEOPLE_OPTIONS = [...PEOPLE_PRIMARY, ...PEOPLE_MORE];
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
-type DiscoverProfileRow = {
-  id: string;
-  slug: string;
-  display_name: string;
-  user_type?: string | null;
-  type?: string | null;
-  city?: string | null;
-  bio?: string | null;
-  genres?: string[] | null;
-  services?: string[] | null;
-  rate_range?: string | null;
-  avatar_url?: string | null;
-  cover_photo_url?: string | null;
-  instagram_handle?: string | null;
-  website_url?: string | null;
-  soundcloud_url?: string | null;
-  spotify_url?: string | null;
-};
-
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export default function DiscoverPage() {
@@ -151,7 +130,7 @@ function DiscoverContent() {
   const [collectivesTotal, setCollectivesTotal] = useState(0);
   const [collectivesLoading, setCollectivesLoading] = useState(true);
 
-  const [profiles, setProfiles] = useState<DiscoverProfileRow[]>([]);
+  const [profiles, setProfiles] = useState<DiscoverProfile[]>([]);
   const [profilesTotal, setProfilesTotal] = useState(0);
   const [profilesLoading, setProfilesLoading] = useState(true);
 
@@ -170,6 +149,7 @@ function DiscoverContent() {
   // ── Connect state (collectives) ─────────────────────────────────────────
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [connectedIds, setConnectedIds] = useState<Set<string>>(new Set());
+  const [pitchError, setPitchError] = useState<string | null>(null);
 
   // ── Contact dialog (profiles) ───────────────────────────────────────────
   const [contactProfile, setContactProfile] = useState<{
@@ -267,7 +247,7 @@ function DiscoverContent() {
       page: 1,
     });
     if (id !== profilesReq.current) return; // stale
-    setProfiles(result.profiles as unknown as DiscoverProfileRow[]);
+    setProfiles(result.profiles as unknown as DiscoverProfile[]);
     setProfilesTotal(result.total);
     setProfilesLoading(false);
   }, [peopleType, query, cityFilter]);
@@ -362,13 +342,17 @@ function DiscoverContent() {
   async function handlePitchCollab(targetCollectiveId: string) {
     if (!myCollectiveId) return;
     haptic("medium");
+    setPitchError(null);
     setConnectingId(targetCollectiveId);
     const result = await startCollabChat(myCollectiveId, targetCollectiveId);
     setConnectingId(null);
-    if (!result.error && result.channelId) {
-      setConnectedIds((prev) => new Set(prev).add(targetCollectiveId));
-      router.push(`/dashboard/chat?channel=${result.channelId}`);
+    if (result.error || !result.channelId) {
+      setPitchError(result.error ?? "Couldn't start the chat — try again.");
+      setTimeout(() => setPitchError(null), 5000);
+      return;
     }
+    setConnectedIds((prev) => new Set(prev).add(targetCollectiveId));
+    router.push(`/dashboard/chat?channel=${result.channelId}`);
   }
 
   // ── Filtering + computed ────────────────────────────────────────────────
@@ -441,7 +425,7 @@ function DiscoverContent() {
 
       {/* Top tabs + view toggle */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div className="flex gap-1 rounded-xl bg-muted/30 p-1 w-full md:w-fit">
+        <div className="flex gap-1 rounded-xl bg-muted/30 p-1 w-full md:w-fit" role="tablist" aria-label="Entity type">
           <TabButton
             active={tab === "collectives"}
             onClick={() => switchTab("collectives")}
@@ -522,12 +506,18 @@ function DiscoverContent() {
         />
       )}
 
+      {/* Pitch error banner */}
+      {pitchError && (
+        <div className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive animate-in fade-in duration-200">
+          {pitchError}
+        </div>
+      )}
+
       {/* Results */}
       <div>
         {tab === "collectives" && (
           <CollectivesResults
             collectives={visibleCollectives}
-            total={visibleCollectives.length}
             loading={collectivesLoading}
             query={query}
             city={cityFilter}
@@ -542,7 +532,6 @@ function DiscoverContent() {
         {tab === "people" && (
           <PeopleResults
             profiles={visibleProfiles}
-            total={visibleProfiles.length}
             loading={profilesLoading}
             view={view}
             savedIds={savedProfileIds}
@@ -607,6 +596,8 @@ function TabButton({
 }) {
   return (
     <button
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-all min-h-[44px] ${
         active
@@ -770,13 +761,25 @@ function CityChip({
       <MapPin className="h-3.5 w-3.5" />
       <span className="max-w-[120px] truncate">{display}</span>
       {value && (
-        <X
-          className="h-3 w-3 hover:text-red-400"
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label="Clear city filter"
+          className="inline-flex items-center justify-center h-5 w-5 rounded hover:text-red-400 cursor-pointer"
           onClick={(e) => {
             e.stopPropagation();
             onChange("");
           }}
-        />
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              onChange("");
+            }
+          }}
+        >
+          <X className="h-3 w-3" />
+        </span>
       )}
     </button>
   );
@@ -861,7 +864,6 @@ function CollectivesResults({
   canPitch,
 }: {
   collectives: DiscoverCollective[];
-  total: number;
   loading: boolean;
   query: string;
   city: string;
@@ -912,14 +914,13 @@ function PeopleResults({
   onUnsave,
   onContact,
 }: {
-  profiles: DiscoverProfileRow[];
-  total: number;
+  profiles: DiscoverProfile[];
   loading: boolean;
   view: "discover" | "network";
   savedIds: Set<string>;
   onSave: (id: string) => void;
   onUnsave: (id: string) => void;
-  onContact: (p: DiscoverProfileRow) => void;
+  onContact: (p: DiscoverProfile) => void;
 }) {
   if (loading) return <CardGridSkeleton kind="profile" />;
   if (profiles.length === 0) {
@@ -1036,8 +1037,35 @@ function GridSkeleton() {
 }
 
 function CardGridSkeleton({ kind }: { kind: "collective" | "profile" | "venue" }) {
-  // Slight variants so the skeleton matches the rendered card geometry
-  const mediaHeight = kind === "collective" ? "h-36" : kind === "venue" ? "h-28" : "h-24";
+  if (kind === "profile") {
+    // Horizontal row layout matching ProfileCard (avatar + text + action)
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="rounded-2xl border border-border bg-card overflow-hidden p-3">
+            <div className="flex items-start gap-3">
+              <div className="h-14 w-14 rounded-xl bg-muted animate-pulse shrink-0" />
+              <div className="flex-1 space-y-2 pt-1">
+                <div className="h-4 w-3/4 rounded bg-muted animate-pulse" />
+                <div className="h-3 w-1/2 rounded bg-muted animate-pulse" />
+                <div className="flex gap-1">
+                  <div className="h-5 w-12 rounded bg-muted animate-pulse" />
+                  <div className="h-5 w-14 rounded bg-muted animate-pulse" />
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-1 mt-3">
+              <div className="flex-1 h-11 rounded-lg bg-muted animate-pulse" />
+              <div className="h-11 w-11 rounded-lg bg-muted animate-pulse" />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // Vertical card layout for collectives + venues (media header + text + CTA)
+  const mediaHeight = kind === "collective" ? "h-36" : "h-28";
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
       {Array.from({ length: 6 }).map((_, i) => (

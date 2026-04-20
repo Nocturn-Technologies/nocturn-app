@@ -1,0 +1,2 @@
+ALTER TABLE public.events
+ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
