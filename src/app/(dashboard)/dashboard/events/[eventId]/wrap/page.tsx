@@ -146,10 +146,9 @@ export default function WrapPage() {
         const { data: event } = await supabase
           .from("events")
           .select(
-            "id, title, starts_at, ends_at, doors_at, status, venue_id, collective_id, venues(name)"
+            "id, title, starts_at, ends_at, doors_at, status, collective_id, venue_name"
           )
           .eq("id", eventId)
-          .is("deleted_at", null)
           .maybeSingle();
 
         if (!event) {
@@ -164,8 +163,6 @@ export default function WrapPage() {
           return;
         }
 
-        const venue = event.venues as unknown as { name: string } | null;
-
         // Ticket tiers
         const { data: tiers } = await supabase
           .from("ticket_tiers")
@@ -177,47 +174,54 @@ export default function WrapPage() {
           0
         );
 
-        // Tickets
+        // Tickets — status counts and tier breakdown (no price_paid/checked_in_at in new schema)
         const { data: tickets } = await supabase
           .from("tickets")
-          .select("id, price_paid, status, checked_in_at, created_at, ticket_tier_id, promo_code_id")
+          .select("id, status, created_at, tier_id")
           .eq("event_id", eventId)
           .in("status", ["paid", "checked_in"]);
 
         const allTickets = tickets ?? [];
         const ticketsSold = allTickets.length;
-        const totalRevenue = allTickets.reduce(
-          (sum, t) => sum + (Number(t.price_paid) || 0),
-          0
-        );
         const checkIns = allTickets.filter(
           (t) => t.status === "checked_in"
         ).length;
+
+        // Revenue from orders
+        const { data: orders } = await supabase
+          .from("orders")
+          .select("total, created_at, promo_code_id")
+          .eq("event_id", eventId)
+          .eq("status", "paid");
+
+        const allOrders = orders ?? [];
+        const totalRevenue = allOrders.reduce(
+          (sum, o) => sum + (Number(o.total) || 0),
+          0
+        );
         const avgPrice = ticketsSold > 0 ? totalRevenue / ticketsSold : 0;
-        const promoCodesUsed = allTickets.filter(
-          (t) => t.promo_code_id
-        ).length;
+        const promoCodesUsed = allOrders.filter((o) => o.promo_code_id).length;
 
         // Tier breakdown
         const tierBreakdown = (tiers ?? []).map((tier) => {
           const sold = allTickets.filter(
-            (t) => t.ticket_tier_id === tier.id
+            (t) => t.tier_id === tier.id
           ).length;
           return { name: tier.name, sold, capacity: tier.capacity ?? 0 };
         });
 
-        // Timeline calculations
-        const ticketDates = allTickets
-          .map((t) => t.created_at)
+        // Timeline calculations (use order created_at for sales timeline)
+        const orderDates = allOrders
+          .map((o) => o.created_at)
           .filter(Boolean)
           .sort();
-        const firstTicketSold = ticketDates[0] ?? null;
+        const firstTicketSold = orderDates[0] ?? null;
 
         // Peak sales hour — group by hour, find max
         let peakSalesHour: string | null = null;
-        if (ticketDates.length > 0) {
+        if (orderDates.length > 0) {
           const hourCounts: Record<string, number> = {};
-          for (const d of ticketDates) {
+          for (const d of orderDates) {
             const hour = new Date(d).toLocaleTimeString("en", {
               hour: "numeric",
               minute: "2-digit",
@@ -238,36 +242,9 @@ export default function WrapPage() {
             })
           : null;
 
-        // Check-in times
-        const checkInTimes = allTickets
-          .map((t) => t.checked_in_at)
-          .filter(Boolean)
-          .sort() as string[];
-
-        let peakCheckIn: string | null = null;
-        if (checkInTimes.length > 0) {
-          const ciHourCounts: Record<string, number> = {};
-          for (const d of checkInTimes) {
-            const hour = new Date(d).toLocaleTimeString("en", {
-              hour: "numeric",
-              minute: "2-digit",
-            });
-            ciHourCounts[hour] = (ciHourCounts[hour] ?? 0) + 1;
-          }
-          const maxCiHour = Object.entries(ciHourCounts).sort(
-            (a, b) => b[1] - a[1]
-          )[0];
-          peakCheckIn = maxCiHour ? maxCiHour[0] : null;
-        }
-
-        const lastCheckIn = checkInTimes[checkInTimes.length - 1]
-          ? new Date(
-              checkInTimes[checkInTimes.length - 1]
-            ).toLocaleTimeString("en", {
-              hour: "numeric",
-              minute: "2-digit",
-            })
-          : null;
+        // Check-in timestamps not available in new schema — omit peak/last check-in
+        const peakCheckIn: string | null = null;
+        const lastCheckIn: string | null = null;
 
         // Check settlement
         const { data: settlement } = await supabase
@@ -284,7 +261,7 @@ export default function WrapPage() {
             day: "numeric",
             year: "numeric",
           }),
-          venueName: venue?.name ?? "Unknown Venue",
+          venueName: event.venue_name ?? "Unknown Venue",
           totalRevenue,
           forecast: 0, // Could be extended to use actual forecast
           ticketsSold,

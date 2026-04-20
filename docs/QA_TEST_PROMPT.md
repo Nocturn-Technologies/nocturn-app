@@ -94,14 +94,14 @@
 - [ ] Greeting shows correct time of day (Good morning/afternoon/evening)
 - [ ] Collective name displays correctly
 - [ ] Smart actions section shows relevant cards based on event state:
-  - No events → "Create Your First Event" + "Find a Venue"
+  - No events → "Throw your first night" + "Find a Venue"
   - Has draft → "Publish [Event Name]" + Promo + Money
   - Has upcoming → "Promote [Event Name]" + Promo + Money
 - [ ] Quick actions row: "Find Venue", "New Event", "Team Chat"
 - [ ] Insights section shows contextual tips
 
 ### 3C. Home Page Links — CLICK EVERY ONE
-- [ ] "Create Your First Event" → `/dashboard/events/new` ✓
+- [ ] "Throw your first night" → `/dashboard/events/new` ✓
 - [ ] "Publish [Event]" → `/dashboard/events` ✓
 - [ ] "Promote [Event]" → `/dashboard/marketing` ✓
 - [ ] "Promo" card → `/dashboard/marketing` ✓
@@ -536,7 +536,7 @@ Test the following with different user types:
 ### Journey 1: First-Time Collective
 1. [ ] Sign up → pending approval
 2. [ ] Get approved → login → dashboard
-3. [ ] See empty state → click "Create Your First Event"
+3. [ ] See empty state → click "Throw your first night"
 4. [ ] Chat through event creation: name → venue → date → $25, 200 cap → local headliner → $500 talent fee → no venue costs → budget breakdown
 5. [ ] Review card shows correct tiers based on $25 input
 6. [ ] Adjust price with slider → tiers update in real time

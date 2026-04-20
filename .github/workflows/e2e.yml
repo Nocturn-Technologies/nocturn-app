@@ -1,0 +1,61 @@
+name: E2E
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    name: Playwright
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      # Placeholder env for `next build` — real backends are mocked at the
+      # network layer in tests/e2e/fixtures/mocks.ts, so these don't need to
+      # point at real services.
+      NEXT_PUBLIC_SUPABASE_URL: https://mock.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiJ9.e30.mockanon
+      SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiJ9.e30.mockservice
+      STRIPE_SECRET_KEY: sk_test_mock
+      STRIPE_WEBHOOK_SECRET: whsec_mock
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      RESEND_API_KEY: re_mock
+      ANTHROPIC_API_KEY: sk-ant-mock
+      OPENAI_API_KEY: sk-mock
+      CRON_SECRET: mock-cron-secret
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Build Next.js
+        run: npm run build
+
+      - name: Run Playwright (starts server via webServer config)
+        run: npm run test:e2e
+        env:
+          CI: '1'
+
+      - name: Upload Playwright report
+        if: always() && !cancelled()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: playwright-report/
+          retention-days: 7

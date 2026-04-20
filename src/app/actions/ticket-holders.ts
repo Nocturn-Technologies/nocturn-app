@@ -20,18 +20,17 @@ export interface TicketHolder {
 }
 
 /**
- * Fetch ticket holders for a ticketed event. Parallel to listEventRsvps but
- * backed by the `tickets` table. Buyer identity resolves from three possible
- * sources — preferring the most reliable (users table join) and falling back
- * to the Stripe checkout metadata we captured, then finally the walk-in
- * attendee_name column:
+ * Fetch ticket holders for a ticketed event.
  *
- *   1. `users` row via `tickets.user_id` (registered buyers)
- *   2. `tickets.metadata.customer_email` / `buyer_email` / `email` (Stripe guest checkout)
- *   3. `tickets.attendee_name` (door comp / manual ticket)
+ * New schema path for buyer identity:
+ *   tickets.holder_party_id → parties.display_name
+ *   tickets.order_line_id → order_lines.unit_price + order_lines.order_id
+ *   order_lines.order_id → orders.party_id + orders.currency + orders.metadata
+ *   orders.party_id → parties.display_name (buyer name)
+ *   party_contact_methods (type='email', party_id = orders.party_id) for email
  *
- * Returns `reserved` tickets too so operators can see in-flight Stripe
- * sessions; UI filters them out of headline counts.
+ * `checked_in_at` is no longer a column on tickets — returned as null.
+ * `currency` comes from the parent order.
  */
 export async function listEventTicketHolders(eventId: string): Promise<{
   error: string | null;
@@ -62,12 +61,13 @@ export async function listEventTicketHolders(eventId: string): Promise<{
       .is("deleted_at", null);
     if (!memberCount) return { error: "Not authorized", holders: [] };
 
+    // Fetch tickets with tier name, order_line (for price), and holder party
     const { data: tickets, error: ticketsError } = await admin
       .from("tickets")
       .select(
-        `id, status, price_paid, currency, checked_in_at, created_at, attendee_name, metadata,
+        `id, status, qr_code, created_at, issued_at, holder_party_id,
          ticket_tiers ( name ),
-         users!tickets_user_id_fkey ( full_name, email )`,
+         order_lines ( unit_price, order_id )`,
       )
       .eq("event_id", eventId)
       .order("created_at", { ascending: false });
@@ -77,42 +77,118 @@ export async function listEventTicketHolders(eventId: string): Promise<{
       return { error: "Failed to load ticket holders", holders: [] };
     }
 
+    if (!tickets || tickets.length === 0) {
+      return { error: null, holders: [] };
+    }
+
+    // Collect unique order_ids and party_ids for batch lookups
+    type OrderLineRow = { unit_price: number; order_id: string } | null;
+
+    const orderIds = Array.from(
+      new Set(
+        (tickets ?? [])
+          .map((t) => {
+            const ol = t.order_lines as unknown as OrderLineRow;
+            return ol?.order_id ?? null;
+          })
+          .filter((id): id is string => !!id)
+      )
+    );
+
+    const holderPartyIds = Array.from(
+      new Set(
+        (tickets ?? [])
+          .map((t) => t.holder_party_id)
+          .filter((id): id is string => !!id)
+      )
+    );
+
+    // Batch fetch orders (for currency and buyer party_id)
+    type OrderRow = { id: string; party_id: string; currency: string; metadata: Record<string, unknown> | null };
+    const orderMap = new Map<string, OrderRow>();
+    if (orderIds.length > 0) {
+      const { data: orders } = await admin
+        .from("orders")
+        .select("id, party_id, currency, metadata")
+        .in("id", orderIds);
+      for (const o of (orders ?? []) as OrderRow[]) {
+        orderMap.set(o.id, o);
+      }
+    }
+
+    // Collect all party_ids we need (buyer parties + holder parties)
+    const buyerPartyIds = Array.from(
+      new Set(Array.from(orderMap.values()).map((o) => o.party_id).filter(Boolean))
+    );
+    const allPartyIds = Array.from(new Set([...holderPartyIds, ...buyerPartyIds]));
+
+    // Batch fetch party display names
+    type PartyRow = { id: string; display_name: string };
+    const partyMap = new Map<string, PartyRow>();
+    if (allPartyIds.length > 0) {
+      const { data: parties } = await admin
+        .from("parties")
+        .select("id, display_name")
+        .in("id", allPartyIds);
+      for (const p of (parties ?? []) as PartyRow[]) {
+        partyMap.set(p.id, p);
+      }
+    }
+
+    // Batch fetch primary email contact methods for buyer parties
+    type ContactRow = { party_id: string; value: string };
+    const emailMap = new Map<string, string>();
+    if (buyerPartyIds.length > 0) {
+      const { data: contacts } = await admin
+        .from("party_contact_methods")
+        .select("party_id, value")
+        .in("party_id", buyerPartyIds)
+        .eq("type", "email")
+        .eq("is_primary", true);
+      for (const c of (contacts ?? []) as ContactRow[]) {
+        emailMap.set(c.party_id, c.value);
+      }
+    }
+
     const holders: TicketHolder[] = (tickets ?? []).map((t) => {
-      // Structural cast — Supabase returns single-row relations as objects, not arrays,
-      // but the generated types widen to arrays. Narrow via `unknown` (not `any`).
-      const userRow = t.users as unknown as { full_name: string | null; email: string | null } | null;
       const tierRow = t.ticket_tiers as unknown as { name: string | null } | null;
-      const meta = (t.metadata ?? {}) as {
-        customer_email?: string;
-        buyer_email?: string;
-        email?: string;
+      const orderLine = t.order_lines as unknown as OrderLineRow;
+      const order = orderLine?.order_id ? orderMap.get(orderLine.order_id) : null;
+
+      const buyerPartyId = order?.party_id ?? null;
+      const holderParty = t.holder_party_id ? partyMap.get(t.holder_party_id) : null;
+      const buyerParty = buyerPartyId ? partyMap.get(buyerPartyId) : null;
+
+      // Prefer holder party name, fall back to buyer party name, then order metadata
+      const orderMeta = (order?.metadata ?? {}) as {
         buyer_name?: string;
         customer_name?: string;
+        buyer_email?: string;
+        customer_email?: string;
       };
 
-      const email =
-        userRow?.email ??
-        meta.customer_email ??
-        meta.buyer_email ??
-        meta.email ??
+      const full_name =
+        holderParty?.display_name ??
+        buyerParty?.display_name ??
+        orderMeta.buyer_name ??
+        orderMeta.customer_name ??
         null;
 
-      const full_name =
-        userRow?.full_name ??
-        meta.customer_name ??
-        meta.buyer_name ??
-        t.attendee_name ??
+      const email =
+        (buyerPartyId ? emailMap.get(buyerPartyId) : null) ??
+        orderMeta.buyer_email ??
+        orderMeta.customer_email ??
         null;
 
       return {
         id: t.id,
         status: t.status as TicketHolderStatus,
         full_name,
-        email,
+        email: email ?? null,
         tier_name: tierRow?.name ?? null,
-        price_paid: Number(t.price_paid) || 0,
-        currency: (t.currency ?? "usd").toLowerCase(),
-        checked_in_at: t.checked_in_at,
+        price_paid: Number(orderLine?.unit_price) || 0,
+        currency: (order?.currency ?? "usd").toLowerCase(),
+        checked_in_at: null, // column removed in schema rebuild
         created_at: t.created_at,
       };
     });

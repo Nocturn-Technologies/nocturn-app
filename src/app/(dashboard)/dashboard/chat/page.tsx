@@ -49,13 +49,10 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Channel {
   id: string;
-  collective_id: string;
-  event_id: string | null;
-  partner_collective_id?: string | null;
-  name: string;
-  type: "general" | "event" | "collab";
+  collective_id: string | null;
+  name: string | null;
+  type: string;
   created_at: string;
-  metadata?: Record<string, string>;
 }
 
 interface ChannelWithMeta extends Channel {
@@ -64,6 +61,7 @@ interface ChannelWithMeta extends Channel {
   unread: boolean;
   unread_count: number;
   event_date?: string;
+  event_id?: string | null;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -158,7 +156,7 @@ function ChannelRow({
       className="flex items-center gap-3 px-4 py-3 min-h-[48px] hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 border-b border-white/5 last:border-b-0"
     >
       {/* Avatar */}
-      {icon ?? <Avatar name={ch.name} />}
+      {icon ?? <Avatar name={ch.name ?? ""} />}
 
       {/* Content */}
       <div className="flex-1 min-w-0">
@@ -300,7 +298,6 @@ export default function ChatPage() {
         collective_id: collectiveId,
         name: "General",
         type: "general",
-        event_id: null,
       });
     }
 
@@ -309,25 +306,24 @@ export default function ChatPage() {
       .from("events")
       .select("id, title, starts_at")
       .eq("collective_id", collectiveId)
-      .is("deleted_at", null)
       .order("starts_at", { ascending: true });
 
     if (events && events.length > 0) {
+      // Note: channels no longer has event_id column — event channels are identified by name matching
       const { data: existingEventChannels } = await supabase
         .from("channels")
-        .select("event_id")
+        .select("name")
         .eq("collective_id", collectiveId)
         .eq("type", "event");
 
-      const existingEventIds = new Set(
-        existingEventChannels?.map((c) => c.event_id) ?? []
+      const existingEventNames = new Set(
+        existingEventChannels?.map((c) => c.name) ?? []
       );
 
       const newChannels = events
-        .filter((e) => !existingEventIds.has(e.id))
+        .filter((e) => !existingEventNames.has(e.title))
         .map((e) => ({
           collective_id: collectiveId,
-          event_id: e.id,
           name: e.title,
           type: "event" as const,
         }));
@@ -356,7 +352,7 @@ export default function ChatPage() {
       typedChannels.map(async (ch) => {
         const { data: msgs } = await supabase
           .from("messages")
-          .select("content, created_at, type")
+          .select("content, created_at")
           .eq("channel_id", ch.id)
           .order("created_at", { ascending: false })
           .limit(1);
@@ -364,20 +360,16 @@ export default function ChatPage() {
         const lastMsg = msgs?.[0];
         let eventDate: string | undefined;
 
-        if (ch.event_id && events) {
+        if (events) {
           const evt = events.find(
-            (e: { id: string }) => e.id === ch.event_id
+            (e: { title: string }) => e.title === ch.name
           );
           if (evt) eventDate = (evt as { starts_at: string }).starts_at;
         }
 
         return {
           ...ch,
-          last_message: lastMsg
-            ? lastMsg.type === "voice"
-              ? "Voice note"
-              : lastMsg.content
-            : undefined,
+          last_message: lastMsg?.content,
           last_message_at: lastMsg?.created_at,
           unread: false,
           unread_count: 0,
@@ -395,7 +387,7 @@ export default function ChatPage() {
         ((collabs ?? []) as Channel[]).map(async (ch) => {
           const { data: msgs } = await supabase
             .from("messages")
-            .select("content, created_at, type")
+            .select("content, created_at")
             .eq("channel_id", ch.id as string)
             .order("created_at", { ascending: false })
             .limit(1);
@@ -502,7 +494,7 @@ export default function ChatPage() {
       const q = searchQuery.toLowerCase();
       return list.filter(
         (ch) =>
-          ch.name.toLowerCase().includes(q) ||
+          (ch.name?.toLowerCase().includes(q) ?? false) ||
           ch.last_message?.toLowerCase().includes(q)
       );
     },

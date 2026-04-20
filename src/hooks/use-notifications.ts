@@ -72,7 +72,7 @@ export function useNotifications() {
                 .from("tickets")
                 .select("*", { count: "exact", head: true })
                 .eq("event_id", event.id)
-                .in("status", ["paid", "checked_in"]);
+                .in("status", ["valid", "checked_in"]);
 
               const ticketText = ticketCount ? ` ${ticketCount} tickets sold` : "";
               newNotifications.push({

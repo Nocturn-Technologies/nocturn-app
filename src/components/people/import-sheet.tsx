@@ -365,7 +365,6 @@ export function ImportSheet({
         email: quickEmail.trim().toLowerCase(),
         contactType,
         phone: quickPhone.trim() || undefined,
-        instagram: quickInstagram.trim() || undefined,
         role: contactType === "industry" && quickRole ? quickRole : undefined,
         tags: quickTags,
         notes: quickNotes.trim() || undefined,

@@ -1,6 +1,5 @@
 import { SupabaseClient } from "@supabase/supabase-js";
 import { calculateServiceFeeCents } from "@/lib/pricing";
-import { randomUUID } from "crypto";
 
 // ── Promo code validation ────────────────────────────────────────────
 
@@ -35,7 +34,7 @@ export async function validatePromo(
 
   const { data: promo } = await admin
     .from("promo_codes")
-    .select("id, code, discount_type, discount_value, max_uses, current_uses, valid_until")
+    .select("id, code, discount_type, discount_value, max_uses, is_active, expires_at")
     .eq("event_id", eventId)
     .ilike("code", promoCode)
     .maybeSingle();
@@ -44,37 +43,28 @@ export async function validatePromo(
     return { error: "Promo code not found" };
   }
 
-  // Active check: valid_until in the past means deactivated
-  if (promo.valid_until && new Date(promo.valid_until) < new Date()) {
+  // Active check
+  if (!promo.is_active) {
+    return { error: "Promo code is no longer active" };
+  }
+
+  // Expiry check
+  if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
     return { error: "Promo code expired" };
   }
 
-  // Atomic claim: increment current_uses only if under max_uses.
-  // This prevents race conditions where two users validate the same promo code
-  // simultaneously and both see capacity available.
+  // Capacity check against promo_code_usage count if max_uses is set.
+  // current_uses was removed from the schema — we derive the count from the usage table.
   if (promo.max_uses !== null) {
-    const { data: claimResult, error: claimError } = await admin
-      .from("promo_codes")
-      .update({ current_uses: (promo.current_uses ?? 0) + quantity })
-      .eq("id", promo.id)
-      .lt("current_uses", promo.max_uses - quantity + 1) // atomic guard: current_uses + quantity <= max_uses
-      .select("id")
-      .maybeSingle();
+    const { count: usageCount } = await admin
+      .from("promo_code_usage")
+      .select("*", { count: "exact", head: true })
+      .eq("promo_code_id", promo.id);
 
-    if (claimError) {
-      console.error("[checkout-helpers] Promo claim failed:", claimError);
-      return { error: "Failed to apply promo code" };
-    }
-
-    if (!claimResult) {
+    const currentUses = usageCount ?? 0;
+    if (currentUses + quantity > promo.max_uses) {
       return { error: "Promo code usage limit reached" };
     }
-  } else {
-    // No max_uses limit — just increment for tracking
-    await admin
-      .from("promo_codes")
-      .update({ current_uses: (promo.current_uses ?? 0) + quantity })
-      .eq("id", promo.id);
   }
 
   // Calculate discount in cents
@@ -138,57 +128,3 @@ export function calculateCheckoutPricing(
   };
 }
 
-// ── Pending ticket insertion ─────────────────────────────────────────
-
-export interface PendingTicketResult {
-  pendingTicketIds: string[];
-  pendingTokens: string[];
-}
-
-/**
- * Insert pending tickets to reserve capacity.
- * These are upgraded to "paid" on webhook fulfillment or cleaned up after 30 min.
- */
-export async function insertPendingTickets(
-  admin: SupabaseClient,
-  opts: {
-    eventId: string;
-    tierId: string;
-    quantity: number;
-    email: string;
-    phone?: string | null;
-    expiresInMs?: number;
-  }
-): Promise<PendingTicketResult> {
-  const expiresAt = new Date(Date.now() + (opts.expiresInMs ?? 30 * 60 * 1000)).toISOString();
-
-  const tickets = Array.from({ length: opts.quantity }, () => ({
-    event_id: opts.eventId,
-    ticket_tier_id: opts.tierId,
-    user_id: null,
-    status: "pending" as const,
-    price_paid: 0,
-    currency: "usd",
-    stripe_payment_intent_id: null,
-    ticket_token: randomUUID(),
-    metadata: {
-      customer_email: opts.email,
-      ...(opts.phone && { customer_phone: opts.phone }),
-      pending_expires_at: expiresAt,
-    },
-  }));
-
-  const { data: inserted, error } = await admin
-    .from("tickets")
-    .insert(tickets)
-    .select("id, ticket_token");
-
-  if (error) {
-    throw new Error(`Failed to insert pending tickets: ${error.message}`);
-  }
-
-  return {
-    pendingTicketIds: inserted?.map((t) => t.id) ?? [],
-    pendingTokens: inserted?.map((t) => t.ticket_token) ?? [],
-  };
-}

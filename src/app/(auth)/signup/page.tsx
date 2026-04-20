@@ -191,11 +191,7 @@ export default function SignupPage() {
       return;
     }
 
-    if (userType === "collective" || userType === "promoter") {
-      router.push("/pending-approval");
-    } else {
-      router.push("/dashboard");
-    }
+    router.push("/pending-approval");
     router.refresh();
   }
 

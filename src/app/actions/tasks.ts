@@ -80,8 +80,8 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
     const { data: templates, error: templatesError } = await admin
       .from("playbook_task_templates")
       .select("*")
-      .eq("playbook_id", playbookId)
-      .order("position");
+      .eq("template_id", playbookId)
+      .order("sort_order");
 
     if (templatesError) return { error: "Failed to fetch playbook templates" };
     if (!templates || templates.length === 0) return { error: "No tasks in playbook" };
@@ -89,19 +89,18 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
     const eventDate = new Date(event.starts_at);
 
     // Generate tasks
-    const tasks = templates.map((t, _i) => {
-      // due_offset_hours is stored in hours (negative = before event)
+    const tasks = templates.map((t) => {
+      // due_offset is stored in hours (negative = before event)
       const dueDate = new Date(eventDate);
-      const offsetHours = t.due_offset_hours ?? 0;
+      const offsetHours = t.due_offset ?? 0;
       dueDate.setHours(dueDate.getHours() + offsetHours);
 
-      // Try to auto-assign based on role
-      const assignedTo = t.default_assignee_role ? (membersByRole.get(t.default_assignee_role) || membersByRole.get("admin") || null) : null;
+      const assignedTo: string | null = null;
 
       return {
         event_id: eventId,
         title: t.title,
-        description: t.description,
+        description: t.description ?? null,
         status: "todo",
         assigned_to: assignedTo,
         due_at: dueDate.toISOString(),
@@ -185,7 +184,7 @@ export async function createEventTask(input: {
 
     const { error } = await admin.from("event_tasks").insert({
       event_id: input.eventId,
-      title: input.title,
+      title: input.title.trim(),
       description: input.description || null,
       assigned_to: input.assignedTo || null,
       due_at: input.dueDate || null,
@@ -225,7 +224,11 @@ export async function updateTaskStatus(taskId: string, status: string) {
     const admin = createAdminClient();
 
     // Verify ownership via task's event
-    const { data: taskCheck, error: taskCheckError } = await admin.from("event_tasks").select("event_id").eq("id", taskId).maybeSingle();
+    const { data: taskCheck, error: taskCheckError } = await admin
+      .from("event_tasks")
+      .select("event_id")
+      .eq("id", taskId)
+      .maybeSingle();
     if (taskCheckError) return { error: "Failed to verify task" };
     if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
 
@@ -263,8 +266,10 @@ export async function updateTaskStatus(taskId: string, status: string) {
 }
 
 // Update task details (assign, due date)
-// TODO(audit): validate priority/category enums, UUID-validate assignedTo
-export async function updateTaskDetails(taskId: string, updates: { assignedTo?: string | null; dueAt?: string | null; description?: string | null }) {
+export async function updateTaskDetails(
+  taskId: string,
+  updates: { assignedTo?: string | null; dueAt?: string | null; description?: string | null }
+) {
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -272,7 +277,11 @@ export async function updateTaskDetails(taskId: string, updates: { assignedTo?: 
     if (!taskId?.trim()) return { error: "Task ID is required" };
 
     const admin = createAdminClient();
-    const { data: taskCheck, error: taskCheckError } = await admin.from("event_tasks").select("event_id, title").eq("id", taskId).maybeSingle();
+    const { data: taskCheck, error: taskCheckError } = await admin
+      .from("event_tasks")
+      .select("event_id, title")
+      .eq("id", taskId)
+      .maybeSingle();
     if (taskCheckError) return { error: "Failed to verify task" };
     if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
 
@@ -314,7 +323,11 @@ export async function getEventMembers(eventId: string) {
     if (!userId) return [];
 
     const admin = createAdminClient();
-    const { data: event, error: eventError } = await admin.from("events").select("collective_id").eq("id", eventId).maybeSingle();
+    const { data: event, error: eventError } = await admin
+      .from("events")
+      .select("collective_id")
+      .eq("id", eventId)
+      .maybeSingle();
     if (eventError) {
       console.error("[getEventMembers] event lookup error:", eventError);
       return [];
@@ -436,7 +449,7 @@ export async function getAITaskSuggestions(eventId: string) {
       return [];
     }
 
-    const existingTitles = new Set((existingTasks ?? []).map(t => t.title.toLowerCase()));
+    const existingTitles = new Set((existingTasks ?? []).map((t) => t.title.toLowerCase()));
     const daysUntil = Math.ceil((new Date(event.starts_at).getTime() - Date.now()) / 86400000);
 
     const suggestions: Array<{ title: string; description: string; category: string; priority: string }> = [];
@@ -533,7 +546,11 @@ export async function getEventDate(eventId: string): Promise<string | null> {
     const userId = await authAndVerifyEvent(eventId);
     if (!userId) return null;
     const admin = createAdminClient();
-    const { data, error } = await admin.from("events").select("starts_at").eq("id", eventId).maybeSingle();
+    const { data, error } = await admin
+      .from("events")
+      .select("starts_at")
+      .eq("id", eventId)
+      .maybeSingle();
     if (error) {
       console.error("[getEventDate]", error);
       return null;
@@ -566,7 +583,7 @@ export async function getEventTaskProgress(eventId: string) {
     if (!data || data.length === 0) return null;
 
     const total = data.length;
-    const done = data.filter(t => t.status === "done").length;
+    const done = data.filter((t) => t.status === "done").length;
     return { total, done, percent: Math.round((done / total) * 100) };
   } catch (err) {
     console.error("[getEventTaskProgress]", err);

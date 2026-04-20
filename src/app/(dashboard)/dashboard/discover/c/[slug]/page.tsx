@@ -7,10 +7,7 @@ import {
   MapPin,
   Users,
   Calendar,
-  Instagram,
-  Globe,
   Sparkles,
-  ExternalLink,
 } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/config";
 import { createClient as createServerClient } from "@/lib/supabase/server";
@@ -23,12 +20,9 @@ interface CollectiveRow {
   id: string;
   name: string;
   slug: string;
-  description: string | null;
   bio: string | null;
   logo_url: string | null;
-  cover_photo_url: string | null;
-  website: string | null;
-  instagram: string | null;
+  cover_url: string | null;
   city: string | null;
   created_at: string;
 }
@@ -43,7 +37,7 @@ export default async function CollectiveDetailPage({
 
   const { data: collective } = await sb
     .from("collectives")
-    .select("id, name, slug, description, bio, logo_url, cover_photo_url, website, instagram, city, created_at")
+    .select("id, name, slug, bio, logo_url, cover_url, city, created_at")
     .eq("slug", slug)
     .maybeSingle<CollectiveRow>();
 
@@ -80,7 +74,7 @@ export default async function CollectiveDetailPage({
   ]);
 
   const memberCount = memberCountResult.count ?? 0;
-  const heroFlyer = recentEvents[0]?.flyer_url ?? collective.cover_photo_url ?? null;
+  const heroFlyer = recentEvents[0]?.flyer_url ?? collective.cover_url ?? null;
   const sixtyDaysAgo = Date.now() - 60 * 24 * 60 * 60 * 1000;
   const recentEventCount = recentEvents.filter((e) => {
     const t = new Date(e.starts_at).getTime();
@@ -181,13 +175,13 @@ export default async function CollectiveDetailPage({
         />
       )}
 
-      {/* Bio / description */}
-      {(collective.description || collective.bio) && (
+      {/* Bio */}
+      {collective.bio && (
         <Card>
           <CardContent className="p-4 md:p-5 space-y-2">
             <h2 className="text-sm font-bold font-heading">About</h2>
             <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-              {collective.description ?? collective.bio}
+              {collective.bio}
             </p>
           </CardContent>
         </Card>
@@ -213,40 +207,7 @@ export default async function CollectiveDetailPage({
         </div>
       )}
 
-      {/* Socials */}
-      {(collective.instagram || collective.website) && (
-        <Card>
-          <CardContent className="p-4 md:p-5 space-y-2">
-            <h2 className="text-sm font-bold font-heading">Find them</h2>
-            <div className="flex flex-wrap gap-2">
-              {collective.instagram && (
-                <a
-                  href={`https://instagram.com/${collective.instagram.replace("@", "")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 min-h-[44px] rounded-xl border border-border bg-background hover:border-nocturn/30 hover:bg-muted/40 transition-colors px-3 text-xs"
-                >
-                  <Instagram className="h-3.5 w-3.5" />
-                  @{collective.instagram.replace(/^@/, "")}
-                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                </a>
-              )}
-              {collective.website && (
-                <a
-                  href={collective.website.startsWith("http") ? collective.website : `https://${collective.website}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 min-h-[44px] rounded-xl border border-border bg-background hover:border-nocturn/30 hover:bg-muted/40 transition-colors px-3 text-xs"
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  Website
-                  <ExternalLink className="h-3 w-3 text-muted-foreground" />
-                </a>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Socials — contact methods are now in party_contact_methods; shown if available */}
     </div>
   );
 }

@@ -36,18 +36,17 @@ export default async function EventChatPage({ params }: Props) {
     .from("events")
     .select("id, title, collective_id")
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event || !collectiveIds.includes(event.collective_id)) notFound();
 
-  // Look for existing event channel
+  // Look for existing event channel by collective_id + type + name (no event_id column)
   const { data: channel } = await admin
     .from("channels")
     .select("id")
-    .eq("event_id", eventId)
     .eq("collective_id", event.collective_id)
     .eq("type", "event")
+    .eq("name", event.title)
     .maybeSingle();
 
   if (channel) {
@@ -59,7 +58,6 @@ export default async function EventChatPage({ params }: Props) {
     .from("channels")
     .insert({
       collective_id: event.collective_id,
-      event_id: event.id,
       name: event.title,
       type: "event",
     })

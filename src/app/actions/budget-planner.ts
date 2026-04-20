@@ -7,7 +7,6 @@ import { cascadeScenario, cascadeBreakEven } from "@/lib/ticket-forecast";
 // so budget-planner, event-financials, settlements, and the wizard chip tray
 // never drift. Re-exported here for callers still importing from this file.
 import type { ExpenseCategory } from "@/lib/expense-categories";
-export type { ExpenseCategory };
 
 export interface ExpenseItem {
   category: ExpenseCategory;

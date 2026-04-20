@@ -38,8 +38,8 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, isPaidEvent
   }
 
   function handleEmailShare() {
-    const subject = encodeURIComponent(`${eventTitle} — Grab your tickets`);
-    const body = encodeURIComponent(`Just dropped ${eventTitle}. Grab tickets here: ${shareUrl}`);
+    const subject = encodeURIComponent(`${eventTitle} — grab one`);
+    const body = encodeURIComponent(`${eventTitle} is on. Grab a ticket before they go: ${shareUrl}`);
     window.open(`mailto:?subject=${subject}&body=${body}`, "_blank");
   }
 
@@ -49,7 +49,7 @@ export function ShareScreen({ eventTitle, collectiveSlug, eventSlug, isPaidEvent
       try {
         await navigator.share({
           title: eventTitle,
-          text: `Check out ${eventTitle}`,
+          text: `${eventTitle} — link in bio`,
           url: shareUrl,
         });
         return;
