@@ -160,17 +160,6 @@ export default async function EventDetailPage({ params }: Props) {
   // Use admin client to bypass RLS
   const admin = createAdminClient();
 
-  // Verify user owns this event via collective membership
-  const { data: memberships } = await admin
-    .from("collective_members")
-    .select("collective_id")
-    .eq("user_id", user.id)
-    .is("deleted_at", null);
-
-  const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
-
-  if (collectiveIds.length === 0) notFound();
-
   // Fetch event with flat venue columns. is_free drives whether we render
   // the RSVPs widget (free/rsvp events) or the Ticket Holders widget
   // (ticketed events) below.
@@ -182,7 +171,25 @@ export default async function EventDetailPage({ params }: Props) {
     .eq("id", eventId)
     .maybeSingle();
 
-  if (!event || !collectiveIds.includes(event.collective_id)) notFound();
+  if (!event) notFound();
+
+  // Verify the caller belongs to the exact collective that owns this event.
+  // This is more robust than fetching a broader membership list first and
+  // avoids false 404s when the dashboard is working against rebuilt-schema
+  // data with stale assumptions.
+  const { count: membershipCount, error: membershipError } = await admin
+    .from("collective_members")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .eq("collective_id", event.collective_id)
+    .is("deleted_at", null);
+
+  if (membershipError) {
+    console.error("[EventDetailPage] membership query error:", membershipError.message);
+    notFound();
+  }
+
+  if (!membershipCount) notFound();
 
   // Get collective slug for public link
   const { data: collective } = await admin
@@ -206,7 +213,7 @@ export default async function EventDetailPage({ params }: Props) {
       .from("tickets")
       .select("tier_id")
       .in("tier_id", tierIds)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     if (soldData) {
       for (const ticket of soldData) {
