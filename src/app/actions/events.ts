@@ -7,12 +7,19 @@ import { generateAutoSettlement } from "./auto-settlement";
 import { getStripe } from "@/lib/stripe";
 import { DEFAULT_TIMEZONE } from "@/lib/utils";
 import { rateLimitStrict } from "@/lib/rate-limit";
+import { mergeEventCommercialMetadata } from "@/lib/event-commercials";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Json } from "@/lib/supabase/database.types";
 
 function slugify(text: string): string {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/(^-|-$)/g, "");
+}
+
+function untypedCollectives(admin: ReturnType<typeof createAdminClient>) {
+  return (admin as unknown as SupabaseClient).from("collectives");
 }
 
 interface CreateEventInput {
@@ -39,6 +46,8 @@ interface CreateEventInput {
   venueDeposit?: number | null;
   barMinimum?: number | null;
   estimatedBarRevenue?: number | null;
+  projectedBarSales?: number | null;
+  barPercent?: number | null;
   // Free-form bucket from the budget step ("sound, lights, security, promo").
   // Stored as a single line in the event_expenses table so it shows up in the P&L.
   otherExpenses?: number | null;
@@ -72,6 +81,8 @@ interface UpdateEventInput {
   venueDeposit?: number | null;
   venueCost?: number | null;
   estimatedBarRevenue?: number | null;
+  projectedBarSales?: number | null;
+  barPercent?: number | null;
   timezone?: string; // IANA timezone, defaults to America/Toronto
   // Itemized expenses. Reconciled against the `event_expenses` table:
   //   id present → update in place
@@ -278,6 +289,21 @@ export async function createEvent(input: CreateEventInput) {
   const travelCostClean = safeMoney(input.travelCost);
 
   // Create event — venue details stored as flat columns (venue_name, venue_address, city, capacity)
+  const eventMetadata = mergeEventCommercialMetadata(
+    {
+      timezone: tz,
+      ...(dressCode ? { dress_code: dressCode } : {}),
+      ...(hostMessage ? { host_message: hostMessage } : {}),
+    },
+    {
+      venueCost: input.venueCost ?? null,
+      venueDeposit: input.venueDeposit ?? null,
+      barMinimum: input.barMinimum ?? null,
+      projectedBarSales: input.projectedBarSales ?? input.estimatedBarRevenue ?? null,
+      barPercent: input.barPercent ?? null,
+    }
+  );
+
   const { data: event, error: eventError } = await admin
     .from("events")
     .insert({
@@ -295,11 +321,7 @@ export async function createEvent(input: CreateEventInput) {
       status: "draft",
       is_free: isFree,
       vibe_tags: vibeTags.length > 0 ? vibeTags : undefined,
-      metadata: {
-        timezone: tz,
-        ...(dressCode ? { dress_code: dressCode } : {}),
-        ...(hostMessage ? { host_message: hostMessage } : {}),
-      },
+      metadata: eventMetadata as Json,
     })
     .select("id")
     .maybeSingle();
@@ -434,7 +456,7 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
   // Only regenerate slug when title actually changed — check collision within same collective
   const { data: currentEventRow } = await admin
     .from("events")
-    .select("title, collective_id")
+    .select("title, collective_id, metadata")
     .eq("id", eventId)
     .maybeSingle();
 
@@ -507,6 +529,13 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
     venue_address: input.venueAddress,
     city: input.venueCity,
     capacity: input.venueCapacity || null,
+    metadata: mergeEventCommercialMetadata(currentEventRow?.metadata, {
+      venueCost: input.venueCost ?? null,
+      venueDeposit: input.venueDeposit ?? null,
+      barMinimum: input.barMinimum ?? null,
+      projectedBarSales: input.projectedBarSales ?? input.estimatedBarRevenue ?? null,
+      barPercent: input.barPercent ?? null,
+    }) as Json,
   };
   if (newSlug) {
     eventUpdatePayload.slug = newSlug;
@@ -702,28 +731,71 @@ export async function publishEvent(eventId: string) {
 
   const admin = createAdminClient();
 
-  // Verify event has at least 1 ticket tier
-  const { count: tierCount, error: tierCountError } = await admin
-    .from("ticket_tiers")
-    .select("*", { count: "exact", head: true })
-    .eq("event_id", eventId);
+  const [tiersRes, eventRes] = await Promise.all([
+    admin
+      .from("ticket_tiers")
+      .select("price")
+      .eq("event_id", eventId),
+    admin
+      .from("events")
+      .select("title, starts_at, venue_name, collective_id")
+      .eq("id", eventId)
+      .maybeSingle(),
+  ]);
 
-  if (tierCountError) {
-    console.error("[publishEvent] tier count query error:", tierCountError.message);
+  if (tiersRes.error) {
+    console.error("[publishEvent] tier query error:", tiersRes.error.message);
     return { error: "Failed to verify ticket tiers" };
   }
 
-  if (!tierCount || tierCount === 0) {
+  if (eventRes.error || !eventRes.data) {
+    console.error("[publishEvent] event query error:", eventRes.error?.message);
+    return { error: "Failed to load event" };
+  }
+
+  const tierRows = tiersRes.data ?? [];
+  if (tierRows.length === 0) {
     return { error: "Add at least one ticket tier before publishing. Your event needs a way for people to get in." };
   }
 
-  const { error } = await admin
+  if (!eventRes.data.title?.trim() || !eventRes.data.starts_at || !eventRes.data.venue_name?.trim()) {
+    return { error: "Finish the event details before publishing. Title, date, and venue are required." };
+  }
+
+  const hasPaidTier = tierRows.some((tier) => Number(tier.price) > 0);
+  if (hasPaidTier) {
+    const { data: collective, error: collectiveError } = await untypedCollectives(admin)
+      .select("stripe_account_id, stripe_charges_enabled, stripe_details_submitted")
+      .eq("id", eventRes.data.collective_id)
+      .maybeSingle() as {
+        data: Record<string, unknown> | null;
+        error: { message: string } | null;
+      };
+
+    if (collectiveError) {
+      console.error("[publishEvent] collective query error:", collectiveError.message);
+      return { error: "Failed to verify Stripe status" };
+    }
+
+    const stripeReady = Boolean(
+      collective &&
+      collective.stripe_account_id &&
+      collective.stripe_charges_enabled === true &&
+      collective.stripe_details_submitted === true
+    );
+
+    if (!stripeReady) {
+      return { error: "Connect Stripe before publishing a paid event." };
+    }
+  }
+
+  const { error: publishError } = await admin
     .from("events")
-    .update({ status: "published", is_published: true })
+    .update({ status: "published", is_published: true, published_at: new Date().toISOString() })
     .eq("id", eventId);
 
-  if (error) {
-    console.error("[publishEvent] update error:", error.message);
+  if (publishError) {
+    console.error("[publishEvent] update error:", publishError.message);
     return { error: "Failed to publish event" };
   }
 

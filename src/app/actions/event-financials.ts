@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { revalidatePath } from "next/cache";
+import { getProjectedBarRevenue, readEventCommercialConfig } from "@/lib/event-commercials";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -91,11 +92,9 @@ async function verifyOwnership(userId: string, eventId: string) {
 
   const collectiveIds = memberships.map((m) => m.collective_id);
 
-  // events table no longer has venue_cost, venue_deposit, bar_minimum,
-  // estimated_bar_revenue, actual_bar_revenue, or currency columns.
   const { data: event, error: eventError } = await admin
     .from("events")
-    .select("id, collective_id, title")
+    .select("id, collective_id, title, metadata")
     .eq("id", eventId)
     .maybeSingle();
 
@@ -232,14 +231,17 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
 
     // Calculate totals from orders (source of truth for revenue)
     const ticketRevenue = orders.reduce((sum, o) => sum + (Number(o.subtotal) || 0), 0);
-    const additionalRevenue = 0; // no event_revenue table
-    const grossRevenue = ticketRevenue + additionalRevenue;
     const totalTicketsSold = ticketTiers.reduce((sum, t) => sum + t.ticketsSold, 0);
     const totalExpenses = expenseRows.reduce((sum, e) => sum + e.amount, 0);
     const totalArtistFees = artistFeeRows.reduce((sum, a) => sum + a.fee, 0);
 
-    // venue_cost, venue_deposit, bar_minimum fields no longer exist on events.
-    // Return null for all; barShortfall is always 0.
+    const commercial = readEventCommercialConfig(event.metadata);
+    const estimatedBarRevenue = getProjectedBarRevenue(commercial);
+    const additionalRevenue = estimatedBarRevenue ?? 0;
+    const grossRevenue = ticketRevenue + additionalRevenue;
+    const projectedBarSales = commercial.projectedBarSales ?? 0;
+    const barMinimum = commercial.barMinimum;
+    const barShortfall = barMinimum != null ? Math.max(0, barMinimum - projectedBarSales) : 0;
     const profitLoss = grossRevenue - totalExpenses - totalArtistFees;
 
     return {
@@ -253,17 +255,17 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
         revenueLines: revenueLineRows,
         artistFees: artistFeeRows,
         ticketRevenue: Math.round(ticketRevenue * 100) / 100,
-        additionalRevenue: 0,
+        additionalRevenue: Math.round(additionalRevenue * 100) / 100,
         grossRevenue: Math.round(grossRevenue * 100) / 100,
         totalTicketsSold,
         totalExpenses: Math.round(totalExpenses * 100) / 100,
         totalArtistFees: Math.round(totalArtistFees * 100) / 100,
-        barShortfall: 0,
+        barShortfall: Math.round(barShortfall * 100) / 100,
         profitLoss: Math.round(profitLoss * 100) / 100,
-        venueCost: null,
-        venueDeposit: null,
-        barMinimum: null,
-        estimatedBarRevenue: null,
+        venueCost: commercial.venueCost,
+        venueDeposit: commercial.venueDeposit,
+        barMinimum,
+        estimatedBarRevenue,
         actualBarRevenue: null,
       },
     };

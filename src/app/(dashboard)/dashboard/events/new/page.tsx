@@ -11,8 +11,8 @@ import {
   type BudgetResult,
   type BudgetInput,
   type ExpenseItem,
-  type ExpenseCategory,
 } from "@/app/actions/budget-planner";
+import type { ExpenseCategory } from "@/lib/expense-categories";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { cascadeScenario, cascadeBreakEven, type TicketTierInput } from "@/lib/ticket-forecast";
 import { getMyCollectiveDefaults } from "@/app/actions/collective-settings";
@@ -782,7 +782,15 @@ function fmtCurrency(n: number, compact?: boolean): string {
   return `$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExpenses?: number }) {
+function InlinePnL({
+  tiers,
+  totalExpenses = 0,
+  additionalRevenue = 0,
+}: {
+  tiers: TicketTier[];
+  totalExpenses?: number;
+  additionalRevenue?: number;
+}) {
   const rates = [0.5, 0.75, 1.0, 1.25];
   const rateLabels = ["50%", "75%", "Sell-out", "Waitlist"];
 
@@ -800,10 +808,10 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
     return {
       rate,
       tierLines: result.perTier,
-      gross: result.revenue,
+      gross: result.revenue + additionalRevenue,
       totalSold: result.ticketsSold,
       waitlist: result.waitlistCount,
-      profit: result.revenue - totalExpenses,
+      profit: result.revenue + additionalRevenue - totalExpenses,
     };
   });
 
@@ -896,13 +904,24 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
               ))}
             </tr>
 
+            {additionalRevenue > 0 && (
+              <tr className="hover:bg-white/[0.02] transition-colors">
+                <td className="px-4 py-2 text-sm text-muted-foreground">Projected bar share</td>
+                {scenarios.map((_, i) => (
+                  <td key={i} className="text-right px-3 py-2 text-sm text-green-400">
+                    {fmtCurrency(additionalRevenue)}
+                  </td>
+                ))}
+              </tr>
+            )}
+
             {/* Buyer-paid platform fees note — informational, not deducted from operator */}
             <tr className="bg-nocturn/[0.04]">
               <td colSpan={5} className="px-4 py-1.5">
                 <div className="flex items-center gap-1.5">
                   <DollarSign className="h-3 w-3 text-nocturn" />
                   <span className="text-[11px] font-medium text-nocturn/90">
-                    You keep 100% — buyers cover platform fees at checkout
+                    Buyer covers platform fees at checkout
                   </span>
                 </div>
               </td>
@@ -957,7 +976,7 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
         const be = totalExpenses > 0
           ? cascadeBreakEven(
               tiers.map((t, i) => ({ name: t.name, price: t.price, capacity: t.capacity, sort_order: i })),
-              totalExpenses,
+              Math.max(0, totalExpenses - additionalRevenue),
             )
           : null;
         return (
@@ -988,7 +1007,17 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
 
 // ─── Live Forecast ────────────────────────────────────────────────────────────
 
-function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: TicketTier[]; totalExpenses?: number; onTiersUpdate?: (tiers: TicketTier[]) => void }) {
+function LiveForecast({
+  tiers,
+  totalExpenses = 0,
+  additionalRevenue = 0,
+  onTiersUpdate,
+}: {
+  tiers: TicketTier[];
+  totalExpenses?: number;
+  additionalRevenue?: number;
+  onTiersUpdate?: (tiers: TicketTier[]) => void;
+}) {
   const [priceMultiplier, setPriceMultiplier] = useState(1.0);
   const baseTiersRef = useRef<TicketTier[]>(tiers);
 
@@ -1021,7 +1050,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
       tiers.map((t, i) => ({ name: t.name, price: t.price, capacity: t.capacity, sort_order: i })),
       rate,
     );
-    const gross = result.revenue;
+    const gross = result.revenue + additionalRevenue;
     const profit = gross - totalExpenses;
     return { ticketsSold: result.ticketsSold, gross, net: gross, profit };
   }
@@ -1173,7 +1202,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
 
       <p className="text-[11px] text-muted-foreground text-center">
         {totalExpenses > 0
-          ? `Profit = revenue \u2212 $${totalExpenses.toLocaleString()} expenses \u2022 You keep 100%, buyer covers fees`
+          ? `Profit = tickets + bar share \u2212 $${totalExpenses.toLocaleString()} expenses \u2022 Buyer covers fees`
           : "You keep 100% of ticket price \u2022 Buyer covers platform fees at checkout"}
       </p>
     </div>
@@ -1483,6 +1512,10 @@ interface BudgetStepProps {
   venueCity: string;
   eventDate: string;
   venueCapacity: number | undefined;
+  projectedBarSales: number | "";
+  barPercent: number | "";
+  onProjectedBarSalesChange: (value: number | "") => void;
+  onBarPercentChange: (value: number | "") => void;
   onSkip: () => void;
   onCalculate: () => void;
   onSuggestTravel: () => void;
@@ -1493,6 +1526,7 @@ interface BudgetStepProps {
 function BudgetStep({
   draft, setDraft, result, calculating,
   venueCity, eventDate, venueCapacity,
+  projectedBarSales, barPercent, onProjectedBarSalesChange, onBarPercentChange,
   onSkip, onCalculate, onSuggestTravel,
   tiers, onApplySuggestedTiers,
 }: BudgetStepProps) {
@@ -1712,8 +1746,24 @@ function BudgetStep({
                 className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Projected bar sales</label>
+              <NumberInput
+                value={typeof projectedBarSales === "number" ? projectedBarSales : 0}
+                onChange={onProjectedBarSalesChange}
+                className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Your bar share %</label>
+              <NumberInput
+                value={typeof barPercent === "number" ? barPercent : 0}
+                onChange={onBarPercentChange}
+                className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
+              />
+            </div>
           </div>
-          <p className="text-[11px] text-muted-foreground/70">All in {ec.toUpperCase()} — venue is paid locally.</p>
+          <p className="text-[11px] text-muted-foreground/70">All in {ec.toUpperCase()} — venue is paid locally. Your bar share feeds the forecast as extra revenue.</p>
         </div>
 
         {/* ── Production & Marketing (chip-add) ── */}
@@ -2026,6 +2076,10 @@ export default function NewEventPage() {
   // happened and summing native-currency numbers would mix units.
   // Bar minimum is a revenue threshold, not an expense (matches server logic).
   const totalExpenses = budgetResult?.totalExpenses ?? 0;
+  const projectedBarRevenue =
+    typeof formData.projectedBarSales === "number" && Number.isFinite(formData.projectedBarSales)
+      ? formData.projectedBarSales * ((typeof formData.barPercent === "number" ? formData.barPercent : 0) / 100)
+      : 0;
 
   // Validation per step
   function canAdvance(): boolean {
@@ -2232,6 +2286,8 @@ export default function NewEventPage() {
         barMinimum: budgetDraft.barMinimum || null,
         venueCost: budgetDraft.venueRental || null,
         venueDeposit: budgetDraft.deposit || null,
+        projectedBarSales: typeof formData.projectedBarSales === "number" ? formData.projectedBarSales : null,
+        barPercent: typeof formData.barPercent === "number" ? formData.barPercent : null,
         // Itemized expense rows — EXCLUDING venue_rental + deposit. Those
         // are already carried by venueCost / venueDeposit scalar fields
         // above; writing them to expenses too would double-count in the
@@ -2917,7 +2973,7 @@ export default function NewEventPage() {
 
             {/* Inline P&L forecast */}
             {tiers.length > 0 && tiers.some(t => t.price > 0) && (
-              <InlinePnL tiers={tiers} totalExpenses={totalExpenses} />
+              <InlinePnL tiers={tiers} totalExpenses={totalExpenses} additionalRevenue={projectedBarRevenue} />
             )}
 
             {/* Pricing insight */}
@@ -2942,6 +2998,10 @@ export default function NewEventPage() {
             venueCity={formData.venueCity}
             eventDate={formData.date}
             venueCapacity={typeof formData.venueCapacity === "number" ? formData.venueCapacity : undefined}
+            projectedBarSales={formData.projectedBarSales}
+            barPercent={formData.barPercent}
+            onProjectedBarSalesChange={(value) => setFormData((prev) => ({ ...prev, projectedBarSales: value }))}
+            onBarPercentChange={(value) => setFormData((prev) => ({ ...prev, barPercent: value }))}
             onSkip={goNext}
             onCalculate={handleCalculateBudget}
             onSuggestTravel={handleSuggestTravel}
@@ -3074,6 +3134,7 @@ export default function NewEventPage() {
               <LiveForecast
                 tiers={tiers}
                 totalExpenses={totalExpenses}
+                additionalRevenue={projectedBarRevenue}
                 onTiersUpdate={setTiers}
               />
             )}

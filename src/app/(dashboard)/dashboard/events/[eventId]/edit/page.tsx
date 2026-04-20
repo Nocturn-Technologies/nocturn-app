@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { readEventCommercialConfig } from "@/lib/event-commercials";
 import { notFound } from "next/navigation";
 import { EditEventForm } from "./edit-event-form";
 
@@ -33,7 +34,7 @@ export default async function EditEventPage({ params }: Props) {
   const { data: event } = await admin
     .from("events")
     .select(
-      "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_name, venue_address, city, capacity"
+      "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_name, venue_address, city, capacity, metadata"
     )
     .eq("id", eventId)
     .maybeSingle();
@@ -86,6 +87,8 @@ export default async function EditEventPage({ params }: Props) {
     doorsOpen = doorsAt.toTimeString().slice(0, 5);
   }
 
+  const commercial = readEventCommercialConfig(event.metadata);
+
   const eventData = {
     id: event.id,
     title: event.title,
@@ -105,10 +108,11 @@ export default async function EditEventPage({ params }: Props) {
         price: Number(t.price),
         quantity: t.capacity ?? 0,
       })) ?? [],
-    barMinimum: null,
-    venueDeposit: null,
-    venueCost: null,
-    estimatedBarRevenue: null,
+    barMinimum: commercial.barMinimum,
+    venueDeposit: commercial.venueDeposit,
+    venueCost: commercial.venueCost,
+    estimatedBarRevenue: commercial.projectedBarSales,
+    barPercent: commercial.barPercent,
     currency: resolvedCurrency,
     expenses:
       expenseRows?.map((r) => ({
