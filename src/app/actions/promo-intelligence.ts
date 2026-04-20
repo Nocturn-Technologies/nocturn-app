@@ -72,8 +72,7 @@ export async function analyzeTicketSalesPatterns(
     const { data: events, error: eventsError } = await admin
       .from("events")
       .select("id, starts_at")
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     if (eventsError || !events || events.length === 0) {
       return { error: "No events found for this collective.", data: null };
@@ -87,7 +86,7 @@ export async function analyzeTicketSalesPatterns(
       .from("tickets")
       .select("id, event_id, created_at")
       .in("event_id", eventIds)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     if (ticketsError) {
       return { error: "Failed to fetch ticket sales data", data: null };
@@ -316,7 +315,6 @@ export async function getAudienceInsights(
       .from("events")
       .select("id, title, starts_at")
       .eq("collective_id", collectiveId)
-      .is("deleted_at", null)
       .order("starts_at", { ascending: true });
 
     if (eventsError || !events || events.length === 0) {
@@ -325,12 +323,12 @@ export async function getAudienceInsights(
 
     const eventIds = events.map((e) => e.id);
 
-    // Get all paid/checked-in tickets
+    // Get all paid/checked-in tickets joined through order_lines → orders for pricing + metadata
     const { data: tickets, error: ticketsError } = await admin
       .from("tickets")
-      .select("id, event_id, price_paid, metadata, created_at")
+      .select("id, event_id, created_at, order_lines(unit_price, orders(metadata))")
       .in("event_id", eventIds)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     if (ticketsError) {
       return { error: "Failed to fetch ticket data", data: null };
@@ -349,6 +347,17 @@ export async function getAudienceInsights(
       };
     }
 
+    type AudienceTicket = {
+      id: string;
+      event_id: string;
+      created_at: string;
+      order_lines: {
+        unit_price: number;
+        orders: { metadata: Record<string, unknown> | null } | null;
+      } | null;
+    };
+    const typedTickets = tickets as unknown as AudienceTicket[];
+
     // Group by email to find unique attendees and repeat rate
     const emailEventMap = new Map<string, Set<string>>();
     const cityCount = new Map<string, number>();
@@ -358,8 +367,8 @@ export async function getAudienceInsights(
     // Track attendees per event
     const eventAttendeeCount = new Map<string, number>();
 
-    for (const ticket of tickets) {
-      const meta = ticket.metadata as Record<string, unknown> | null;
+    for (const ticket of typedTickets) {
+      const meta = ticket.order_lines?.orders?.metadata as Record<string, unknown> | null;
       const email =
         (meta?.customer_email as string) ||
         (meta?.buyer_email as string) ||
@@ -371,8 +380,8 @@ export async function getAudienceInsights(
         (eventAttendeeCount.get(ticket.event_id) ?? 0) + 1
       );
 
-      // Price tracking
-      const price = Number(ticket.price_paid) || 0;
+      // Price from order_lines.unit_price
+      const price = Number(ticket.order_lines?.unit_price) || 0;
       if (price > 0) {
         totalPricePaid += price;
         ticketWithPrice++;

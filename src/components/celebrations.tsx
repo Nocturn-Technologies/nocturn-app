@@ -5,6 +5,7 @@ import { useCallback } from "react";
 // 🎉 Full-screen confetti burst — use on event publish, first ticket sale, etc.
 export function useConfetti() {
   const fire = useCallback(async (options?: { emoji?: boolean; duration?: number }) => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     // Dynamic import to avoid SSR crash
     const confetti = (await import("canvas-confetti")).default;
 
@@ -51,6 +52,7 @@ export function useConfetti() {
 // 💰 Ka-ching animation for ticket sales — smaller, focused burst
 export function useKaChing() {
   const fire = useCallback(async () => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const confetti = (await import("canvas-confetti")).default;
     confetti({
       particleCount: 30,

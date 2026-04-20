@@ -40,7 +40,7 @@ export function ShareButton({ url, title }: { url: string; title: string }) {
 
   return (
     <div className="space-y-2">
-      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.2em] text-white/40">
+      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.2em] text-white/60">
         Share this event
       </h2>
       <div className="flex gap-2">

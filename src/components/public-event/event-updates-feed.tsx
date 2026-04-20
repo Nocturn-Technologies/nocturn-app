@@ -41,7 +41,7 @@ export function EventUpdatesFeed({ updates, accentColor, collectiveName }: Event
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Megaphone className="h-4 w-4" style={{ color: accentColor }} />
-          <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/40">
+          <h3 className="font-heading text-[11px] font-bold tracking-[0.3em] uppercase text-white/60">
             Updates from {collectiveName}
           </h3>
         </div>

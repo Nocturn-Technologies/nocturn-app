@@ -68,7 +68,7 @@ export function VenueScout({ venuePlaceId, venueName, onClose }: VenueScoutProps
           <button
             onClick={onClose}
             aria-label="Close scout report"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+            className="flex h-8 w-8 min-h-[44px] min-w-[44px] items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
           >
             <X className="h-4 w-4" />
           </button>

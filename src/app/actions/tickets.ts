@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { logPaymentEvent } from "@/lib/payment-events";
+import type { Json } from "@/lib/supabase/database.types";
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
@@ -31,7 +32,8 @@ function checkFulfillRateLimit(paymentIntentId: string): boolean {
 
 /**
  * Generate a QR code data URL for a ticket and persist it.
- * The QR encodes the check-in URL: {APP_URL}/check-in/{ticket_token}
+ * The QR encodes the check-in URL: {APP_URL}/check-in/{qr_code}
+ * In the new schema, tickets.qr_code stores the UUID token.
  */
 export async function generateTicketQRCode(ticketToken: string) {
   try {
@@ -42,24 +44,28 @@ export async function generateTicketQRCode(ticketToken: string) {
 
   const admin = createAdminClient();
 
+  // In the new schema, qr_code holds the UUID token value
   const { data: ticket, error: fetchError } = await admin
     .from("tickets")
-    .select("id, qr_code, user_id, event_id")
-    .eq("ticket_token", ticketToken)
+    .select("id, qr_code, holder_party_id, event_id")
+    .eq("qr_code", ticketToken)
     .maybeSingle();
 
   if (fetchError || !ticket) {
     return { error: "Ticket not found", qrCode: null };
   }
 
-  // Verify the authenticated user owns this ticket
-  if (ticket.user_id && ticket.user_id !== user.id) {
-    return { error: "You don't have access to this ticket", qrCode: null };
-  }
-
-  // If QR code already exists, return it
-  if (ticket.qr_code) {
-    return { error: null, qrCode: ticket.qr_code };
+  // If the holder is linked to a party, verify access via the user's party_id
+  if (ticket.holder_party_id) {
+    const { data: userRow } = await admin
+      .from("users")
+      .select("party_id")
+      .eq("id", user.id)
+      .maybeSingle();
+    // If the user has a party and it doesn't match the holder's party, deny access
+    if (userRow?.party_id && userRow.party_id !== ticket.holder_party_id) {
+      return { error: "You don't have access to this ticket", qrCode: null };
+    }
   }
 
   const checkInUrl = `${BASE_URL}/check-in/${ticketToken}`;
@@ -75,20 +81,7 @@ export async function generateTicketQRCode(ticketToken: string) {
     errorCorrectionLevel: "H",
   });
 
-  // TODO: Store QR as a URL to Supabase Storage instead of inline data URI to reduce
-  // ticket table bloat. The email flow already uploads to storage (lib/email/send.ts).
-
-  // Persist the QR code to the ticket record
-  const { error: updateError } = await admin
-    .from("tickets")
-    .update({ qr_code: qrDataUrl })
-    .eq("id", ticket.id);
-
-  if (updateError) {
-    console.error("[tickets] Failed to save QR code:", updateError);
-    return { error: "Failed to save QR code", qrCode: null };
-  }
-
+  // qr_code column stores the UUID token, not the image — return the generated image
   return { error: null, qrCode: qrDataUrl };
   } catch (err) {
     console.error("[generateTicketQRCode] Unexpected error:", err);
@@ -97,9 +90,10 @@ export async function generateTicketQRCode(ticketToken: string) {
 }
 
 /**
- * Fetch a ticket with its event and tier details by token.
+ * Fetch a ticket with its event and tier details by token (qr_code UUID).
  * If the user is authenticated, verifies ownership.
  * If not authenticated, returns limited public data (for check-in page / ticket view).
+ * Returns a shape compatible with existing callers that cast via `as unknown as`.
  */
 // TODO(audit): defense-in-depth gap — add isValidUUID(ticketToken) guard. Current callers validate upstream, but any new caller introduces regression.
 export async function getTicketByToken(ticketToken: string) {
@@ -109,20 +103,20 @@ export async function getTicketByToken(ticketToken: string) {
 
   const admin = createAdminClient();
 
+  // Join through order_lines → orders to get price/payment data
   const { data: ticket, error } = await admin
     .from("tickets")
     .select(
       `
       id,
-      ticket_token,
-      user_id,
-      status,
-      price_paid,
-      currency,
       qr_code,
-      checked_in_at,
-      metadata,
+      holder_party_id,
+      status,
+      issued_at,
       created_at,
+      event_id,
+      tier_id,
+      order_line_id,
       events:event_id (
         id,
         title,
@@ -131,53 +125,157 @@ export async function getTicketByToken(ticketToken: string) {
         starts_at,
         ends_at,
         doors_at,
-        venues:venue_id (
-          name,
-          address,
-          city
-        )
+        venue_name,
+        venue_address,
+        city
       ),
-      ticket_tiers:ticket_tier_id (
+      ticket_tiers:tier_id (
         name,
         price
+      ),
+      order_lines:order_line_id (
+        id,
+        unit_price,
+        subtotal,
+        orders:order_id (
+          id,
+          stripe_payment_intent_id,
+          currency,
+          metadata,
+          party_id
+        )
       )
     `
     )
-    .eq("ticket_token", ticketToken)
+    .eq("qr_code", ticketToken)
     .maybeSingle();
 
   if (error || !ticket) {
     return { error: "Ticket not found", ticket: null };
   }
 
-  // If authenticated, verify ownership (unless ticket is unlinked/guest purchase)
-  if (user && ticket.user_id && ticket.user_id !== user.id) {
-    // Check if user is a collective member (staff viewing for check-in)
-    const { data: event } = await admin
-      .from("events")
-      .select("collective_id")
-      .eq("id", (ticket as unknown as { events: { id: string } | null }).events?.id ?? "")
+  // Resolve the linked order for price and metadata
+  const orderLine = ticket.order_lines as unknown as {
+    id: string;
+    unit_price: number;
+    subtotal: number;
+    orders: {
+      id: string;
+      stripe_payment_intent_id: string | null;
+      currency: string;
+      metadata: Record<string, unknown> | null;
+      party_id: string;
+    } | null;
+  } | null;
+
+  const order = orderLine?.orders ?? null;
+  const pricePaid = orderLine?.unit_price ?? null;
+  const currency = order?.currency ?? "cad";
+  const orderMetadata = order?.metadata ?? null;
+
+  // Look up checked_in_at from ticket_events (the audit log)
+  const { data: checkInEvent } = await admin
+    .from("ticket_events")
+    .select("occurred_at")
+    .eq("ticket_id", ticket.id)
+    .eq("event_type", "checked_in")
+    .order("occurred_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const checkedInAt = checkInEvent?.occurred_at ?? null;
+
+  // If authenticated, verify ownership or collective membership
+  if (user && ticket.holder_party_id) {
+    const { data: userRow } = await admin
+      .from("users")
+      .select("party_id")
+      .eq("id", user.id)
       .maybeSingle();
 
-    if (event?.collective_id) {
-      const { count } = await admin
-        .from("collective_members")
-        .select("*", { count: "exact", head: true })
-        .eq("collective_id", event.collective_id)
-        .eq("user_id", user.id)
-        .is("deleted_at", null);
+    const isOwner = userRow?.party_id && userRow.party_id === ticket.holder_party_id;
 
-      if (!count) {
+    if (!isOwner) {
+      // Check if user is a collective member (staff viewing for check-in)
+      const eventData = ticket.events as unknown as { id: string } | null;
+      const { data: event } = await admin
+        .from("events")
+        .select("collective_id")
+        .eq("id", eventData?.id ?? "")
+        .maybeSingle();
+
+      if (event?.collective_id) {
+        const { count } = await admin
+          .from("collective_members")
+          .select("*", { count: "exact", head: true })
+          .eq("collective_id", event.collective_id)
+          .eq("user_id", user.id)
+          .is("deleted_at", null);
+
+        if (!count) {
+          return { error: "Not authorized to view this ticket", ticket: null };
+        }
+      } else {
         return { error: "Not authorized to view this ticket", ticket: null };
       }
-    } else {
-      return { error: "Not authorized to view this ticket", ticket: null };
     }
   }
 
-  // For unauthenticated users, the ticket token itself is the proof of access
-  // (only the buyer has the token from their email/success page)
-  return { error: null, ticket };
+  // Include metadata for any authenticated user (staff or owner already verified above)
+  const shouldIncludeMetadata = !!user;
+
+  // Reshape events to include a synthesized `venues` object for backward-compat with callers
+  // Events now store venue_name/venue_address directly; callers expect events.venues.{name,address,city}
+  const rawEvent = ticket.events as unknown as {
+    id: string;
+    title: string;
+    slug: string;
+    status: string;
+    starts_at: string;
+    ends_at: string | null;
+    doors_at: string | null;
+    venue_name: string | null;
+    venue_address: string | null;
+    city: string | null;
+  } | null;
+
+  const shapedEvent = rawEvent
+    ? {
+        id: rawEvent.id,
+        title: rawEvent.title,
+        slug: rawEvent.slug,
+        status: rawEvent.status,
+        starts_at: rawEvent.starts_at,
+        ends_at: rawEvent.ends_at,
+        doors_at: rawEvent.doors_at,
+        venues: rawEvent.venue_name
+          ? { name: rawEvent.venue_name, address: rawEvent.venue_address ?? "", city: rawEvent.city ?? "" }
+          : null,
+      }
+    : null;
+
+  // Build backward-compatible return shape
+  // Callers cast via `as unknown as {...}` so we can include extra aliased fields
+  const shaped = {
+    id: ticket.id,
+    ticket_token: ticket.qr_code,          // alias for callers expecting ticket_token
+    qr_code: ticket.qr_code,
+    holder_party_id: ticket.holder_party_id,
+    user_id: null,                          // removed; kept as null for compat
+    status: ticket.status,
+    price_paid: pricePaid,                  // sourced from order_lines.unit_price
+    currency,
+    checked_in_at: checkedInAt,            // sourced from ticket_events
+    metadata: shouldIncludeMetadata ? orderMetadata : null,
+    created_at: ticket.created_at,
+    events: shapedEvent,
+    ticket_tiers: ticket.ticket_tiers,
+  };
+
+  if (!shouldIncludeMetadata) {
+    return { error: null, ticket: { ...shaped, metadata: null } };
+  }
+  return { error: null, ticket: shaped };
   } catch (err) {
     console.error("[getTicketByToken] Unexpected error:", err);
     return { error: "Something went wrong", ticket: null };
@@ -185,7 +283,8 @@ export async function getTicketByToken(ticketToken: string) {
 }
 
 /**
- * Look up tickets by Stripe checkout session ID.
+ * Look up tickets by Stripe payment intent ID.
+ * Resolves via orders.stripe_payment_intent_id → order_lines → tickets.
  */
 export async function getTicketsBySessionId(sessionOrPaymentId: string) {
   try {
@@ -201,36 +300,111 @@ export async function getTicketsBySessionId(sessionOrPaymentId: string) {
 
   const admin = createAdminClient();
 
-  const ticketSelect = `ticket_token, status, created_at, price_paid, ticket_tiers:ticket_tier_id (name, price), events:event_id (id, title, starts_at, venues:venue_id (name, city))`;
-
-  // Try checkout_session_id first (Stripe Checkout Sessions flow)
-  const { data: sessionTickets } = await admin
-    .from("tickets")
-    .select(ticketSelect)
-    .filter("metadata->>checkout_session_id", "eq", sessionOrPaymentId);
-
-  if (sessionTickets && sessionTickets.length > 0) {
-    return { error: null, tickets: sessionTickets };
-  }
-
-  // Try payment_intent_id in metadata (embedded PaymentElement flow)
-  const { data: piMetaTickets } = await admin
-    .from("tickets")
-    .select(ticketSelect)
-    .filter("metadata->>payment_intent_id", "eq", sessionOrPaymentId);
-
-  if (piMetaTickets && piMetaTickets.length > 0) {
-    return { error: null, tickets: piMetaTickets };
-  }
-
-  // Try stripe_payment_intent_id column directly
-  const { data: piTickets } = await admin
-    .from("tickets")
-    .select(ticketSelect)
+  // Look up the order by stripe_payment_intent_id, then join through order_lines to tickets
+  const { data: orders } = await admin
+    .from("orders")
+    .select(`
+      id,
+      stripe_payment_intent_id,
+      currency,
+      metadata,
+      order_lines (
+        id,
+        unit_price,
+        tier_id,
+        tickets:tickets!tickets_order_line_id_fkey (
+          id,
+          qr_code,
+          status,
+          created_at,
+          event_id,
+          tier_id,
+          ticket_tiers:tier_id (name, price),
+          events:event_id (id, title, starts_at, venue_name, city)
+        )
+      )
+    `)
     .eq("stripe_payment_intent_id", sessionOrPaymentId);
 
-  if (piTickets && piTickets.length > 0) {
-    return { error: null, tickets: piTickets };
+  if (orders && orders.length > 0) {
+    // Flatten tickets from all order lines
+    const tickets = orders.flatMap((o) =>
+      (o.order_lines ?? []).flatMap((ol) => {
+        const lineTickets = (ol.tickets as unknown as Array<{
+          id: string;
+          qr_code: string | null;
+          status: string;
+          created_at: string;
+          event_id: string;
+          tier_id: string;
+          ticket_tiers: { name: string; price: number } | null;
+          events: { id: string; title: string; starts_at: string; venue_name: string | null; city: string | null } | null;
+        }>) ?? [];
+        return lineTickets.map((t) => ({
+          ticket_token: t.qr_code,
+          status: t.status,
+          created_at: t.created_at,
+          price_paid: ol.unit_price,
+          ticket_tiers: t.ticket_tiers,
+          events: t.events,
+        }));
+      })
+    );
+    if (tickets.length > 0) {
+      return { error: null, tickets };
+    }
+  }
+
+  // Also try metadata-based lookup for checkout session IDs (Stripe Checkout flow)
+  const { data: metaOrders } = await admin
+    .from("orders")
+    .select(`
+      id,
+      currency,
+      metadata,
+      order_lines (
+        id,
+        unit_price,
+        tickets:tickets!tickets_order_line_id_fkey (
+          id,
+          qr_code,
+          status,
+          created_at,
+          event_id,
+          tier_id,
+          ticket_tiers:tier_id (name, price),
+          events:event_id (id, title, starts_at, venue_name, city)
+        )
+      )
+    `)
+    .filter("metadata->>checkout_session_id", "eq", sessionOrPaymentId);
+
+  if (metaOrders && metaOrders.length > 0) {
+    const tickets = metaOrders.flatMap((o) =>
+      (o.order_lines ?? []).flatMap((ol) => {
+        const lineTickets = (ol.tickets as unknown as Array<{
+          id: string;
+          qr_code: string | null;
+          status: string;
+          created_at: string;
+          event_id: string;
+          tier_id: string;
+          ticket_tiers: { name: string; price: number } | null;
+          events: { id: string; title: string; starts_at: string; venue_name: string | null; city: string | null } | null;
+        }>) ?? [];
+        return lineTickets.map((t) => ({
+          ticket_token: t.qr_code,
+          status: t.status,
+          created_at: t.created_at,
+          price_paid: ol.unit_price,
+          ticket_tiers: t.ticket_tiers,
+          events: t.events,
+        }));
+      })
+    );
+    if (tickets.length > 0) {
+      return { error: null, tickets };
+    }
   }
 
   return { error: null, tickets: [] };
@@ -248,65 +422,53 @@ export async function getTicketsBySessionId(sessionOrPaymentId: string) {
 async function sendConfirmationEmail(params: {
   admin: ReturnType<typeof createAdminClient>;
   ticketTokens: string[];
-  ticketIds?: string[];
+  ticketIds?: string[]; // kept for call-site compat, unused in new schema
   eventId: string;
   tierId: string;
   buyerEmail: string;
   quantity: number;
   pricePaid: number;
+  orderId?: string;
 }) {
-  const { admin, ticketTokens, ticketIds, eventId, tierId, buyerEmail, quantity, pricePaid } = params;
+  const { admin, ticketTokens, eventId, tierId, buyerEmail, quantity, pricePaid, orderId } = params;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
   try {
-    // Dedup check: if any ticket already has confirmation_email_sent flag, skip
-    if (ticketIds && ticketIds.length > 0) {
-      const { data: sentCheck } = await admin
-        .from("tickets")
+    // Dedup check: if any order already has confirmation_email_sent flag, skip
+    if (orderId) {
+      const { data: orderCheck } = await admin
+        .from("orders")
         .select("id, metadata")
-        .in("id", ticketIds)
-        .limit(1);
-      if (sentCheck?.[0]?.metadata && typeof sentCheck[0].metadata === "object" &&
-          (sentCheck[0].metadata as Record<string, unknown>).confirmation_email_sent === true) {
+        .eq("id", orderId)
+        .maybeSingle();
+      if (orderCheck?.metadata && typeof orderCheck.metadata === "object" &&
+          (orderCheck.metadata as Record<string, unknown>).confirmation_email_sent === true) {
         console.info("[sendConfirmationEmail] Email already sent, skipping duplicate");
         return;
       }
     }
 
-    // Generate QR codes for tickets that don't have them yet
+    // Generate QR codes for each ticket token (the token IS the qr_code UUID)
     const QRCodeLib = (await import("qrcode")).default;
     const qrCodes: string[] = [];
 
-    if (ticketIds && ticketIds.length > 0) {
-      const qrResults = await Promise.allSettled(
-        ticketIds.map(async (id, i) => {
-          // Check if QR already exists
-          const { data: existing } = await admin
-            .from("tickets")
-            .select("qr_code")
-            .eq("id", id)
-            .maybeSingle();
+    const qrResults = await Promise.allSettled(
+      ticketTokens.map(async (token) => {
+        const qrDataUrl = await QRCodeLib.toDataURL(
+          `${appUrl}/check-in/${token}`,
+          { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
+        );
+        return qrDataUrl;
+      })
+    );
 
-          if (existing?.qr_code) return existing.qr_code;
-
-          const token = ticketTokens[i] || id;
-          const qrDataUrl = await QRCodeLib.toDataURL(
-            `${appUrl}/check-in/${token}`,
-            { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
-          );
-          await admin.from("tickets").update({ qr_code: qrDataUrl }).eq("id", id);
-          return qrDataUrl;
-        })
-      );
-
-      for (const r of qrResults) {
-        if (r.status === "fulfilled") qrCodes.push(r.value);
-      }
+    for (const r of qrResults) {
+      if (r.status === "fulfilled") qrCodes.push(r.value);
     }
 
     // Fetch event + tier info for email
     const [{ data: event }, { data: tierInfo }] = await Promise.all([
-      admin.from("events").select("title, starts_at, venues(name)").eq("id", eventId).maybeSingle(),
+      admin.from("events").select("title, starts_at, venue_name").eq("id", eventId).maybeSingle(),
       admin.from("ticket_tiers").select("name").eq("id", tierId).maybeSingle(),
     ]);
 
@@ -315,7 +477,6 @@ async function sendConfirmationEmail(params: {
       return;
     }
 
-    const venue = event.venues as unknown as { name: string } | null;
     const { sendTicketConfirmation } = await import("@/lib/email/actions");
     await sendTicketConfirmation({
       to: buyerEmail,
@@ -323,7 +484,7 @@ async function sendConfirmationEmail(params: {
       eventDate: new Date(event.starts_at).toLocaleDateString("en", {
         weekday: "long", month: "long", day: "numeric", year: "numeric",
       }),
-      venueName: venue?.name || "TBA",
+      venueName: event.venue_name || "TBA",
       tierName: tierInfo?.name || "General Admission",
       quantity,
       totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
@@ -333,27 +494,24 @@ async function sendConfirmationEmail(params: {
     });
     console.info("[fulfillPaymentIntent] Confirmation email sent with QR codes");
 
-    // Mark tickets as having had email sent (dedup flag for concurrent client+webhook)
-    if (ticketIds && ticketIds.length > 0) {
-      // Merge confirmation_email_sent into existing metadata for each ticket
-      const { data: currentTickets } = await admin
-        .from("tickets")
+    // Mark order as having had email sent (dedup flag for concurrent client+webhook)
+    if (orderId) {
+      const { data: currentOrder } = await admin
+        .from("orders")
         .select("id, metadata")
-        .in("id", ticketIds);
-      if (currentTickets) {
-        await Promise.all(
-          currentTickets.map((t) =>
-            admin
-              .from("tickets")
-              .update({
-                metadata: {
-                  ...((t.metadata as Record<string, unknown>) ?? {}),
-                  confirmation_email_sent: true,
-                },
-              })
-              .eq("id", t.id)
-          )
-        ).catch(() => { /* non-blocking */ });
+        .eq("id", orderId)
+        .maybeSingle();
+      if (currentOrder) {
+        await admin
+          .from("orders")
+          .update({
+            metadata: {
+              ...((currentOrder.metadata as Record<string, unknown>) ?? {}),
+              confirmation_email_sent: true,
+            },
+          })
+          .eq("id", currentOrder.id)
+          .then(() => {}, () => { /* non-blocking */ });
       }
     }
   } catch (err) {
@@ -366,6 +524,7 @@ async function sendConfirmationEmail(params: {
  * This is the PRIMARY ticket creation path — called directly from the client
  * after stripe.confirmPayment() succeeds. The webhook serves as a backup.
  *
+ * New schema: creates orders → order_lines → tickets.
  * Security: Verifies the PaymentIntent with Stripe before creating tickets,
  * so a client can't forge a request.
  */
@@ -382,22 +541,42 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
 
   const admin = createAdminClient();
 
-  // IDEMPOTENCY: If PAID tickets already exist for this PI, send email if needed and return them
-  const { data: existingTickets } = await admin
-    .from("tickets")
-    .select("id, ticket_token, status, created_at, qr_code, metadata")
+  // IDEMPOTENCY: If an order + tickets already exist for this PI, return them
+  const { data: existingOrder } = await admin
+    .from("orders")
+    .select(`
+      id,
+      status,
+      metadata,
+      currency,
+      order_lines (
+        id,
+        unit_price,
+        tier_id,
+        tickets:tickets!tickets_order_line_id_fkey (
+          id,
+          qr_code,
+          status,
+          created_at
+        )
+      )
+    `)
     .eq("stripe_payment_intent_id", paymentIntentId)
-    .in("status", ["paid", "checked_in"]);
+    .in("status", ["paid"])
+    .maybeSingle();
 
-  if (existingTickets && existingTickets.length > 0) {
-    // Tickets exist (from webhook or earlier call) — ensure email was sent
-    const customerEmail = (existingTickets[0]?.metadata as Record<string, unknown>)?.customer_email as string | undefined;
-    if (customerEmail) {
-      // Check if a confirmation email was already sent by looking for a QR code
-      // (QR + email are always sent together). If no QR, email likely wasn't sent.
-      const missingQr = existingTickets.some((t) => !t.qr_code);
-      if (missingQr) {
-        // Retrieve tier price from Stripe metadata for the email
+  if (existingOrder) {
+    const existingTickets = (existingOrder.order_lines ?? []).flatMap((ol) =>
+      (ol.tickets as unknown as Array<{ id: string; qr_code: string | null; status: string; created_at: string }>) ?? []
+    );
+
+    if (existingTickets.length > 0) {
+      // Tickets exist (from webhook or earlier call) — ensure email was sent
+      const orderMeta = existingOrder.metadata as Record<string, unknown> | null;
+      const customerEmail = orderMeta?.customer_email as string | undefined;
+      const emailAlreadySent = orderMeta?.confirmation_email_sent === true;
+
+      if (customerEmail && !emailAlreadySent) {
         try {
           const { getStripe } = await import("@/lib/stripe");
           const pi = await getStripe().paymentIntents.retrieve(paymentIntentId);
@@ -409,20 +588,28 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
 
           await sendConfirmationEmail({
             admin,
-            ticketTokens: existingTickets.map((t) => t.ticket_token),
+            ticketTokens: existingTickets.map((t) => t.qr_code ?? ""),
             ticketIds: existingTickets.map((t) => t.id),
             eventId: meta?.eventId || "",
             tierId: meta?.tierId || "",
             buyerEmail: customerEmail,
             quantity: existingTickets.length,
             pricePaid,
+            orderId: existingOrder.id,
           });
         } catch (err) {
           console.error("[fulfillPaymentIntent] Email recovery failed:", err);
         }
       }
+      return {
+        error: null,
+        tickets: existingTickets.map((t) => ({
+          ticket_token: t.qr_code ?? "",
+          status: t.status,
+          created_at: t.created_at,
+        })),
+      };
     }
-    return { error: null, tickets: existingTickets.map((t) => ({ ticket_token: t.ticket_token, status: t.status, created_at: t.created_at })) };
   }
 
   // Verify the PaymentIntent with Stripe — this is the security check (with retry)
@@ -485,293 +672,281 @@ export async function fulfillPaymentIntent(paymentIntentId: string) {
     if (!referrerUser) referrerToken = null;
   }
 
-  // Use the base USD price for the ticket record (organizer always sees USD)
-  const ticketCurrency = metadata.baseCurrency || pi.currency || "usd";
+  const ticketCurrency = metadata.baseCurrency || pi.currency || "cad";
 
-  const ticketMetadata = {
+  // Resolve the buyer's party_id (required for orders.party_id)
+  // If we have a buyer user_id in metadata, look up their party; otherwise create/find a guest party
+  let buyerPartyId: string | null = null;
+  if (metadata.userId) {
+    const { data: buyerUser } = await admin
+      .from("users")
+      .select("party_id")
+      .eq("id", metadata.userId)
+      .maybeSingle();
+    buyerPartyId = buyerUser?.party_id ?? null;
+  }
+
+  // If no party resolved, try to find an existing party by email (via party_contact_methods) or create one
+  if (!buyerPartyId && buyerEmail) {
+    const { data: existingContact } = await admin
+      .from("party_contact_methods")
+      .select("party_id")
+      .eq("type", "email")
+      .eq("value", buyerEmail)
+      .limit(1)
+      .maybeSingle();
+    if (existingContact) {
+      buyerPartyId = existingContact.party_id;
+    } else {
+      // Create a new guest party with a display name derived from email
+      const displayName = buyerEmail.split("@")[0] || "Guest";
+      const { data: newParty } = await admin
+        .from("parties")
+        .insert({ display_name: displayName, type: "person" as const })
+        .select("id")
+        .single();
+      if (newParty) {
+        buyerPartyId = newParty.id;
+        // Record email as a contact method
+        void admin
+          .from("party_contact_methods")
+          .insert({ party_id: newParty.id, type: "email" as const, value: buyerEmail, is_primary: true })
+          .then(() => {}, () => { /* non-blocking */ });
+      }
+    }
+  }
+
+  if (!buyerPartyId) {
+    return { error: "Could not resolve buyer identity", tickets: null };
+  }
+
+  const subtotal = pricePaid * quantity;
+  const platformFee = subtotal * 0.07 + quantity * 0.50;
+  const stripeFee = subtotal * 0.029 + 0.30;
+  const total = subtotal;
+
+  const orderMetadata: Json = {
     payment_intent_id: paymentIntentId,
-    customer_email: buyerEmail,
+    customer_email: buyerEmail ?? null,
     fulfilled_by: "client_action",
     ...(referrerToken && { referrer_token: referrerToken }),
   };
 
-  // Try to update pending tickets (created at checkout) to "paid" first (Gap 9 + 25).
-  let pendingTicketIds: string[] = [];
-  if (metadata.pendingTicketIds) {
-    try {
-      pendingTicketIds = JSON.parse(metadata.pendingTicketIds);
-    } catch (parseErr) {
-      console.error("[fulfillPaymentIntent] Failed to parse pendingTicketIds:", parseErr);
+  // Try to update a pending order if one exists (created at checkout)
+  let orderId: string | null = null;
+  let orderLineId: string | null = null;
+
+  const { data: pendingOrder } = await admin
+    .from("orders")
+    .select("id, order_lines(id, tier_id)")
+    .eq("stripe_payment_intent_id", paymentIntentId)
+    .eq("status", "pending")
+    .maybeSingle();
+
+  if (pendingOrder) {
+    // Update existing pending order to paid
+    await admin
+      .from("orders")
+      .update({ status: "paid", metadata: orderMetadata })
+      .eq("id", pendingOrder.id);
+    orderId = pendingOrder.id;
+    const matchedLine = (pendingOrder.order_lines as unknown as Array<{ id: string; tier_id: string }>)
+      ?.find((ol) => ol.tier_id === tierId);
+    orderLineId = matchedLine?.id ?? null;
+  } else {
+    // Create a new order
+    const { data: newOrder, error: orderError } = await admin
+      .from("orders")
+      .insert({
+        party_id: buyerPartyId,
+        event_id: eventId,
+        stripe_payment_intent_id: paymentIntentId,
+        promo_code_id: metadata.promoId || null,
+        subtotal,
+        platform_fee: platformFee,
+        stripe_fee: stripeFee,
+        total,
+        currency: ticketCurrency,
+        status: "paid",
+        metadata: orderMetadata,
+      })
+      .select("id")
+      .single();
+
+    if (orderError || !newOrder) {
+      console.error("[fulfillPaymentIntent] Order creation failed:", orderError);
+      return { error: "Failed to create order", tickets: null };
     }
+    orderId = newOrder.id;
+
+    // Create the order line
+    const { data: newOrderLine, error: olError } = await admin
+      .from("order_lines")
+      .insert({
+        order_id: orderId,
+        tier_id: tierId,
+        quantity,
+        unit_price: pricePaid,
+        subtotal,
+      })
+      .select("id")
+      .single();
+
+    if (olError || !newOrderLine) {
+      console.error("[fulfillPaymentIntent] Order line creation failed:", olError);
+      return { error: "Failed to create order line", tickets: null };
+    }
+    orderLineId = newOrderLine.id;
   }
 
-  if (pendingTicketIds.length > 0) {
-    const { data: updatedTickets, error: updateError } = await admin
+  // Generate ticket UUIDs (qr_code = the UUID token)
+  const { randomUUID } = await import("crypto");
+  const now = new Date().toISOString();
+  const ticketRows = Array.from({ length: quantity }, () => ({
+    event_id: eventId,
+    tier_id: tierId,
+    order_line_id: orderLineId,
+    holder_party_id: buyerPartyId,
+    qr_code: randomUUID(),
+    status: "valid" as const,
+    issued_at: now,
+  }));
+
+  // Check for existing tickets on this order line (idempotency)
+  if (orderLineId) {
+    const { data: existingLineTickets } = await admin
       .from("tickets")
-      .update({
-        status: "paid",
-        price_paid: pricePaid,
-        currency: ticketCurrency,
-        stripe_payment_intent_id: paymentIntentId,
-        referred_by: referrerToken,
-        metadata: ticketMetadata,
-      })
-      .in("id", pendingTicketIds)
-      .eq("status", "pending")
-      .select("id, ticket_token, status, created_at");
+      .select("id, qr_code, status, created_at")
+      .eq("order_line_id", orderLineId);
 
-    if (!updateError && updatedTickets && updatedTickets.length > 0) {
-      console.info(`[fulfillPaymentIntent] Updated ${updatedTickets.length} pending ticket(s) to paid for PI ${paymentIntentId}`);
-
-      // Generate QR codes + send email for the updated tickets
+    if (existingLineTickets && existingLineTickets.length > 0) {
+      console.info(`[fulfillPaymentIntent] Tickets already exist for order line ${orderLineId}`);
+      // Ensure email was sent
       if (buyerEmail) {
         await sendConfirmationEmail({
           admin,
-          ticketTokens: updatedTickets.map((t) => t.ticket_token),
-          ticketIds: updatedTickets.map((t) => t.id),
-          eventId, tierId, buyerEmail, quantity, pricePaid,
+          ticketTokens: existingLineTickets.map((t) => t.qr_code ?? ""),
+          ticketIds: existingLineTickets.map((t) => t.id),
+          eventId, tierId, buyerEmail, quantity, pricePaid, orderId: orderId ?? undefined,
         });
       }
-
-      // Claim promo and track analytics
-      if (metadata.promoId) {
-        try {
-          await admin.rpc("claim_promo_code", { p_code_id: metadata.promoId, p_quantity: quantity });
-        } catch (promoErr) {
-          console.error("[fulfillPaymentIntent] Failed to claim promo uses (non-blocking):", promoErr);
-        }
-      }
-
-      void logPaymentEvent({
-        event_type: "tickets_fulfilled",
-        payment_intent_id: paymentIntentId,
-        event_id: eventId,
-        tier_id: tierId,
-        quantity,
-        amount_cents: Math.round(pricePaid * quantity * 100),
-        currency: ticketCurrency,
-        buyer_email: buyerEmail ?? null,
-        metadata: { fulfilled_by: "client_action", from_pending: true },
-      });
-
-      try {
-        const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
-        trackTicketSold(eventId, quantity, pricePaid * quantity);
-        if (buyerEmail) {
-          const { data: eventForAnalytics } = await admin
-            .from("events")
-            .select("collective_id")
-            .eq("id", eventId)
-            .maybeSingle();
-          if (eventForAnalytics?.collective_id) {
-            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
-          }
-        }
-      } catch (analyticsErr) { console.error("[fulfillPaymentIntent] Analytics tracking failed (non-blocking):", analyticsErr); }
-
       return {
         error: null,
-        tickets: updatedTickets.map((t) => ({
-          ticket_token: t.ticket_token,
-          status: "paid" as const,
+        tickets: existingLineTickets.map((t) => ({
+          ticket_token: t.qr_code ?? "",
+          status: t.status,
           created_at: t.created_at,
         })),
       };
     }
   }
 
-  const { randomUUID } = await import("crypto");
-  const tickets = Array.from({ length: quantity }, () => ({
-    event_id: eventId,
-    ticket_tier_id: tierId,
-    user_id: null,
-    status: "paid" as const,
-    price_paid: pricePaid,
-    currency: ticketCurrency,
-    stripe_payment_intent_id: paymentIntentId,
-    ticket_token: randomUUID(),
-    referred_by: referrerToken,
-    metadata: ticketMetadata,
-  }));
+  // Insert tickets
+  const { data: insertedTickets, error: insertError } = await admin
+    .from("tickets")
+    .insert(ticketRows)
+    .select("id, qr_code, status, created_at");
 
-  // ATOMIC FULFILLMENT: Use a single DB function that acquires an advisory lock,
-  // checks for existing tickets, and inserts — all within one transaction.
-  // This prevents race conditions between concurrent client fulfillment + webhook.
-  // Falls back to manual insert if the RPC doesn't exist yet (migration not applied).
-  let insertedTickets: { id: string; ticket_token: string; is_new?: boolean }[] | null = null;
-  let insertError: { message: string } | null = null;
-  let wasNewlyCreated = true; // Track if tickets were newly created vs pre-existing
-
-  try {
-    const { data: atomicResult, error: atomicError } = await admin.rpc("fulfill_tickets_atomic", {
-      p_payment_intent_id: paymentIntentId,
-      p_event_id: eventId,
-      p_tier_id: tierId,
-      p_quantity: quantity,
-      p_price_paid: pricePaid,
-      p_currency: ticketCurrency,
-      p_buyer_email: buyerEmail ?? undefined,
-      p_referrer_token: referrerToken ?? undefined,
-      p_metadata: {
-        payment_intent_id: paymentIntentId,
-        customer_email: buyerEmail,
-        fulfilled_by: "client_action",
-        ...(referrerToken && { referrer_token: referrerToken }),
-      },
-    });
-
-    if (atomicError) throw atomicError;
-    insertedTickets = atomicResult as unknown as { id: string; ticket_token: string; is_new?: boolean }[];
-
-    // We passed the idempotency check above (lines 341-345), so if the RPC returns results,
-    // they are either newly created or the RPC found them via the advisory lock.
-    // The idempotency check already handled the "pre-existing" case.
-    if (insertedTickets && insertedTickets.length > 0) {
-      wasNewlyCreated = true;
-    }
-  } catch (atomicFallbackErr) {
-    console.error("[fulfillPaymentIntent] Atomic RPC failed, falling back to manual insert:", atomicFallbackErr);
-    // Fallback: manual insert (for pre-migration compatibility)
-    // Re-check for existing tickets first (idempotency)
-    const { data: postLockTickets } = await admin
-      .from("tickets")
-      .select("id, ticket_token, status, created_at, qr_code")
-      .eq("stripe_payment_intent_id", paymentIntentId);
-
-    if (postLockTickets && postLockTickets.length > 0) {
-      // Tickets created by webhook — still send email + QR if missing
-      if (buyerEmail) {
-        await sendConfirmationEmail({
-          admin,
-          ticketTokens: postLockTickets.map((t) => t.ticket_token),
-          ticketIds: postLockTickets.map((t) => t.id),
-          eventId, tierId, buyerEmail, quantity, pricePaid,
-        });
-      }
-      return { error: null, tickets: postLockTickets.map((t) => ({ ticket_token: t.ticket_token, status: t.status, created_at: t.created_at })) };
-    }
-
-    const result = await admin
-      .from("tickets")
-      .insert(tickets)
-      .select("id, ticket_token, status, created_at");
-
-    insertedTickets = result.data;
-    insertError = result.error;
-  }
-
-  if (insertError) {
+  if (insertError || !insertedTickets) {
     console.error("[fulfillPaymentIntent] Insert failed:", insertError);
     void logPaymentEvent({
+      stripe_event_id: `fulfillment_failed:${paymentIntentId}`,
       event_type: "fulfillment_failed",
-      payment_intent_id: paymentIntentId,
+      stripe_payment_intent_id: paymentIntentId,
       event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: Math.round(pricePaid * quantity * 100),
+      order_id: orderId ?? null,
+      amount: pricePaid * quantity,
       currency: ticketCurrency,
-      buyer_email: buyerEmail ?? null,
-      error_message: insertError.message,
-      metadata: { fulfilled_by: "client_action" },
+      customer_email: buyerEmail ?? null,
+      status: "failed",
+      metadata: {
+        tier_id: tierId,
+        quantity,
+        error: insertError?.message ?? "Unknown insert error",
+        fulfilled_by: "client_action",
+      },
     });
-    // Check if tickets were created by webhook in the meantime
-    const { data: retryTickets } = await admin
-      .from("tickets")
-      .select("id, ticket_token, status, created_at, qr_code")
-      .eq("stripe_payment_intent_id", paymentIntentId);
-    if (retryTickets && retryTickets.length > 0) {
-      // Tickets exist from webhook — send email before returning
-      if (buyerEmail) {
-        await sendConfirmationEmail({
-          admin,
-          ticketTokens: retryTickets.map((t) => t.ticket_token),
-          ticketIds: retryTickets.map((t) => t.id),
-          eventId, tierId, buyerEmail, quantity, pricePaid,
-        });
-      }
-      return { error: null, tickets: retryTickets.map((t) => ({ ticket_token: t.ticket_token, status: t.status, created_at: t.created_at })) };
-    }
     return { error: "Failed to create tickets", tickets: null };
   }
 
   console.info(`[fulfillPaymentIntent] Created ${quantity} ticket(s) for PI ${paymentIntentId}`);
 
-  // Only claim promo and track analytics if tickets were NEWLY created.
-  // If tickets already existed (from webhook), skip to avoid double-counting.
-  if (wasNewlyCreated) {
-    // Claim promo code uses AFTER successful ticket creation.
-    // Uses claim_promo_code RPC which accepts quantity.
-    if (metadata.promoId) {
-      try {
-        await admin.rpc("claim_promo_code", { p_code_id: metadata.promoId, p_quantity: quantity });
-      } catch (promoErr) {
-        console.error("[fulfillPaymentIntent] Failed to claim promo uses (non-blocking):", promoErr);
-      }
-    }
+  // Insert ticket_events audit records for each ticket
+  void admin
+    .from("ticket_events")
+    .insert(
+      insertedTickets.map((t) => ({
+        ticket_id: t.id,
+        event_type: "purchased" as const,
+        party_id: buyerPartyId,
+        metadata: {
+          payment_intent_id: paymentIntentId,
+          customer_email: buyerEmail ?? null,
+          price_paid: pricePaid,
+          currency: ticketCurrency,
+        },
+      }))
+    )
+    .then(() => {}, (e: unknown) => console.error("[fulfillPaymentIntent] ticket_events insert failed (non-blocking):", e));
 
-    void logPaymentEvent({
-      event_type: "tickets_fulfilled",
-      payment_intent_id: paymentIntentId,
-      event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: Math.round(pricePaid * quantity * 100),
-      currency: ticketCurrency,
-      buyer_email: buyerEmail ?? null,
-      metadata: { fulfilled_by: "client_action" },
-    });
-
-    // Analytics tracking
+  // Claim promo code uses AFTER successful ticket creation
+  if (metadata.promoId && metadata.promoCode) {
     try {
-      const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
-      trackTicketSold(eventId, quantity, pricePaid * quantity);
-      if (buyerEmail) {
-        try {
-          const { data: eventForAnalytics } = await admin
-            .from("events")
-            .select("collective_id")
-            .eq("id", eventId)
-            .maybeSingle();
-          if (eventForAnalytics?.collective_id) {
-            upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
-          }
-        } catch (profileErr) { console.error("[fulfillPaymentIntent] Attendee profile upsert failed (non-blocking):", profileErr); }
-      }
-    } catch (analyticsErr) {
-      console.error("[fulfillPaymentIntent] Analytics tracking failed (non-blocking):", analyticsErr);
+      await admin.rpc("claim_promo_code", { p_code: metadata.promoCode, p_event_id: eventId });
+    } catch (promoErr) {
+      console.error("[fulfillPaymentIntent] Failed to claim promo uses (non-blocking):", promoErr);
     }
-  } else {
-    console.info(`[fulfillPaymentIntent] Tickets pre-existed for PI ${paymentIntentId}, skipping promo/analytics`);
+  }
+
+  void logPaymentEvent({
+    stripe_event_id: `tickets_fulfilled:${paymentIntentId}`,
+    event_type: "tickets_fulfilled",
+    stripe_payment_intent_id: paymentIntentId,
+    event_id: eventId,
+    order_id: orderId ?? null,
+    amount: pricePaid * quantity,
+    currency: ticketCurrency,
+    customer_email: buyerEmail ?? null,
+    status: "succeeded",
+    metadata: { tier_id: tierId, quantity, fulfilled_by: "client_action" },
+  });
+
+  // Analytics tracking
+  try {
+    const { trackTicketSold } = await import("@/lib/analytics");
+    trackTicketSold(tierId, quantity);
+  } catch (analyticsErr) {
+    console.error("[fulfillPaymentIntent] Analytics tracking failed (non-blocking):", analyticsErr);
   }
 
   // Send confirmation email with QR codes — AWAITED so serverless doesn't kill it
-  if (buyerEmail && insertedTickets) {
+  if (buyerEmail) {
     await sendConfirmationEmail({
       admin,
-      ticketTokens: insertedTickets.map((t) => t.ticket_token),
+      ticketTokens: insertedTickets.map((t) => t.qr_code ?? ""),
       ticketIds: insertedTickets.map((t) => t.id),
-      eventId, tierId, buyerEmail, quantity, pricePaid,
+      eventId, tierId, buyerEmail, quantity, pricePaid, orderId: orderId ?? undefined,
     });
   }
 
-  // Post-purchase hooks: referral nudge + milestone emails (#8)
-  if (buyerEmail && insertedTickets && wasNewlyCreated) {
+  // Post-purchase hooks: referral nudge + milestone emails
+  if (buyerEmail) {
     try {
       const { runPostPurchaseHooks } = await import("@/app/actions/post-purchase-hooks");
       await runPostPurchaseHooks({
         eventId,
         buyerEmail,
-        ticketToken: insertedTickets[0]?.ticket_token || "",
+        ticketToken: insertedTickets[0]?.qr_code || "",
       });
     } catch (hookErr) { console.error("[fulfillPaymentIntent] Post-purchase hooks failed (non-blocking):", hookErr); }
   }
 
   return {
     error: null,
-    tickets: (insertedTickets ?? []).map((t) => ({
-      ticket_token: t.ticket_token,
-      status: "paid" as const,
-      created_at: new Date().toISOString(),
+    tickets: insertedTickets.map((t) => ({
+      ticket_token: t.qr_code ?? "",
+      status: "valid" as const,
+      created_at: t.created_at,
     })),
   };
   } catch (err) {

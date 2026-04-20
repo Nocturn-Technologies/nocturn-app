@@ -260,6 +260,7 @@ export function MarketplaceConnect({
               onClick={handleSearch}
               disabled={searching || !query.trim()}
               size="icon"
+              aria-label="Search"
               className="bg-nocturn hover:bg-nocturn-light shrink-0"
             >
               {searching ? (
@@ -325,13 +326,14 @@ export function MarketplaceConnect({
               <Input
                 value={inviteLink}
                 readOnly
-                className="flex-1 text-xs"
+                className="flex-1 text-base md:text-xs"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
               />
               <Button
                 onClick={handleCopyLink}
                 size="icon"
                 variant="outline"
+                aria-label="Copy link"
                 className="shrink-0"
               >
                 {linkCopied ? (
@@ -365,6 +367,7 @@ export function MarketplaceConnect({
                 onClick={handleInviteEmail}
                 disabled={!inviteEmail.trim() || inviteSent}
                 size="icon"
+                aria-label="Send invite"
                 className="bg-nocturn hover:bg-nocturn-light shrink-0"
               >
                 {inviteSent ? (

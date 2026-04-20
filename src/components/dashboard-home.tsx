@@ -14,7 +14,6 @@ import {
   Plus,
   Send,
   Users,
-  Mic,
   MapPin,
   MessageSquare,
   AlertTriangle,
@@ -153,7 +152,7 @@ function getSmartActions(props: DashboardHomeProps) {
       description: "Your event is ready to go live",
       href: "/dashboard/events",
       icon: <Send className="h-5 w-5" />,
-      color: "text-green-400",
+      color: "text-emerald-400",
       iconBg: "bg-green-500/15",
       priority: "primary",
     });
@@ -333,7 +332,7 @@ function SetupChecklist(props: DashboardHomeProps) {
               </span>
               <button
                 onClick={handleDismiss}
-                className="text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                className="text-xs text-muted-foreground/70 hover:text-muted-foreground transition-colors"
               >
                 Dismiss
               </button>
@@ -351,7 +350,7 @@ function SetupChecklist(props: DashboardHomeProps) {
           {/* Checklist items */}
           <div className="space-y-1">
             {steps.map((step) => {
-              const Icon = step.icon;
+              const _Icon = step.icon;
               return (
                 <Link
                   key={step.label}
@@ -724,7 +723,7 @@ export function DashboardHome(props: DashboardHomeProps) {
 
 // ── Lazy-loaded AI Briefing (doesn't block page render) ──
 
-function LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string; initialBriefing?: BriefingItem[] }) {
+function _LazyBriefing({ collectiveId, initialBriefing }: { collectiveId?: string; initialBriefing?: BriefingItem[] }) {
   const [briefing, setBriefing] = React.useState<BriefingItem[]>(initialBriefing ?? []);
   const [loading, setLoading] = React.useState(!initialBriefing?.length && !!collectiveId);
 

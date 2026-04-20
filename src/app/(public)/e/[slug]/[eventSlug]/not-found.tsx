@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function EventNotFound() {
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-[#09090B] px-6 text-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-[#09090B] px-6 text-center overflow-x-hidden">
       <div className="mb-8">
         <span className="text-2xl font-bold tracking-tight text-[#7B2FF7]">
           nocturn.

@@ -7,6 +7,7 @@ import {
   deleteEventUpdate,
   type EventUpdate,
 } from "@/app/actions/event-updates";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface EventUpdatesComposerProps {
   eventId: string;
@@ -37,6 +38,7 @@ export function EventUpdatesComposer({ eventId, initialUpdates }: EventUpdatesCo
   const [success, setSuccess] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { confirm, confirmDialog } = useConfirm();
 
   function handlePost() {
     setError(null);
@@ -73,8 +75,14 @@ export function EventUpdatesComposer({ eventId, initialUpdates }: EventUpdatesCo
     });
   }
 
-  function handleDelete(id: string) {
-    if (!confirm("Delete this update? This cannot be undone.")) return;
+  async function handleDelete(id: string) {
+    const ok = await confirm({
+      title: "Delete this update?",
+      description: "This cannot be undone.",
+      confirmText: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
     setDeletingId(id);
     startTransition(async () => {
       const result = await deleteEventUpdate(id);
@@ -108,10 +116,10 @@ export function EventUpdatesComposer({ eventId, initialUpdates }: EventUpdatesCo
           placeholder="Heads up — doors moved to 10pm, see you soon 🔥"
           rows={4}
           maxLength={MAX_LEN + 100}
-          className="w-full resize-none rounded-xl border border-border bg-background px-3 py-3 text-base md:text-sm placeholder:text-muted-foreground/60 outline-none focus:border-nocturn/40 transition-all min-h-[100px]"
+          className="w-full resize-none rounded-xl border border-border bg-background px-3 py-3 text-base md:text-sm placeholder:text-muted-foreground/70 outline-none focus:border-nocturn/40 transition-all min-h-[100px]"
         />
         <div className="flex items-center justify-between text-[11px]">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <label className="flex items-center gap-2 cursor-pointer select-none min-h-[44px]">
             <input
               type="checkbox"
               checked={sendEmail}
@@ -188,6 +196,7 @@ export function EventUpdatesComposer({ eventId, initialUpdates }: EventUpdatesCo
           ))}
         </div>
       )}
+      {confirmDialog}
     </div>
   );
 }

@@ -11,7 +11,8 @@ interface EventItem {
   starts_at: string;
   status: string;
   flyer_url: string | null;
-  venues: { name: string; city: string } | null;
+  venue_name: string | null;
+  city: string | null;
 }
 
 interface CollapsibleEventSectionProps {
@@ -76,7 +77,7 @@ export function CollapsibleEventSection({
         }`}
       >
         <div className="overflow-hidden">
-          <div className="grid gap-3">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             <SwipeableEventList events={events} stagger={!defaultOpen && hasAnimated} />
           </div>
         </div>

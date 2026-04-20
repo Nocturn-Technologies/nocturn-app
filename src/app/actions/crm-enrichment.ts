@@ -39,10 +39,12 @@ export async function enrichAttendeeCRM(eventId: string) {
     return { error: "Failed to verify membership" };
   }
   if (!memberCount) return { error: "Not authorized" };
-    // 1. Get all paid/checked-in tickets for this event
+
+    // 1. Get all paid/checked-in tickets for this event, joined through
+    //    order_lines → orders to get pricing and buyer metadata.
     const { data: tickets, error: ticketsError } = await admin
       .from("tickets")
-      .select("id, user_id, price_paid, metadata")
+      .select("id, holder_party_id, order_line_id, order_lines(unit_price, orders(metadata, party_id))")
       .eq("event_id", eventId)
       .in("status", ["paid", "checked_in"]);
 
@@ -56,173 +58,182 @@ export async function enrichAttendeeCRM(eventId: string) {
     }
 
     const now = new Date().toISOString();
+    const collectiveId = ev.collective_id;
 
-    // 2. Collect all unique user IDs and emails from tickets
-    const userIds: string[] = [];
+    type TicketRow = {
+      id: string;
+      holder_party_id: string | null;
+      order_line_id: string | null;
+      order_lines: {
+        unit_price: number;
+        orders: {
+          metadata: Record<string, unknown> | null;
+          party_id: string;
+        } | null;
+      } | null;
+    };
+
+    const typedTickets = tickets as unknown as TicketRow[];
+
+    // 2. Collect all unique party IDs and emails from tickets
+    const partyIds: string[] = [];
     const emails: string[] = [];
 
-    for (const ticket of tickets) {
-      if (ticket.user_id) userIds.push(ticket.user_id);
-      const meta = (ticket.metadata || {}) as Record<string, string>;
-      if (meta.customer_email) emails.push(meta.customer_email);
+    for (const ticket of typedTickets) {
+      const holderParty = ticket.holder_party_id;
+      if (holderParty) partyIds.push(holderParty);
+      const orderParty = ticket.order_lines?.orders?.party_id;
+      if (orderParty && !partyIds.includes(orderParty)) partyIds.push(orderParty);
+      const meta = (ticket.order_lines?.orders?.metadata || {}) as Record<string, string>;
+      if (meta.customer_email) emails.push(meta.customer_email.toLowerCase());
     }
 
-    // 3. Fetch existing attendee profiles using separate parameterized queries to avoid PostgREST injection
-    let existingProfiles: { id: string; user_id: string | null; email: string | null; total_events: number | null; total_spend: number | null; first_event_at: string | null; vip_status: boolean | null }[] = [];
+    // 3. Fetch existing attendee_profiles for this collective (by party_id or email)
+    let existingProfiles: {
+      id: string;
+      party_id: string | null;
+      user_id: string | null;
+      email: string | null;
+      total_events: number;
+      total_spend: number;
+      first_seen_at: string | null;
+    }[] = [];
 
-    if (userIds.length > 0) {
-      const { data: profilesByUserId, error: err1 } = await admin
+    if (partyIds.length > 0) {
+      const { data: byPartyId, error: err1 } = await admin
         .from("attendee_profiles")
-        .select("id, user_id, email, total_events, total_spend, first_event_at, vip_status")
-        .in("user_id", userIds);
+        .select("id, party_id, user_id, email, total_events, total_spend, first_seen_at")
+        .eq("collective_id", collectiveId)
+        .in("party_id", partyIds);
 
       if (err1) {
-        console.error("[enrichAttendeeCRM] profiles query error:", err1.message);
+        console.error("[enrichAttendeeCRM] attendee_profiles by party_id query error:", err1.message);
         return { error: "Failed to load attendee profiles" };
       }
-      if (profilesByUserId) existingProfiles = profilesByUserId;
+      if (byPartyId) existingProfiles = byPartyId;
     }
 
     if (emails.length > 0) {
-      const { data: profilesByEmail, error: err2 } = await admin
+      const { data: byEmail, error: err2 } = await admin
         .from("attendee_profiles")
-        .select("id, user_id, email, total_events, total_spend, first_event_at, vip_status")
+        .select("id, party_id, user_id, email, total_events, total_spend, first_seen_at")
+        .eq("collective_id", collectiveId)
         .in("email", emails);
 
       if (err2) {
-        console.error("[enrichAttendeeCRM] profiles email query error:", err2.message);
+        console.error("[enrichAttendeeCRM] attendee_profiles by email query error:", err2.message);
         return { error: "Failed to load attendee profiles" };
       }
-      if (profilesByEmail) {
-        // Merge, deduplicating by id
-        const existingIds = new Set(existingProfiles.map((p) => p.id));
-        for (const p of profilesByEmail) {
-          if (!existingIds.has(p.id)) {
-            existingProfiles.push(p);
-          }
+      if (byEmail) {
+        const existingIds = new Set(existingProfiles.map((c) => c.id));
+        for (const c of byEmail) {
+          if (!existingIds.has(c.id)) existingProfiles.push(c);
         }
       }
     }
 
-    // 4. Index existing profiles by user_id and email for fast lookup
-    const profileByUserId = new Map<string, (typeof existingProfiles)[number]>();
+    // 4. Index by party_id and email for fast lookup
+    const profileByPartyId = new Map<string, (typeof existingProfiles)[number]>();
     const profileByEmail = new Map<string, (typeof existingProfiles)[number]>();
 
-    for (const profile of existingProfiles ?? []) {
-      if (profile.user_id) profileByUserId.set(profile.user_id, profile);
-      if (profile.email) profileByEmail.set(profile.email, profile);
+    for (const p of existingProfiles ?? []) {
+      if (p.party_id) profileByPartyId.set(p.party_id, p);
+      if (p.email) profileByEmail.set(p.email.toLowerCase(), p);
     }
 
     // 5. Process all tickets in memory — no DB calls in this loop
-    // Track updates keyed by profile ID to handle duplicate user_ids across tickets
     const updatesById = new Map<
       string,
-      { user_id: string; total_events: number; total_spend: number; last_event_at: string; vip_status: boolean }
+      { party_id: string | null; total_events: number; total_spend: number; last_seen_at: string }
     >();
-    const insertsById = new Map<
+    const insertsByKey = new Map<
       string,
-      { user_id: string; email?: string; total_events: number; total_spend: number; first_event_at: string; last_event_at: string; vip_status: boolean }
+      {
+        collective_id: string;
+        party_id: string | null;
+        email: string | null;
+        total_events: number;
+        total_spend: number;
+        first_seen_at: string;
+        last_seen_at: string;
+      }
     >();
 
-    for (const ticket of tickets) {
-      const userId = ticket.user_id;
-      const meta = (ticket.metadata || {}) as Record<string, string>;
-      const email = meta.customer_email || null;
-      const ticketPrice = Number(ticket.price_paid) || 0;
+    for (const ticket of typedTickets) {
+      const partyId = ticket.holder_party_id ?? ticket.order_lines?.orders?.party_id ?? null;
+      const meta = (ticket.order_lines?.orders?.metadata || {}) as Record<string, string>;
+      const email = meta.customer_email?.toLowerCase() || null;
+      const ticketPrice = Number(ticket.order_lines?.unit_price) || 0;
 
-      if (!userId) continue;
-
-      // Look up existing profile
-      const existing = profileByUserId.get(userId) ?? (email ? profileByEmail.get(email) : null);
+      // Prefer email-based matching (attendee_profiles unique key is (collective_id, email)).
+      const existing =
+        (email ? profileByEmail.get(email) : null) ??
+        (partyId ? profileByPartyId.get(partyId) : null);
 
       if (existing) {
-        // Check if we already have a pending update for this profile
         const pending = updatesById.get(existing.id);
         if (pending) {
-          // Accumulate onto the pending update
           pending.total_events += 1;
           pending.total_spend = Math.round((pending.total_spend + ticketPrice) * 100) / 100;
-          pending.vip_status =
-            pending.total_events >= VIP_EVENT_THRESHOLD ||
-            pending.total_spend >= VIP_SPEND_THRESHOLD;
         } else {
           const newTotalEvents = (existing.total_events ?? 0) + 1;
           const newTotalSpend =
             Math.round(((Number(existing.total_spend) || 0) + ticketPrice) * 100) / 100;
-          const isVip =
-            newTotalEvents >= VIP_EVENT_THRESHOLD ||
-            newTotalSpend >= VIP_SPEND_THRESHOLD;
 
           updatesById.set(existing.id, {
-            user_id: existing.user_id ?? userId,
+            party_id: existing.party_id ?? partyId ?? null,
             total_events: newTotalEvents,
             total_spend: newTotalSpend,
-            last_event_at: now,
-            vip_status: isVip,
+            last_seen_at: now,
           });
         }
       } else {
-        // New profile — use a key to deduplicate multiple tickets for same user
-        const key = userId;
-        const pending = insertsById.get(key);
+        // New profile — key by email (falls back to party_id)
+        const key = email ?? partyId;
+        if (!key) continue;
+
+        const pending = insertsByKey.get(key);
         if (pending) {
           pending.total_events += 1;
           pending.total_spend = Math.round((pending.total_spend + ticketPrice) * 100) / 100;
-          pending.vip_status =
-            pending.total_events >= VIP_EVENT_THRESHOLD ||
-            pending.total_spend >= VIP_SPEND_THRESHOLD;
         } else {
-          const isVip =
-            1 >= VIP_EVENT_THRESHOLD || ticketPrice >= VIP_SPEND_THRESHOLD;
-
-          // Skip profiles without a user_id — DB requires it
-          if (!userId) continue;
-
-          const insertData: { user_id: string; email?: string; total_events: number; total_spend: number; first_event_at: string; last_event_at: string; vip_status: boolean } = {
-            user_id: userId,
+          if (!email && !partyId) continue; // need at least one identifier
+          insertsByKey.set(key, {
+            collective_id: collectiveId,
+            party_id: partyId ?? null,
+            email: email ?? null,
             total_events: 1,
             total_spend: Math.round(ticketPrice * 100) / 100,
-            first_event_at: now,
-            last_event_at: now,
-            vip_status: isVip,
-          };
-
-          if (email) insertData.email = email;
-
-          insertsById.set(key, insertData);
+            first_seen_at: now,
+            last_seen_at: now,
+          });
         }
       }
     }
 
-    // 6. Batch write: upsert all updates and inserts
+    // 6. Batch write
     let enrichedCount = 0;
 
-    // Batch updates — use upsert with the profile id
     if (updatesById.size > 0) {
-      const upsertRows = Array.from(updatesById.entries()).map(([id, data]) => ({
-        id,
-        ...data,
-      }));
-
-      const { error: updateError } = await admin
-        .from("attendee_profiles")
-        .upsert(upsertRows, { onConflict: "id" });
-
-      if (updateError) {
-        console.error("[enrichAttendeeCRM] batch update failed:", updateError.message);
+      const updateResults = await Promise.all(
+        Array.from(updatesById.entries()).map(([id, data]) =>
+          admin.from("attendee_profiles").update(data).eq("id", id)
+        )
+      );
+      const updateFail = updateResults.find((r) => r.error);
+      if (updateFail?.error) {
+        console.error("[enrichAttendeeCRM] batch update failed:", updateFail.error.message);
         return { error: "Failed to update attendee profiles" };
-      } else {
-        enrichedCount += upsertRows.length;
       }
+      enrichedCount += updatesById.size;
     }
 
-    // Batch inserts — insert all new profiles at once
-    if (insertsById.size > 0) {
-      const insertRows = Array.from(insertsById.values());
+    if (insertsByKey.size > 0) {
+      const insertRows = Array.from(insertsByKey.values());
 
       const { error: insertError } = await admin
         .from("attendee_profiles")
-        .insert(insertRows);
+        .upsert(insertRows, { onConflict: "collective_id,email" });
 
       if (insertError) {
         console.error("[enrichAttendeeCRM] batch insert failed:", insertError.message);

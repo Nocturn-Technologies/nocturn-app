@@ -61,8 +61,9 @@ export default function InvitePage() {
         return;
       }
 
-      if (invitation.status !== "pending") {
-        setState(invitation.status === "expired" ? "expired" : "not-found");
+      // If accepted_at is set, invitation has already been used
+      if (invitation.accepted_at !== null) {
+        setState("not-found");
         return;
       }
 
@@ -100,14 +101,14 @@ export default function InvitePage() {
 
   if (state === "loading") {
     return (
-      <div className="flex min-h-dvh items-center justify-center bg-background">
+      <div className="flex min-h-dvh items-center justify-center bg-background overflow-x-hidden">
         <Loader2 className="h-8 w-8 animate-spin text-nocturn" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4 overflow-x-hidden">
       <div className="w-full max-w-md space-y-6">
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight text-nocturn">

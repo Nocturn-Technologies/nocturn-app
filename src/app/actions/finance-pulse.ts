@@ -73,42 +73,39 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
       console.error("[getFinancialPulse] past events query error:", pastEventsError.message);
     }
 
-    // Revenue for current events (this month + upcoming)
+    // Revenue for current events — sum orders.total where status='paid'
     let revenue = 0;
     if (currentEventIds.length > 0) {
-      const { data: tickets, error: ticketsError } = await admin
-        .from("tickets")
-        .select("price_paid")
+      const { data: orders, error: ordersError } = await admin
+        .from("orders")
+        .select("total")
         .in("event_id", currentEventIds)
-        .in("status", ["paid", "checked_in"]);
+        .eq("status", "paid");
 
-      if (ticketsError) {
-        console.error("[getFinancialPulse] tickets query error:", ticketsError.message);
+      if (ordersError) {
+        console.error("[getFinancialPulse] orders query error:", ordersError.message);
       }
 
-      revenue = (tickets ?? []).reduce(
-        (sum, t) => sum + (Number(t.price_paid) || 0),
+      revenue = (orders ?? []).reduce(
+        (sum, o) => sum + (Number(o.total) || 0),
         0
       );
     }
 
-    // Expenses for current events (scoped by event, not settlement.created_at).
-    // NOTE: `total_costs` is a generated column that already sums
-    // artist_fees_total + venue_fee + platform_fee + stripe_fees + other_costs.
-    // Do NOT add artist/stripe/platform on top of it — that would double-count.
+    // Expenses for current events — sum event_expenses.amount
     let expenses = 0;
     if (currentEventIds.length > 0) {
-      const { data: currentSettlements, error: settlementsError } = await admin
-        .from("settlements")
-        .select("total_costs")
+      const { data: currentExpenses, error: expensesError } = await admin
+        .from("event_expenses")
+        .select("amount")
         .in("event_id", currentEventIds);
 
-      if (settlementsError) {
-        console.error("[getFinancialPulse] current settlements query error:", settlementsError.message);
+      if (expensesError) {
+        console.error("[getFinancialPulse] current expenses query error:", expensesError.message);
       }
 
-      expenses = (currentSettlements ?? []).reduce(
-        (sum, s) => sum + (Number(s.total_costs) || 0),
+      expenses = (currentExpenses ?? []).reduce(
+        (sum, e) => sum + (Number(e.amount) || 0),
         0
       );
     }
@@ -130,30 +127,30 @@ export async function getFinancialPulse(): Promise<FinancialPulseData> {
     const outstandingSettlements = outstandingCount ?? 0;
 
     // Build recent events trend chart from the last 5 completed events
+    // settlements.net_payout = revenue after platform_fee + stripe_fee deducted
     const recentEvents: Array<{ title: string; profit: number }> = [];
     const pastEventIds = (pastEvents ?? []).map((e) => e.id);
 
     if (pastEventIds.length > 0) {
       const { data: pastSettlements, error: pastSettlementsError } = await admin
         .from("settlements")
-        .select("event_id, net_profit, profit")
+        .select("event_id, net_payout")
         .in("event_id", pastEventIds);
 
       if (pastSettlementsError) {
         console.error("[getFinancialPulse] past settlements query error:", pastSettlementsError.message);
       }
 
-      const profitByEvent = new Map<string, number>();
+      const payoutByEvent = new Map<string, number>();
       for (const s of pastSettlements ?? []) {
-        // Prefer net_profit (generated from source fields); fall back to manual `profit` column
-        const p = Number(s.net_profit ?? s.profit) || 0;
-        profitByEvent.set(s.event_id, p);
+        const p = Number(s.net_payout) || 0;
+        payoutByEvent.set(s.event_id, p);
       }
 
       for (const e of pastEvents ?? []) {
         recentEvents.push({
           title: e.title,
-          profit: profitByEvent.get(e.id) ?? 0,
+          profit: payoutByEvent.get(e.id) ?? 0,
         });
         if (recentEvents.length >= 5) break;
       }

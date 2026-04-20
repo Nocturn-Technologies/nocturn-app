@@ -56,7 +56,7 @@ interface EventCardLiveProps {
   eventId: string;
 }
 
-export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
+export function EventCardLive({ channelId: _channelId, eventId }: EventCardLiveProps) {
   const [card, setCard] = useState<EventCardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -73,7 +73,7 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
         if (queryError) {
           setError(true);
         } else if (data && data.length > 0) {
-          setCard(data[0] as EventCardData);
+          setCard(data[0] as unknown as EventCardData);
         }
         setLoading(false);
       });
@@ -133,7 +133,7 @@ export function EventCardLive({ channelId, eventId }: EventCardLiveProps) {
       {expanded && (
         <div className="px-4 pb-4 space-y-3">
           {isEmpty ? (
-            <p className="text-xs text-muted-foreground/60 text-center py-3">
+            <p className="text-xs text-muted-foreground/70 text-center py-3">
               Chat about your event to fill this in
             </p>
           ) : (

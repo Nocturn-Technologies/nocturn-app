@@ -72,17 +72,16 @@ export async function enrichEventContent(input: {
     // PostgREST operators into the .ilike() filter.
     const safeName = sanitizePostgRESTInput(input.venueName);
     const { data: venueRaw, error: venueError } = await admin
-      .from("venues")
-      .select("description, capacity, address, city, metadata")
+      .from("venue_profiles")
+      .select("capacity, address, city")
       .ilike("name", `%${safeName}%`)
       .maybeSingle();
     if (venueError) {
       console.error("[enrichEventContent] venue lookup failed:", venueError);
     }
-    const venue = venueRaw as { description: string | null; capacity: number | null; address: string | null; city: string | null; metadata: Record<string, unknown> | null } | null;
+    const venue = venueRaw as { capacity: number | null; address: string | null; city: string | null } | null;
 
     if (venue) {
-      venueDescription = venue.description ?? null;
       venueCapacity = venue.capacity ?? null;
       venueAddress = venue.address ?? null;
     }

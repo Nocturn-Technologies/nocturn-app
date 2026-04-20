@@ -7,10 +7,10 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-dvh bg-background overflow-x-hidden">
       <div className="mx-auto max-w-3xl px-4 py-12 sm:px-6">
         <h1 className="text-3xl font-bold">Privacy Policy</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Last updated: March 23, 2026</p>
+        <p className="mt-2 text-sm text-muted-foreground">Last updated: April 17, 2026</p>
 
         <div className="mt-8 space-y-8 text-sm leading-relaxed text-muted-foreground">
           <section>
@@ -19,8 +19,33 @@ export default function PrivacyPage() {
             <p className="mt-2"><strong className="text-foreground">Collective information:</strong> Collective name, city, description, social media handles, and member details.</p>
             <p className="mt-2"><strong className="text-foreground">Event data:</strong> Event titles, dates, venues, ticket tiers, pricing, and flyer images.</p>
             <p className="mt-2"><strong className="text-foreground">Payment information:</strong> Processed securely by Stripe. We do not store credit card numbers. We receive transaction confirmations including amounts and buyer email addresses.</p>
-            <p className="mt-2"><strong className="text-foreground">Attendee data:</strong> Email addresses of ticket purchasers, check-in status, and attendance history.</p>
+            <p className="mt-2"><strong className="text-foreground">Attendee data:</strong> Name, email address, phone number, check-in status, and attendance history of ticket purchasers and people who RSVP to events.</p>
+            <p className="mt-2"><strong className="text-foreground">RSVP data:</strong> When you RSVP to a free event, we collect your full name, email address, phone number, RSVP status (Going / Maybe / Can&apos;t go), plus-ones count, and any optional message you add.</p>
             <p className="mt-2"><strong className="text-foreground">Usage data:</strong> Pages visited, features used, and interactions with the Platform for improving the service.</p>
+          </section>
+
+          <section>
+            <h2 className="mb-3 text-lg font-semibold text-foreground">1a. RSVP &amp; Ticket Consent — Sharing With Event Organizers</h2>
+            <p>
+              When you submit an RSVP or purchase a ticket for an event on Nocturn, you <strong className="text-foreground">expressly consent</strong> to Nocturn sharing the following information with the event organizer (the collective, promoter, or individual running that event):
+            </p>
+            <ul className="list-disc pl-5 space-y-1 mt-2">
+              <li>Your full name</li>
+              <li>Your email address</li>
+              <li>Your phone number</li>
+              <li>Your RSVP status or ticket purchase</li>
+              <li>Your plus-ones count and any optional message you include</li>
+              <li>Check-in / attendance status on the night of the event</li>
+            </ul>
+            <p className="mt-2">
+              Organizers use this information to manage the guest list, contact you with event updates (venue changes, cancellations, lineup announcements), reconcile the door on event night, and follow up after the event (e.g., invitations to future events from that collective). You may unsubscribe from an organizer&apos;s marketing emails at any time.
+            </p>
+            <p className="mt-2">
+              <strong className="text-foreground">What other attendees and the public can see:</strong> On the public event page, only your <strong className="text-foreground">first name and last initial</strong> (e.g. &ldquo;Maya K.&rdquo;), your plus-ones count, and your RSVP status (Going or Maybe) are displayed. Your email address, phone number, and full last name are <strong className="text-foreground">never shown publicly</strong> and are never shared with other attendees. Declined RSVPs (&ldquo;Can&apos;t go&rdquo;) are never shown publicly.
+            </p>
+            <p className="mt-2">
+              <strong className="text-foreground">Your controls:</strong> You can change or delete your RSVP at any time using the confirmation link in your RSVP email. You can request that an organizer remove you from their attendee list by contacting them directly, or contact us at <a href="mailto:shawn@trynocturn.com" className="text-nocturn hover:underline">shawn@trynocturn.com</a> and we will pass the request on.
+            </p>
           </section>
 
           <section>
@@ -28,7 +53,9 @@ export default function PrivacyPage() {
             <ul className="list-disc pl-5 space-y-1">
               <li>To provide and maintain the Platform</li>
               <li>To process ticket purchases and settlements</li>
-              <li>To send transactional emails (ticket confirmations, settlement reports)</li>
+              <li>To send transactional emails (ticket confirmations, RSVP confirmations, settlement reports)</li>
+              <li>To share RSVP and ticket purchaser information with the relevant event organizer, as described in Section 1a</li>
+              <li>To display first name + last initial on public event pages so attendees can see who else is going</li>
               <li>To power AI features (content suggestions, financial forecasts)</li>
               <li>To improve the Platform based on usage patterns</li>
               <li>To communicate updates about the service</li>

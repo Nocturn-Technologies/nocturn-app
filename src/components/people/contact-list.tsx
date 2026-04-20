@@ -216,7 +216,7 @@ export function ContactList({
           email: c.email ?? "",
           name: c.fullName,
           phone: c.phone,
-          instagram: c.instagram,
+          instagram: undefined,
           soundcloud_url: (c.metadata as Record<string, unknown>)?.soundcloud_url as string | undefined,
           spotify_url: (c.metadata as Record<string, unknown>)?.spotify_url as string | undefined,
           avatar_url: (c.metadata as Record<string, unknown>)?.avatar_url as string | undefined,
@@ -1011,7 +1011,7 @@ export function ContactList({
                       </span>
                     )}
                     {contact.source && (
-                      <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[11px] text-muted-foreground/60">
+                      <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[11px] text-muted-foreground/70">
                         {SOURCE_LABELS[contact.source] ?? contact.source}
                       </span>
                     )}
@@ -1116,7 +1116,7 @@ export function ContactList({
                         )}
                         {/* Last seen */}
                         {contactType === "fan" && getLastSeenDate(contact) && (
-                          <span className="text-[11px] text-muted-foreground/60">
+                          <span className="text-[11px] text-muted-foreground/70">
                             · {getLastSeenDate(contact)}
                           </span>
                         )}
@@ -1132,7 +1132,7 @@ export function ContactList({
                             </span>
                           )}
                         {contact.source && (
-                          <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[11px] text-muted-foreground/60">
+                          <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[11px] text-muted-foreground/70">
                             {SOURCE_LABELS[contact.source] ?? contact.source}
                           </span>
                         )}
@@ -1159,7 +1159,7 @@ export function ContactList({
 
                       {/* Notes preview */}
                       {contact.notes && (
-                        <p className="mt-1 text-[11px] text-muted-foreground/60 truncate">
+                        <p className="mt-1 text-[11px] text-muted-foreground/70 truncate">
                           {contact.notes}
                         </p>
                       )}

@@ -169,7 +169,7 @@ export default function AttendeesPage() {
   }
 
   return (
-    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300">
+    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300 max-w-6xl mx-auto">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-bold font-heading">Attendees</h1>
@@ -206,8 +206,8 @@ export default function AttendeesPage() {
         </Card>
         <Card className="rounded-2xl transition-colors duration-200 hover:border-nocturn/20">
           <CardContent className="flex items-center gap-3 p-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
-              <UserCheck className="h-5 w-5 text-green-500" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
+              <UserCheck className="h-5 w-5 text-emerald-500" />
             </div>
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground truncate">
@@ -234,7 +234,7 @@ export default function AttendeesPage() {
 
       {/* Search */}
       {attendees.length > 0 && (
-        <div className="relative">
+        <div className="relative md:max-w-md">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search by name, email, or event..."
@@ -273,12 +273,12 @@ export default function AttendeesPage() {
                       <p className="truncate font-medium text-sm">
                         {attendee.name || attendee.email}
                       </p>
-                      {attendee.source === "rsvp" && (
+                      {(attendee.source as string) === "rsvp" && (
                         <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
                           RSVP
                         </span>
                       )}
-                      {attendee.source === "both" && (
+                      {(attendee.source as string) === "both" && (
                         <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
                           VIP
                         </span>
@@ -323,12 +323,12 @@ export default function AttendeesPage() {
                         <p className="truncate font-medium text-sm">
                           {attendee.name || attendee.email}
                         </p>
-                        {attendee.source === "rsvp" && (
+                        {(attendee.source as string) === "rsvp" && (
                           <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
                             RSVP
                           </span>
                         )}
-                        {attendee.source === "both" && (
+                        {(attendee.source as string) === "both" && (
                           <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
                             VIP
                           </span>

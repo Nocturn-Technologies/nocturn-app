@@ -12,7 +12,6 @@ function slugify(name: string): string {
     .slice(0, 80);
 }
 
-// TODO(audit): cap name/address/city lengths, sanitize website/photo_url, validate metadata shape
 export async function saveVenue(venue: VenueResult) {
   try {
     if (!venue?.place_id?.trim() || !venue?.name?.trim()) {
@@ -26,18 +25,6 @@ export async function saveVenue(venue: VenueResult) {
       }
     }
 
-    // Validate latitude/longitude if provided
-    if (venue.latitude != null) {
-      if (typeof venue.latitude !== "number" || venue.latitude < -90 || venue.latitude > 90) {
-        return { error: "Latitude must be between -90 and 90" };
-      }
-    }
-    if (venue.longitude != null) {
-      if (typeof venue.longitude !== "number" || venue.longitude < -180 || venue.longitude > 180) {
-        return { error: "Longitude must be between -180 and 180" };
-      }
-    }
-
     const supabase = await createServerClient();
     const {
       data: { user },
@@ -46,71 +33,68 @@ export async function saveVenue(venue: VenueResult) {
 
     const admin = createAdminClient();
 
-    // Get user's collective
-    const { data: membership } = await admin
-      .from("collective_members")
-      .select("collective_id")
-      .eq("user_id", user.id)
-      .is("deleted_at", null)
-      .limit(1)
-      .maybeSingle();
-
-    if (!membership) return { error: "You must belong to a collective to save venues" };
-
-    // Upsert the venue into the venues table (use place_id in metadata to deduplicate)
     const slug = slugify(venue.name) + "-" + venue.place_id.slice(-6);
 
-    const { data: existingVenue } = await admin
-      .from("venues")
-      .select("id")
+    // Check if a venue_profile with this slug already exists
+    const { data: existingVenueProfile } = await admin
+      .from("venue_profiles")
+      .select("id, party_id")
       .eq("slug", slug)
       .maybeSingle();
 
-    let venueId: string;
+    let venuePartyId: string;
 
-    if (existingVenue) {
-      venueId = existingVenue.id;
+    if (existingVenueProfile) {
+      venuePartyId = existingVenueProfile.party_id;
     } else {
-      const { data: newVenue, error: venueError } = await admin
-        .from("venues")
-        .insert({
-          name: venue.name,
-          slug,
-          address: venue.address,
-          city: venue.city,
-          capacity: venue.capacity,
-          latitude: venue.latitude,
-          longitude: venue.longitude,
-          website: venue.website,
-          metadata: {
-            place_id: venue.place_id,
-            neighbourhood: venue.neighbourhood,
-            venue_type: venue.venue_type,
-            review_count: venue.review_count,
-            phone: venue.phone,
-            photo_url: venue.photo_url,
-            hours: venue.hours,
-            rating: venue.rating,
-          },
-        })
+      // 1. Create a parties record for this venue
+      const { data: party, error: partyError } = await admin
+        .from("parties")
+        .insert({ display_name: venue.name, type: "venue" })
         .select("id")
         .maybeSingle();
 
-      if (venueError || !newVenue) return { error: "Failed to save venue" };
-      venueId = newVenue.id;
+      if (partyError || !party) {
+        console.error("[saveVenue] party insert error:", partyError?.message);
+        return { error: "Failed to save venue" };
+      }
+
+      // 2. Create the venue_profile (drop instagram/website/lat/lng — not in schema)
+      const { error: vpError } = await admin
+        .from("venue_profiles")
+        .insert({
+          party_id: party.id,
+          name: venue.name,
+          slug,
+          address: venue.address ?? null,
+          city: venue.city ?? null,
+          capacity: venue.capacity ?? null,
+          photo_url: venue.photo_url ?? null,
+        });
+
+      if (vpError) {
+        console.error("[saveVenue] venue_profiles insert error:", vpError.message);
+        return { error: "Failed to save venue" };
+      }
+
+      venuePartyId = party.id;
     }
 
-    // Link venue to collective via saved_venues
-    const { error } = await admin.from("saved_venues").upsert(
-      {
-        collective_id: membership.collective_id,
-        venue_id: venueId,
-        rating: venue.rating,
-      },
-      { onConflict: "collective_id,venue_id" }
-    );
+    // Link venue to user via saved_venues (schema: user_id + venue_party_id)
+    // Check for existing save first (no unique constraint to rely on for upsert)
+    const { count: existingCount } = await admin
+      .from("saved_venues")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .eq("venue_party_id", venuePartyId);
 
-    if (error) return { error: "Failed to save venue" };
+    if (!existingCount || existingCount === 0) {
+      const { error } = await admin.from("saved_venues").insert({
+        user_id: user.id,
+        venue_party_id: venuePartyId,
+      });
+      if (error) return { error: "Failed to save venue" };
+    }
     return { error: null };
   } catch (err) {
     console.error("[saveVenue]", err);
@@ -118,9 +102,9 @@ export async function saveVenue(venue: VenueResult) {
   }
 }
 
-export async function removeSavedVenue(venueId: string) {
+export async function removeSavedVenue(venuePartyId: string) {
   try {
-    if (!venueId?.trim()) return { error: "Venue ID is required" };
+    if (!venuePartyId?.trim()) return { error: "Venue ID is required" };
 
     const supabase = await createServerClient();
     const {
@@ -130,22 +114,11 @@ export async function removeSavedVenue(venueId: string) {
 
     const admin = createAdminClient();
 
-    // Get user's collective
-    const { data: membership } = await admin
-      .from("collective_members")
-      .select("collective_id")
-      .eq("user_id", user.id)
-      .is("deleted_at", null)
-      .limit(1)
-      .maybeSingle();
-
-    if (!membership) return { error: "Not a member of any collective" };
-
     const { error } = await admin
       .from("saved_venues")
       .delete()
-      .eq("collective_id", membership.collective_id)
-      .eq("venue_id", venueId);
+      .eq("user_id", user.id)
+      .eq("venue_party_id", venuePartyId);
 
     if (error) return { error: "Failed to remove venue" };
     return { error: null };
@@ -165,25 +138,15 @@ export async function getSavedVenues() {
 
     const admin = createAdminClient();
 
-    // Get user's collective
-    const { data: membership } = await admin
-      .from("collective_members")
-      .select("collective_id")
-      .eq("user_id", user.id)
-      .is("deleted_at", null)
-      .limit(1)
-      .maybeSingle();
-
-    if (!membership) return { error: "Not a member of any collective", venues: [] };
-
+    // saved_venues joins to parties via venue_party_id; venue_profiles joins to parties
     const { data, error } = await admin
       .from("saved_venues")
-      .select("*, venues(*)")
-      .eq("collective_id", membership.collective_id)
+      .select("id, venue_party_id, created_at, parties(id, display_name, venue_profiles(id, slug, name, city, address, capacity, photo_url, cover_photo_url, is_verified, is_active))")
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false });
 
     if (error) return { error: "Failed to load saved venues", venues: [] };
-    return { error: null, venues: data ?? [] };
+    return { error: null, venues: (data ?? []) as unknown[] };
   } catch (err) {
     console.error("[getSavedVenues]", err);
     return { error: "Something went wrong", venues: [] };

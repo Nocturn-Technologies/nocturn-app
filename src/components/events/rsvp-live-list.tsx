@@ -45,6 +45,7 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
   const [filter, setFilter] = useState<RsvpStatus | "all">("all");
   const [copiedAll, setCopiedAll] = useState(false);
   const [flashId, setFlashId] = useState<string | null>(null);
+  const [announce, setAnnounce] = useState<string | null>(null);
 
   // Realtime subscription — any insert/update/delete on this event's rsvps triggers a refetch
   useEffect(() => {
@@ -64,6 +65,14 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
             if (rowId) {
               setFlashId(rowId);
               setTimeout(() => setFlashId((cur) => (cur === rowId ? null : cur)), 2500);
+              // Announce to screen readers for new/updated RSVPs
+              const row = fresh.find((r) => r.id === rowId);
+              if (row && payload.eventType !== "DELETE") {
+                const statusLabel = STATUS_META[row.status]?.label ?? row.status;
+                const who = row.full_name || "Anonymous";
+                setAnnounce(`New RSVP: ${who}, ${statusLabel}`);
+                setTimeout(() => setAnnounce(null), 3000);
+              }
             }
           });
         }
@@ -214,8 +223,11 @@ export function RsvpLiveList({ eventId, initialRsvps }: Props) {
         </div>
       </div>
 
+      {/* Screen reader announcement */}
+      <p className="sr-only" role="status" aria-live="polite">{announce}</p>
+
       {/* List */}
-      <ul className="space-y-2">
+      <ul className="space-y-2" role="status" aria-live="polite" aria-atomic="false">
         {visible.map((r) => {
           const meta = STATUS_META[r.status];
           const Icon = meta.icon;

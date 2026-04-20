@@ -2,36 +2,90 @@
  * Stripe Webhook Handler
  *
  * Handled events (configure in Stripe Dashboard → Webhooks):
+ *
+ * Platform webhook endpoint (STRIPE_WEBHOOK_SECRET):
  *   - checkout.session.completed    — Fulfill tickets from Checkout Sessions
  *   - payment_intent.succeeded      — Fulfill tickets from embedded/direct PaymentIntents
- *   - payment_intent.payment_failed — Delete pending tickets to release capacity
- *   - charge.refunded               — Mark paid/checked-in tickets as refunded
- *   - charge.failed                  — Clean up pending tickets on charge failure
- *   - charge.dispute.created         — Mark tickets as disputed
- *   - charge.dispute.closed          — Restore tickets if dispute won
+ *   - payment_intent.payment_failed — Update order status to failed
+ *   - charge.refunded               — Mark order/tickets as refunded
+ *   - charge.failed                 — Mark order as failed
+ *   - charge.dispute.created        — Mark tickets as disputed
+ *   - charge.dispute.closed         — Restore tickets if dispute won
  *
- * NOTE: Webhook dedup relies on ticket-level idempotency checks (paid ticket counts
- * per PI/session). A dedicated webhook_events table for event.id dedup would be more
- * robust but is not yet implemented. The current approach is sufficient for ticket
- * events; non-ticket events (disputes, refunds) are naturally idempotent.
+ * Both endpoints POST to this same route; we try both signatures in turn
+ * and branch on event.type.
  *
- * TODO: Add a cron job (e.g., Vercel cron every 15 min) to clean up expired pending
- * tickets older than 30 minutes. For now, the capacity queries in the public event
- * page and checkout routes only count pending tickets created within the last 30 min,
- * so expired ones are effectively ignored. A cleanup cron would just remove the rows:
- *   DELETE FROM tickets WHERE status = 'pending' AND created_at < now() - interval '30 minutes';
+ * Deduplication: webhook_events table with unique stripe_event_id constraint.
+ * Orders are looked up by stripe_payment_intent_id. Tickets are fulfilled via
+ * the fulfill_tickets_atomic RPC and tracked via the ticket_events lifecycle table.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
-import { getStripe, STRIPE_WEBHOOK_SECRET } from "@/lib/stripe";
+import {
+  getStripe,
+  STRIPE_WEBHOOK_SECRET,
+  STRIPE_CONNECT_WEBHOOK_SECRET,
+} from "@/lib/stripe";
 import Stripe from "stripe";
-import { randomUUID } from "crypto";
 import QRCode from "qrcode";
 import { createAdminClient } from "@/lib/supabase/config";
-import { logPaymentEvent } from "@/lib/payment-events";
+import type { Json } from "@/lib/supabase/database.types";
+
+type AdminClient = ReturnType<typeof createAdminClient>;
+
+/** Log a raw Stripe event to the payment_events table. Fire-and-forget. */
+async function logStripePaymentEvent(
+  supabase: AdminClient,
+  opts: {
+    stripeEventId: string;
+    stripePaymentIntentId: string | null;
+    eventType: string;
+    eventId: string | null;
+    orderId: string | null;
+    amountDollars: number | null;
+    currency: string | null;
+    customerEmail: string | null;
+    status: string | null;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  try {
+    await supabase.from("payment_events").insert({
+      stripe_event_id: opts.stripeEventId,
+      stripe_payment_intent_id: opts.stripePaymentIntentId,
+      event_type: opts.eventType,
+      event_id: opts.eventId,
+      order_id: opts.orderId,
+      amount: opts.amountDollars,
+      currency: opts.currency ?? "cad",
+      customer_email: opts.customerEmail,
+      status: opts.status,
+      metadata: (opts.metadata ?? {}) as unknown as Json,
+    });
+  } catch (err) {
+    console.error("[stripe-webhook] payment_events log failed (non-fatal):", err);
+  }
+}
+
+/** Look up an order by Stripe payment intent ID. */
+async function getOrderByPaymentIntent(
+  supabase: AdminClient,
+  paymentIntentId: string
+) {
+  const { data } = await supabase
+    .from("orders")
+    .select("id, event_id, party_id, status, promo_code_id, currency")
+    .eq("stripe_payment_intent_id", paymentIntentId)
+    .maybeSingle();
+  return data;
+}
 
 export async function POST(request: NextRequest) {
-  // TODO(audit): add replay-window check on event timestamp (reject events older than 5min) as defense-in-depth alongside signature verification
+  // NOTE: No replay-window check on event.created — Stripe's constructEvent()
+  // already validates the signature header timestamp (`t=`) against a 300s
+  // tolerance, which is freshly generated on each delivery (including retries).
+  // Adding an event.created check would reject legitimate Stripe retries, which
+  // can arrive up to 3 days after the original event.
   const body = await request.text();
   const signature = request.headers.get("stripe-signature");
 
@@ -42,8 +96,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!STRIPE_WEBHOOK_SECRET) {
-    console.error("[stripe-webhook] STRIPE_WEBHOOK_SECRET is not configured");
+  if (!STRIPE_WEBHOOK_SECRET && !STRIPE_CONNECT_WEBHOOK_SECRET) {
+    console.error(
+      "[stripe-webhook] No webhook secrets configured (STRIPE_WEBHOOK_SECRET and STRIPE_CONNECT_WEBHOOK_SECRET both empty)"
+    );
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -52,26 +108,98 @@ export async function POST(request: NextRequest) {
 
   let event: Stripe.Event;
 
-  try {
-    event = getStripe().webhooks.constructEvent(
-      body,
-      signature,
-      STRIPE_WEBHOOK_SECRET
-    );
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
+  // Try platform signature first, then Connect. Stripe signs each webhook
+  // with exactly one of the two secrets — the one from the endpoint that
+  // delivered the event. We accept both so we can register both endpoints
+  // against this single route.
+  const allSecrets: { key: "platform" | "connect"; value: string }[] = [
+    { key: "platform", value: STRIPE_WEBHOOK_SECRET },
+    { key: "connect", value: STRIPE_CONNECT_WEBHOOK_SECRET },
+  ];
+  const secretsToTry = allSecrets.filter((s) => s.value.length > 0);
+
+  let lastErr: unknown = null;
+  let verified: Stripe.Event | null = null;
+  let matchedSecretKey: "platform" | "connect" | null = null;
+  for (const { key, value } of secretsToTry) {
+    try {
+      verified = getStripe().webhooks.constructEvent(body, signature, value);
+      matchedSecretKey = key;
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+
+  if (!verified) {
+    const message =
+      lastErr instanceof Error ? lastErr.message : "Unknown error";
     console.error("[stripe-webhook] Signature verification failed:", message);
+
+    // Diagnostic: if only ONE of the two secrets is configured, the event
+    // might be legit but addressed to the OTHER endpoint we forgot to
+    // register.
+    const hasPlatform = STRIPE_WEBHOOK_SECRET.length > 0;
+    const hasConnect = STRIPE_CONNECT_WEBHOOK_SECRET.length > 0;
+    if (!hasPlatform || !hasConnect) {
+      try {
+        const Sentry = await import("@sentry/nextjs");
+        Sentry.captureMessage(
+          `Stripe webhook signature rejected — only ${hasPlatform ? "platform" : "connect"} secret is configured. If the event is a Connect (or platform) event, set the other secret in Vercel env.`,
+          {
+            level: "warning",
+            tags: {
+              area: "stripe-webhook",
+              has_platform_secret: String(hasPlatform),
+              has_connect_secret: String(hasConnect),
+            },
+          }
+        );
+      } catch {
+        // Non-fatal — don't block the 400 response on Sentry failure.
+      }
+    }
+
     return NextResponse.json(
       { error: "Webhook signature verification failed" },
       { status: 400 }
     );
   }
 
+  event = verified;
+
+  // Cross-check: Connect-scoped events (envelope has `account`) should
+  // have been signed with the Connect secret.
+  if (event.account && matchedSecretKey === "platform") {
+    console.warn(
+      `[stripe-webhook] Connect-scoped event ${event.type} (${event.id}) verified via PLATFORM secret. If you intended to separate endpoints, check your Stripe Dashboard webhook config.`
+    );
+  }
+
+  // Dedup via webhook_events table — INSERT-first, rely on unique stripe_event_id constraint.
+  // Handles Stripe retries so a replayed event doesn't re-fulfill tickets.
+  const supabaseForDedup = createAdminClient();
+  try {
+    const { error: dedupErr } = await supabaseForDedup
+      .from("webhook_events")
+      .insert({ stripe_event_id: event.id, event_type: event.type });
+    if (dedupErr) {
+      if (dedupErr.code === "23505") {
+        console.info(`[stripe-webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
+        return NextResponse.json({ received: true, duplicate: true });
+      }
+      console.warn(`[stripe-webhook] webhook_events insert failed (non-fatal): ${dedupErr.message}`);
+    }
+  } catch (dedupErr) {
+    console.warn("[stripe-webhook] Dedup pre-check failed (non-fatal):", dedupErr);
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
         const result = await handleCheckoutCompleted(
-          event.data.object as Stripe.Checkout.Session
+          event.data.object as Stripe.Checkout.Session,
+          event.id
         );
         if (result?.backgroundWork) {
           after(result.backgroundWork);
@@ -80,7 +208,8 @@ export async function POST(request: NextRequest) {
       }
       case "payment_intent.succeeded": {
         const result = await handlePaymentIntentSucceeded(
-          event.data.object as Stripe.PaymentIntent
+          event.data.object as Stripe.PaymentIntent,
+          event.id
         );
         if (result?.backgroundWork) {
           after(result.backgroundWork);
@@ -89,65 +218,56 @@ export async function POST(request: NextRequest) {
       }
       case "payment_intent.payment_failed": {
         const pi = event.data.object as Stripe.PaymentIntent;
-        const failureReason =
-          pi.last_payment_error?.message ?? "unknown";
+        const failureReason = pi.last_payment_error?.message ?? "unknown";
         console.warn(
           `[stripe-webhook] Payment failed for PI ${pi.id}: ${failureReason}`
         );
-        // Delete pending tickets to release reserved capacity (Gap 9 + 25)
         const supabase = createAdminClient();
-        const { data: failedTickets, error: failErr } = await supabase
-          .from("tickets")
-          .delete()
-          .eq("stripe_payment_intent_id", pi.id)
-          .eq("status", "pending")
-          .select("id");
-        if (failErr) {
-          console.error("[stripe-webhook] Failed to delete pending tickets:", failErr);
-        } else if (failedTickets && failedTickets.length > 0) {
-          console.info(
-            `[stripe-webhook] Deleted ${failedTickets.length} pending ticket(s) to release capacity for PI ${pi.id}`
-          );
-        }
 
-        // Release promo code claim (Gap 22): promo uses were claimed atomically
-        // before payment, so we must decrement on failure to free the slot.
-        const piPromoId = pi.metadata?.promoId;
-        const piPromoQuantity = parseInt(pi.metadata?.promoClaimedQuantity || "0", 10);
-        // TODO: make atomic with DB function (e.g. decrement_promo_uses RPC)
-        // Current pattern has a race condition: read-then-write can cause
-        // incorrect values under concurrent webhook processing.
-        if (piPromoId && piPromoQuantity > 0) {
-          const { data: currentPromo } = await supabase
-            .from("promo_codes")
-            .select("current_uses")
-            .eq("id", piPromoId)
-            .maybeSingle();
-
-          if (currentPromo) {
-            const newUses = Math.max((currentPromo.current_uses ?? 0) - piPromoQuantity, 0);
+        // Update order status to 'failed' and release pending tickets
+        if (pi.id) {
+          const order = await getOrderByPaymentIntent(supabase, pi.id);
+          if (order) {
             await supabase
-              .from("promo_codes")
-              .update({ current_uses: newUses })
-              .eq("id", piPromoId);
+              .from("orders")
+              .update({ status: "failed" })
+              .eq("id", order.id);
+            console.info(`[stripe-webhook] Order ${order.id} marked failed for PI ${pi.id}`);
 
-            // Defensive check: re-read and verify current_uses >= 0
-            const { data: verifyPromo } = await supabase
-              .from("promo_codes")
-              .select("current_uses")
-              .eq("id", piPromoId)
-              .maybeSingle();
-            if (verifyPromo && (verifyPromo.current_uses ?? 0) < 0) {
-              console.warn(`[stripe-webhook] Promo ${piPromoId} went negative (${verifyPromo.current_uses}), resetting to 0`);
-              await supabase
-                .from("promo_codes")
-                .update({ current_uses: 0 })
-                .eq("id", piPromoId);
+            await logStripePaymentEvent(supabase, {
+              stripeEventId: event.id,
+              stripePaymentIntentId: pi.id,
+              eventType: "payment_intent.payment_failed",
+              eventId: order.event_id,
+              orderId: order.id,
+              amountDollars: pi.amount ? pi.amount / 100 : null,
+              currency: pi.currency ?? "cad",
+              customerEmail: null,
+              status: "failed",
+              metadata: { failure_reason: failureReason },
+            });
+
+            // Delete pending tickets via order_lines to release reserved capacity
+            const { data: orderLines } = await supabase
+              .from("order_lines")
+              .select("id")
+              .eq("order_id", order.id);
+            const orderLineIds = (orderLines ?? []).map((ol) => ol.id);
+            if (orderLineIds.length > 0) {
+              const { data: failedTickets, error: failErr } = await supabase
+                .from("tickets")
+                .delete()
+                .in("order_line_id", orderLineIds)
+                .eq("status", "pending")
+                .select("id");
+              if (failErr) {
+                console.error("[stripe-webhook] Failed to delete pending tickets:", failErr);
+              } else if (failedTickets && failedTickets.length > 0) {
+                console.info(
+                  `[stripe-webhook] Deleted ${failedTickets.length} pending ticket(s) for PI ${pi.id}`
+                );
+              }
             }
-
-            console.info(
-              `[stripe-webhook] Released ${piPromoQuantity} promo claim(s) for code ${piPromoId} (PI ${pi.id})`
-            );
           }
         }
         break;
@@ -158,60 +278,95 @@ export async function POST(request: NextRequest) {
           typeof charge.payment_intent === "string"
             ? charge.payment_intent
             : (charge.payment_intent as Stripe.PaymentIntent | null)?.id ?? null;
-        if (refundPiId) {
-          const isFullRefund = charge.refunded === true; // Stripe sets this only on FULL refund
-          console.info(`[stripe-webhook] Charge ${isFullRefund ? "fully" : "partially"} refunded for PI ${refundPiId}`);
-          const supabase = createAdminClient();
-          if (isFullRefund) {
-            // Full refund — mark all tickets
+
+        if (!refundPiId) {
+          console.warn("[stripe-webhook] charge.refunded event has no payment_intent ID, skipping");
+          break;
+        }
+
+        const isFullRefund = charge.refunded === true;
+        console.info(`[stripe-webhook] Charge ${isFullRefund ? "fully" : "partially"} refunded for PI ${refundPiId}`);
+        const supabase = createAdminClient();
+
+        // Look up the order
+        const order = await getOrderByPaymentIntent(supabase, refundPiId);
+        if (!order) {
+          console.warn(`[stripe-webhook] No order found for PI ${refundPiId} on charge.refunded`);
+          break;
+        }
+
+        const newOrderStatus = isFullRefund ? "refunded" : "partially_refunded";
+        await supabase
+          .from("orders")
+          .update({ status: newOrderStatus })
+          .eq("id", order.id);
+
+        await logStripePaymentEvent(supabase, {
+          stripeEventId: event.id,
+          stripePaymentIntentId: refundPiId,
+          eventType: "charge.refunded",
+          eventId: order.event_id,
+          orderId: order.id,
+          amountDollars: charge.amount_refunded ? charge.amount_refunded / 100 : null,
+          currency: charge.currency ?? "cad",
+          customerEmail: charge.billing_details?.email ?? null,
+          status: newOrderStatus,
+          metadata: { charge_id: charge.id, full_refund: isFullRefund },
+        });
+
+        if (isFullRefund) {
+          // Mark all paid/checked_in tickets for this order as refunded
+          // Tickets are linked to order via order_line_id → order_lines → orders
+          const { data: orderLines } = await supabase
+            .from("order_lines")
+            .select("id")
+            .eq("order_id", order.id);
+
+          const orderLineIds = (orderLines ?? []).map((ol) => ol.id);
+          if (orderLineIds.length > 0) {
             const { data: refundedTickets, error: refundErr } = await supabase
               .from("tickets")
               .update({ status: "refunded" })
-              .eq("stripe_payment_intent_id", refundPiId)
+              .in("order_line_id", orderLineIds)
               .in("status", ["paid", "checked_in"])
-              .select("id");
+              .select("id, tier_id, order_line_id");
+
             if (refundErr) {
               console.error("[stripe-webhook] Failed to update tickets to refunded:", refundErr);
             } else if (refundedTickets && refundedTickets.length > 0) {
               console.info(`[stripe-webhook] Marked ${refundedTickets.length} ticket(s) as refunded for PI ${refundPiId}`);
-            }
-          } else {
-            // Partial refund — calculate how many tickets to refund based on amount
-            const refundAmount = charge.amount_refunded ?? 0;
-            const { data: allTickets } = await supabase
-              .from("tickets")
-              .select("id, price_paid")
-              .eq("stripe_payment_intent_id", refundPiId)
-              .in("status", ["paid", "checked_in"])
-              .order("created_at", { ascending: false });
-            if (allTickets && allTickets.length > 0) {
-              // Refund tickets from most recent first, up to the refunded amount
-              let remainingRefundCents = refundAmount;
-              const ticketsToRefund: string[] = [];
-              for (const t of allTickets) {
-                const ticketCents = Math.round(Number(t.price_paid ?? 0) * 100);
-                if (ticketCents > 0 && remainingRefundCents >= ticketCents) {
-                  ticketsToRefund.push(t.id);
-                  remainingRefundCents -= ticketCents;
+
+              // Log ticket_events for each refunded ticket
+              const ticketEventRows = refundedTickets.map((t) => ({
+                ticket_id: t.id,
+                event_type: "refunded" as const,
+                metadata: { charge_id: charge.id, order_id: order.id },
+              }));
+              await supabase.from("ticket_events").insert(ticketEventRows);
+
+              // Promote waitlist per tier — best-effort
+              const byTier = new Map<string, number>();
+              for (const t of refundedTickets) {
+                if (t.tier_id) {
+                  byTier.set(t.tier_id, (byTier.get(t.tier_id) ?? 0) + 1);
                 }
               }
-              if (ticketsToRefund.length > 0) {
-                const { error: partialErr } = await supabase
-                  .from("tickets")
-                  .update({ status: "refunded" })
-                  .in("id", ticketsToRefund);
-                if (partialErr) {
-                  console.error("[stripe-webhook] Partial refund update failed:", partialErr);
-                } else {
-                  console.info(`[stripe-webhook] Partially refunded ${ticketsToRefund.length}/${allTickets.length} ticket(s) for PI ${refundPiId}`);
+              const { notifyNextOnWaitlist } = await import("@/app/actions/ticket-waitlist");
+              for (const [tierId, count] of byTier.entries()) {
+                try {
+                  await notifyNextOnWaitlist(order.event_id, tierId, count);
+                } catch (err) {
+                  console.error("[stripe-webhook] waitlist notify failed (non-fatal):", err);
                 }
-              } else {
-                console.warn(`[stripe-webhook] Partial refund amount ${refundAmount} didn't match any ticket prices for PI ${refundPiId}`);
               }
             }
           }
         } else {
-          console.warn("[stripe-webhook] charge.refunded event has no payment_intent ID, skipping");
+          // Partial refund — update order_lines refunded_quantity based on Stripe refund amount
+          // Best-effort: log and let the operator reconcile via refunds page
+          console.info(
+            `[stripe-webhook] Partial refund ${charge.amount_refunded}¢ for PI ${refundPiId} — order ${order.id} marked partially_refunded. Manual ticket reconciliation may be needed.`
+          );
         }
         break;
       }
@@ -223,16 +378,31 @@ export async function POST(request: NextRequest) {
             : (charge.payment_intent as Stripe.PaymentIntent | null)?.id ?? null;
         if (failedPiId) {
           console.warn(`[stripe-webhook] Charge failed for PI ${failedPiId}: ${charge.failure_message ?? "unknown"}`);
-          // Clean up pending tickets (same as payment_intent.payment_failed)
           const supabase = createAdminClient();
-          const { data: failedTickets } = await supabase
-            .from("tickets")
-            .delete()
-            .eq("stripe_payment_intent_id", failedPiId)
-            .eq("status", "pending")
-            .select("id");
-          if (failedTickets && failedTickets.length > 0) {
-            console.info(`[stripe-webhook] Deleted ${failedTickets.length} pending ticket(s) for charge failure on PI ${failedPiId}`);
+          const order = await getOrderByPaymentIntent(supabase, failedPiId);
+          if (order) {
+            await supabase
+              .from("orders")
+              .update({ status: "failed" })
+              .eq("id", order.id);
+
+            // Delete pending tickets to release reserved capacity
+            const { data: orderLines } = await supabase
+              .from("order_lines")
+              .select("id")
+              .eq("order_id", order.id);
+            const orderLineIds = (orderLines ?? []).map((ol) => ol.id);
+            if (orderLineIds.length > 0) {
+              const { data: failedTickets } = await supabase
+                .from("tickets")
+                .delete()
+                .in("order_line_id", orderLineIds)
+                .eq("status", "pending")
+                .select("id");
+              if (failedTickets && failedTickets.length > 0) {
+                console.info(`[stripe-webhook] Deleted ${failedTickets.length} pending ticket(s) for charge failure on PI ${failedPiId}`);
+              }
+            }
           }
         }
         break;
@@ -249,41 +419,48 @@ export async function POST(request: NextRequest) {
             `[stripe-webhook] Charge disputed for PI ${disputePiId}, reason: ${disputeReason}`
           );
           const supabase = createAdminClient();
-          // Use "cancelled" status (no "disputed" enum value) but store dispute info in metadata
-          // Fetch existing tickets to preserve their metadata (avoid overwrite)
-          const { data: ticketsToDispute } = await supabase
-            .from("tickets")
-            .select("id, metadata")
-            .eq("stripe_payment_intent_id", disputePiId)
-            .in("status", ["paid", "checked_in"]);
+          const order = await getOrderByPaymentIntent(supabase, disputePiId);
+          if (!order) {
+            console.warn(`[stripe-webhook] No order found for PI ${disputePiId} on dispute`);
+            break;
+          }
 
-          const disputedTicketIds: string[] = [];
-          let disputeErr: { message: string } | null = null;
-          if (ticketsToDispute && ticketsToDispute.length > 0) {
-            for (const ticket of ticketsToDispute) {
-              const existingMetadata = (ticket.metadata && typeof ticket.metadata === "object") ? ticket.metadata as Record<string, unknown> : {};
-              const { error: updateErr } = await supabase
+          // Get order lines to find tickets
+          const { data: orderLines } = await supabase
+            .from("order_lines")
+            .select("id")
+            .eq("order_id", order.id);
+          const orderLineIds = (orderLines ?? []).map((ol) => ol.id);
+
+          if (orderLineIds.length > 0) {
+            const { data: ticketsToDispute } = await supabase
+              .from("tickets")
+              .select("id")
+              .in("order_line_id", orderLineIds)
+              .in("status", ["paid", "checked_in"]);
+
+            const ticketIds = (ticketsToDispute ?? []).map((t) => t.id);
+            if (ticketIds.length > 0) {
+              const { error: disputeErr } = await supabase
                 .from("tickets")
-                .update({
-                  status: "cancelled",
-                  metadata: { ...existingMetadata, disputed: true, dispute_reason: disputeReason, dispute_id: dispute.id },
-                })
-                .eq("id", ticket.id);
-              if (updateErr) {
-                disputeErr = updateErr;
-                console.error(`[stripe-webhook] Failed to update ticket ${ticket.id} for dispute:`, updateErr);
+                .update({ status: "cancelled" })
+                .in("id", ticketIds);
+              if (disputeErr) {
+                console.error("[stripe-webhook] Failed to update tickets for dispute:", disputeErr);
               } else {
-                disputedTicketIds.push(ticket.id);
+                console.info(
+                  `[stripe-webhook] Marked ${ticketIds.length} ticket(s) as cancelled (dispute) for PI ${disputePiId}`
+                );
+                // Log ticket_events
+                await supabase.from("ticket_events").insert(
+                  ticketIds.map((id) => ({
+                    ticket_id: id,
+                    event_type: "voided" as const,
+                    metadata: { dispute_id: dispute.id, dispute_reason: disputeReason },
+                  }))
+                );
               }
             }
-          }
-          const disputedTickets = disputedTicketIds.map(id => ({ id }));
-          if (disputeErr) {
-            console.error("[stripe-webhook] Failed to update tickets for dispute:", disputeErr);
-          } else if (disputedTickets && disputedTickets.length > 0) {
-            console.info(
-              `[stripe-webhook] Marked ${disputedTickets.length} ticket(s) as cancelled (dispute) for PI ${disputePiId}`
-            );
           }
         } else {
           console.warn("[stripe-webhook] charge.dispute.created event has no payment_intent ID, skipping");
@@ -299,44 +476,93 @@ export async function POST(request: NextRequest) {
         if (closedPiId && closedDispute.status === "won") {
           console.info(`[stripe-webhook] Dispute won for PI ${closedPiId}, restoring tickets`);
           const supabase = createAdminClient();
-          // Restore cancelled tickets that were marked from a dispute (have disputed=true in metadata)
-          // Fetch existing tickets to preserve their metadata (avoid overwrite)
-          const { data: ticketsToRestore } = await supabase
-            .from("tickets")
-            .select("id, metadata")
-            .eq("stripe_payment_intent_id", closedPiId)
-            .eq("status", "cancelled")
-            .filter("metadata->>disputed", "eq", "true");
+          const order = await getOrderByPaymentIntent(supabase, closedPiId);
+          if (!order) break;
 
-          const restoredTicketIds: string[] = [];
-          let restoreErr: { message: string } | null = null;
-          if (ticketsToRestore && ticketsToRestore.length > 0) {
-            for (const ticket of ticketsToRestore) {
-              const existingMetadata = (ticket.metadata && typeof ticket.metadata === "object") ? ticket.metadata as Record<string, unknown> : {};
-              const { error: updateErr } = await supabase
+          const { data: orderLines } = await supabase
+            .from("order_lines")
+            .select("id")
+            .eq("order_id", order.id);
+          const orderLineIds = (orderLines ?? []).map((ol) => ol.id);
+
+          if (orderLineIds.length > 0) {
+            const { data: ticketsToRestore } = await supabase
+              .from("tickets")
+              .select("id")
+              .in("order_line_id", orderLineIds)
+              .eq("status", "cancelled");
+
+            const ticketIds = (ticketsToRestore ?? []).map((t) => t.id);
+            if (ticketIds.length > 0) {
+              const { error: restoreErr } = await supabase
                 .from("tickets")
-                .update({
-                  status: "paid",
-                  metadata: { ...existingMetadata, disputed: false, dispute_resolved: true },
-                })
-                .eq("id", ticket.id);
-              if (updateErr) {
-                restoreErr = updateErr;
-                console.error(`[stripe-webhook] Failed to restore ticket ${ticket.id}:`, updateErr);
+                .update({ status: "paid" })
+                .in("id", ticketIds);
+              if (restoreErr) {
+                console.error("[stripe-webhook] Failed to restore disputed tickets:", restoreErr);
               } else {
-                restoredTicketIds.push(ticket.id);
+                console.info(`[stripe-webhook] Restored ${ticketIds.length} ticket(s) from dispute for PI ${closedPiId}`);
+                // Restore order to paid
+                await supabase
+                  .from("orders")
+                  .update({ status: "paid" })
+                  .eq("id", order.id);
               }
             }
-          }
-          const restoredTickets = restoredTicketIds.map(id => ({ id }));
-          if (restoreErr) {
-            console.error("[stripe-webhook] Failed to restore disputed tickets:", restoreErr);
-          } else if (restoredTickets && restoredTickets.length > 0) {
-            console.info(`[stripe-webhook] Restored ${restoredTickets.length} ticket(s) from dispute for PI ${closedPiId}`);
           }
         } else if (closedPiId) {
           console.info(`[stripe-webhook] Dispute closed (${closedDispute.status}) for PI ${closedPiId}`);
         }
+        break;
+      }
+      // ──────────────── Connect events ────────────────
+      // These arrive from the Connect webhook endpoint (scoped to connected accounts).
+      // The payouts table schema has been updated; Stripe Connect columns are
+      // managed separately. Log and acknowledge.
+      case "account.updated": {
+        const account = event.data.object as Stripe.Account;
+        console.info(
+          `[stripe-webhook] account.updated: ${account.id} charges=${account.charges_enabled} payouts=${account.payouts_enabled} details_submitted=${account.details_submitted}`
+        );
+        // Note: collectives table no longer has denormalized Stripe status columns.
+        // Stripe account status should be read directly from the Stripe API on demand.
+        break;
+      }
+      case "account.application.deauthorized": {
+        const deauthorizedAccountId = event.account;
+        console.warn(
+          `[stripe-webhook] account.application.deauthorized for account ${deauthorizedAccountId ?? "unknown"} — manual action required to unlink collective.`
+        );
+        break;
+      }
+      case "transfer.created": {
+        const transfer = event.data.object as Stripe.Transfer;
+        console.info(
+          `[stripe-webhook] transfer.created ${transfer.id} -> ${transfer.destination} — recorded for audit.`
+        );
+        break;
+      }
+      case "transfer.reversed": {
+        const transfer = event.data.object as Stripe.Transfer;
+        const isFullReversal =
+          (transfer.amount_reversed ?? 0) >= (transfer.amount ?? 0);
+        console.warn(
+          `[stripe-webhook] transfer.reversed ${transfer.id} ${isFullReversal ? "FULL" : "partial"} reversal — manual reconciliation may be needed.`
+        );
+        break;
+      }
+      case "payout.paid": {
+        const payout = event.data.object as Stripe.Payout;
+        console.info(
+          `[stripe-webhook] payout.paid ${payout.id} for account ${event.account ?? "unknown"} — recorded for audit.`
+        );
+        break;
+      }
+      case "payout.failed": {
+        const payout = event.data.object as Stripe.Payout;
+        console.warn(
+          `[stripe-webhook] payout.failed ${payout.id} for account ${event.account ?? "unknown"}: ${payout.failure_message ?? payout.failure_code}`
+        );
         break;
       }
       default:
@@ -360,7 +586,7 @@ export async function POST(request: NextRequest) {
       errMsgLower.includes("too many connections") ||
       errMsgLower.includes("connection terminated") ||
       errMsgLower.includes("connection pool") ||
-      /\b(53[0-9]{3}|57[A-Z0-9]{3}|08[0-9]{3})\b/.test(errMsg) || // Postgres connection/resource error codes (53xxx, 57xxx, 08xxx)
+      /\b(53[0-9]{3}|57[A-Z0-9]{3}|08[0-9]{3})\b/.test(errMsg) ||
       errMsgLower.includes("could not connect") ||
       errMsgLower.includes("503") ||
       errMsgLower.includes("502")
@@ -381,7 +607,15 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ received: true });
 }
 
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
+/**
+ * Handle checkout.session.completed — fulfill tickets from a Checkout Session.
+ * The checkout route must have created an order + order_lines + pending tickets
+ * before redirecting to Stripe. This handler transitions everything to paid.
+ */
+async function handleCheckoutCompleted(
+  session: Stripe.Checkout.Session,
+  stripeEventId: string
+) {
   const metadata = session.metadata;
 
   if (!metadata?.eventId || !metadata?.tierId || !metadata?.quantity) {
@@ -403,388 +637,177 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     console.error("[stripe-webhook] Invalid quantity in metadata:", metadata.quantity);
     return;
   }
+
   const paymentIntentId =
     typeof session.payment_intent === "string"
       ? session.payment_intent
       : session.payment_intent?.id ?? null;
 
+  const currency = (
+    (metadata.chargeCurrency || session.currency || "cad") as string
+  ).toLowerCase();
+
   const supabase = createAdminClient();
 
-  // IDEMPOTENCY CHECK: Prevent duplicate ticket creation on webhook retry
-  // Check for already-fulfilled (paid) tickets — not pending ones which we'll update
-  let existingPaidCount = 0;
-  if (paymentIntentId) {
-    const { count } = await supabase
-      .from("tickets")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", eventId)
-      .eq("stripe_payment_intent_id", paymentIntentId)
-      .in("status", ["paid", "checked_in"]);
-    existingPaidCount = count ?? 0;
-  }
-  if (existingPaidCount === 0) {
-    const { count } = await supabase
-      .from("tickets")
-      .select("*", { count: "exact", head: true })
-      .eq("event_id", eventId)
-      .filter("metadata->>checkout_session_id", "eq", session.id)
-      .in("status", ["paid", "checked_in"]);
-    existingPaidCount = count ?? 0;
-  }
+  // Look up the order by payment intent ID
+  const order = paymentIntentId
+    ? await getOrderByPaymentIntent(supabase, paymentIntentId)
+    : null;
 
-  if (existingPaidCount && existingPaidCount > 0) {
-    console.info(
-      `[stripe-webhook] Idempotency: paid tickets already exist for session ${session.id}` +
-      (paymentIntentId ? ` / PI ${paymentIntentId}` : "") +
-      `, skipping duplicate creation`
+  if (!order) {
+    console.error(
+      `[stripe-webhook] No order found for session ${session.id} (PI: ${paymentIntentId}) — cannot fulfill tickets`
     );
     return;
   }
 
-  // Log payment_succeeded now that we know this is a new fulfillment
-  void logPaymentEvent({
-    event_type: "payment_succeeded",
-    payment_intent_id: paymentIntentId,
-    event_id: eventId,
-    tier_id: tierId,
-    quantity,
-    amount_cents: session.amount_total ?? null,
-    currency: session.currency ?? "usd",
-    buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
+  // IDEMPOTENCY CHECK: if order is already paid, skip
+  if (order.status === "paid") {
+    console.info(
+      `[stripe-webhook] Idempotency: order ${order.id} already paid for session ${session.id}, skipping`
+    );
+    return;
+  }
+
+  // Mark order as paid
+  const { error: orderUpdateErr } = await supabase
+    .from("orders")
+    .update({ status: "paid" })
+    .eq("id", order.id);
+  if (orderUpdateErr) {
+    console.error("[stripe-webhook] Failed to update order status:", orderUpdateErr);
+    throw orderUpdateErr;
+  }
+
+  // Log to payment_events
+  void logStripePaymentEvent(supabase, {
+    stripeEventId,
+    stripePaymentIntentId: paymentIntentId,
+    eventType: "checkout.session.completed",
+    eventId,
+    orderId: order.id,
+    amountDollars: session.amount_total ? session.amount_total / 100 : null,
+    currency,
+    customerEmail: session.customer_email ?? session.customer_details?.email ?? null,
+    status: "paid",
     metadata: { checkout_session_id: session.id, flow: "checkout_session" },
   });
 
-  // Look up the tier to get the price
-  const { data: tier, error: tierError } = await supabase
-    .from("ticket_tiers")
-    .select("price")
-    .eq("id", tierId)
-    .maybeSingle();
+  // Get order lines for this order
+  const { data: orderLines } = await supabase
+    .from("order_lines")
+    .select("id, tier_id, quantity")
+    .eq("order_id", order.id);
 
-  if (tierError || !tier) {
-    console.error("[stripe-webhook] CRITICAL: Ticket tier not found, tierId:", tierId, "for session:", session.id, "error:", tierError);
-    void logPaymentEvent({
-      event_type: "fulfillment_failed",
-      payment_intent_id: paymentIntentId,
-      event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: session.amount_total ?? null,
-      currency: session.currency ?? "usd",
-      buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
-      error_message: `Tier not found: ${tierId}`,
-      metadata: { checkout_session_id: session.id },
-    });
-    return; // Don't throw — Stripe won't retry, and we've logged for investigation
-  }
+  const orderLineIds = (orderLines ?? []).map((ol) => ol.id);
 
-  // Calculate actual price paid, accounting for discounts
-  // The checkout route stores ticketPriceCents (discounted unit price in cents) and
-  // discountCents (per-ticket discount in cents) in session metadata
-  let pricePaid: number;
-  if (metadata.ticketPriceCents) {
-    // Use the exact discounted price from checkout (convert cents to dollars)
-    pricePaid = parseFloat((Number(metadata.ticketPriceCents) / 100).toFixed(2));
-  } else if (metadata.discountCents) {
-    // Fallback: subtract discount from tier price
-    pricePaid = parseFloat(Math.max(Number(tier.price) - Number(metadata.discountCents) / 100, 0).toFixed(2));
-  } else {
-    // No discount — full price
-    pricePaid = Number(tier.price);
-  }
+  // Find or create tickets — update pending tickets to paid first
+  let fulfilledTickets: { id: string }[] = [];
 
-  // NOTE: Capacity was already reserved at checkout creation (checkout/route.ts or
-  // create-payment-intent/route.ts). We skip re-reserving here to prevent double-decrement.
-  // The idempotency check above already prevents duplicate ticket creation on retries.
-
-  // Build ticket records — referrerToken is a user UUID (from ?ref= link)
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  let referrerToken = metadata.referrerToken && uuidRegex.test(metadata.referrerToken) ? metadata.referrerToken : null;
-  // Validate referrer user actually exists (prevents FK constraint violation)
-  if (referrerToken) {
-    const { data: referrerUser } = await supabase.from("users").select("id").eq("id", referrerToken).maybeSingle();
-    if (!referrerUser) referrerToken = null;
-  }
-  const buyerPhone = metadata.buyerPhone || null;
-  const tickets = Array.from({ length: quantity }, () => ({
-    event_id: eventId,
-    ticket_tier_id: tierId,
-    user_id: null, // Guest purchase — no user linked
-    status: "paid" as const,
-    price_paid: pricePaid,
-    currency: "usd",
-    stripe_payment_intent_id: paymentIntentId,
-    ticket_token: randomUUID(),
-    referred_by: referrerToken,
-    metadata: {
-      checkout_session_id: session.id,
-      customer_email: session.customer_email ?? session.customer_details?.email,
-      ...(buyerPhone && { customer_phone: buyerPhone }),
-      ...(referrerToken && { referrer_token: referrerToken }),
-      ...(session.metadata?.promoId && { promo_id: session.metadata.promoId, promo_code: session.metadata.promoCode }),
-      ...(session.metadata?.discountCents && { discount_cents: session.metadata.discountCents }),
-    },
-  }));
-
-  // Try to update pending tickets (created at checkout) to "paid" first.
-  // If pending tickets exist from checkout creation, update them instead of inserting new ones.
-  let insertedTickets: { id: string; ticket_token: string }[] | null = null;
-  const uuidValidate = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  let pendingTicketIds: string[] = [];
-  if (metadata.pendingTicketIds) {
-    try {
-      const parsed = JSON.parse(metadata.pendingTicketIds);
-      if (Array.isArray(parsed)) {
-        pendingTicketIds = parsed.filter((id: unknown) => typeof id === "string" && uuidValidate.test(id));
-      }
-    } catch (parseErr) {
-      console.error("[stripe-webhook] Failed to parse pendingTicketIds for session", session.id, ":", parseErr);
-      // Non-retryable — data corruption, not transient. Continue without pending ticket IDs.
-    }
-  }
-
-  if (pendingTicketIds.length > 0) {
-    const { data: updatedTickets, error: updateError } = await supabase
+  if (orderLineIds.length > 0) {
+    const { data: pendingTickets, error: pendingErr } = await supabase
       .from("tickets")
-      .update({
-        status: "paid",
-        price_paid: pricePaid,
-        currency: "usd",
-        stripe_payment_intent_id: paymentIntentId,
-        metadata: {
-          checkout_session_id: session.id,
-          customer_email: session.customer_email ?? session.customer_details?.email,
-          ...(buyerPhone && { customer_phone: buyerPhone }),
-          ...(referrerToken && { referrer_token: referrerToken }),
-          ...(session.metadata?.promoId && { promo_id: session.metadata.promoId, promo_code: session.metadata.promoCode }),
-          ...(session.metadata?.discountCents && { discount_cents: session.metadata.discountCents }),
-        },
-      })
-      .in("id", pendingTicketIds)
+      .update({ status: "paid" })
+      .in("order_line_id", orderLineIds)
       .eq("status", "pending")
-      .select("id, ticket_token");
+      .select("id");
 
-    if (!updateError && updatedTickets && updatedTickets.length > 0) {
-      insertedTickets = updatedTickets;
+    if (!pendingErr && pendingTickets && pendingTickets.length > 0) {
+      fulfilledTickets = pendingTickets;
       console.info(
-        `[stripe-webhook] Updated ${updatedTickets.length} pending ticket(s) to paid for session ${session.id}`
+        `[stripe-webhook] Updated ${fulfilledTickets.length} pending ticket(s) to paid for session ${session.id}`
       );
-    } else {
-      if (updateError) console.warn("[stripe-webhook] Failed to update pending tickets, falling back to insert:", updateError);
     }
   }
 
-  // Fallback: insert new tickets if no pending tickets were updated
-  if (!insertedTickets || insertedTickets.length === 0) {
-    // Use atomic RPC with advisory lock to prevent race with client fulfillment
-    try {
-      const { data: atomicResult, error: atomicError } = await supabase.rpc("fulfill_tickets_atomic", {
-        p_payment_intent_id: paymentIntentId ?? `session_${session.id}`,
-        p_event_id: eventId,
-        p_tier_id: tierId,
-        p_quantity: quantity,
-        p_price_paid: pricePaid,
-        p_currency: "usd",
-        p_buyer_email: session.customer_email ?? session.customer_details?.email ?? undefined,
-        p_referrer_token: referrerToken ?? undefined,
-        p_metadata: {
-          checkout_session_id: session.id,
-          customer_email: session.customer_email ?? session.customer_details?.email,
-          ...(buyerPhone && { customer_phone: buyerPhone }),
-          ...(referrerToken && { referrer_token: referrerToken }),
-          ...(session.metadata?.promoId && { promo_id: session.metadata.promoId, promo_code: session.metadata.promoCode }),
-          ...(session.metadata?.discountCents && { discount_cents: session.metadata.discountCents }),
-        },
-      });
-      if (atomicError) throw atomicError;
-      insertedTickets = atomicResult as unknown as { id: string; ticket_token: string }[];
-      console.info(`[stripe-webhook] Atomic fulfillment: ${insertedTickets?.length ?? 0} ticket(s) for session ${session.id}`);
-    } catch (atomicErr) {
-      // Fallback: plain insert (pre-migration compatibility)
-      console.warn("[stripe-webhook] Atomic RPC failed, falling back to plain insert:", atomicErr);
-      const { data: newTickets, error: insertError } = await supabase
-        .from("tickets")
-        .insert(tickets)
-        .select("id, ticket_token");
-
-      if (insertError) {
-        if (insertError.code === "23505") {
-          console.info(`[stripe-webhook] Tickets already exist for session ${session.id} (unique constraint), skipping`);
-          if (paymentIntentId) {
-            const { data: existing } = await supabase
-              .from("tickets")
-              .select("id, ticket_token")
-              .eq("event_id", eventId)
-              .eq("stripe_payment_intent_id", paymentIntentId);
-            insertedTickets = existing;
+  // If no pending tickets were updated, use the atomic RPC to create them
+  if (fulfilledTickets.length === 0) {
+    const targetOrderLine = orderLines?.[0];
+    if (targetOrderLine && order.party_id) {
+      try {
+        const { data: atomicResult, error: atomicError } = await supabase.rpc(
+          "fulfill_tickets_atomic",
+          {
+            p_event_id: eventId,
+            p_holder_party_id: order.party_id,
+            p_order_line_id: targetOrderLine.id,
+            p_quantity: quantity,
+            p_tier_id: tierId,
           }
-        } else {
-          console.error("[stripe-webhook] Failed to insert tickets:", insertError);
-          throw insertError;
-        }
-      } else {
-        insertedTickets = newTickets;
-        console.info(`[stripe-webhook] Created ${quantity} ticket(s) for event ${eventId}, session ${session.id}`);
+        );
+        if (atomicError) throw atomicError;
+        fulfilledTickets = (atomicResult ?? []) as { id: string }[];
+        console.info(
+          `[stripe-webhook] Atomic fulfillment: ${fulfilledTickets.length} ticket(s) for session ${session.id}`
+        );
+      } catch (atomicErr) {
+        console.error("[stripe-webhook] Atomic fulfillment failed:", atomicErr);
+        throw atomicErr;
       }
     }
   }
 
-  // Contact upsert — best-effort fan sync
-  try {
-    const contactEmail = (session.customer_email ?? session.customer_details?.email ?? "").toLowerCase().trim();
-    if (contactEmail) {
-      const { data: eventForContact } = await supabase
-        .from("events")
-        .select("collective_id")
-        .eq("id", eventId)
-        .is("deleted_at", null)
-        .maybeSingle();
-      if (eventForContact?.collective_id) {
-        const fullNameValue = (metadata.customerName || metadata.buyerName || session.customer_details?.name) ?? null;
-        const { error: insertContactErr } = await supabase.from("contacts").insert({
-          collective_id: eventForContact.collective_id,
-          contact_type: "fan",
-          email: contactEmail,
-          phone: buyerPhone,
-          full_name: fullNameValue,
-          source: "ticket",
-          total_events: 1,
-          total_spend: pricePaid * quantity,
-          last_seen_at: new Date().toISOString(),
-        });
-        if (insertContactErr?.code === "23505") {
-          // Existing contact — increment stats via raw SQL to avoid overwriting
-          const { error: rpcErr } = await supabase.rpc("execute_sql" as never, {
-            query: `UPDATE contacts SET total_events = COALESCE(total_events, 0) + 1, total_spend = COALESCE(total_spend, 0) + $1, last_seen_at = NOW(), updated_at = NOW() WHERE collective_id = $2 AND email = $3`,
-            params: [pricePaid * quantity, eventForContact.collective_id, contactEmail],
-          } as never);
-          if (rpcErr) {
-            // Fallback: simple update without increment
-            await supabase.from("contacts")
-              .update({ last_seen_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-              .eq("collective_id", eventForContact.collective_id)
-              .eq("email", contactEmail);
-          }
-          // Backfill phone if missing — never clobber existing value
-          if (buyerPhone) {
-            await supabase.from("contacts")
-              .update({ phone: buyerPhone })
-              .eq("collective_id", eventForContact.collective_id)
-              .eq("email", contactEmail)
-              .is("phone", null);
-          }
-        }
-
-        // Backfill attendee_profiles.phone if missing
-        if (buyerPhone) {
-          await supabase.from("attendee_profiles")
-            .update({ phone: buyerPhone })
-            .eq("collective_id", eventForContact.collective_id)
-            .eq("email", contactEmail)
-            .is("phone", null);
-        }
-      }
-    }
-  } catch (contactErr) {
-    console.error("[stripe-webhook] Contact upsert failed (non-blocking):", contactErr);
+  // Log ticket_events (purchased) for each fulfilled ticket
+  if (fulfilledTickets.length > 0) {
+    const ticketEventRows = fulfilledTickets.map((t) => ({
+      ticket_id: t.id,
+      event_type: "purchased" as const,
+      party_id: order.party_id,
+      metadata: { checkout_session_id: session.id, order_id: order.id },
+    }));
+    await supabase.from("ticket_events").insert(ticketEventRows);
   }
-
-  // Promo code uses are now claimed atomically BEFORE payment (Gap 22 fix).
-  // No need to claim here — the checkout/create-payment-intent routes handle it.
-  // If payment fails, the payment_intent.payment_failed webhook decrements the counter.
-
-  void logPaymentEvent({
-    event_type: "tickets_fulfilled",
-    payment_intent_id: paymentIntentId,
-    event_id: eventId,
-    tier_id: tierId,
-    quantity,
-    amount_cents: session.amount_total ?? null,
-    currency: session.currency ?? "usd",
-    buyer_email: session.customer_email ?? session.customer_details?.email ?? null,
-    metadata: { checkout_session_id: session.id, flow: "checkout_session" },
-  });
 
   // Return background work to run AFTER the response is sent to Stripe.
   // QR generation + email sending can take 10-30s and would cause Stripe timeouts.
   return {
     backgroundWork: async () => {
-      // Track ticket purchase
+      // Analytics tracking
       try {
         const { trackServerEvent } = await import("@/lib/track-server");
         await trackServerEvent("ticket_purchased", {
           eventId,
           quantity,
-          revenue: pricePaid * quantity,
           sessionId: session.id,
         });
       } catch { /* non-critical */ }
 
-      // Analytics tracking
       try {
-        const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
-        trackTicketSold(eventId, quantity, pricePaid * quantity);
-        const customerEmailForAnalytics = session.customer_email ?? session.customer_details?.email;
-        if (customerEmailForAnalytics) {
-          const { data: eventForAnalytics } = await supabase
-            .from("events")
-            .select("collective_id")
-            .eq("id", eventId)
-            .is("deleted_at", null)
-            .maybeSingle();
-          if (eventForAnalytics?.collective_id) {
-            upsertAttendeeProfile(eventForAnalytics.collective_id, customerEmailForAnalytics, eventId, pricePaid * quantity);
-          }
-        }
+        const { trackTicketSold } = await import("@/lib/analytics");
+        trackTicketSold(tierId, quantity);
       } catch { /* non-critical */ }
 
-      // Dedup: skip if email was already sent by the client action
-      if (insertedTickets && insertedTickets.length > 0) {
-        const { data: emailCheck } = await supabase
-          .from("tickets")
-          .select("metadata")
-          .eq("id", insertedTickets[0].id)
-          .maybeSingle();
-        if (emailCheck?.metadata && typeof emailCheck.metadata === "object" &&
-            (emailCheck.metadata as Record<string, unknown>).confirmation_email_sent === true) {
-          console.info("[stripe-webhook] Email already sent by client action, skipping");
-          return; // Exit background work early
-        }
-      }
+      if (fulfilledTickets.length === 0) return;
 
-      // Generate QR codes for each ticket FIRST, then include in email
+      // Generate QR codes for each ticket
+      const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
       const qrCodes: string[] = [];
-      if (insertedTickets && insertedTickets.length > 0) {
-        const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
-        const qrResults = await Promise.allSettled(
-          insertedTickets.map(async (ticket) => {
-            const checkInUrl = `${BASE_URL}/check-in/${ticket.ticket_token}`;
-            const qrDataUrl = await QRCode.toDataURL(checkInUrl, {
-              width: 400,
-              margin: 2,
-              color: { dark: "#000000", light: "#ffffff" },
-              errorCorrectionLevel: "H",
-            });
+      const qrResults = await Promise.allSettled(
+        fulfilledTickets.map(async (ticket) => {
+          const ticketUrl = `${BASE_URL}/ticket/${ticket.id}`;
+          const qrDataUrl = await QRCode.toDataURL(ticketUrl, {
+            width: 400,
+            margin: 2,
+            color: { dark: "#000000", light: "#ffffff" },
+            errorCorrectionLevel: "H",
+          });
+          await supabase
+            .from("tickets")
+            .update({ qr_code: qrDataUrl })
+            .eq("id", ticket.id);
+          return qrDataUrl;
+        })
+      );
 
-            await supabase
-              .from("tickets")
-              .update({ qr_code: qrDataUrl })
-              .eq("id", ticket.id);
-
-            return qrDataUrl;
-          })
-        );
-
-        for (const r of qrResults) {
-          if (r.status === "fulfilled") qrCodes.push(r.value);
-          else console.error("[stripe-webhook] QR generation failed:", r.reason);
-        }
-
-        console.info(
-          `[stripe-webhook] Generated ${qrCodes.length}/${insertedTickets.length} QR codes`
-        );
+      for (const r of qrResults) {
+        if (r.status === "fulfilled") qrCodes.push(r.value);
+        else console.error("[stripe-webhook] QR generation failed:", r.reason);
       }
+
+      console.info(
+        `[stripe-webhook] Generated ${qrCodes.length}/${fulfilledTickets.length} QR codes`
+      );
 
       // Send branded confirmation email with QR codes
       try {
@@ -793,50 +816,49 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
           console.warn(
             `[stripe-webhook] No buyer email available for session ${session.id}, skipping confirmation email`
           );
+          return;
         }
-        if (customerEmail) {
-          const { data: event } = await supabase
-            .from("events")
-            .select("title, starts_at, venues(name)")
-            .eq("id", eventId)
-            .is("deleted_at", null)
-            .maybeSingle();
 
-          const { data: tierInfo } = await supabase
-            .from("ticket_tiers")
-            .select("name")
-            .eq("id", tierId)
-            .maybeSingle();
+        const { data: eventRow } = await supabase
+          .from("events")
+          .select("title, starts_at, venue_name")
+          .eq("id", eventId)
+          .maybeSingle();
 
-          if (event) {
-            const venue = event.venues as unknown as { name: string } | null;
-            const { sendTicketConfirmation } = await import("@/lib/email/actions");
-            await sendTicketConfirmation({
-              to: customerEmail,
-              eventTitle: event.title || "Event",
-              eventDate: new Date(event.starts_at).toLocaleDateString("en", {
-                weekday: "long", month: "long", day: "numeric", year: "numeric",
-              }),
-              venueName: venue?.name || "TBA",
-              tierName: tierInfo?.name || "General Admission",
-              quantity,
-              totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
-              ticketLink: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
-              qrCodes: qrCodes.length > 0 ? qrCodes : undefined,
-              ticketTokens: insertedTickets?.map((t) => t.ticket_token) || [],
+        const { data: tierInfo } = await supabase
+          .from("ticket_tiers")
+          .select("name, price")
+          .eq("id", tierId)
+          .maybeSingle();
+
+        if (eventRow) {
+          const pricePaid = Number(tierInfo?.price ?? 0);
+          const { sendTicketConfirmation } = await import("@/lib/email/actions");
+          await sendTicketConfirmation({
+            to: customerEmail,
+            eventTitle: eventRow.title || "Event",
+            eventDate: new Date(eventRow.starts_at).toLocaleDateString("en", {
+              weekday: "long", month: "long", day: "numeric", year: "numeric",
+            }),
+            venueName: eventRow.venue_name || "TBA",
+            tierName: tierInfo?.name || "General Admission",
+            quantity,
+            totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
+            ticketLink: `${BASE_URL}/ticket/${fulfilledTickets[0]?.id || ""}`,
+            qrCodes: qrCodes.length > 0 ? qrCodes : undefined,
+            ticketTokens: fulfilledTickets.map((t) => t.id),
+          });
+          console.info("[stripe-webhook] Confirmation email sent with QR codes");
+
+          // Post-purchase hooks
+          try {
+            const { runPostPurchaseHooks } = await import("@/app/actions/post-purchase-hooks");
+            await runPostPurchaseHooks({
+              eventId,
+              buyerEmail: customerEmail,
+              ticketToken: fulfilledTickets[0]?.id || "",
             });
-            console.info("[stripe-webhook] Confirmation email sent with QR codes");
-
-            // Post-purchase hooks: referral nudge + milestone check
-            try {
-              const { runPostPurchaseHooks } = await import("@/app/actions/post-purchase-hooks");
-              await runPostPurchaseHooks({
-                eventId,
-                buyerEmail: customerEmail!,
-                ticketToken: insertedTickets?.[0]?.ticket_token || "",
-              });
-            } catch { /* non-critical */ }
-          }
+          } catch { /* non-critical */ }
         }
       } catch (emailErr) {
         console.error("[stripe-webhook] Email send failed (non-blocking):", emailErr);
@@ -845,18 +867,23 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
   };
 }
 
-// Handle embedded checkout (PaymentIntent) — same ticket creation logic
-async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent) {
+/**
+ * Handle payment_intent.succeeded — fulfill tickets from embedded/direct PaymentIntents.
+ * Skips if the PI originated from a Checkout Session (handled above) or if the PI
+ * metadata doesn't include eventId/tierId/quantity.
+ */
+async function handlePaymentIntentSucceeded(
+  paymentIntent: Stripe.PaymentIntent,
+  stripeEventId: string
+) {
   const metadata = paymentIntent.metadata;
 
   if (!metadata?.eventId || !metadata?.tierId || !metadata?.quantity) {
-    // Not a ticket purchase PaymentIntent (could be from Checkout Session which is handled above)
+    // Not a ticket purchase PaymentIntent
     return;
   }
 
   // If this PaymentIntent originated from a Checkout Session, skip entirely.
-  // The checkout.session.completed handler already created tickets and stored
-  // checkout_session_id in ticket metadata. Processing here would be a duplicate.
   const checkoutSessionId = metadata.checkoutSessionId ?? null;
   if (checkoutSessionId) {
     console.info(
@@ -864,10 +891,6 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
     );
     return;
   }
-
-  // The idempotency check below (lines ~651-665) will catch any duplicate tickets
-  // created by the checkout.session.completed handler, so no additional Stripe API
-  // call is needed here. The previous latest_charge retrieval was fragile and redundant.
 
   const eventId = metadata.eventId;
   const tierId = metadata.tierId;
@@ -878,309 +901,151 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
   }
 
   // SECURITY: Verify payment amount matches expected amount from metadata
-  // Prevents fulfillment on amount mismatches (currency glitches, replay attacks)
   const expectedCents = parseInt(metadata.totalAmountCents || metadata.baseAmountCents || "0", 10);
   if (expectedCents > 0 && paymentIntent.amount !== expectedCents) {
     console.error(
       `[stripe-webhook] AMOUNT MISMATCH: PI ${paymentIntent.id} charged ${paymentIntent.amount} cents but expected ${expectedCents} cents`
     );
-    void logPaymentEvent({
-      event_type: "fulfillment_failed",
-      payment_intent_id: paymentIntent.id,
-      event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: paymentIntent.amount,
-      currency: paymentIntent.currency,
-      buyer_email: metadata.buyerEmail ?? null,
-      metadata: { error: `Amount mismatch: got ${paymentIntent.amount}, expected ${expectedCents}` },
-    });
     return;
   }
 
   const buyerEmail = metadata.buyerEmail || paymentIntent.receipt_email;
-  const buyerPhone = metadata.buyerPhone || null;
   const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+  const currency = (
+    metadata.chargeCurrency || metadata.baseCurrency || paymentIntent.currency || "cad"
+  ).toLowerCase();
 
   const supabase = createAdminClient();
 
-  // IDEMPOTENCY CHECK: Prevent duplicate ticket creation.
-  // Only check for paid/checked_in tickets — pending ones will be updated to paid.
-  const { count: existingPaidCount } = await supabase
-    .from("tickets")
-    .select("*", { count: "exact", head: true })
-    .eq("event_id", eventId)
-    .eq("stripe_payment_intent_id", paymentIntent.id)
-    .in("status", ["paid", "checked_in"]);
+  // Look up the order by payment intent ID
+  const order = await getOrderByPaymentIntent(supabase, paymentIntent.id);
 
-  if (existingPaidCount && existingPaidCount > 0) {
-    console.info(
-      `[stripe-webhook] Idempotency: paid tickets already exist for PI ${paymentIntent.id}, skipping duplicate creation`
+  if (!order) {
+    console.error(
+      `[stripe-webhook] No order found for PI ${paymentIntent.id} — cannot fulfill tickets`
     );
     return;
   }
 
-  // Log payment_succeeded now that we know this is a new fulfillment
-  void logPaymentEvent({
-    event_type: "payment_succeeded",
-    payment_intent_id: paymentIntent.id,
-    event_id: eventId,
-    tier_id: tierId,
-    quantity,
-    amount_cents: paymentIntent.amount,
-    currency: paymentIntent.currency,
-    buyer_email: buyerEmail ?? null,
+  // IDEMPOTENCY CHECK: if order is already paid, skip
+  if (order.status === "paid") {
+    console.info(
+      `[stripe-webhook] Idempotency: order ${order.id} already paid for PI ${paymentIntent.id}, skipping`
+    );
+    return;
+  }
+
+  // Mark order as paid
+  const { error: orderUpdateErr } = await supabase
+    .from("orders")
+    .update({ status: "paid" })
+    .eq("id", order.id);
+  if (orderUpdateErr) {
+    console.error("[stripe-webhook] Failed to update order status:", orderUpdateErr);
+    throw orderUpdateErr;
+  }
+
+  // Log to payment_events
+  void logStripePaymentEvent(supabase, {
+    stripeEventId,
+    stripePaymentIntentId: paymentIntent.id,
+    eventType: "payment_intent.succeeded",
+    eventId,
+    orderId: order.id,
+    amountDollars: paymentIntent.amount / 100,
+    currency,
+    customerEmail: buyerEmail ?? null,
+    status: "paid",
     metadata: { flow: "payment_intent" },
   });
 
-  const { data: tier } = await supabase
-    .from("ticket_tiers")
-    .select("price")
-    .eq("id", tierId)
-    .maybeSingle();
+  // Get order lines
+  const { data: orderLines } = await supabase
+    .from("order_lines")
+    .select("id, tier_id, quantity")
+    .eq("order_id", order.id);
+  const orderLineIds = (orderLines ?? []).map((ol) => ol.id);
 
-  if (!tier) {
-    console.error("[stripe-webhook] CRITICAL: Ticket tier not found, tierId:", tierId, "for PI:", paymentIntent.id);
-    void logPaymentEvent({
-      event_type: "fulfillment_failed",
-      payment_intent_id: paymentIntent.id,
-      event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: paymentIntent.amount,
-      currency: paymentIntent.currency,
-      buyer_email: buyerEmail ?? null,
-      error_message: `Tier not found: ${tierId}`,
-      metadata: { flow: "payment_intent" },
-    });
-    return; // Don't throw — Stripe won't retry, and we've logged for investigation
-  }
-
-  // Calculate actual price paid, accounting for discounts
-  let pricePaid: number;
-  if (metadata.ticketPriceCents) {
-    pricePaid = parseFloat((Number(metadata.ticketPriceCents) / 100).toFixed(2));
-  } else if (metadata.discountCents) {
-    pricePaid = parseFloat(Math.max(Number(tier.price) - Number(metadata.discountCents) / 100, 0).toFixed(2));
-  } else {
-    pricePaid = Number(tier.price);
-  }
-
-  // NOTE: Capacity was already reserved at checkout creation (create-payment-intent/route.ts).
-  // We skip re-reserving here to prevent double-decrement.
-  // The idempotency check above already prevents duplicate ticket creation on retries.
-
-  const uuidRegex2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  let referrerToken = metadata.referrerToken && uuidRegex2.test(metadata.referrerToken) ? metadata.referrerToken : null;
-  if (referrerToken) {
-    const { data: referrerUser } = await supabase.from("users").select("id").eq("id", referrerToken).maybeSingle();
-    if (!referrerUser) referrerToken = null;
-  }
-  // Store base currency (USD) for organizer reporting, not the buyer's charge currency
-  const ticketCurrency = metadata.baseCurrency || "usd";
-
-  const ticketMetadata = {
-    payment_intent_id: paymentIntent.id,
-    customer_email: buyerEmail,
-    ...(buyerPhone && { customer_phone: buyerPhone }),
-    fulfilled_by: "webhook",
-    ...(metadata.chargeCurrency && metadata.chargeCurrency !== "usd" && {
-      charge_currency: metadata.chargeCurrency,
-      fx_rate: metadata.fxRate,
-      buyer_country: metadata.buyerCountry,
-    }),
-    ...(referrerToken && { referrer_token: referrerToken }),
-  };
-
-  // Try to update pending tickets (created at checkout) to "paid" first.
-  let insertedTickets: { id: string; ticket_token: string }[] | null = null;
+  let fulfilledTickets: { id: string }[] = [];
   let wasNewlyCreated = true;
-  let pendingTicketIds: string[] = [];
-  if (metadata.pendingTicketIds) {
-    try {
-      const parsed = JSON.parse(metadata.pendingTicketIds);
-      if (Array.isArray(parsed)) {
-        pendingTicketIds = parsed.filter((id: unknown) => typeof id === "string" && uuidRegex2.test(id));
-      }
-    } catch (parseErr) {
-      console.error("[stripe-webhook] Failed to parse pendingTicketIds for PI", paymentIntent.id, ":", parseErr);
-      // Non-retryable — data corruption, not transient. Continue without pending ticket IDs.
-    }
-  }
 
-  if (pendingTicketIds.length > 0) {
+  // Try to update pending tickets to paid first
+  if (orderLineIds.length > 0) {
     const { data: updatedTickets, error: updateError } = await supabase
       .from("tickets")
-      .update({
-        status: "paid",
-        price_paid: pricePaid,
-        currency: ticketCurrency,
-        stripe_payment_intent_id: paymentIntent.id,
-        referred_by: referrerToken,
-        metadata: ticketMetadata,
-      })
-      .in("id", pendingTicketIds)
+      .update({ status: "paid" })
+      .in("order_line_id", orderLineIds)
       .eq("status", "pending")
-      .select("id, ticket_token");
+      .select("id");
 
     if (!updateError && updatedTickets && updatedTickets.length > 0) {
-      insertedTickets = updatedTickets;
+      fulfilledTickets = updatedTickets;
       console.info(
         `[stripe-webhook] Updated ${updatedTickets.length} pending ticket(s) to paid for PI ${paymentIntent.id}`
       );
-    } else {
-      if (updateError) console.warn("[stripe-webhook] Failed to update pending tickets for PI, falling back:", updateError);
+    } else if (updateError) {
+      console.warn("[stripe-webhook] Failed to update pending tickets for PI, falling back:", updateError);
     }
   }
 
-  // Fallback: Use atomic fulfillment RPC or plain insert if no pending tickets were updated.
-  if (!insertedTickets || insertedTickets.length === 0) {
-    try {
-      const { data: atomicResult, error: atomicError } = await supabase.rpc("fulfill_tickets_atomic", {
-        p_payment_intent_id: paymentIntent.id,
-        p_event_id: eventId,
-        p_tier_id: tierId,
-        p_quantity: quantity,
-        p_price_paid: pricePaid,
-        p_currency: ticketCurrency,
-        p_buyer_email: buyerEmail ?? undefined,
-        p_referrer_token: referrerToken ?? undefined,
-        p_metadata: ticketMetadata,
-      });
+  // Check for already-paid tickets (idempotency after the order status check)
+  if (fulfilledTickets.length === 0 && orderLineIds.length > 0) {
+    const { data: existingPaid } = await supabase
+      .from("tickets")
+      .select("id")
+      .in("order_line_id", orderLineIds)
+      .in("status", ["paid", "checked_in"]);
 
-      if (atomicError) throw atomicError;
-      insertedTickets = atomicResult as unknown as { id: string; ticket_token: string }[];
-
-      if (insertedTickets && insertedTickets.length > 0) {
-        wasNewlyCreated = true; // We passed the idempotency check above, so these are new
-      }
-    } catch {
-      // Fallback: plain insert (for pre-migration compatibility)
-      const tickets = Array.from({ length: quantity }, () => ({
-        event_id: eventId,
-        ticket_tier_id: tierId,
-        user_id: null,
-        status: "paid" as const,
-        price_paid: pricePaid,
-        currency: ticketCurrency,
-        stripe_payment_intent_id: paymentIntent.id,
-        ticket_token: randomUUID(),
-        referred_by: referrerToken,
-        metadata: ticketMetadata,
-      }));
-
-      const { data, error: insertError } = await supabase
-        .from("tickets")
-        .insert(tickets)
-        .select("id, ticket_token");
-
-      if (insertError) {
-        // If unique constraint violation, tickets already exist (created by client action)
-        if (insertError.code === "23505") {
-          console.info(`[stripe-webhook] Tickets already exist for PI ${paymentIntent.id} (unique constraint), skipping`);
-          wasNewlyCreated = false;
-          const { data: existing } = await supabase
-            .from("tickets")
-            .select("id, ticket_token")
-            .eq("stripe_payment_intent_id", paymentIntent.id);
-          insertedTickets = existing;
-        } else {
-          console.error("[stripe-webhook] Failed to insert tickets:", insertError);
-          throw insertError;
-        }
-      } else {
-        insertedTickets = data;
-      }
+    if (existingPaid && existingPaid.length > 0) {
+      fulfilledTickets = existingPaid;
+      wasNewlyCreated = false;
+      console.info(
+        `[stripe-webhook] Tickets already paid for PI ${paymentIntent.id} — skipping creation`
+      );
     }
   }
 
-  console.info(`[stripe-webhook] ${wasNewlyCreated ? "Created" : "Found existing"} ${quantity} ticket(s) for PI ${paymentIntent.id}`);
-
-  // Contact upsert — best-effort fan sync
-  if (wasNewlyCreated) {
-    try {
-      const contactEmail = (buyerEmail ?? "").toLowerCase().trim();
-      if (contactEmail) {
-        const { data: eventForContact } = await supabase
-          .from("events")
-          .select("collective_id")
-          .eq("id", eventId)
-          .is("deleted_at", null)
-          .maybeSingle();
-        if (eventForContact?.collective_id) {
-          const fullNameValue = (metadata.buyerName || metadata.customerName) ?? null;
-          const { error: insertContactErr } = await supabase.from("contacts").insert({
-            collective_id: eventForContact.collective_id,
-            contact_type: "fan",
-            email: contactEmail,
-            phone: buyerPhone,
-            full_name: fullNameValue,
-            source: "ticket",
-            total_events: 1,
-            total_spend: pricePaid * quantity,
-            last_seen_at: new Date().toISOString(),
-          });
-          if (insertContactErr?.code === "23505") {
-            // Existing contact — increment stats via raw SQL to avoid overwriting
-            const { error: rpcErr2 } = await supabase.rpc("execute_sql" as never, {
-              query: `UPDATE contacts SET total_events = COALESCE(total_events, 0) + 1, total_spend = COALESCE(total_spend, 0) + $1, last_seen_at = NOW(), updated_at = NOW() WHERE collective_id = $2 AND email = $3`,
-              params: [pricePaid * quantity, eventForContact.collective_id, contactEmail],
-            } as never);
-            if (rpcErr2) {
-              // Fallback: simple update without increment
-              await supabase.from("contacts")
-                .update({ last_seen_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-                .eq("collective_id", eventForContact.collective_id)
-                .eq("email", contactEmail);
-            }
-            // Backfill phone if missing — never clobber existing
-            if (buyerPhone) {
-              await supabase.from("contacts")
-                .update({ phone: buyerPhone })
-                .eq("collective_id", eventForContact.collective_id)
-                .eq("email", contactEmail)
-                .is("phone", null);
-            }
+  // Fallback: use the atomic RPC if no tickets found
+  if (fulfilledTickets.length === 0) {
+    const targetOrderLine = orderLines?.[0];
+    if (targetOrderLine && order.party_id) {
+      try {
+        const { data: atomicResult, error: atomicError } = await supabase.rpc(
+          "fulfill_tickets_atomic",
+          {
+            p_event_id: eventId,
+            p_holder_party_id: order.party_id,
+            p_order_line_id: targetOrderLine.id,
+            p_quantity: quantity,
+            p_tier_id: tierId,
           }
-
-          // Backfill attendee_profiles.phone if missing
-          if (buyerPhone) {
-            await supabase.from("attendee_profiles")
-              .update({ phone: buyerPhone })
-              .eq("collective_id", eventForContact.collective_id)
-              .eq("email", contactEmail)
-              .is("phone", null);
-          }
-        }
+        );
+        if (atomicError) throw atomicError;
+        fulfilledTickets = (atomicResult ?? []) as { id: string }[];
+        wasNewlyCreated = true;
+        console.info(
+          `[stripe-webhook] Atomic fulfillment: ${fulfilledTickets.length} ticket(s) for PI ${paymentIntent.id}`
+        );
+      } catch (atomicErr) {
+        console.error("[stripe-webhook] Atomic fulfillment failed:", atomicErr);
+        throw atomicErr;
       }
-    } catch (contactErr) {
-      console.error("[stripe-webhook] Contact upsert failed (non-blocking):", contactErr);
     }
   }
 
-  // Only log fulfillment and claim promo if tickets were NEWLY created.
-  // If they pre-existed (client action beat the webhook), skip to avoid double-counting.
-  if (wasNewlyCreated) {
-    void logPaymentEvent({
-      event_type: "tickets_fulfilled",
-      payment_intent_id: paymentIntent.id,
-      event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: paymentIntent.amount,
-      currency: paymentIntent.currency,
-      buyer_email: buyerEmail ?? null,
-      metadata: { flow: "payment_intent" },
-    });
+  console.info(
+    `[stripe-webhook] ${wasNewlyCreated ? "Created" : "Found existing"} ${fulfilledTickets.length} ticket(s) for PI ${paymentIntent.id}`
+  );
 
-    // Promo code uses are now claimed atomically BEFORE payment (Gap 22 fix).
-    // No need to claim here — the create-payment-intent route handles it.
-    // If payment fails, the payment_intent.payment_failed webhook decrements the counter.
-    if (false && metadata.promoId) {
-      // Kept for reference — this block is intentionally disabled (Gap 22)
-    }
-  } else {
-    console.info(`[stripe-webhook] Tickets pre-existed for PI ${paymentIntent.id}, skipping promo/analytics`);
+  // Log ticket_events for newly created/activated tickets
+  if (wasNewlyCreated && fulfilledTickets.length > 0) {
+    const ticketEventRows = fulfilledTickets.map((t) => ({
+      ticket_id: t.id,
+      event_type: "purchased" as const,
+      party_id: order.party_id ?? null,
+      metadata: { payment_intent_id: paymentIntent.id, order_id: order.id },
+    }));
+    await supabase.from("ticket_events").insert(ticketEventRows);
   }
 
   // Return background work to run AFTER the response is sent to Stripe
@@ -1189,89 +1054,63 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
       // Analytics tracking — only if tickets were newly created
       if (wasNewlyCreated) {
         try {
-          const { trackTicketSold, upsertAttendeeProfile } = await import("@/lib/analytics");
-          trackTicketSold(eventId, quantity, pricePaid * quantity);
-          if (buyerEmail) {
-            const { data: eventForAnalytics } = await supabase
-              .from("events")
-              .select("collective_id")
-              .eq("id", eventId)
-              .is("deleted_at", null)
-              .maybeSingle();
-            if (eventForAnalytics?.collective_id) {
-              upsertAttendeeProfile(eventForAnalytics.collective_id, buyerEmail, eventId, pricePaid * quantity);
-            }
-          }
+          const { trackTicketSold } = await import("@/lib/analytics");
+          trackTicketSold(tierId, quantity);
         } catch (err) {
           console.error("[stripe-webhook] Analytics tracking failed (non-blocking):", err);
         }
       }
 
-      // Dedup: skip if email was already sent by the client action
-      if (insertedTickets && insertedTickets.length > 0) {
-        const { data: emailCheck } = await supabase
-          .from("tickets")
-          .select("metadata")
-          .eq("id", insertedTickets[0].id)
-          .maybeSingle();
-        if (emailCheck?.metadata && typeof emailCheck.metadata === "object" &&
-            (emailCheck.metadata as Record<string, unknown>).confirmation_email_sent === true) {
-          console.info("[stripe-webhook] Email already sent by client action, skipping");
-          return; // Exit background work early
-        }
-      }
+      if (fulfilledTickets.length === 0) return;
 
       // Generate QR codes FIRST, then include in email
       const piQrCodes: string[] = [];
-      if (insertedTickets && insertedTickets.length > 0) {
-        const qrResults = await Promise.allSettled(
-          insertedTickets.map(async (ticket) => {
-            const qrDataUrl = await QRCode.toDataURL(
-              `${BASE_URL}/check-in/${ticket.ticket_token}`,
-              { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
-            );
-            await supabase.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
-            return qrDataUrl;
-          })
-        );
-        for (const r of qrResults) {
-          if (r.status === "fulfilled") piQrCodes.push(r.value);
-          else console.error("[stripe-webhook] QR failed:", r.reason);
-        }
+      const qrResults = await Promise.allSettled(
+        fulfilledTickets.map(async (ticket) => {
+          const qrDataUrl = await QRCode.toDataURL(
+            `${BASE_URL}/ticket/${ticket.id}`,
+            { width: 400, margin: 2, color: { dark: "#000000", light: "#ffffff" }, errorCorrectionLevel: "H" }
+          );
+          await supabase.from("tickets").update({ qr_code: qrDataUrl }).eq("id", ticket.id);
+          return qrDataUrl;
+        })
+      );
+      for (const r of qrResults) {
+        if (r.status === "fulfilled") piQrCodes.push(r.value);
+        else console.error("[stripe-webhook] QR failed:", r.reason);
       }
 
       // Send confirmation email with QR codes
       try {
         if (buyerEmail) {
-          const { data: event } = await supabase
+          const { data: eventRow } = await supabase
             .from("events")
-            .select("title, starts_at, venues(name)")
+            .select("title, starts_at, venue_name")
             .eq("id", eventId)
-            .is("deleted_at", null)
             .maybeSingle();
 
           const { data: tierInfo } = await supabase
             .from("ticket_tiers")
-            .select("name")
+            .select("name, price")
             .eq("id", tierId)
             .maybeSingle();
 
-          if (event) {
-            const venue = event.venues as unknown as { name: string } | null;
+          if (eventRow) {
+            const pricePaid = Number(tierInfo?.price ?? 0);
             const { sendTicketConfirmation } = await import("@/lib/email/actions");
             await sendTicketConfirmation({
               to: buyerEmail,
-              eventTitle: event.title || "Event",
-              eventDate: new Date(event.starts_at).toLocaleDateString("en", {
+              eventTitle: eventRow.title || "Event",
+              eventDate: new Date(eventRow.starts_at).toLocaleDateString("en", {
                 weekday: "long", month: "long", day: "numeric", year: "numeric",
               }),
-              venueName: venue?.name || "TBA",
+              venueName: eventRow.venue_name || "TBA",
               tierName: tierInfo?.name || "General Admission",
               quantity,
               totalPrice: `$${(pricePaid * quantity).toFixed(2)}`,
-              ticketLink: `${BASE_URL}/ticket/${insertedTickets?.[0]?.ticket_token || ""}`,
+              ticketLink: `${BASE_URL}/ticket/${fulfilledTickets[0]?.id || ""}`,
               qrCodes: piQrCodes.length > 0 ? piQrCodes : undefined,
-              ticketTokens: insertedTickets?.map((t) => t.ticket_token) || [],
+              ticketTokens: fulfilledTickets.map((t) => t.id),
             });
           }
         }
@@ -1282,7 +1121,7 @@ async function handlePaymentIntentSucceeded(paymentIntent: Stripe.PaymentIntent)
             await runPostPurchaseHooks({
               eventId,
               buyerEmail,
-              ticketToken: insertedTickets?.[0]?.ticket_token || "",
+              ticketToken: fulfilledTickets[0]?.id || "",
             });
           } catch { /* non-critical */ }
         }

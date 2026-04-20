@@ -61,7 +61,7 @@ const SEGMENT_BADGE_STYLES: Record<string, string> = {
 };
 
 const ROLE_BADGE_STYLES: Record<string, string> = {
-  artist: "bg-[#7B2FF7]/15 text-[#9D5CFF] border-[#7B2FF7]/25",
+  artist: "bg-nocturn/15 text-nocturn-light border-nocturn/25",
   venue: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   photographer: "bg-pink-500/10 text-pink-400 border-pink-500/20",
   videographer: "bg-orange-500/10 text-orange-400 border-orange-500/20",
@@ -139,7 +139,7 @@ export function ContactDetailSheet({
     setEditName(c.fullName ?? "");
     setEditEmail(c.email ?? "");
     setEditPhone(c.phone ?? "");
-    setEditInstagram(c.instagram ?? "");
+    setEditInstagram("");
     setEditRole(c.role ?? "");
     setEditTags(c.tags ?? []);
     setEditNotes(c.notes ?? "");
@@ -188,7 +188,6 @@ export function ContactDetailSheet({
         fullName: editName || undefined,
         email: editEmail || undefined,
         phone: editPhone || undefined,
-        instagram: editInstagram || undefined,
         ...(contact.contactType === "industry" && editRole
           ? { role: editRole }
           : {}),
@@ -548,19 +547,6 @@ export function ContactDetailSheet({
                     </a>
                   </div>
                 )}
-                {contact.instagram && (
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Instagram className="h-3 w-3 shrink-0" />
-                    <a
-                      href={`https://instagram.com/${contact.instagram.replace(/^@/, "")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hover:text-pink-400 transition-colors"
-                    >
-                      @{contact.instagram.replace(/^@/, "")}
-                    </a>
-                  </div>
-                )}
                 <div className="flex items-center gap-3 pt-1 text-xs text-muted-foreground">
                   {(contact.totalEvents ?? 0) > 0 && (
                     <span className="flex items-center gap-1">
@@ -664,7 +650,7 @@ export function ContactDetailSheet({
                               </p>
                             )}
                           </div>
-                          <span className="text-[11px] text-muted-foreground/60 shrink-0 mt-0.5">
+                          <span className="text-[11px] text-muted-foreground/70 shrink-0 mt-0.5">
                             {relativeDate(entry.date)}
                           </span>
                         </div>

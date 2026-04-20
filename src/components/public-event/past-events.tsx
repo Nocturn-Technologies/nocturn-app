@@ -20,7 +20,7 @@ export function PastEvents({ events, collectiveSlug, collectiveName }: PastEvent
 
   return (
     <div className="space-y-3">
-      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.25em] text-white/40">
+      <h2 className="font-heading text-[11px] font-semibold uppercase tracking-[0.25em] text-white/60">
         Previous events by {collectiveName}
       </h2>
       <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
@@ -59,7 +59,7 @@ export function PastEvents({ events, collectiveSlug, collectiveName }: PastEvent
                   <p className="truncate text-sm font-medium text-white/80 group-hover:text-white transition-colors">
                     {event.title}
                   </p>
-                  <p className="text-xs text-white/40">{dateStr}</p>
+                  <p className="text-xs text-white/60">{dateStr}</p>
                 </div>
               </div>
             </Link>

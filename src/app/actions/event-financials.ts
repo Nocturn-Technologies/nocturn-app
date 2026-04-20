@@ -3,6 +3,7 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { revalidatePath } from "next/cache";
+import { getProjectedBarRevenue, readEventCommercialConfig } from "@/lib/event-commercials";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -20,6 +21,11 @@ export interface ExpenseRow {
   description: string;
   category: string;
   amount: number;
+  // Legacy FX fields — kept for UI compatibility but always null in new schema
+  originalAmount: number | null;
+  originalCurrency: string | null;
+  fxRate: number | null;
+  fxLockedAt: string | null;
 }
 
 export interface RevenueLineRow {
@@ -30,7 +36,7 @@ export interface RevenueLineRow {
 }
 
 export interface ArtistFeeRow {
-  id: string;           // event_artists composite id
+  id: string;
   artistName: string;
   fee: number;
 }
@@ -38,27 +44,25 @@ export interface ArtistFeeRow {
 export interface EventFinancials {
   eventId: string;
   eventTitle: string;
+  /**
+   * Always 'cad' — the new schema removed per-event currency and
+   * collectives.default_currency. All amounts are in CAD.
+   */
+  currency: string;
   ticketTiers: TicketTierRow[];
   expenses: ExpenseRow[];
   revenueLines: RevenueLineRow[];
   artistFees: ArtistFeeRow[];
   // Calculated totals
-  // Note: Stripe + Nocturn fees are NOT in this view. Buyers pay them at
-  // checkout (the buyer fee on top of face value covers both), so the
-  // organizer keeps 100% of grossRevenue. Showing those line items here
-  // confused promoters into thinking the fees came out of their pocket.
   ticketRevenue: number;
   additionalRevenue: number;
   grossRevenue: number;
   totalTicketsSold: number;
   totalExpenses: number;
   totalArtistFees: number;
-  // Bar minimum shortfall: amount the organizer owes the venue when actual
-  // bar sales fall under the contracted minimum (max(0, barMinimum - actual)).
-  // 0 if there's no minimum or it was met.
   barShortfall: number;
   profitLoss: number;
-  // Event-level financial fields
+  // Event-level financial fields — null in new schema (columns removed)
   venueCost: number | null;
   venueDeposit: number | null;
   barMinimum: number | null;
@@ -90,7 +94,7 @@ async function verifyOwnership(userId: string, eventId: string) {
 
   const { data: event, error: eventError } = await admin
     .from("events")
-    .select("id, collective_id, title, venue_cost, venue_deposit, bar_minimum, estimated_bar_revenue, actual_bar_revenue")
+    .select("id, collective_id, title, metadata")
     .eq("id", eventId)
     .maybeSingle();
 
@@ -123,126 +127,131 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
     const admin = createAdminClient();
     const event = ownership.event;
 
-    // Parallel queries
-    const [tiersRes, ticketsRes, expensesRes, revenueRes, artistsRes] = await Promise.all([
+    // All amounts are in CAD — new schema removed per-event currency columns
+    const reportingCurrency = "cad";
+
+    // Parallel queries.
+    // Revenue now comes from orders (paid), not individual ticket price_paid.
+    // ticket_tiers has tickets_sold counter; use orders + order_lines for revenue breakdown per tier.
+    // order_lines are fetched in a second pass after we have the order IDs.
+    const [tiersRes, ordersRes, expensesRes, artistsRes] = await Promise.all([
       admin
         .from("ticket_tiers")
-        .select("id, name, price, capacity, sort_order")
+        .select("id, name, price, capacity, tickets_sold, sort_order")
         .eq("event_id", eventId)
         .order("sort_order"),
       admin
-        .from("tickets")
-        .select("id, ticket_tier_id, price_paid, status")
+        .from("orders")
+        .select("id, total, subtotal, platform_fee, stripe_fee")
         .eq("event_id", eventId)
-        .in("status", ["paid", "checked_in"]),
+        .eq("status", "paid"),
       admin
-        .from("expenses")
-        .select("id, description, category, amount")
-        .eq("event_id", eventId)
-        .order("created_at"),
-      admin
-        .from("event_revenue")
+        .from("event_expenses")
         .select("id, description, category, amount")
         .eq("event_id", eventId)
         .order("created_at"),
       admin
         .from("event_artists")
-        .select("event_id, artist_id, fee, artists(name)")
+        .select("id, event_id, name, fee")
         .eq("event_id", eventId),
     ]);
 
-    if (tiersRes.error || ticketsRes.error || expensesRes.error || revenueRes.error || artistsRes.error) {
-      console.error("[getEventFinancials]", tiersRes.error || ticketsRes.error || expensesRes.error || revenueRes.error || artistsRes.error);
+    if (tiersRes.error || ordersRes.error || expensesRes.error || artistsRes.error) {
+      console.error("[getEventFinancials]", tiersRes.error || ordersRes.error || expensesRes.error || artistsRes.error);
       return { error: "Failed to load financial data", data: null };
     }
 
     const tiers = tiersRes.data ?? [];
-    const tickets = ticketsRes.data ?? [];
-    const expenses = expensesRes.data ?? [];
-    const revenueLinesData = revenueRes.data ?? [];
+    const orders = ordersRes.data ?? [];
     const eventArtists = artistsRes.data ?? [];
 
-    // Build ticket tier rows with sold counts
+    // Fetch order lines for the paid orders in a second pass (avoids the placeholder hack)
+    let orderLines: Array<{ tier_id: string; quantity: number; subtotal: number; refunded_quantity: number }> = [];
+    if (orders.length > 0) {
+      const orderIds = orders.map((o) => o.id);
+      const { data: linesData, error: linesError } = await admin
+        .from("order_lines")
+        .select("tier_id, quantity, subtotal, refunded_quantity")
+        .in("order_id", orderIds);
+      if (linesError) {
+        console.error("[getEventFinancials] order_lines error:", linesError.message);
+      }
+      orderLines = linesData ?? [];
+    }
+
+    // Build tier revenue from order_lines (net of refunded quantity)
+    // order_lines.subtotal = quantity * unit_price; for refunds we scale proportionally.
+    const tierRevenueMap: Record<string, number> = {};
+    const tierSoldMap: Record<string, number> = {};
+    for (const line of orderLines) {
+      const netQty = line.quantity - (line.refunded_quantity ?? 0);
+      const unitPrice = line.quantity > 0 ? line.subtotal / line.quantity : 0;
+      tierRevenueMap[line.tier_id] = (tierRevenueMap[line.tier_id] ?? 0) + netQty * unitPrice;
+      tierSoldMap[line.tier_id] = (tierSoldMap[line.tier_id] ?? 0) + netQty;
+    }
+
+    // Build ticket tier rows
     const ticketTiers: TicketTierRow[] = tiers.map((tier) => {
-      const tierTickets = tickets.filter((t) => t.ticket_tier_id === tier.id);
-      const revenue = tierTickets.reduce((sum, t) => sum + (Number(t.price_paid) || 0), 0);
+      const revenue = tierRevenueMap[tier.id] ?? 0;
+      const sold = tierSoldMap[tier.id] ?? tier.tickets_sold ?? 0;
       return {
         id: tier.id,
         name: tier.name,
         price: Number(tier.price),
         capacity: tier.capacity ?? 0,
-        ticketsSold: tierTickets.length,
+        ticketsSold: sold,
         revenue: Math.round(revenue * 100) / 100,
       };
     });
 
-    // Build expense rows
+    // expense_expenses has no metadata or currency columns in the new schema.
+    // FX fields are always null for these rows.
+    const expenses = expensesRes.data ?? [];
     const expenseRows: ExpenseRow[] = expenses.map((e) => ({
       id: e.id,
       description: e.description ?? "",
       category: e.category ?? "other",
       amount: Number(e.amount) || 0,
+      originalAmount: null,
+      originalCurrency: null,
+      fxRate: null,
+      fxLockedAt: null,
     }));
 
-    // Build revenue line rows
-    const revenueLineRows: RevenueLineRow[] = revenueLinesData.map((r) => ({
-      id: r.id,
-      description: r.description ?? "",
-      category: r.category ?? "other",
-      amount: Number(r.amount) || 0,
+    // No event_revenue table in new schema — revenue lines are always empty.
+    // UI components receive an empty array and render nothing for this section.
+    const revenueLineRows: RevenueLineRow[] = [];
+
+    // Artist fee rows — name is now a direct column on event_artists
+    const artistFeeRows: ArtistFeeRow[] = eventArtists.map((ea) => ({
+      id: ea.id,
+      artistName: ea.name ?? "Unknown Artist",
+      fee: Number(ea.fee) || 0,
     }));
 
-    // Build artist fee rows
-    const artistFeeRows: ArtistFeeRow[] = eventArtists.map((ea) => {
-      const artist = ea.artists as unknown as { name: string } | null;
-      return {
-        id: `${ea.event_id}_${ea.artist_id}`,
-        artistName: artist?.name ?? "Unknown Artist",
-        fee: Number(ea.fee) || 0,
-      };
-    });
-
-    // Calculate totals
-    const ticketRevenue = ticketTiers.reduce((sum, t) => sum + t.revenue, 0);
-    const additionalRevenue = revenueLineRows.reduce((sum, r) => sum + r.amount, 0);
-    const grossRevenue = ticketRevenue + additionalRevenue;
+    // Calculate totals from orders (source of truth for revenue)
+    const ticketRevenue = orders.reduce((sum, o) => sum + (Number(o.subtotal) || 0), 0);
     const totalTicketsSold = ticketTiers.reduce((sum, t) => sum + t.ticketsSold, 0);
     const totalExpenses = expenseRows.reduce((sum, e) => sum + e.amount, 0);
     const totalArtistFees = artistFeeRows.reduce((sum, a) => sum + a.fee, 0);
 
-    // Stripe + Nocturn fees are buyer-paid — Nocturn is the merchant of
-    // record, so neither comes out of the organizer's pocket. The P&L here
-    // is purely from the organizer's perspective: revenue is the full
-    // ticket face value, expenses are the costs they actually write checks
-    // for (artists, venue, gear, promo, etc.).
-    const venueCostNum = event.venue_cost ? Number(event.venue_cost) : 0;
-    const venueDepositNum = event.venue_deposit ? Number(event.venue_deposit) : 0;
-
-    // Bar minimum shortfall: if venue requires a $X bar minimum and actual
-    // sales fell short, the organizer eats the difference. Only counts when
-    // both barMinimum and actualBarRevenue are set — if actual isn't filled
-    // in yet (event hasn't happened, or organizer hasn't reconciled), we
-    // can't compute a real shortfall, so it's $0.
-    const barMin = event.bar_minimum ? Number(event.bar_minimum) : 0;
-    const actualBar = event.actual_bar_revenue != null ? Number(event.actual_bar_revenue) : null;
-    const barShortfall =
-      barMin > 0 && actualBar != null && actualBar < barMin
-        ? Math.round((barMin - actualBar) * 100) / 100
-        : 0;
-
-    const profitLoss =
-      grossRevenue -
-      totalExpenses -
-      totalArtistFees -
-      venueCostNum -
-      venueDepositNum -
-      barShortfall;
+    const commercial = readEventCommercialConfig(event.metadata);
+    const estimatedBarRevenue = getProjectedBarRevenue(commercial);
+    // additionalRevenue is display-only (projected bar share) — NOT counted in
+    // actual P&L since bar revenue is not collected by the collective until wrap.
+    const additionalRevenue = estimatedBarRevenue ?? 0;
+    const grossRevenue = ticketRevenue; // actual collected revenue only
+    const projectedBarSales = commercial.projectedBarSales ?? 0;
+    const barMinimum = commercial.barMinimum;
+    const barShortfall = barMinimum != null ? Math.max(0, barMinimum - projectedBarSales) : 0;
+    const profitLoss = grossRevenue - totalExpenses - totalArtistFees;
 
     return {
       error: null,
       data: {
         eventId,
         eventTitle: event.title,
+        currency: reportingCurrency,
         ticketTiers,
         expenses: expenseRows,
         revenueLines: revenueLineRows,
@@ -253,13 +262,13 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
         totalTicketsSold,
         totalExpenses: Math.round(totalExpenses * 100) / 100,
         totalArtistFees: Math.round(totalArtistFees * 100) / 100,
-        barShortfall,
+        barShortfall: Math.round(barShortfall * 100) / 100,
         profitLoss: Math.round(profitLoss * 100) / 100,
-        venueCost: event.venue_cost ? Number(event.venue_cost) : null,
-        venueDeposit: event.venue_deposit ? Number(event.venue_deposit) : null,
-        barMinimum: event.bar_minimum ? Number(event.bar_minimum) : null,
-        estimatedBarRevenue: event.estimated_bar_revenue ? Number(event.estimated_bar_revenue) : null,
-        actualBarRevenue: actualBar,
+        venueCost: commercial.venueCost,
+        venueDeposit: commercial.venueDeposit,
+        barMinimum,
+        estimatedBarRevenue,
+        actualBarRevenue: null,
       },
     };
   } catch (err) {
@@ -270,15 +279,9 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
 
 // ── Add Expense ──────────────────────────────────────────────────────
 
-const VALID_EXPENSE_CATEGORIES = [
-  "talent", "venue", "production", "sound", "lighting",
-  "staffing", "security", "marketing", "hospitality",
-  "transportation", "equipment", "decor", "insurance",
-  "permits", "booking_fee",
-  // Legacy values still accepted for backward compat
-  "dj", "artist", "promotion", "staff", "miscellaneous",
-  "other",
-];
+// Canonical + legacy categories — single source of truth in
+// `@/lib/expense-categories`
+import { ACCEPTED_EXPENSE_CATEGORIES as VALID_EXPENSE_CATEGORIES } from "@/lib/expense-categories";
 
 export async function addExpense(eventId: string, data: { description: string; category: string; amount: number }) {
   try {
@@ -301,14 +304,16 @@ export async function addExpense(eventId: string, data: { description: string; c
     if (ownership.error) return { error: ownership.error };
 
     const admin = createAdminClient();
+    // event_expenses: event_id, category, description, amount, is_paid, created_by
     const { error } = await admin
-      .from("expenses")
+      .from("event_expenses")
       .insert({
         event_id: eventId,
-        collective_id: ownership.collectiveId!,
-        description: desc,
         category,
+        description: desc,
         amount,
+        is_paid: false,
+        created_by: user.id,
       });
 
     if (error) return { error: "Failed to add expense" };
@@ -349,7 +354,7 @@ export async function updateExpense(expenseId: string, data: { description?: str
 
     // Get expense to find event_id for ownership check
     const { data: expense, error: expenseLookupError } = await admin
-      .from("expenses")
+      .from("event_expenses")
       .select("event_id")
       .eq("id", expenseId)
       .maybeSingle();
@@ -366,7 +371,7 @@ export async function updateExpense(expenseId: string, data: { description?: str
     if (data.amount !== undefined) updatePayload.amount = Math.round(data.amount * 100) / 100;
 
     const { error } = await admin
-      .from("expenses")
+      .from("event_expenses")
       .update(updatePayload)
       .eq("id", expenseId);
 
@@ -393,7 +398,7 @@ export async function deleteExpense(expenseId: string) {
     const admin = createAdminClient();
 
     const { data: expense, error: expenseLookupError } = await admin
-      .from("expenses")
+      .from("event_expenses")
       .select("event_id")
       .eq("id", expenseId)
       .maybeSingle();
@@ -405,7 +410,7 @@ export async function deleteExpense(expenseId: string) {
     if (ownership.error) return { error: ownership.error };
 
     const { error } = await admin
-      .from("expenses")
+      .from("event_expenses")
       .delete()
       .eq("id", expenseId);
 
@@ -420,197 +425,29 @@ export async function deleteExpense(expenseId: string) {
 }
 
 // ── Revenue Line CRUD ───────────────────────────────────────────────
-// Custom revenue lines (bar revenue, sponsorship, merch, coat check, etc.)
-// Mirrors the expense CRUD pattern. Categories are free-form on the
-// server — the UI presents a fixed set but we don't reject unknown ones,
-// so promoters can dump anything in.
+// The event_revenue table was removed in the schema rebuild.
+// These stubs return errors gracefully so existing UI components
+// don't crash — they will show an empty list and disabled add button.
 
-const VALID_REVENUE_CATEGORIES = [
-  "bar", "sponsorship", "merch", "coat_check", "donation", "other",
-];
-
-export async function addRevenueLine(eventId: string, data: { description: string; category: string; amount: number }) {
-  try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "Not authenticated" };
-
-    if (!eventId?.trim()) return { error: "Event ID is required" };
-
-    const desc = (data.description ?? "").trim();
-    if (!desc) return { error: "Description is required." };
-    if (desc.length > 500) return { error: "Description must be under 500 characters." };
-    if (!Number.isFinite(data.amount) || data.amount <= 0) return { error: "Amount must be a positive number." };
-    if (data.amount > 9999999.99) return { error: "Amount is too large." };
-    const category = VALID_REVENUE_CATEGORIES.includes(data.category) ? data.category : "other";
-    const amount = Math.round(data.amount * 100) / 100;
-
-    const ownership = await verifyOwnership(user.id, eventId);
-    if (ownership.error) return { error: ownership.error };
-
-    const admin = createAdminClient();
-    const { error } = await admin
-      .from("event_revenue")
-      .insert({
-        event_id: eventId,
-        collective_id: ownership.collectiveId!,
-        description: desc,
-        category,
-        amount,
-      });
-
-    if (error) {
-      console.error("[addRevenueLine]", error.message);
-      return { error: "Failed to add revenue line" };
-    }
-
-    revalidatePath(`/dashboard/events/${eventId}/financials`);
-    return { error: null };
-  } catch (err) {
-    console.error("[addRevenueLine]", err);
-    return { error: "Something went wrong" };
-  }
+export async function addRevenueLine(_eventId: string, _data: { description: string; category: string; amount: number }) {
+  return { error: "Custom revenue lines are not supported in the current schema." };
 }
 
-export async function updateRevenueLine(revenueId: string, data: { description?: string; category?: string; amount?: number }) {
-  try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "Not authenticated" };
-
-    if (!revenueId?.trim()) return { error: "Revenue line ID is required" };
-
-    if (data.description !== undefined) {
-      const desc = data.description.trim();
-      if (!desc) return { error: "Description is required." };
-      if (desc.length > 500) return { error: "Description must be under 500 characters." };
-    }
-    if (data.amount !== undefined) {
-      if (!Number.isFinite(data.amount) || data.amount <= 0) return { error: "Amount must be a positive number." };
-      if (data.amount > 9999999.99) return { error: "Amount is too large." };
-    }
-    if (data.category !== undefined && !VALID_REVENUE_CATEGORIES.includes(data.category)) {
-      data.category = "other";
-    }
-
-    const admin = createAdminClient();
-    const { data: row, error: lookupError } = await admin
-      .from("event_revenue")
-      .select("event_id")
-      .eq("id", revenueId)
-      .maybeSingle();
-
-    if (lookupError) return { error: "Failed to look up revenue line" };
-    if (!row) return { error: "Revenue line not found" };
-
-    const ownership = await verifyOwnership(user.id, row.event_id);
-    if (ownership.error) return { error: ownership.error };
-
-    const updatePayload: Record<string, unknown> = { updated_at: new Date().toISOString() };
-    if (data.description !== undefined) updatePayload.description = data.description.trim();
-    if (data.category !== undefined) updatePayload.category = data.category;
-    if (data.amount !== undefined) updatePayload.amount = Math.round(data.amount * 100) / 100;
-
-    const { error } = await admin
-      .from("event_revenue")
-      .update(updatePayload)
-      .eq("id", revenueId);
-
-    if (error) return { error: "Failed to update revenue line" };
-
-    revalidatePath(`/dashboard/events/${row.event_id}/financials`);
-    return { error: null };
-  } catch (err) {
-    console.error("[updateRevenueLine]", err);
-    return { error: "Something went wrong" };
-  }
+export async function updateRevenueLine(_revenueId: string, _data: { description?: string; category?: string; amount?: number }) {
+  return { error: "Custom revenue lines are not supported in the current schema." };
 }
 
-export async function deleteRevenueLine(revenueId: string) {
-  try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "Not authenticated" };
-
-    if (!revenueId?.trim()) return { error: "Revenue line ID is required" };
-
-    const admin = createAdminClient();
-    const { data: row, error: lookupError } = await admin
-      .from("event_revenue")
-      .select("event_id")
-      .eq("id", revenueId)
-      .maybeSingle();
-
-    if (lookupError) return { error: "Failed to look up revenue line" };
-    if (!row) return { error: "Revenue line not found" };
-
-    const ownership = await verifyOwnership(user.id, row.event_id);
-    if (ownership.error) return { error: ownership.error };
-
-    const { error } = await admin
-      .from("event_revenue")
-      .delete()
-      .eq("id", revenueId);
-
-    if (error) return { error: "Failed to delete revenue line" };
-
-    revalidatePath(`/dashboard/events/${row.event_id}/financials`);
-    return { error: null };
-  } catch (err) {
-    console.error("[deleteRevenueLine]", err);
-    return { error: "Something went wrong" };
-  }
+export async function deleteRevenueLine(_revenueId: string) {
+  return { error: "Custom revenue lines are not supported in the current schema." };
 }
 
 // ── Bar Settings ────────────────────────────────────────────────────
-// Update bar minimum and/or actual bar revenue. Both are optional — pass
-// null to clear, undefined to leave unchanged. The shortfall is computed
-// on read in getEventFinancials, not stored.
+// The bar_minimum and actual_bar_revenue columns were removed from events
+// in the schema rebuild. This stub is kept for API compatibility.
 
 export async function updateEventBarSettings(
-  eventId: string,
-  data: { barMinimum?: number | null; actualBarRevenue?: number | null }
+  _eventId: string,
+  _data: { barMinimum?: number | null; actualBarRevenue?: number | null }
 ) {
-  try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { error: "Not authenticated" };
-
-    if (!eventId?.trim()) return { error: "Event ID is required" };
-
-    const ownership = await verifyOwnership(user.id, eventId);
-    if (ownership.error) return { error: ownership.error };
-
-    function safeMoney(n: number | null | undefined): number | null | undefined {
-      if (n === undefined) return undefined; // leave unchanged
-      if (n === null) return null;
-      if (!Number.isFinite(n) || n < 0 || n > 9999999.99) return undefined;
-      return Math.round(n * 100) / 100;
-    }
-
-    const updatePayload: Record<string, unknown> = {};
-    const barMin = safeMoney(data.barMinimum);
-    const actualBar = safeMoney(data.actualBarRevenue);
-    if (barMin !== undefined) updatePayload.bar_minimum = barMin;
-    if (actualBar !== undefined) updatePayload.actual_bar_revenue = actualBar;
-
-    if (Object.keys(updatePayload).length === 0) return { error: null };
-
-    const admin = createAdminClient();
-    const { error } = await admin
-      .from("events")
-      .update(updatePayload)
-      .eq("id", eventId);
-
-    if (error) {
-      console.error("[updateEventBarSettings]", error.message);
-      return { error: "Failed to update bar settings" };
-    }
-
-    revalidatePath(`/dashboard/events/${eventId}/financials`);
-    return { error: null };
-  } catch (err) {
-    console.error("[updateEventBarSettings]", err);
-    return { error: "Something went wrong" };
-  }
+  return { error: "Bar settings are not supported in the current schema." };
 }

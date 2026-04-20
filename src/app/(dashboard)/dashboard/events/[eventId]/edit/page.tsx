@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/config";
 import { createClient } from "@/lib/supabase/server";
+import { readEventCommercialConfig } from "@/lib/event-commercials";
 import { notFound } from "next/navigation";
 import { EditEventForm } from "./edit-event-form";
 
@@ -29,17 +30,19 @@ export default async function EditEventPage({ params }: Props) {
 
   if (collectiveIds.length === 0) notFound();
 
-  // Fetch event with venue
+  // Fetch event with flat venue columns
   const { data: event } = await admin
     .from("events")
     .select(
-      "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_id, bar_minimum, venue_deposit, venue_cost, estimated_bar_revenue, venues(id, name, address, city, capacity)"
+      "id, title, slug, description, starts_at, ends_at, doors_at, status, collective_id, venue_name, venue_address, city, capacity, metadata"
     )
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (!event || !collectiveIds.includes(event.collective_id)) notFound();
+
+  // Default to USD (currency column removed from schema)
+  const resolvedCurrency = "usd";
 
   // Only draft events can be edited
   if (event.status !== "draft") {
@@ -60,13 +63,12 @@ export default async function EditEventPage({ params }: Props) {
     .eq("event_id", eventId)
     .order("sort_order");
 
-  const venue = event.venues as unknown as {
-    id: string;
-    name: string;
-    address: string;
-    city: string;
-    capacity: number;
-  } | null;
+  // Fetch itemized expenses.
+  const { data: expenseRows } = await admin
+    .from("event_expenses")
+    .select("id, category, description, amount")
+    .eq("event_id", eventId)
+    .order("created_at");
 
   // Extract date and time parts from ISO strings
   const startsAt = new Date(event.starts_at);
@@ -85,6 +87,8 @@ export default async function EditEventPage({ params }: Props) {
     doorsOpen = doorsAt.toTimeString().slice(0, 5);
   }
 
+  const commercial = readEventCommercialConfig(event.metadata);
+
   const eventData = {
     id: event.id,
     title: event.title,
@@ -93,10 +97,10 @@ export default async function EditEventPage({ params }: Props) {
     startTime,
     endTime,
     doorsOpen,
-    venueName: venue?.name ?? "",
-    venueAddress: venue?.address ?? "",
-    venueCity: venue?.city ?? "",
-    venueCapacity: venue?.capacity ?? 0,
+    venueName: event.venue_name ?? "",
+    venueAddress: event.venue_address ?? "",
+    venueCity: event.city ?? "",
+    venueCapacity: event.capacity ?? 0,
     tiers:
       tiers?.map((t) => ({
         id: t.id,
@@ -104,10 +108,20 @@ export default async function EditEventPage({ params }: Props) {
         price: Number(t.price),
         quantity: t.capacity ?? 0,
       })) ?? [],
-    barMinimum: event.bar_minimum ? Number(event.bar_minimum) : null,
-    venueDeposit: event.venue_deposit ? Number(event.venue_deposit) : null,
-    venueCost: event.venue_cost ? Number(event.venue_cost) : null,
-    estimatedBarRevenue: event.estimated_bar_revenue ? Number(event.estimated_bar_revenue) : null,
+    barMinimum: commercial.barMinimum,
+    venueDeposit: commercial.venueDeposit,
+    venueCost: commercial.venueCost,
+    estimatedBarRevenue: commercial.projectedBarSales,
+    barPercent: commercial.barPercent,
+    currency: resolvedCurrency,
+    expenses:
+      expenseRows?.map((r) => ({
+        id: r.id,
+        category: r.category ?? "other",
+        label: r.description ?? "",
+        amount: Number(r.amount ?? 0),
+        currency: resolvedCurrency,
+      })) ?? [],
   };
 
   return <EditEventForm event={eventData} />;

@@ -44,10 +44,10 @@ export async function getPromoterDashboard(): Promise<PromoterDashboardData> {
         .from("tickets")
         .select("event_id, events(id, title, starts_at, flyer_url, slug, collectives(slug))")
         .eq("referred_by", userId)
-        .in("status", ["paid", "checked_in"]),
+        .in("status", ["valid", "checked_in"]),
       admin
         .from("events")
-        .select("id, title, starts_at, flyer_url, slug, collective_id, collectives(slug), venues(name)")
+        .select("id, title, starts_at, flyer_url, slug, collective_id, collectives(slug), venue_name")
         .eq("status", "published")
         .gte("starts_at", new Date().toISOString())
         .order("starts_at", { ascending: true })
@@ -87,7 +87,7 @@ export async function getPromoterDashboard(): Promise<PromoterDashboardData> {
 
     const browseEvents: BrowseEvent[] = ((upcomingEvents ?? []) as unknown as {
       id: string; title: string; starts_at: string; flyer_url: string | null; slug: string;
-      collective_id: string; collectives: { slug: string } | null; venues: { name: string } | null;
+      collective_id: string; collectives: { slug: string } | null; venue_name: string | null;
     }[]).map((e) => ({
       eventId: e.id,
       title: e.title,
@@ -95,7 +95,7 @@ export async function getPromoterDashboard(): Promise<PromoterDashboardData> {
       flyerUrl: e.flyer_url,
       collectiveSlug: e.collectives?.slug ?? "",
       eventSlug: e.slug,
-      venueName: e.venues?.name ?? null,
+      venueName: e.venue_name ?? null,
     }));
 
     return {

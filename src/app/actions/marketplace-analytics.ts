@@ -43,32 +43,41 @@ export async function getProfilePerformanceWithCollective(
     if (!membership) return null;
     const collectiveId = (membership as { collective_id: string }).collective_id;
 
-    // Find artist record linked to this profile user
-    const { data: artist } = await admin.from("artists")
-      .select("id")
-      .eq("user_id", profileUserId)
+    // Find the party_id linked to the target user
+    const { data: targetUser } = await admin.from("users")
+      .select("party_id")
+      .eq("id", profileUserId)
       .maybeSingle();
 
-    if (!artist) return null;
-    const artistId = (artist as { id: string }).id;
+    if (!targetUser?.party_id) return null;
+    const partyId = (targetUser as { party_id: string }).party_id;
+
+    // Find artist_profile linked to this party
+    const { data: artistProfile } = await admin.from("artist_profiles")
+      .select("id")
+      .eq("party_id", partyId)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (!artistProfile) return null;
 
     // Get collective's events
     const { data: events } = await admin.from("events")
       .select("id")
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     if (!events || (events as { id: string }[]).length === 0) return null;
     const eventIds = (events as { id: string }[]).map((e) => e.id);
 
-    // Get bookings for this artist at these events
+    // Get bookings for this artist at these events via event_artists.party_id
     const { data: bookings } = await admin.from("event_artists")
       .select("event_id, events(starts_at, title)")
-      .eq("artist_id", artistId)
-      .in("event_id", eventIds)
-      .neq("status", "cancelled");
+      .eq("party_id", partyId)
+      .in("event_id", eventIds);
 
-    if (!bookings || (bookings as unknown[]).length === 0) return null;
+    if (!bookings || (bookings as unknown[]).length === 0) {
+      return null;
+    }
 
     // Get tickets for those events
     const bookedEventIds = [
@@ -123,4 +132,3 @@ export async function getProfilePerformanceWithCollective(
     return null;
   }
 }
-

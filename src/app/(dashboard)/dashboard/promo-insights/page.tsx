@@ -81,7 +81,6 @@ export default async function PromoInsightsPage() {
     .select("id, title, starts_at")
     .eq("collective_id", collectiveId)
     .gte("starts_at", new Date().toISOString())
-    .is("deleted_at", null)
     .order("starts_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -102,7 +101,7 @@ export default async function PromoInsightsPage() {
   const schedule = scheduleResult.data;
 
   return (
-    <div className="space-y-6 overflow-x-hidden">
+    <div className="space-y-6 overflow-x-hidden max-w-6xl mx-auto">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold font-heading">Promo Insights</h1>

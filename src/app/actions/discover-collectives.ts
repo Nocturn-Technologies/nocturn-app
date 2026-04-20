@@ -7,14 +7,15 @@ export interface DiscoverCollective {
   id: string;
   name: string;
   slug: string;
-  description: string | null;
   bio: string | null;
   logo_url: string | null;
-  website: string | null;
-  instagram: string | null;
   city: string | null;
   member_count: number;
   event_count: number;
+  recent_events_count: number;
+  latest_flyer_url: string | null;
+  latest_event_title: string | null;
+  latest_event_date: string | null;
   created_at: string;
 }
 
@@ -58,7 +59,7 @@ export async function getDiscoverCollectives(opts?: {
   // Build query
   let builder = sb
     .from("collectives")
-    .select("id, name, slug, description, bio, logo_url, website, instagram, city, created_at", {
+    .select("id, name, slug, bio, logo_url, city, created_at", {
       count: "exact",
     });
 
@@ -80,7 +81,7 @@ export async function getDiscoverCollectives(opts?: {
         .replace(/%/g, "\\%")
         .replace(/_/g, "\\_");
       builder = builder.or(
-        `name.ilike.%${escaped}%,city.ilike.%${escaped}%,slug.ilike.%${escaped}%,description.ilike.%${escaped}%`
+        `name.ilike.%${escaped}%,city.ilike.%${escaped}%,slug.ilike.%${escaped}%,bio.ilike.%${escaped}%`
       );
     }
   }
@@ -109,10 +110,11 @@ export async function getDiscoverCollectives(opts?: {
   }
   if (!collectives) return { collectives: [], total: 0 };
 
-  // Batch-fetch member counts and event counts for all collectives
+  // Batch-fetch member counts and event data for all collectives
   const collectiveIds = collectives.map((c) => c.id);
+  const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
 
-  const [memberCounts, eventCounts] = await Promise.all([
+  const [memberCounts, eventRows] = await Promise.all([
     sb
       .from("collective_members")
       .select("collective_id", { count: "exact" })
@@ -120,9 +122,10 @@ export async function getDiscoverCollectives(opts?: {
       .is("deleted_at", null),
     sb
       .from("events")
-      .select("collective_id")
+      .select("collective_id, title, flyer_url, starts_at")
       .in("collective_id", collectiveIds)
-      .neq("status", "draft"),
+      .neq("status", "draft")
+      .order("starts_at", { ascending: false }),
   ]);
 
   // Count members per collective
@@ -134,33 +137,197 @@ export async function getDiscoverCollectives(opts?: {
     }
   }
 
-  // Count events per collective
-  const eventMap = new Map<string, number>();
-  if (eventCounts.data) {
-    for (const row of eventCounts.data) {
-      const cid = (row as { collective_id: string }).collective_id;
-      eventMap.set(cid, (eventMap.get(cid) ?? 0) + 1);
+  // Build per-collective event stats: total count, recent-60d count, and latest event details
+  type EventRow = { collective_id: string; title: string | null; flyer_url: string | null; starts_at: string | null };
+  const eventStatsMap = new Map<
+    string,
+    { total: number; recent: number; latest: EventRow | null }
+  >();
+  if (eventRows.data) {
+    for (const raw of eventRows.data) {
+      const row = raw as EventRow;
+      const cid = row.collective_id;
+      const existing = eventStatsMap.get(cid) ?? { total: 0, recent: 0, latest: null };
+      existing.total += 1;
+      if (row.starts_at && row.starts_at >= sixtyDaysAgo) existing.recent += 1;
+      // First row per collective is the latest (rows are ordered desc by starts_at)
+      if (!existing.latest) existing.latest = row;
+      eventStatsMap.set(cid, existing);
     }
   }
 
-  const result: DiscoverCollective[] = collectives.map((c) => ({
-    id: c.id,
-    name: c.name,
-    slug: c.slug,
-    description: c.description,
-    bio: c.bio,
-    logo_url: c.logo_url,
-    website: c.website,
-    instagram: c.instagram,
-    city: c.city,
-    member_count: memberMap.get(c.id) ?? 0,
-    event_count: eventMap.get(c.id) ?? 0,
-    created_at: c.created_at,
-  }));
+  const result: DiscoverCollective[] = collectives.map((c) => {
+    const stats = eventStatsMap.get(c.id);
+    return {
+      id: c.id,
+      name: c.name,
+      slug: c.slug,
+      bio: c.bio ?? null,
+      logo_url: c.logo_url ?? null,
+      city: c.city ?? null,
+      member_count: memberMap.get(c.id) ?? 0,
+      event_count: stats?.total ?? 0,
+      recent_events_count: stats?.recent ?? 0,
+      latest_flyer_url: stats?.latest?.flyer_url ?? null,
+      latest_event_title: stats?.latest?.title ?? null,
+      latest_event_date: stats?.latest?.starts_at ?? null,
+      created_at: c.created_at,
+    };
+  });
 
   return { collectives: result, total: count ?? 0 };
   } catch (err) {
     console.error("[getDiscoverCollectives]", err);
     return { collectives: [], total: 0 };
+  }
+}
+
+/**
+ * Fetch the user's nearest upcoming event (for the discover-page context card).
+ * Returns null if the user has no upcoming published event or no collective.
+ */
+export interface NextEventSummary {
+  id: string;
+  title: string;
+  starts_at: string;
+  city: string | null;
+  vibe_tags: string[] | null;
+  collective_city: string | null;
+}
+
+export async function getMyNextEvent(): Promise<NextEventSummary | null> {
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+
+    const sb = createAdminClient();
+
+    const { data: membership } = await sb
+      .from("collective_members")
+      .select("collective_id, collectives(city)")
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+
+    const collectiveId = (membership as { collective_id?: string } | null)?.collective_id;
+    if (!collectiveId) return null;
+
+    const collectiveCity =
+      (membership as unknown as { collectives?: { city?: string | null } | null } | null)
+        ?.collectives?.city ?? null;
+
+    const { data: event } = await sb
+      .from("events")
+      .select("id, title, starts_at, vibe_tags")
+      .eq("collective_id", collectiveId)
+      .neq("status", "draft")
+      .gte("starts_at", new Date().toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (!event) return null;
+
+    return {
+      id: event.id as string,
+      title: event.title as string,
+      starts_at: event.starts_at as string,
+      city: null,
+      vibe_tags: (event.vibe_tags as string[] | null) ?? null,
+      collective_city: collectiveCity,
+    };
+  } catch (err) {
+    console.error("[getMyNextEvent]", err);
+    return null;
+  }
+}
+
+/**
+ * Return the set of collective IDs the current user's collective has
+ * already started a collab chat with — i.e. "collectives in my network."
+ * Used to power the "My network" filter on the Discover page.
+ */
+export async function getMyConnectedCollectiveIds(): Promise<string[]> {
+  try {
+    const supabase = await createServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const sb = createAdminClient();
+
+    // Find the user's collective
+    const { data: membership } = await sb
+      .from("collective_members")
+      .select("collective_id")
+      .eq("user_id", user.id)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle();
+
+    const myCollectiveId = (membership as { collective_id?: string } | null)?.collective_id;
+    if (!myCollectiveId) return [];
+
+    // Collab channel partner lookup not available in current schema
+    void myCollectiveId;
+    return [];
+  } catch (err) {
+    console.error("[getMyConnectedCollectiveIds]", err);
+    return [];
+  }
+}
+
+/**
+ * Fetch the 5 most recent published events for a collective (for detail page).
+ */
+export interface CollectiveEventTile {
+  id: string;
+  title: string;
+  flyer_url: string | null;
+  starts_at: string;
+  venue_name: string | null;
+  status: string;
+}
+
+export async function getCollectiveRecentEvents(
+  collectiveId: string,
+  limit = 5
+): Promise<CollectiveEventTile[]> {
+  try {
+    const sb = createAdminClient();
+    // events now has venue_name as an inline column
+    const { data: events } = await sb
+      .from("events")
+      .select("id, title, flyer_url, starts_at, status, venue_name")
+      .eq("collective_id", collectiveId)
+      .neq("status", "draft")
+      .order("starts_at", { ascending: false })
+      .limit(limit);
+
+    if (!events || events.length === 0) return [];
+
+    return (events as Array<{
+      id: string;
+      title: string;
+      flyer_url: string | null;
+      starts_at: string;
+      status: string;
+      venue_name: string | null;
+    }>).map((e) => ({
+      id: e.id,
+      title: e.title,
+      flyer_url: e.flyer_url,
+      starts_at: e.starts_at,
+      venue_name: e.venue_name ?? null,
+      status: e.status,
+    }));
+  } catch (err) {
+    console.error("[getCollectiveRecentEvents]", err);
+    return [];
   }
 }

@@ -5,6 +5,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { PLATFORM_FEE_PERCENT, PLATFORM_FEE_FLAT_CENTS } from "@/lib/pricing";
 import { createAdminClient } from "@/lib/supabase/config";
 import { isValidUUID } from "@/lib/utils";
+import { isAcceptedExpenseCategory } from "@/lib/expense-categories";
 
 // Generate a settlement for a completed event
 export async function generateSettlement(eventId: string) {
@@ -18,7 +19,7 @@ export async function generateSettlement(eventId: string) {
 
   const admin = createAdminClient();
 
-  // Get event with collective
+  // Get event with collective_id and status
   const { data: event } = await admin
     .from("events")
     .select("id, title, collective_id, status")
@@ -47,77 +48,71 @@ export async function generateSettlement(eventId: string) {
 
   if (existing) return { error: "Settlement already exists", settlementId: existing.id };
 
-  // Fetch tickets, refunded tickets, artist bookings, and expenses in parallel
-  const [{ data: tickets }, { data: refundedTickets }, { data: bookings }, { data: expenses }] = await Promise.all([
+  // Fetch paid orders, artist bookings, and expenses in parallel
+  const [{ data: paidOrders }, { data: bookings }, { data: expenses }] = await Promise.all([
     admin
-      .from("tickets")
-      .select("price_paid")
+      .from("orders")
+      .select("id, total, platform_fee, stripe_fee")
       .eq("event_id", eventId)
-      .in("status", ["paid", "checked_in"]),
-    admin
-      .from("tickets")
-      .select("price_paid")
-      .eq("event_id", eventId)
-      .eq("status", "refunded"),
+      .eq("status", "paid"),
     admin
       .from("event_artists")
-      .select("artist_id, fee, artists(name)")
-      .eq("event_id", eventId)
-      .eq("status", "confirmed"),
+      .select("id, name, fee")
+      .eq("event_id", eventId),
     admin
       .from("event_expenses")
       .select("id, description, amount, category")
       .eq("event_id", eventId),
   ]);
 
-  const grossRevenue = (tickets ?? []).reduce(
-    (sum, t) => sum + (Number(t.price_paid) || 0),
+  // Revenue = sum of paid orders (orders.total = subtotal + buyer-paid fees)
+  // total_revenue on the settlement = organizer gross = sum of order subtotals
+  const grossRevenue = (paidOrders ?? []).reduce(
+    (sum, o) => sum + (Number(o.total) || 0),
     0
   );
 
-  const refundsTotal = (refundedTickets ?? []).reduce(
-    (sum, t) => sum + (Number(t.price_paid) || 0),
+  // Platform and Stripe fees are buyer-paid (added on top of ticket price).
+  // Record them for Nocturn-side reporting on the settlement.
+  const totalPlatformFee = (paidOrders ?? []).reduce(
+    (sum, o) => sum + (Number(o.platform_fee) || 0),
+    0
+  );
+  const totalStripeFee = (paidOrders ?? []).reduce(
+    (sum, o) => sum + (Number(o.stripe_fee) || 0),
     0
   );
 
-  // Stripe processing fees (~2.9% + $0.30 per transaction, estimated)
-  const ticketCount = tickets?.length ?? 0;
-  const stripeFees = Math.round((grossRevenue * 0.029 + ticketCount * 0.30) * 100) / 100;
-
-  // Platform fee: 7% + $0.50/ticket — BUT buyer pays this as a surcharge
-  // So the platform fee does NOT reduce the collective's revenue
-  // We track it for reporting but it comes from the service fee, not ticket revenue
-  const platformFee = 0; // Collective keeps 100% of ticket price
-  const nocturnRevenue = Math.round((grossRevenue * (PLATFORM_FEE_PERCENT / 100) + ticketCount * (PLATFORM_FEE_FLAT_CENTS / 100)) * 100) / 100;
-
+  // Artist fees
   const totalArtistFees = (bookings ?? []).reduce(
     (sum, b) => sum + (Number(b.fee) || 0),
     0
   );
 
+  // Expenses
   const totalExpenses = (expenses ?? []).reduce(
     (sum, e) => sum + (Number(e.amount) || 0),
     0
   );
 
-  // Calculate net and profit (subtract refunds from gross revenue)
-  const netRevenue = grossRevenue - refundsTotal - stripeFees - platformFee;
-  const profit = netRevenue - totalArtistFees - totalExpenses;
+  // Net payout = gross revenue minus artist fees and expenses.
+  // Stripe and Nocturn platform fees are buyer-paid — they don't come out of
+  // the organizer's payout, but we record them on the settlement for reporting.
+  const netPayout = Math.round(
+    (grossRevenue - totalArtistFees - totalExpenses) * 100
+  ) / 100;
 
-  // Create settlement
+  // Create settlement with new schema columns
   const { data: settlement, error: settlementError } = await admin
     .from("settlements")
     .insert({
       event_id: eventId,
       collective_id: event.collective_id,
       status: "draft",
-      gross_revenue: grossRevenue,
-      stripe_fees: stripeFees,
-      platform_fee: platformFee,
-      net_revenue: netRevenue,
-      total_costs: totalExpenses,
-      total_artist_fees: totalArtistFees,
-      profit: profit,
+      total_revenue: Math.round(grossRevenue * 100) / 100,
+      platform_fee: Math.round(totalPlatformFee * 100) / 100,
+      stripe_fee: Math.round(totalStripeFee * 100) / 100,
+      net_payout: netPayout,
     })
     .select("id")
     .maybeSingle();
@@ -140,53 +135,67 @@ export async function generateSettlement(eventId: string) {
     return { error: "Failed to create settlement" };
   }
 
-  // Create line items
+  // Create line items using the new settlement_lines schema:
+  // { settlement_id, order_id?, ticket_id?, description, amount, type }
   const lines: Array<{
     settlement_id: string;
+    order_id?: string | null;
+    ticket_id?: string | null;
     description: string;
     amount: number;
-    category?: string;
-    metadata?: { type: string; recipient_type?: string; recipient_id?: string };
+    type: string;
   }> = [];
 
-  // Stripe fee line
-  lines.push({
-    settlement_id: settlement.id,
-    description: "Stripe processing fees",
-    amount: stripeFees,
-    category: "stripe_fee",
-    metadata: { type: "stripe_fee", recipient_type: "platform" },
-  });
+  // Per-order revenue lines
+  for (const order of paidOrders ?? []) {
+    lines.push({
+      settlement_id: settlement.id,
+      order_id: order.id,
+      description: "Ticket order revenue",
+      amount: Number(order.total) || 0,
+      type: "revenue",
+    });
+  }
 
-  // Nocturn service fee (paid by buyer, not deducted from collective)
-  lines.push({
-    settlement_id: settlement.id,
-    description: `Nocturn service fee (${PLATFORM_FEE_PERCENT}% + $0.50/ticket — paid by buyer)`,
-    amount: nocturnRevenue,
-    category: "platform_fee",
-    metadata: { type: "platform_fee", recipient_type: "platform" },
-  });
+  // Stripe fee line (buyer-paid, recorded for reporting)
+  if (totalStripeFee > 0) {
+    lines.push({
+      settlement_id: settlement.id,
+      description: "Stripe processing fees (buyer-paid)",
+      amount: Math.round(totalStripeFee * 100) / 100,
+      type: "stripe_fee",
+    });
+  }
+
+  // Nocturn platform fee line (buyer-paid, recorded for reporting)
+  if (totalPlatformFee > 0) {
+    lines.push({
+      settlement_id: settlement.id,
+      description: `Nocturn service fee (${PLATFORM_FEE_PERCENT}% + $${(PLATFORM_FEE_FLAT_CENTS / 100).toFixed(2)}/ticket — buyer-paid)`,
+      amount: Math.round(totalPlatformFee * 100) / 100,
+      type: "platform_fee",
+    });
+  }
 
   // Artist fee lines
   for (const booking of bookings ?? []) {
-    const artist = booking.artists as unknown as { name: string } | null;
-    lines.push({
-      settlement_id: settlement.id,
-      description: `Artist fee: ${artist?.name ?? "Unknown"}`,
-      amount: Number(booking.fee) || 0,
-      category: "artist_fee",
-      metadata: { type: "artist_fee", recipient_type: "artist", recipient_id: booking.artist_id },
-    });
+    if ((Number(booking.fee) || 0) > 0) {
+      lines.push({
+        settlement_id: settlement.id,
+        description: `Artist fee: ${booking.name ?? "Unknown"}`,
+        amount: Number(booking.fee) || 0,
+        type: "artist_fee",
+      });
+    }
   }
 
   // Expense lines
   for (const expense of expenses ?? []) {
     lines.push({
       settlement_id: settlement.id,
-      description: `${expense.category}: ${expense.description}`,
+      description: `${expense.category}: ${expense.description ?? ""}`,
       amount: Number(expense.amount),
-      category: "expense",
-      metadata: { type: "expense" },
+      type: "expense",
     });
   }
 
@@ -205,8 +214,8 @@ export async function generateSettlement(eventId: string) {
       eventId,
       settlementId: settlement.id,
       grossRevenue,
-      profit,
-      ticketCount,
+      profit: netPayout,
+      orderCount: (paidOrders ?? []).length,
     });
   } catch (trackErr) {
     console.error("[generateSettlement] Tracking failed:", trackErr);
@@ -219,7 +228,7 @@ export async function generateSettlement(eventId: string) {
   }
 }
 
-// Approve a settlement
+// Approve/finalize a settlement
 export async function approveSettlement(settlementId: string) {
   try {
   if (!settlementId?.trim()) return { error: "Settlement ID is required" };
@@ -240,21 +249,26 @@ export async function approveSettlement(settlementId: string) {
 
   if (!settlement) return { error: "Settlement not found" };
 
-  const { count } = await admin
+  // Role check: only owners/admins can approve a settlement
+  const { data: membership } = await admin
     .from("collective_members")
-    .select("*", { count: "exact", head: true })
+    .select("role")
     .eq("collective_id", settlement.collective_id)
     .eq("user_id", user.id)
-    .is("deleted_at", null);
+    .in("role", ["owner", "admin"])
+    .is("deleted_at", null)
+    .maybeSingle();
 
-  if (!count || count === 0) return { error: "You don't have permission to approve this settlement" };
+  if (!membership) {
+    return { error: "Only collective owners and admins can approve settlements" };
+  }
 
+  // New schema uses 'finalized' status and finalized_at timestamp
   const { data: updated, error } = await admin
     .from("settlements")
     .update({
-      status: "approved",
-      approved_by: user.id,
-      approved_at: new Date().toISOString(),
+      status: "finalized",
+      finalized_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", settlementId)
@@ -345,18 +359,9 @@ export async function addEventExpense(input: {
   amount: number;
 }) {
   try {
-  // Input validation
-  const VALID_EXPENSE_CATEGORIES = [
-    "talent", "venue", "production", "sound", "lighting", "staffing", "security",
-    "marketing", "hospitality", "transportation", "equipment", "decor", "insurance",
-    "permits", "booking_fee",
-    // Legacy values
-    "supply", "artist", "travel", "staff", "dj", "promotion", "miscellaneous",
-    "other",
-  ];
   if (!input.eventId || typeof input.eventId !== "string") return { error: "Invalid event ID" };
   if (!isValidUUID(input.eventId)) return { error: "Invalid event ID format" };
-  if (!VALID_EXPENSE_CATEGORIES.includes(input.category)) return { error: "Invalid expense category" };
+  if (!isAcceptedExpenseCategory(input.category)) return { error: "Invalid expense category" };
   if (!input.description || input.description.length > 500) return { error: "Description is required and must be under 500 characters" };
   if (!Number.isFinite(input.amount) || input.amount <= 0 || input.amount > 1000000) return { error: "Amount must be between $0.01 and $1,000,000" };
 
@@ -366,14 +371,16 @@ export async function addEventExpense(input: {
 
   const admin = createAdminClient();
 
-  // Get collective_id from event
   const { data: event } = await admin
     .from("events")
-    .select("collective_id")
+    .select("collective_id, status")
     .eq("id", input.eventId)
     .maybeSingle();
 
   if (!event) return { error: "Event not found" };
+  if (event.status !== "draft" && event.status !== "published") {
+    return { error: "Can't add expenses to a completed or archived event. Regenerate the settlement instead." };
+  }
 
   // Verify user is a member of this collective
   const { count } = await admin
@@ -385,13 +392,14 @@ export async function addEventExpense(input: {
 
   if (!count || count === 0) return { error: "You don't have permission to add expenses to this event" };
 
+  // event_expenses schema: event_id, category, description, amount, is_paid, created_by
   const { error } = await admin.from("event_expenses").insert({
     event_id: input.eventId,
-    collective_id: event.collective_id,
     category: input.category,
     description: input.description.slice(0, 500),
-    amount: Math.round(input.amount * 100) / 100, // Round to 2 decimal places
-    added_by: user.id,
+    amount: Math.round(input.amount * 100) / 100,
+    is_paid: false,
+    created_by: user.id,
   });
 
   if (error) {

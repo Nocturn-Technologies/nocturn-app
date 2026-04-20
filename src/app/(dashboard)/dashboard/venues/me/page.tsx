@@ -22,12 +22,6 @@ export default function VenueMePage() {
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [capacity, setCapacity] = useState("");
-  const [description, setDescription] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [website, setWebsite] = useState("");
-  const [rentalFee, setRentalFee] = useState("");
-  const [barMinimum, setBarMinimum] = useState("");
 
   useEffect(() => {
     loadVenue();
@@ -37,20 +31,18 @@ export default function VenueMePage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Check if venue exists for this user (via metadata)
-    const { data: userProfile } = await supabase
+    // Look up venue_profile via the parties table linked to this user
+    const { data: userRow } = await supabase
       .from("users")
-      .select("full_name, email, metadata")
+      .select("party_id")
       .eq("id", user.id)
       .maybeSingle();
 
-    const venueIdFromMeta = (userProfile?.metadata as Record<string, unknown>)?.venue_id as string | undefined;
-
-    if (venueIdFromMeta) {
+    if (userRow?.party_id) {
       const { data: venue } = await supabase
-        .from("venues")
-        .select("*")
-        .eq("id", venueIdFromMeta)
+        .from("venue_profiles")
+        .select("id, name, address, city, capacity")
+        .eq("party_id", userRow.party_id)
         .maybeSingle();
 
       if (venue) {
@@ -59,20 +51,9 @@ export default function VenueMePage() {
         setAddress(venue.address ?? "");
         setCity(venue.city ?? "");
         setCapacity(venue.capacity ? String(venue.capacity) : "");
-        setDescription(venue.description ?? "");
-        setPhone((venue.metadata as Record<string, unknown>)?.phone as string ?? "");
-        setEmail((venue.metadata as Record<string, unknown>)?.email as string ?? "");
-        setWebsite((venue.metadata as Record<string, unknown>)?.website as string ?? "");
-        setRentalFee((venue.metadata as Record<string, unknown>)?.rental_fee as string ?? "");
-        setBarMinimum((venue.metadata as Record<string, unknown>)?.bar_minimum as string ?? "");
-      }
-    } else {
-      // Pre-fill from user profile
-      if (userProfile) {
-        setName(userProfile.full_name ?? "");
-        setEmail(userProfile.email ?? "");
       }
     }
+
     setLoading(false);
   }
 
@@ -97,25 +78,15 @@ export default function VenueMePage() {
     }
 
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-    const metadata = {
-      phone: phone || null,
-      email: email || null,
-      website: website || null,
-      rental_fee: rentalFee || null,
-      bar_minimum: barMinimum || null,
-      listed_by_venue: true,
-    };
 
     if (venueId) {
       const { error: updateError } = await supabase
-        .from("venues")
+        .from("venue_profiles")
         .update({
           name,
           address: address || null,
           city: city || null,
           capacity: capacity ? parseInt(capacity) : null,
-          description: description || null,
-          metadata,
         })
         .eq("id", venueId);
 
@@ -126,16 +97,28 @@ export default function VenueMePage() {
         return;
       }
     } else {
+      // Need a party_id to create a venue_profile — look up user's party
+      const { data: userRow } = await supabase
+        .from("users")
+        .select("party_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (!userRow?.party_id) {
+        setError("Your account is not linked to a party. Please contact support.");
+        setSaving(false);
+        return;
+      }
+
       const { data: newVenue, error: insertError } = await supabase
-        .from("venues")
+        .from("venue_profiles")
         .insert({
           name,
           slug,
           address: address || null,
           city: city || null,
           capacity: capacity ? parseInt(capacity) : null,
-          description: description || null,
-          metadata,
+          party_id: userRow.party_id,
         })
         .select("id")
         .maybeSingle();
@@ -149,18 +132,6 @@ export default function VenueMePage() {
 
       if (newVenue) {
         setVenueId(newVenue.id);
-        // Link venue to user profile
-        const { error: linkError } = await supabase
-          .from("users")
-          .update({ metadata: { venue_id: newVenue.id } })
-          .eq("id", user.id);
-        if (linkError) {
-          console.error("[venue] Link failed:", linkError.message);
-          // Non-fatal — venue was created successfully, just warn.
-          setError("Venue created, but failed to link to your account. Please refresh.");
-          setSaving(false);
-          return;
-        }
       }
     }
 
@@ -184,8 +155,6 @@ export default function VenueMePage() {
               <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
               <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
             </div>
-            <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
-            <div className="h-10 w-full rounded-lg bg-muted animate-pulse" />
           </CardContent>
         </Card>
       </div>
@@ -231,44 +200,6 @@ export default function VenueMePage() {
               <div className="space-y-2">
                 <Label>Capacity</Label>
                 <Input type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} placeholder="e.g. 400" min="0" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <textarea
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm min-h-[80px] resize-none"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Tell promoters about your space — vibe, sound system, what makes it special..."
-                maxLength={2000}
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Contact Phone</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="e.g. (416) 555-0123" />
-              </div>
-              <div className="space-y-2">
-                <Label>Booking Email</Label>
-                <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="booking@venue.com" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Website</Label>
-              <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://yourvenue.com" maxLength={500} />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Room Rental ($)</Label>
-                <Input type="number" value={rentalFee} onChange={(e) => setRentalFee(e.target.value)} placeholder="e.g. 500" min="0" />
-              </div>
-              <div className="space-y-2">
-                <Label>Bar Minimum ($)</Label>
-                <Input type="number" value={barMinimum} onChange={(e) => setBarMinimum(e.target.value)} placeholder="e.g. 3000" min="0" />
               </div>
             </div>
 

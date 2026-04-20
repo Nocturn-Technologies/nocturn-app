@@ -114,7 +114,6 @@ export default async function PublicCheckInPage({ params }: Props) {
         .from("events")
         .select("collective_id")
         .eq("id", event.id)
-        .is("deleted_at", null)
         .maybeSingle();
       const ev = evRaw as { collective_id: string } | null;
 
@@ -125,13 +124,13 @@ export default async function PublicCheckInPage({ params }: Props) {
   }
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-dvh bg-background overflow-x-hidden">
       {/* Header */}
       <header className="border-b border-border px-4 py-4">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <Link
             href="/"
-            className="text-nocturn font-heading font-bold text-xl"
+            className="text-nocturn font-heading font-bold text-xl min-h-[44px] inline-flex items-center"
           >
             Nocturn
           </Link>
@@ -330,7 +329,7 @@ export default async function PublicCheckInPage({ params }: Props) {
         <div className="text-center pt-2">
           <Link
             href="/"
-            className="text-sm text-nocturn hover:text-nocturn-light transition-colors"
+            className="text-sm text-nocturn hover:text-nocturn-light transition-colors min-h-[44px] inline-flex items-center"
           >
             nocturn.app
           </Link>

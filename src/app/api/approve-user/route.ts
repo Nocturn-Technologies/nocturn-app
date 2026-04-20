@@ -73,19 +73,17 @@ function verifyActionToken(userId: string, action: string, token: string): boole
 }
 
 /**
- * Generate approval/deny URLs with HMAC-signed tokens (not raw secrets).
+ * Generate approval URLs with HMAC-signed tokens (not raw secrets).
  * Called from auth.ts when sending approval request emails.
  */
-export function generateApprovalUrls(userId: string): { approveUrl: string; denyUrl: string } {
+export function generateApprovalUrls(userId: string): { approveUrl: string } {
   if (!APPROVAL_SECRET) {
     throw new Error("Cannot generate approval URLs: ADMIN_APPROVAL_SECRET is not set (min 16 chars). Do not fall back to CRON_SECRET.");
   }
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
   const approveToken = generateActionToken(userId, "approve");
-  const denyToken = generateActionToken(userId, "deny");
   return {
     approveUrl: `${baseUrl}/api/approve-user?user_id=${userId}&action=approve&token=${encodeURIComponent(approveToken)}`,
-    denyUrl: `${baseUrl}/api/approve-user?user_id=${userId}&action=deny&token=${encodeURIComponent(denyToken)}`,
   };
 }
 
@@ -118,7 +116,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid user_id" }, { status: 400 });
     }
 
-    if (action !== "approve" && action !== "deny") {
+    if (action !== "approve") {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
@@ -138,18 +136,15 @@ export async function GET(request: NextRequest) {
     const safeEmail = escapeHtml(email);
     const safeName = escapeHtml(name);
     const safeUserType = escapeHtml(userType);
-    const safeAction = escapeHtml(action);
-
     // Generate per-action CSRF tokens (single-use, not the master secret)
     const csrfApprove = generateActionToken(userId, "approve");
-    const csrfDeny = generateActionToken(userId, "deny");
 
     // Render an HTML confirmation page — no action is taken on GET
     return new NextResponse(
       `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nocturn - ${safeAction === "approve" ? "Approve" : "Deny"} User</title></head>
-<body style="background:#09090B;color:#FAFAFA;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nocturn - Approve User</title></head>
+<body style="background:#09090B;color:#FAFAFA;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100dvh;margin:0;">
   <div style="max-width:420px;width:100%;padding:40px 24px;text-align:center;">
     <div style="margin-bottom:32px;">
       <span style="color:#7B2FF7;font-weight:700;font-size:20px;">nocturn.</span>
@@ -161,7 +156,7 @@ export async function GET(request: NextRequest) {
       <p style="color:#71717A;font-size:13px;margin:0;">Type: ${safeUserType}</p>
     </div>
     <p style="color:#A1A1AA;font-size:14px;margin-bottom:24px;">
-      Confirm that you want to <strong>${safeAction === "deny" ? "deny" : "approve"}</strong> this account.
+      Confirm that you want to <strong>approve</strong> this account.
     </p>
     <div style="display:flex;gap:12px;justify-content:center;">
       <form method="POST" action="">
@@ -170,14 +165,6 @@ export async function GET(request: NextRequest) {
         <input type="hidden" name="token" value="${escapeHtml(csrfApprove)}" />
         <button type="submit" style="background:#2DD4BF;color:#09090B;padding:14px 32px;border-radius:12px;border:none;font-weight:700;font-size:15px;cursor:pointer;">
           Approve
-        </button>
-      </form>
-      <form method="POST" action="">
-        <input type="hidden" name="user_id" value="${safeUserId}" />
-        <input type="hidden" name="action" value="deny" />
-        <input type="hidden" name="token" value="${escapeHtml(csrfDeny)}" />
-        <button type="submit" style="background:#FB7185;color:#09090B;padding:14px 32px;border-radius:12px;border:none;font-weight:700;font-size:15px;cursor:pointer;">
-          Deny
         </button>
       </form>
     </div>
@@ -189,7 +176,7 @@ export async function GET(request: NextRequest) {
   } catch (err) {
     console.error("[approve-user] GET", err);
     return new NextResponse(
-      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error</title></head><body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;"><div><h1 style="color:#FB7185;">Something went wrong</h1><p style="color:#A1A1AA;">Please try again later.</p></div></body></html>`,
+      `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error</title></head><body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100dvh;text-align:center;"><div><h1 style="color:#FB7185;">Something went wrong</h1><p style="color:#A1A1AA;">Please try again later.</p></div></body></html>`,
       { status: 500, headers: { "Content-Type": "text/html" } }
     );
   }
@@ -224,7 +211,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid user_id" }, { status: 400 });
     }
 
-    if (action !== "approve" && action !== "deny") {
+    if (action !== "approve") {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
@@ -235,55 +222,13 @@ export async function POST(request: NextRequest) {
 
     const admin = createAdminClient();
 
-    if (action === "deny") {
-      // Set is_approved to false in users table and mark as denied in auth metadata
-      const { error: dbError } = await admin.from("users")
-        .update({ is_approved: false })
-        .eq("id", userId);
-
-      if (dbError) {
-        console.error("[approve-user] DB update failed (deny):", dbError);
-        return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
-      }
-
-      const { error: authError } = await admin.auth.admin.updateUserById(userId, {
-        user_metadata: { is_approved: false, is_denied: true },
-      });
-
-      if (authError) {
-        console.error("[approve-user] Auth update failed (deny):", authError);
-        return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
-      }
-
-      const safeUserId = escapeHtml(userId);
-
-      return new NextResponse(
-        `<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Account Denied</title></head>
-<body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;">
-  <div><h1 style="color:#FB7185;">Account Denied</h1><p style="color:#A1A1AA;">User ${safeUserId} has been denied.</p></div>
-</body></html>`,
-        { headers: { "Content-Type": "text/html" } }
-      );
-    }
-
-    // Approve: update users table and auth metadata
+    // Approve: update the public.users source-of-truth record.
     const { error: dbError } = await admin.from("users")
       .update({ is_approved: true })
       .eq("id", userId);
 
     if (dbError) {
       console.error("[approve-user] DB update failed (approve):", dbError);
-      return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
-    }
-
-    const { error: authError } = await admin.auth.admin.updateUserById(userId, {
-      user_metadata: { is_approved: true, is_denied: false },
-    });
-
-    if (authError) {
-      console.error("[approve-user] Auth update failed (approve):", authError);
       return NextResponse.json({ error: "Failed to update user" }, { status: 500 });
     }
 
@@ -337,7 +282,7 @@ export async function POST(request: NextRequest) {
       `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Account Approved</title></head>
-<body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;text-align:center;">
+<body style="background:#09090B;color:#FAFAFA;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100dvh;text-align:center;">
   <div><h1 style="color:#2DD4BF;">Account Approved!</h1><p style="color:#A1A1AA;">${safeEmail} now has full access to Nocturn.</p></div>
 </body></html>`,
       { headers: { "Content-Type": "text/html" } }

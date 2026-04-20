@@ -43,18 +43,16 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { useConfirm } from "@/components/ui/confirm-dialog";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface Channel {
   id: string;
-  collective_id: string;
-  event_id: string | null;
-  partner_collective_id?: string | null;
-  name: string;
-  type: "general" | "event" | "collab";
+  collective_id: string | null;
+  name: string | null;
+  type: string;
   created_at: string;
-  metadata?: Record<string, string>;
 }
 
 interface ChannelWithMeta extends Channel {
@@ -63,6 +61,7 @@ interface ChannelWithMeta extends Channel {
   unread: boolean;
   unread_count: number;
   event_date?: string;
+  event_id?: string | null;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -157,7 +156,7 @@ function ChannelRow({
       className="flex items-center gap-3 px-4 py-3 min-h-[48px] hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 border-b border-white/5 last:border-b-0"
     >
       {/* Avatar */}
-      {icon ?? <Avatar name={ch.name} />}
+      {icon ?? <Avatar name={ch.name ?? ""} />}
 
       {/* Content */}
       <div className="flex-1 min-w-0">
@@ -209,8 +208,8 @@ function SectionHeader({
   if (count === 0) return null;
   return (
     <div className="flex items-center gap-2 px-4 py-2.5 select-none">
-      <span className="text-muted-foreground/60">{icon}</span>
-      <h2 className="text-[11px] font-semibold font-heading text-muted-foreground/60 uppercase tracking-widest">
+      <span className="text-muted-foreground/70">{icon}</span>
+      <h2 className="text-[11px] font-semibold font-heading text-muted-foreground/70 uppercase tracking-widest">
         {label}
       </h2>
       <span className="text-[11px] font-medium text-muted-foreground/40 bg-white/[0.04] rounded-full px-1.5 py-0.5">
@@ -225,6 +224,7 @@ function SectionHeader({
 export default function ChatPage() {
   const supabase = createClient();
   const router = useRouter();
+  const { confirm, confirmDialog } = useConfirm();
   const [userId, setUserId] = useState<string | null>(null);
   const [channels, setChannels] = useState<ChannelWithMeta[]>([]);
   const [collabChannels, setCollabChannels] = useState<ChannelWithMeta[]>([]);
@@ -298,7 +298,6 @@ export default function ChatPage() {
         collective_id: collectiveId,
         name: "General",
         type: "general",
-        event_id: null,
       });
     }
 
@@ -307,25 +306,24 @@ export default function ChatPage() {
       .from("events")
       .select("id, title, starts_at")
       .eq("collective_id", collectiveId)
-      .is("deleted_at", null)
       .order("starts_at", { ascending: true });
 
     if (events && events.length > 0) {
+      // Note: channels no longer has event_id column — event channels are identified by name matching
       const { data: existingEventChannels } = await supabase
         .from("channels")
-        .select("event_id")
+        .select("name")
         .eq("collective_id", collectiveId)
         .eq("type", "event");
 
-      const existingEventIds = new Set(
-        existingEventChannels?.map((c) => c.event_id) ?? []
+      const existingEventNames = new Set(
+        existingEventChannels?.map((c) => c.name) ?? []
       );
 
       const newChannels = events
-        .filter((e) => !existingEventIds.has(e.id))
+        .filter((e) => !existingEventNames.has(e.title))
         .map((e) => ({
           collective_id: collectiveId,
-          event_id: e.id,
           name: e.title,
           type: "event" as const,
         }));
@@ -354,7 +352,7 @@ export default function ChatPage() {
       typedChannels.map(async (ch) => {
         const { data: msgs } = await supabase
           .from("messages")
-          .select("content, created_at, type")
+          .select("content, created_at")
           .eq("channel_id", ch.id)
           .order("created_at", { ascending: false })
           .limit(1);
@@ -362,20 +360,16 @@ export default function ChatPage() {
         const lastMsg = msgs?.[0];
         let eventDate: string | undefined;
 
-        if (ch.event_id && events) {
+        if (events) {
           const evt = events.find(
-            (e: { id: string }) => e.id === ch.event_id
+            (e: { title: string }) => e.title === ch.name
           );
           if (evt) eventDate = (evt as { starts_at: string }).starts_at;
         }
 
         return {
           ...ch,
-          last_message: lastMsg
-            ? lastMsg.type === "voice"
-              ? "Voice note"
-              : lastMsg.content
-            : undefined,
+          last_message: lastMsg?.content,
           last_message_at: lastMsg?.created_at,
           unread: false,
           unread_count: 0,
@@ -393,7 +387,7 @@ export default function ChatPage() {
         ((collabs ?? []) as Channel[]).map(async (ch) => {
           const { data: msgs } = await supabase
             .from("messages")
-            .select("content, created_at, type")
+            .select("content, created_at")
             .eq("channel_id", ch.id as string)
             .order("created_at", { ascending: false })
             .limit(1);
@@ -451,6 +445,13 @@ export default function ChatPage() {
   }
 
   async function handleRejectInquiry(inquiryId: string) {
+    const ok = await confirm({
+      title: "Dismiss this inquiry?",
+      description: "You can't undo this. The sender won't be notified.",
+      confirmText: "Dismiss",
+      destructive: true,
+    });
+    if (!ok) return;
     setProcessingInquiryId(inquiryId);
     setInquiryError(null);
     const result = await rejectInquiry(inquiryId);
@@ -493,7 +494,7 @@ export default function ChatPage() {
       const q = searchQuery.toLowerCase();
       return list.filter(
         (ch) =>
-          ch.name.toLowerCase().includes(q) ||
+          (ch.name?.toLowerCase().includes(q) ?? false) ||
           ch.last_message?.toLowerCase().includes(q)
       );
     },
@@ -618,7 +619,7 @@ export default function ChatPage() {
 
       {/* Search bar — only on chats tab */}
       {activeTab === "chats" && (
-      <div className="relative mb-4">
+      <div className="relative mb-4 md:max-w-md">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
         <Input
           placeholder="Search conversations..."
@@ -721,8 +722,11 @@ export default function ChatPage() {
                 </div>
               )}
               {searchQuery && filteredCollabs.length === 0 && filteredTeam.length === 0 && filteredEvents.length === 0 && (
-                <div className="py-10 text-center">
-                  <p className="text-sm text-muted-foreground">
+                <div className="py-10 px-6 text-center animate-in fade-in duration-200">
+                  <div className="w-12 h-12 rounded-full bg-white/[0.04] flex items-center justify-center mx-auto mb-3">
+                    <Search size={18} className="text-muted-foreground/60" />
+                  </div>
+                  <p className="text-sm text-muted-foreground truncate">
                     No conversations matching &ldquo;{searchQuery}&rdquo;
                   </p>
                 </div>
@@ -734,13 +738,13 @@ export default function ChatPage() {
 
       {/* ── REQUESTS TAB ─────────────────────────────────────────────── */}
       {activeTab === "requests" && (
-        <div className="space-y-3">
+        <div className="space-y-3 animate-in fade-in duration-300">
           {inquiryError && (
-            <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex items-start justify-between gap-2">
-              <span>{inquiryError}</span>
+            <div className="rounded-xl border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive flex items-start justify-between gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+              <span className="min-w-0 break-words">{inquiryError}</span>
               <button
                 onClick={() => setInquiryError(null)}
-                className="text-destructive/70 hover:text-destructive shrink-0"
+                className="text-destructive/70 hover:text-destructive active:scale-90 transition-all duration-200 shrink-0 min-h-[44px] min-w-[44px] flex items-center justify-center -mr-1 -mt-1"
                 aria-label="Dismiss error"
               >
                 <X className="h-4 w-4" />
@@ -748,8 +752,29 @@ export default function ChatPage() {
             </div>
           )}
           {!inquiriesLoaded ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-nocturn" />
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="rounded-2xl border border-white/[0.06] bg-card p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+                      <div className="space-y-2">
+                        <div className="h-3.5 w-28 rounded bg-white/[0.06] animate-pulse" />
+                        <div className="h-3 w-36 rounded bg-white/[0.04] animate-pulse" />
+                      </div>
+                    </div>
+                    <div className="h-4 w-16 rounded-full bg-white/[0.04] animate-pulse" />
+                  </div>
+                  <div className="h-12 rounded-lg bg-white/[0.03] animate-pulse" />
+                  <div className="flex items-center gap-2 pt-1">
+                    <div className="flex-1 h-10 rounded-md bg-white/[0.06] animate-pulse" />
+                    <div className="w-24 h-10 rounded-md bg-white/[0.04] animate-pulse" />
+                  </div>
+                </div>
+              ))}
             </div>
           ) : receivedInquiries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
@@ -769,22 +794,22 @@ export default function ChatPage() {
               return (
                 <div
                   key={inq.id}
-                  className="rounded-xl border border-white/[0.06] bg-card p-4 space-y-3"
+                  className="rounded-2xl border border-white/[0.06] bg-card p-4 space-y-3 hover:border-white/[0.1] transition-colors duration-200 animate-in fade-in duration-300"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
                       <Avatar name={inq.contact_name} size="sm" />
-                      <div>
-                        <p className="font-medium text-sm text-foreground">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-foreground truncate">
                           {inq.contact_name}
                         </p>
                         {inq.contact_email && (
-                          <p className="text-xs text-muted-foreground">{inq.contact_email}</p>
+                          <p className="text-xs text-muted-foreground truncate">{inq.contact_email}</p>
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize ${
                         inq.status === "pending"
                           ? "bg-amber-500/10 text-amber-400"
                           : inq.status === "accepted"
@@ -793,14 +818,14 @@ export default function ChatPage() {
                       }`}>
                         {inq.status}
                       </span>
-                      <span className="text-[11px] text-muted-foreground">
+                      <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                         {new Date(inq.created_at).toLocaleDateString("en", { month: "short", day: "numeric" })}
                       </span>
                     </div>
                   </div>
 
                   {inq.message && (
-                    <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed">
+                    <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed break-words">
                       {inq.message}
                     </div>
                   )}
@@ -809,7 +834,7 @@ export default function ChatPage() {
                     <div className="flex items-center gap-2 pt-1">
                       <Button
                         size="sm"
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-10 min-h-[44px] text-xs font-semibold"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] text-white h-10 min-h-[44px] text-xs font-semibold transition-all duration-200"
                         disabled={isProcessing}
                         onClick={() => handleAcceptInquiry(inq.id)}
                       >
@@ -823,7 +848,7 @@ export default function ChatPage() {
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-10 min-h-[44px] text-xs text-muted-foreground hover:text-foreground"
+                        className="h-10 min-h-[44px] text-xs text-muted-foreground hover:text-foreground hover:bg-white/[0.04] active:scale-[0.98] transition-all duration-200"
                         disabled={isProcessing}
                         onClick={() => handleRejectInquiry(inq.id)}
                       >
@@ -840,7 +865,7 @@ export default function ChatPage() {
                   )}
 
                   {inq.status === "rejected" && (
-                    <p className="text-xs text-muted-foreground/60 italic">Dismissed</p>
+                    <p className="text-xs text-muted-foreground/70 italic">Dismissed</p>
                   )}
                 </div>
               );
@@ -851,10 +876,27 @@ export default function ChatPage() {
 
       {/* ── SENT TAB ─────────────────────────────────────────────────── */}
       {activeTab === "sent" && (
-        <div className="space-y-3">
+        <div className="space-y-3 animate-in fade-in duration-300">
           {!inquiriesLoaded ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-nocturn" />
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="rounded-2xl border border-white/[0.06] bg-card p-4 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+                      <div className="space-y-2">
+                        <div className="h-3.5 w-32 rounded bg-white/[0.06] animate-pulse" />
+                        <div className="h-3 w-20 rounded bg-white/[0.04] animate-pulse" />
+                      </div>
+                    </div>
+                    <div className="h-4 w-20 rounded-full bg-white/[0.04] animate-pulse" />
+                  </div>
+                  <div className="h-12 rounded-lg bg-white/[0.03] animate-pulse" />
+                </div>
+              ))}
             </div>
           ) : sentInquiries.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
@@ -879,22 +921,22 @@ export default function ChatPage() {
             sentInquiries.map((inq) => (
               <div
                 key={inq.id}
-                className="rounded-xl border border-white/[0.06] bg-card p-4 space-y-3"
+                className="rounded-2xl border border-white/[0.06] bg-card p-4 space-y-3 hover:border-white/[0.1] transition-colors duration-200 animate-in fade-in duration-300"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
                     <Avatar name={inq.profile_display_name || inq.contact_name} size="sm" />
-                    <div>
-                      <p className="font-medium text-sm text-foreground">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm text-foreground truncate">
                         {inq.profile_display_name || inq.contact_name}
                       </p>
                       {inq.inquiry_type !== "general" && (
-                        <p className="text-xs text-muted-foreground capitalize">{inq.inquiry_type}</p>
+                        <p className="text-xs text-muted-foreground capitalize truncate">{inq.inquiry_type}</p>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${
                       inq.status === "pending"
                         ? "bg-amber-500/10 text-amber-400"
                         : inq.status === "accepted"
@@ -903,20 +945,20 @@ export default function ChatPage() {
                     }`}>
                       {inq.status === "pending" ? "awaiting reply" : inq.status}
                     </span>
-                    <span className="text-[11px] text-muted-foreground">
+                    <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                       {new Date(inq.created_at).toLocaleDateString("en", { month: "short", day: "numeric" })}
                     </span>
                   </div>
                 </div>
 
                 {inq.message && (
-                  <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed">
+                  <div className="bg-white/[0.03] rounded-lg p-3 text-sm text-foreground/90 leading-relaxed break-words">
                     {inq.message}
                   </div>
                 )}
 
                 {inq.status === "pending" && (
-                  <p className="text-xs text-muted-foreground/60 flex items-center gap-1.5">
+                  <p className="text-xs text-muted-foreground/70 flex items-center gap-1.5">
                     <Clock className="h-3 w-3" /> Waiting for them to respond
                   </p>
                 )}
@@ -928,7 +970,7 @@ export default function ChatPage() {
                 )}
 
                 {inq.status === "rejected" && (
-                  <p className="text-xs text-muted-foreground/60 italic">They passed on this one</p>
+                  <p className="text-xs text-muted-foreground/70 italic">They passed on this one</p>
                 )}
               </div>
             ))
@@ -962,8 +1004,20 @@ export default function ChatPage() {
           <div className="overflow-y-auto max-h-[55vh] px-5 pb-5">
             {/* Loading */}
             {collabSearching && (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-5 w-5 animate-spin text-nocturn" />
+              <div className="space-y-1">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-3 p-3 rounded-xl"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-white/[0.06] animate-pulse shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-2">
+                      <div className="h-3.5 w-32 rounded bg-white/[0.06] animate-pulse" />
+                      <div className="h-3 w-20 rounded bg-white/[0.04] animate-pulse" />
+                    </div>
+                    <div className="w-10 h-3 rounded bg-white/[0.04] animate-pulse shrink-0" />
+                  </div>
+                ))}
               </div>
             )}
 
@@ -975,15 +1029,15 @@ export default function ChatPage() {
                     key={c.id}
                     onClick={() => handleStartCollab(c.id)}
                     disabled={startingCollab === c.id}
-                    className="w-full flex items-center gap-3 p-3 min-h-[48px] rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 text-left"
+                    className="w-full flex items-center gap-3 p-3 min-h-[48px] rounded-xl hover:bg-white/[0.04] active:bg-white/[0.06] active:scale-[0.99] transition-all duration-200 text-left disabled:opacity-60"
                   >
                     <Avatar name={c.name} size="sm" />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate text-foreground">
+                      <p className="font-semibold text-sm truncate text-foreground">
                         {c.name}
                       </p>
                       {c.city && (
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground truncate">
                           {c.city}
                         </p>
                       )}
@@ -1006,13 +1060,13 @@ export default function ChatPage() {
                 <button
                   onClick={() => handleInvite(collabQuery)}
                   disabled={inviting}
-                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-nocturn/30 hover:bg-nocturn/5 active:bg-nocturn/10 transition-colors duration-200 text-left"
+                  className="w-full flex items-center gap-3 p-4 rounded-xl border border-dashed border-nocturn/30 hover:bg-nocturn/5 hover:border-nocturn/50 active:bg-nocturn/10 active:scale-[0.99] transition-all duration-200 text-left disabled:opacity-60"
                 >
                   <div className="w-10 h-10 rounded-full bg-nocturn/10 flex items-center justify-center shrink-0">
                     <Mail size={18} className="text-nocturn" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm text-foreground">
+                    <p className="font-semibold text-sm text-foreground truncate">
                       Invite to Nocturn
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
@@ -1030,15 +1084,15 @@ export default function ChatPage() {
 
             {/* Invite sent confirmation */}
             {inviteSent && (
-              <div className="mt-2 flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <div className="mt-2 flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 animate-in fade-in zoom-in-95 duration-200">
                 <div className="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
                   <Check size={18} className="text-emerald-400" />
                 </div>
-                <div>
-                  <p className="font-medium text-sm text-foreground">
+                <div className="min-w-0">
+                  <p className="font-semibold text-sm text-foreground truncate">
                     Invitation sent
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs text-muted-foreground truncate">
                     The chat will activate when they join Nocturn
                   </p>
                 </div>
@@ -1055,7 +1109,7 @@ export default function ChatPage() {
                   <p className="text-sm text-muted-foreground mb-1">
                     No collectives found
                   </p>
-                  <p className="text-xs text-muted-foreground/60">
+                  <p className="text-xs text-muted-foreground/70">
                     Type an email address to invite someone
                   </p>
                 </div>
@@ -1064,7 +1118,7 @@ export default function ChatPage() {
             {/* Default state */}
             {collabQuery.length < 2 && (
               <div className="py-8 text-center">
-                <p className="text-sm text-muted-foreground/60">
+                <p className="text-sm text-muted-foreground/70">
                   Search for a collective name or enter an email
                 </p>
               </div>
@@ -1081,6 +1135,7 @@ export default function ChatPage() {
         <Mic className="h-5 w-5" />
         <span className="text-sm font-semibold">Record Call</span>
       </Link>
+      {confirmDialog}
     </div>
   );
 }

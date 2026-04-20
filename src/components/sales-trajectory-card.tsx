@@ -203,19 +203,19 @@ function ChartLegend() {
     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1">
       <div className="flex items-center gap-1.5">
         <div className="w-4 h-[2px] bg-nocturn rounded-full" />
-        <span className="text-[10px] text-muted-foreground">Actual</span>
+        <span className="text-[11px] text-muted-foreground">Actual</span>
       </div>
       <div className="flex items-center gap-1.5">
         <div className="w-4 h-[2px] border-t-2 border-dashed border-nocturn/50 rounded-full" />
-        <span className="text-[10px] text-muted-foreground">Projected</span>
+        <span className="text-[11px] text-muted-foreground">Projected</span>
       </div>
       <div className="flex items-center gap-1.5">
         <div className="w-4 h-[2px] border-t border-dashed border-foreground/20 rounded-full" />
-        <span className="text-[10px] text-muted-foreground">Normal curve</span>
+        <span className="text-[11px] text-muted-foreground">Normal curve</span>
       </div>
       <div className="flex items-center gap-1.5">
         <div className="w-4 h-[2px] border-t border-dashed border-amber-400/50 rounded-full" />
-        <span className="text-[10px] text-muted-foreground">Break-even</span>
+        <span className="text-[11px] text-muted-foreground">Break-even</span>
       </div>
     </div>
   );
@@ -233,7 +233,7 @@ interface SalesTrajectoryCardProps {
 
 export function SalesTrajectoryCard({
   prediction,
-  ticketsSold,
+  ticketsSold: _ticketsSold,
   totalCapacity,
   breakEvenTickets,
   insight,
@@ -293,7 +293,7 @@ export function SalesTrajectoryCard({
         </div>
 
         {/* Curve info */}
-        <p className="text-[10px] text-muted-foreground/50">
+        <p className="text-[11px] text-muted-foreground/70">
           Compared to: {prediction.curveProfile.label} reference curve
         </p>
       </CardContent>

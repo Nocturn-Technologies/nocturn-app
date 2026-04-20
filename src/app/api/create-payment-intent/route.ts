@@ -2,13 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
-import { getCurrencyForCountry, convertAmount, formatLocalAmount } from "@/lib/currency";
+import { formatLocalAmount, isZeroDecimal } from "@/lib/currency";
 import { logPaymentEvent } from "@/lib/payment-events";
 import {
   validatePromo,
   isPromoError,
   calculateCheckoutPricing,
-  insertPendingTickets,
 } from "@/lib/checkout-helpers";
 
 export async function POST(request: NextRequest) {
@@ -87,12 +86,11 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    // Look up event
+    // Look up event. Currency is hardcoded to CAD — events.currency was removed in schema rebuild.
     const { data: event, error: eventError } = await supabase
       .from("events")
       .select("id, title, collective_id, status")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     if (eventError || !event) {
@@ -107,10 +105,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Look up ticket tier
+    // Look up ticket tier (column renames: sales_start → sale_start_at, sales_end → sale_end_at)
     const { data: tier, error: tierError } = await supabase
       .from("ticket_tiers")
-      .select("id, name, price, capacity, sales_start, sales_end")
+      .select("id, name, price, capacity, sale_start_at, sale_end_at")
       .eq("id", tierId)
       .eq("event_id", eventId)
       .maybeSingle();
@@ -121,10 +119,10 @@ export async function POST(request: NextRequest) {
 
     // Validate sales window
     const now = new Date();
-    if (tier.sales_start && new Date(tier.sales_start) > now) {
+    if (tier.sale_start_at && new Date(tier.sale_start_at) > now) {
       return NextResponse.json({ error: "Ticket sales have not started yet" }, { status: 400 });
     }
-    if (tier.sales_end && new Date(tier.sales_end) < now) {
+    if (tier.sale_end_at && new Date(tier.sale_end_at) < now) {
       return NextResponse.json({ error: "Ticket sales have ended" }, { status: 400 });
     }
 
@@ -148,26 +146,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Reserve capacity by inserting "pending" tickets immediately.
-    // These count toward capacity and will be updated to "paid" on fulfillment,
-    // or cleaned up after 30 minutes if the checkout is abandoned (Gap 9 + 25).
-    let pendingTicketIds: string[];
-    try {
-      const pendingResult = await insertPendingTickets(supabase, {
-        eventId,
-        tierId,
-        quantity,
-        email: buyerEmail,
-        phone: buyerPhone,
-      });
-      pendingTicketIds = pendingResult.pendingTicketIds;
-    } catch (err) {
-      console.error("[create-payment-intent] Failed to insert pending tickets:", err);
-      return NextResponse.json(
-        { error: "Failed to reserve tickets. Please try again." },
-        { status: 500 }
-      );
-    }
+    // Ticket rows are created by fulfill_tickets_atomic after payment succeeds (via webhook).
+    // No pending ticket rows needed here — capacity is reserved via check_and_reserve_capacity.
+    const pendingTicketIds: string[] = [];
 
     // Validate tier price
     const basePriceNumber = Number(tier.price);
@@ -207,21 +188,27 @@ export async function POST(request: NextRequest) {
       trackCheckoutStart(eventId)
     ).catch(() => {});
 
-    const serviceFeePerTicketCents = pricing.serviceFeePerTicketCents;
+    const _serviceFeePerTicketCents = pricing.serviceFeePerTicketCents;
     const totalPerTicketCents = pricing.totalPerTicketCents;
-    const totalUsdCents = totalPerTicketCents * quantity;
+    const totalEventCents = totalPerTicketCents * quantity;
 
-    // Detect buyer's country from Vercel header → convert to local currency
-    const buyerCountry = request.headers.get("x-vercel-ip-country") || null;
-    const targetCurrency = getCurrencyForCountry(buyerCountry);
-    const { amount: chargeAmount, rate: fxRate, currency: chargeCurrency } =
-      await convertAmount(totalUsdCents, targetCurrency);
+    // Currency is hardcoded to CAD — events.currency was removed in schema rebuild.
+    const chargeCurrency = "cad";
 
-    // Create PaymentIntent in buyer's local currency
+    if (isZeroDecimal(chargeCurrency)) {
+      return NextResponse.json(
+        {
+          error: `${chargeCurrency.toUpperCase()} is not yet supported for ticket sales. Contact support.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Create PaymentIntent in the charge currency.
     let paymentIntent;
     try {
       paymentIntent = await getStripe().paymentIntents.create({
-        amount: chargeAmount,
+        amount: totalEventCents,
         currency: chargeCurrency,
         receipt_email: buyerEmail,
         metadata: {
@@ -231,11 +218,8 @@ export async function POST(request: NextRequest) {
           buyerEmail,
           buyerPhone,
           ticketPriceCents: String(unitAmountCents),
-          baseCurrency: "usd",
-          baseAmountCents: String(totalUsdCents),
           chargeCurrency,
-          fxRate: String(fxRate),
-          ...(buyerCountry && { buyerCountry }),
+          totalAmountCents: String(totalEventCents),
           ...(referrerToken && { referrerToken }),
           ...(promoId && { promoId, promoCode: validatedPromoCode ?? "", promoClaimedQuantity: String(quantity) }),
           ...(discountCents > 0 && { discountCents: String(discountCents) }),
@@ -248,54 +232,28 @@ export async function POST(request: NextRequest) {
       });
     } catch (stripeErr) {
       console.error("[create-payment-intent] Stripe PaymentIntent creation failed:", stripeErr);
-      // Clean up pending tickets to release reserved capacity
-      if (pendingTicketIds.length > 0) {
-        try {
-          await supabase
-            .from("tickets")
-            .delete()
-            .in("id", pendingTicketIds)
-            .eq("status", "pending");
-          console.info(`[create-payment-intent] Cleaned up ${pendingTicketIds.length} pending ticket(s) after Stripe failure`);
-        } catch (cleanupErr) {
-          console.error("[create-payment-intent] Failed to clean up pending tickets:", cleanupErr);
-        }
-      }
+      // No pending tickets to clean up — capacity reservation via check_and_reserve_capacity
+      // is not persisted as ticket rows, so nothing to delete here.
       return NextResponse.json(
         { error: "Payment service temporarily unavailable." },
         { status: 500 }
       );
     }
 
-    // Link pending tickets to this PaymentIntent so webhooks can find them
-    if (pendingTicketIds.length > 0) {
-      await supabase
-        .from("tickets")
-        .update({
-          stripe_payment_intent_id: paymentIntent.id,
-          metadata: {
-            customer_email: buyerEmail,
-            customer_phone: buyerPhone,
-            pending_expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-            payment_intent_id: paymentIntent.id,
-          },
-        })
-        .in("id", pendingTicketIds);
-    }
+    // No pending ticket rows to link — tickets are created post-payment via fulfill_tickets_atomic
 
     // Log the payment creation for audit trail
     void logPaymentEvent({
+      stripe_event_id: `pi_created:${paymentIntent.id}`,
       event_type: "payment_created",
-      payment_intent_id: paymentIntent.id,
+      stripe_payment_intent_id: paymentIntent.id,
       event_id: eventId,
-      tier_id: tierId,
-      quantity,
-      amount_cents: chargeAmount,
+      amount: totalEventCents / 100,
       currency: chargeCurrency,
-      buyer_email: buyerEmail,
+      customer_email: buyerEmail,
       metadata: {
-        base_amount_cents: totalUsdCents,
-        fx_rate: fxRate,
+        tier_id: tierId,
+        quantity,
         promo_id: promoId ?? undefined,
         discount_cents: discountCents > 0 ? discountCents : undefined,
       },
@@ -303,9 +261,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
-      amount: chargeAmount,
+      amount: totalEventCents,
       currency: chargeCurrency,
-      displayAmount: formatLocalAmount(chargeAmount, chargeCurrency),
+      displayAmount: formatLocalAmount(totalEventCents, chargeCurrency),
     });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : "Unknown error";

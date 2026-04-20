@@ -44,7 +44,7 @@ export function CopyLinkButton({ url, label = "Copy Link" }: { url: string; labe
     >
       {copied ? (
         <>
-          <Check className="h-3 w-3 text-green-500" />
+          <Check className="h-3 w-3 text-emerald-500" />
           Copied!
         </>
       ) : (

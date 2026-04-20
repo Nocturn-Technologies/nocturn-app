@@ -29,7 +29,7 @@ import {
 } from "@/app/actions/network-crm";
 import { getContacts, type Contact } from "@/app/actions/contacts";
 import { saveProfile, unsaveProfile } from "@/app/actions/marketplace";
-import { ContactDialog } from "./contact-dialog";
+import { ContactDialog } from "../discover/contact-dialog";
 import { ImportSheet } from "@/components/people/import-sheet";
 import { ContactDetailSheet } from "@/components/people/contact-detail-sheet";
 import { haptic } from "@/lib/haptics";
@@ -237,7 +237,7 @@ function ContactCard({
               <span className="text-muted-foreground/40">·</span>
             )}
             {lastDate && (
-              <span className="text-muted-foreground/60">Last: {lastDate}</span>
+              <span className="text-muted-foreground/70">Last: {lastDate}</span>
             )}
           </div>
         )}
@@ -395,7 +395,7 @@ function contactToIndustry(c: Contact): IndustryContact {
     city: (meta.city as string) ?? null,
     email: c.email ?? null,
     phone: c.phone ?? null,
-    instagramHandle: c.instagram ?? null,
+    instagramHandle: null,
     soundcloudUrl: (meta.soundcloud_url as string) ?? null,
     spotifyUrl: (meta.spotify_url as string) ?? null,
     websiteUrl: (meta.website_url as string) ?? null,
@@ -405,7 +405,6 @@ function contactToIndustry(c: Contact): IndustryContact {
     relationships: c.source === "import" ? ["Connected"] : [],
     profileId: c.marketplaceProfileId ?? null,
     slug: null,
-    _contactsTableId: c.id,
   };
 }
 
@@ -642,9 +641,9 @@ export function NetworkCRM({ collectiveId }: NetworkCRMProps) {
   // ── Handle contact card click → open detail sheet ─────────────────────────
 
   function handleCardClick(contact: IndustryContact) {
-    // If this contact has a contacts-table ID, open the detail sheet
-    if (contact._contactsTableId) {
-      setDetailContactId(contact._contactsTableId);
+    // Open the detail sheet for this contact
+    if (contact.id) {
+      setDetailContactId(contact.id);
     }
   }
 

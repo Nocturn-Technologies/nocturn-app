@@ -12,8 +12,8 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-dvh items-start justify-center bg-background px-4 py-8 md:py-12 overflow-y-auto">
-      <div className="w-full max-w-md space-y-6">
+    <div className="min-h-dvh bg-background px-4 py-8 md:py-12">
+      <div className="mx-auto w-full max-w-md space-y-6">
         <div className="flex flex-col items-center">
           <NocturnLogo size="lg" />
           <p className="mt-1 text-sm text-muted-foreground">

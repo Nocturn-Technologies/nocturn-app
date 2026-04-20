@@ -14,7 +14,7 @@ interface Props {
 export function LiveTicketStats({ eventId, initialSold, initialCapacity, initialRevenue, initialCheckedIn }: Props) {
   const [sold, setSold] = useState(initialSold);
   const [checkedIn, setCheckedIn] = useState(initialCheckedIn);
-  const [revenue, setRevenue] = useState(initialRevenue);
+  const [revenue, _setRevenue] = useState(initialRevenue);
 
   useEffect(() => {
     const supabase = createClient();
@@ -37,7 +37,7 @@ export function LiveTicketStats({ eventId, initialSold, initialCapacity, initial
   const pct = initialCapacity > 0 ? Math.round((sold / initialCapacity) * 100) : 0;
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2" role="status" aria-live="polite">
       <div className="flex items-center gap-4 text-sm">
         <div className="flex items-center gap-1.5">
           <span className="text-zinc-500">Sold:</span>

@@ -99,7 +99,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search venues..."
-            className="min-h-[44px] pl-9 pr-8 text-base md:text-sm bg-zinc-800 border-white/10 focus:border-[#7B2FF7]/50"
+            className="min-h-[44px] pl-9 pr-8 text-base md:text-sm bg-zinc-800 border-white/10 focus:border-nocturn/50"
           />
           {query && (
             <button
@@ -127,7 +127,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
               onClick={() => setFilter(f)}
               className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors min-h-[44px] ${
                 filter === f
-                  ? "bg-[#7B2FF7] text-white"
+                  ? "bg-nocturn text-white"
                   : "bg-zinc-800 text-zinc-400 hover:text-zinc-200"
               }`}
             >
@@ -141,7 +141,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
       <div className="max-h-[240px] overflow-y-auto border-t border-white/5">
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-5 w-5 text-[#7B2FF7] animate-spin" />
+            <Loader2 className="h-5 w-5 text-nocturn animate-spin" />
           </div>
         ) : venues.length === 0 ? (
           <div className="py-8 text-center text-xs text-zinc-500">
@@ -157,7 +157,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
                 disabled={selectedId !== null}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 text-left transition-colors border-b border-white/[0.03] last:border-b-0 ${
                   isSelected
-                    ? "bg-[#7B2FF7]/10 border-l-2 border-l-[#7B2FF7]"
+                    ? "bg-nocturn/10 border-l-2 border-l-nocturn"
                     : "hover:bg-zinc-800/60"
                 } ${selectedId !== null && !isSelected ? "opacity-40" : ""}`}
               >
@@ -195,7 +195,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
 
                 {/* Selection check */}
                 {isSelected && (
-                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#7B2FF7]">
+                  <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-nocturn">
                     <Check className="h-3 w-3 text-white" />
                   </div>
                 )}
@@ -209,7 +209,7 @@ export default function VenuePicker({ onSelect, onCustom }: VenuePickerProps) {
       <div className="border-t border-white/5 px-3 py-2.5">
         <button
           onClick={onCustom}
-          className="text-xs text-[#7B2FF7] hover:text-[#9D5CFF] font-medium transition-colors min-h-[44px]"
+          className="text-xs text-nocturn hover:text-nocturn-light font-medium transition-colors min-h-[44px]"
         >
           Or type a custom venue
         </button>

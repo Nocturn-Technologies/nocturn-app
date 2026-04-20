@@ -239,7 +239,7 @@ export default function VenuesPage() {
   // ── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300">
+    <div className="space-y-6 overflow-x-hidden animate-in fade-in duration-300 max-w-6xl mx-auto">
       {/* Header */}
       <div className="px-4 md:px-0">
         <h1 className="text-2xl font-bold font-heading">Venues</h1>
@@ -320,7 +320,7 @@ export default function VenuesPage() {
         <div className="space-y-4">
           {/* Search bar */}
           <div className="px-4 md:px-0">
-            <div className="relative">
+            <div className="relative md:max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
@@ -362,7 +362,7 @@ export default function VenuesPage() {
           {/* Venue list — single column mobile, 2-col md+ */}
           <div className="px-4 md:px-0">
             {loadingDiscover ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <VenueCardSkeleton key={i} />
                 ))}
@@ -376,7 +376,7 @@ export default function VenuesPage() {
                 onCta={() => { setQuery(""); setFilter("All"); }}
               />
             ) : (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {venuesSorted.map((venue, i) => (
                   <VenueCard
                     key={venue.place_id}
