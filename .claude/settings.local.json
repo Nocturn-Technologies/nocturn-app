@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh variable *)",
+      "Bash(gh secret *)",
+      "Bash(gh api *)",
+      "Bash(gh auth *)",
+      "Bash(gh pr *)",
+      "Bash(vercel --version)",
+      "Bash(git add *)",
+      "Bash(awk '/^      [a-z_]+: \\\\{/{table=$0} /artist_fees_total:|total_artist_fees:/{print table\": \"$0}' src/lib/supabase/database.types.ts)",
+      "Bash(git branch *)",
+      "Bash(git push *)",
+      "Bash(npx supabase *)",
+      "Bash(sed -n '456,490p' /c/Users/mccan/OneDrive/Desktop/Desktop/Coding/nocturn-app/supabase/migrations/QA_BOOTSTRAP.sql)",
+      "Bash(sed -n '643,660p' /c/Users/mccan/OneDrive/Desktop/Desktop/Coding/nocturn-app/supabase/migrations/QA_BOOTSTRAP.sql)",
+      "Bash(sed -n '758,780p' /c/Users/mccan/OneDrive/Desktop/Desktop/Coding/nocturn-app/supabase/migrations/QA_BOOTSTRAP.sql)",
+      "Bash(sed -n '901,920p' /c/Users/mccan/OneDrive/Desktop/Desktop/Coding/nocturn-app/supabase/migrations/QA_BOOTSTRAP.sql)",
+      "Bash(sed -n '946,965p' /c/Users/mccan/OneDrive/Desktop/Desktop/Coding/nocturn-app/supabase/migrations/QA_BOOTSTRAP.sql)",
+      "Bash(npx tsc *)",
+      "Bash(git checkout *)"
+    ]
+  }
+}

@@ -4,6 +4,7 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { rateLimitStrict } from "@/lib/rate-limit";
 import { sanitizePostgRESTInput } from "@/lib/utils";
+import type { Json } from "@/lib/supabase/database.types";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -14,7 +15,6 @@ export interface Contact {
   email: string | null;
   phone: string | null;
   fullName: string | null;
-  instagram: string | null;
   role: string | null;
   source: string;
   sourceDetail: string | null;
@@ -83,7 +83,6 @@ type ContactFieldInput = {
   fullName?: string | null;
   email?: string | null;
   phone?: string | null;
-  instagram?: string | null;
   notes?: string | null;
   role?: string | null;
 };
@@ -92,19 +91,12 @@ type ContactFieldOutput = {
   fullName?: string | null;
   email?: string | null;
   phone?: string | null;
-  instagram?: string | null;
   notes?: string | null;
   role?: string | null;
 };
 
 /**
- * Validate + sanitize contact fields shared across addContact, updateContact, and importContacts.
- * Trims strings, enforces length caps, validates email format, strips unsafe phone chars,
- * and restricts role to the allowlist.
- *
- * Returns `{ error }` on failure or `{ data }` with sanitized fields on success.
- * Only fields present in `input` (non-undefined) appear in `data`, so callers can distinguish
- * "not provided" from "explicitly set to null" and build partial update payloads cleanly.
+ * Validate + sanitize contact fields.
  */
 function validateContactFields(
   input: ContactFieldInput
@@ -149,7 +141,6 @@ function validateContactFields(
     if (input.phone === null) {
       data.phone = null;
     } else {
-      // Strip to digits + `+ -()` characters; cap at 50
       const stripped = String(input.phone).trim().replace(/[^0-9+\-() ]/g, "");
       if (stripped.length === 0) {
         data.phone = null;
@@ -157,21 +148,6 @@ function validateContactFields(
         return { error: "Phone number is too long (max 50 characters)", data: null };
       } else {
         data.phone = stripped;
-      }
-    }
-  }
-
-  if (input.instagram !== undefined) {
-    if (input.instagram === null) {
-      data.instagram = null;
-    } else {
-      const trimmed = String(input.instagram).trim().replace(/^@/, "");
-      if (trimmed.length === 0) {
-        data.instagram = null;
-      } else if (trimmed.length > 100) {
-        return { error: "Instagram handle is too long (max 100 characters)", data: null };
-      } else {
-        data.instagram = trimmed;
       }
     }
   }
@@ -212,36 +188,71 @@ function validateContactFields(
   return { error: null, data };
 }
 
-/** Map a DB row to our Contact interface */
-function rowToContact(row: Record<string, unknown>): Contact {
+// ── Internal row shape from DB ─────────────────────────────────────────────────
+
+/**
+ * A party_roles row joined with its party and contact methods.
+ * Returned from queries that select contact-role rows.
+ */
+type ContactRow = {
+  id: string;
+  collective_id: string | null;
+  party_id: string;
+  created_at: string;
+  metadata: Record<string, unknown> | null;
+  parties: {
+    id: string;
+    display_name: string;
+    created_at: string;
+    party_contact_methods: {
+      id: string;
+      type: string;
+      value: string;
+      is_primary: boolean;
+    }[];
+  } | null;
+};
+
+/**
+ * Map a DB row (party_roles + parties + party_contact_methods) to the Contact interface.
+ * The `role` column in party_roles is always 'contact' for these rows;
+ * we derive the human-readable role from metadata.role if present.
+ */
+function rowToContact(row: ContactRow, collectiveId: string): Contact {
+  const party = row.parties;
+  const methods = party?.party_contact_methods ?? [];
+  const meta = (row.metadata ?? {}) as Record<string, unknown>;
+
+  const emailMethod = methods.find((m) => m.type === "email");
+  const phoneMethod = methods.find((m) => m.type === "phone");
+
   return {
-    id: row.id as string,
-    collectiveId: row.collective_id as string,
-    contactType: row.contact_type as "industry" | "fan",
-    email: (row.email as string) ?? null,
-    phone: (row.phone as string) ?? null,
-    fullName: (row.full_name as string) ?? null,
-    instagram: (row.instagram as string) ?? null,
-    role: (row.role as string) ?? null,
-    source: row.source as string,
-    sourceDetail: (row.source_detail as string) ?? null,
-    userId: (row.user_id as string) ?? null,
-    artistId: (row.artist_id as string) ?? null,
-    marketplaceProfileId: (row.marketplace_profile_id as string) ?? null,
-    tags: (row.tags as string[]) ?? [],
-    notes: (row.notes as string) ?? null,
-    followUpAt: (row.follow_up_at as string) ?? null,
-    totalEvents: (row.total_events as number) ?? 0,
-    totalSpend: Number(row.total_spend) || 0,
-    firstSeenAt: row.first_seen_at as string,
-    lastSeenAt: row.last_seen_at as string,
-    metadata: (row.metadata as Record<string, unknown>) ?? {},
-    createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    id: row.id,
+    collectiveId,
+    contactType: (meta.contact_type as "industry" | "fan") ?? "industry",
+    email: emailMethod?.value ?? null,
+    phone: phoneMethod?.value ?? null,
+    fullName: party?.display_name ?? null,
+    role: (meta.role as string) ?? null,
+    source: (meta.source as string) ?? "manual",
+    sourceDetail: (meta.source_detail as string) ?? null,
+    userId: (meta.user_id as string) ?? null,
+    artistId: (meta.artist_id as string) ?? null,
+    marketplaceProfileId: null,
+    tags: (meta.tags as string[]) ?? [],
+    notes: (meta.notes as string) ?? null,
+    followUpAt: (meta.follow_up_at as string) ?? null,
+    totalEvents: (meta.total_events as number) ?? 0,
+    totalSpend: Number(meta.total_spend) || 0,
+    firstSeenAt: party?.created_at ?? row.created_at,
+    lastSeenAt: (meta.last_seen_at as string) ?? row.created_at,
+    metadata: meta,
+    createdAt: row.created_at,
+    updatedAt: (meta.updated_at as string) ?? row.created_at,
   };
 }
 
-/** Verify authenticated user is a member of the collective. Returns userId or error. */
+/** Verify authenticated user is a member of the collective. */
 async function verifyCollectiveAccess(
   collectiveId: string
 ): Promise<{ userId: string; error: null } | { userId: null; error: string }> {
@@ -281,15 +292,12 @@ async function verifyCollectiveAccess(
 
 /**
  * Compute fan segment from contact data.
- * Segments are computed, never stored as a column.
  */
 function computeSegment(
   contact: Contact,
   totalCollectiveEvents: number
 ): "core50" | "ambassador" | "repeat" | "new" | "vip" {
-  // VIP: high spender (top tier, >$500 lifetime)
   if (contact.totalSpend >= 500) return "vip";
-  // Ambassador: tagged as ambassador or has referral metadata
   const meta = contact.metadata ?? {};
   if (
     contact.tags?.includes("ambassador") ||
@@ -297,18 +305,19 @@ function computeSegment(
   ) {
     return "ambassador";
   }
-  // Core 50: attended all events (or nearly all) when 2+ exist
   if (
     totalCollectiveEvents >= 2 &&
     contact.totalEvents >= totalCollectiveEvents
   ) {
     return "core50";
   }
-  // Repeat: 2+ events
   if (contact.totalEvents >= 2) return "repeat";
-  // New: everyone else
   return "new";
 }
+
+// The join string for party_roles → parties → party_contact_methods
+const CONTACT_JOIN =
+  "id, collective_id, party_id, created_at, metadata, parties(id, display_name, created_at, party_contact_methods(id, type, value, is_primary))";
 
 // ── 1. getContacts ────────────────────────────────────────────────────────────
 
@@ -341,54 +350,24 @@ export async function getContacts(
   const page = filters.page ?? 1;
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Build query
-  let query = admin.from("contacts")
-    .select("*", { count: "exact" })
-    .eq("collective_id", collectiveId)
-    .is("deleted_at", null);
+  // Query party_roles where role='contact' and collective_id=X
+  let query = admin
+    .from("party_roles")
+    .select(CONTACT_JOIN, { count: "exact" })
+    .eq("role", "contact")
+    .eq("collective_id", collectiveId);
 
-  // Filter by contact type
-  if (filters.contactType) {
-    query = query.eq("contact_type", filters.contactType);
+  // Sorting on the joined party display_name is not directly supported via
+  // PostgREST nested ordering, so we order by created_at for now. Name/email
+  // sorts are applied in-memory after fetch for small result sets.
+  const sortBy = filters.sortBy ?? "last_seen";
+  const needsInMemorySort = sortBy === "name" || sortBy === "email" || sortBy === "last_seen" || sortBy === "total_events" || sortBy === "total_spend";
+  if (!needsInMemorySort) {
+    query = query.order("created_at", { ascending: sortBy === "created" });
+  } else {
+    query = query.order("created_at", { ascending: false });
   }
 
-  // Search by name or email (sanitize to prevent PostgREST injection)
-  if (filters.search?.trim()) {
-    const sanitized = sanitizePostgRESTInput(filters.search);
-    if (sanitized) {
-      query = query.or(`full_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%`);
-    }
-  }
-
-  // Filter by tags (all provided tags must be present)
-  if (filters.tags && filters.tags.length > 0) {
-    query = query.contains("tags", filters.tags);
-  }
-
-  // Filter by source
-  if (filters.source) {
-    query = query.eq("source", filters.source);
-  }
-
-  // Filter by role (industry contacts)
-  if (filters.role) {
-    query = query.eq("role", filters.role);
-  }
-
-  // Sorting
-  const sortMap: Record<string, string> = {
-    name: "full_name",
-    email: "email",
-    created: "created_at",
-    last_seen: "last_seen_at",
-    total_events: "total_events",
-    total_spend: "total_spend",
-  };
-  const sortColumn = sortMap[filters.sortBy ?? "last_seen"] ?? "last_seen_at";
-  const ascending = sortColumn === "full_name" || sortColumn === "email";
-  query = query.order(sortColumn, { ascending, nullsFirst: false });
-
-  // Pagination
   query = query.range(offset, offset + PAGE_SIZE - 1);
 
   const { data, count: totalCount, error } = await query;
@@ -398,21 +377,73 @@ export async function getContacts(
     return { ...empty, error: "Failed to load contacts" };
   }
 
-  const rows = (data ?? []) as Record<string, unknown>[];
-  let contacts = rows.map(rowToContact);
+  let contacts = (data ?? []).map((row) =>
+    rowToContact(row as unknown as ContactRow, collectiveId)
+  );
 
-  // For fan segment filtering, we need to compute segments
+  // Apply contact type filter (stored in metadata)
+  if (filters.contactType) {
+    contacts = contacts.filter((c) => c.contactType === filters.contactType);
+  }
+
+  // Apply search filter
+  if (filters.search?.trim()) {
+    const sanitized = sanitizePostgRESTInput(filters.search).toLowerCase();
+    if (sanitized) {
+      contacts = contacts.filter(
+        (c) =>
+          c.fullName?.toLowerCase().includes(sanitized) ||
+          c.email?.toLowerCase().includes(sanitized)
+      );
+    }
+  }
+
+  // Apply tag filter
+  if (filters.tags && filters.tags.length > 0) {
+    contacts = contacts.filter((c) =>
+      filters.tags!.every((t) => c.tags.includes(t))
+    );
+  }
+
+  // Apply source filter
+  if (filters.source) {
+    contacts = contacts.filter((c) => c.source === filters.source);
+  }
+
+  // Apply role filter
+  if (filters.role) {
+    contacts = contacts.filter((c) => c.role === filters.role);
+  }
+
+  // In-memory sort
+  if (needsInMemorySort) {
+    contacts.sort((a, b) => {
+      switch (sortBy) {
+        case "name":
+          return (a.fullName ?? "").localeCompare(b.fullName ?? "");
+        case "email":
+          return (a.email ?? "").localeCompare(b.email ?? "");
+        case "last_seen":
+          return new Date(b.lastSeenAt).getTime() - new Date(a.lastSeenAt).getTime();
+        case "total_events":
+          return b.totalEvents - a.totalEvents;
+        case "total_spend":
+          return b.totalSpend - a.totalSpend;
+        default:
+          return 0;
+      }
+    });
+  }
+
+  // Segment computation for fan contacts
   if (filters.contactType === "fan" || !filters.contactType) {
-    // Get total events for this collective (for segment computation)
     const { count: eventCount } = await admin
       .from("events")
       .select("*", { count: "exact", head: true })
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     const totalCollectiveEvents = eventCount ?? 0;
 
-    // Attach computed segment for fan contacts
     if (filters.segment) {
       contacts = contacts.filter((c) => {
         if (c.contactType !== "fan") return false;
@@ -420,47 +451,25 @@ export async function getContacts(
       });
     }
 
-    // Compute segment counts — fetch all fan contacts for counts
-    const { data: allFans } = await admin.from("contacts")
-      .select("total_events, total_spend, tags, metadata, created_at")
-      .eq("collective_id", collectiveId)
-      .eq("contact_type", "fan")
-      .is("deleted_at", null);
-
+    // Compute aggregate stats across all contacts fetched
     const segmentCounts: Record<string, number> = {
-      core50: 0,
-      ambassador: 0,
-      repeat: 0,
-      new: 0,
-      vip: 0,
+      core50: 0, ambassador: 0, repeat: 0, new: 0, vip: 0,
     };
-
-    // Compute aggregate stats across ALL fan contacts (not just paginated)
     let totalRevenue = 0;
     let repeatCount = 0;
     let newThisMonth = 0;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    for (const fan of (allFans ?? []) as Record<string, unknown>[]) {
-      const spend = Number(fan.total_spend) || 0;
-      const events = (fan.total_events as number) ?? 0;
-      const createdAt = fan.created_at as string | undefined;
-      totalRevenue += spend;
-      if (events >= 2) repeatCount++;
-      if (createdAt && new Date(createdAt) >= thirtyDaysAgo) newThisMonth++;
-
-      const tempContact = {
-        totalEvents: events,
-        totalSpend: spend,
-        tags: (fan.tags as string[]) ?? [],
-        metadata: (fan.metadata as Record<string, unknown>) ?? {},
-      } as Contact;
-      const seg = computeSegment(tempContact, totalCollectiveEvents);
-      segmentCounts[seg]++;
+    for (const c of contacts) {
+      if (c.contactType !== "fan") continue;
+      totalRevenue += c.totalSpend;
+      if (c.totalEvents >= 2) repeatCount++;
+      if (new Date(c.createdAt) >= thirtyDaysAgo) newThisMonth++;
+      segmentCounts[computeSegment(c, totalCollectiveEvents)]++;
     }
 
-    const fanCount = (allFans ?? []).length;
+    const fanCount = contacts.filter((c) => c.contactType === "fan").length;
     const aggregateStats: AggregateStats = {
       totalRevenue,
       avgSpend: fanCount > 0 ? totalRevenue / fanCount : 0,
@@ -502,16 +511,16 @@ export async function getContactDetail(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) return { error: "Not authenticated", detail: null };
 
   const admin = createAdminClient();
 
-  // Fetch the contact row
-  const { data: contactRow, error: contactError } = await admin.from("contacts")
-    .select("*")
+  // Fetch the party_roles row (contact role)
+  const { data: contactRow, error: contactError } = await admin
+    .from("party_roles")
+    .select(CONTACT_JOIN)
     .eq("id", contactId)
-    .is("deleted_at", null)
+    .eq("role", "contact")
     .maybeSingle();
 
   if (contactError || !contactRow) {
@@ -519,88 +528,73 @@ export async function getContactDetail(
     return { error: "Contact not found", detail: null };
   }
 
-  // Verify user has access to this contact's collective
-  const auth = await verifyCollectiveAccess(contactRow.collective_id as string);
+  const row = contactRow as unknown as ContactRow;
+  if (!row.collective_id) return { error: "Contact not found", detail: null };
+
+  const auth = await verifyCollectiveAccess(row.collective_id);
   if (auth.error) return { error: auth.error, detail: null };
 
-  const contact = rowToContact(contactRow as Record<string, unknown>);
+  const contact = rowToContact(row, row.collective_id);
   const timeline: TimelineEntry[] = [];
 
   // Get collective event IDs for ticket lookups
   const { data: events } = await admin
     .from("events")
     .select("id, title, starts_at")
-    .eq("collective_id", contact.collectiveId)
-    .is("deleted_at", null);
+    .eq("collective_id", contact.collectiveId);
 
   const eventIds = events?.map((e) => e.id) ?? [];
   const eventMap = new Map(
     (events ?? []).map((e) => [e.id, { title: e.title, startsAt: e.starts_at }])
   );
 
-  // Tickets by email match within collective events
-  if (contact.email && eventIds.length > 0) {
-    const { data: tickets } = await admin
-      .from("tickets")
-      .select("id, event_id, price_paid, metadata, created_at")
+  // Purchase history via orders (linked by party_id)
+  if (eventIds.length > 0) {
+    const { data: orders } = await admin
+      .from("orders")
+      .select("id, event_id, total, created_at")
       .in("event_id", eventIds)
-      .in("status", ["paid", "checked_in"]);
+      .eq("party_id", row.party_id)
+      .eq("status", "paid");
 
-    for (const ticket of tickets ?? []) {
-      const meta = ticket.metadata as Record<string, unknown> | null;
-      const ticketEmail =
-        ((meta?.customer_email ?? meta?.buyer_email ?? meta?.email) as string)
-          ?.toLowerCase()
-          .trim() ?? "";
+    for (const order of orders ?? []) {
+      const event = eventMap.get(order.event_id);
+      timeline.push({
+        id: order.id,
+        type: "ticket",
+        title: `Ticket for ${event?.title ?? "Unknown event"}`,
+        detail: order.total ? `$${Number(order.total).toFixed(2)}` : "Free",
+        date: order.created_at,
+      });
+    }
+  }
 
-      if (ticketEmail === contact.email.toLowerCase().trim()) {
-        const event = eventMap.get(ticket.event_id);
+  // Event bookings (if artist_id is set in metadata — stored as artist_profiles.id)
+  if (contact.artistId && eventIds.length > 0) {
+    // Resolve artist_profiles.id → parties.id for event_artists lookup
+    const { data: artistProfileRow } = await admin
+      .from("artist_profiles")
+      .select("party_id")
+      .eq("id", contact.artistId)
+      .is("deleted_at", null)
+      .maybeSingle();
+
+    if (artistProfileRow?.party_id) {
+      const { data: bookings } = await admin.from("event_artists")
+        .select("id, event_id, created_at, role")
+        .eq("party_id", artistProfileRow.party_id)
+        .in("event_id", eventIds);
+
+      for (const booking of (bookings ?? []) as Record<string, unknown>[]) {
+        const event = eventMap.get(booking.event_id as string);
         timeline.push({
-          id: ticket.id,
-          type: "ticket",
-          title: `Ticket for ${event?.title ?? "Unknown event"}`,
-          detail: ticket.price_paid ? `$${Number(ticket.price_paid).toFixed(2)}` : "Free",
-          date: ticket.created_at,
+          id: booking.id as string,
+          type: "booking",
+          title: `Booked for ${event?.title ?? "Unknown event"}`,
+          detail: `Status: ${(booking.role as string) ?? "pending"}`,
+          date: booking.created_at as string,
         });
       }
-    }
-  }
-
-  // Marketplace inquiries (if marketplace_profile_id is set)
-  if (contact.marketplaceProfileId) {
-    const { data: inquiries } = await admin.from("marketplace_inquiries")
-      .select("id, message, created_at, from_user_id")
-      .eq("to_profile_id", contact.marketplaceProfileId)
-      .order("created_at", { ascending: false })
-      .limit(20);
-
-    for (const inq of (inquiries ?? []) as Record<string, unknown>[]) {
-      timeline.push({
-        id: inq.id as string,
-        type: "inquiry",
-        title: "Marketplace inquiry",
-        detail: ((inq.message as string) ?? "").slice(0, 100),
-        date: inq.created_at as string,
-      });
-    }
-  }
-
-  // Event bookings (if artist_id is set)
-  if (contact.artistId && eventIds.length > 0) {
-    const { data: bookings } = await admin.from("event_artists")
-      .select("id, event_id, status, created_at")
-      .eq("artist_id", contact.artistId)
-      .in("event_id", eventIds);
-
-    for (const booking of (bookings ?? []) as Record<string, unknown>[]) {
-      const event = eventMap.get(booking.event_id as string);
-      timeline.push({
-        id: booking.id as string,
-        type: "booking",
-        title: `Booked for ${event?.title ?? "Unknown event"}`,
-        detail: `Status: ${booking.status as string}`,
-        date: booking.created_at as string,
-      });
     }
   }
 
@@ -634,7 +628,6 @@ export async function importContacts(
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { error: auth.error, result: null };
 
-  // Rate limit: 5 imports per minute
   const rl = await rateLimitStrict(`import:${auth.userId}`, 5, 60_000);
   if (!rl.success) return { error: "Rate limit exceeded. Try again in a minute.", result: null };
 
@@ -644,26 +637,16 @@ export async function importContacts(
 
   const result: ImportResult = { created: 0, updated: 0, skipped: 0, errors: [] };
 
-  // Detect format: CSV with headers, tab-separated, or plain email list
   const firstLine = lines[0].trim();
   const isCSV = firstLine.includes(",") && /email/i.test(firstLine);
   const isTSV = firstLine.includes("\t") && /email/i.test(firstLine);
 
-  type ParsedRow = {
-    email: string;
-    fullName?: string;
-    phone?: string;
-    instagram?: string;
-  };
-
+  type ParsedRow = { email: string; fullName?: string; phone?: string };
   const parsed: ParsedRow[] = [];
 
   if (isCSV || isTSV) {
-    // Parse header to find column indices
     const separator = isTSV ? "\t" : ",";
     const headers = firstLine.split(separator).map((h) => h.trim().toLowerCase().replace(/['"]/g, ""));
-
-    // Common header variants
     const emailIdx = headers.findIndex((h) =>
       ["email", "e-mail", "email_address", "emailaddress", "email address"].includes(h)
     );
@@ -673,118 +656,109 @@ export async function importContacts(
     const phoneIdx = headers.findIndex((h) =>
       ["phone", "phone_number", "phonenumber", "phone number", "mobile", "cell"].includes(h)
     );
-    const igIdx = headers.findIndex((h) =>
-      ["instagram", "ig", "instagram_handle", "ig_handle", "instagram handle"].includes(h)
-    );
-
     if (emailIdx === -1) {
       return { error: "Could not find an email column in the CSV header", result: null };
     }
-
-    // Parse data rows (skip header)
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(separator).map((c) => c.trim().replace(/^["']|["']$/g, ""));
       const email = cols[emailIdx]?.trim().toLowerCase();
       if (!email) continue;
-
       parsed.push({
         email,
         fullName: nameIdx >= 0 ? cols[nameIdx] : undefined,
         phone: phoneIdx >= 0 ? cols[phoneIdx] : undefined,
-        instagram: igIdx >= 0 ? cols[igIdx] : undefined,
       });
     }
   } else {
-    // Plain email list (one per line)
     for (const line of lines) {
       const email = line.trim().toLowerCase();
-      if (email) {
-        parsed.push({ email });
-      }
+      if (email) parsed.push({ email });
     }
   }
 
-  // Enforce limit on parsed rows
-  if (parsed.length > 500) {
-    return { error: "Maximum 500 contacts per import", result: null };
-  }
+  if (parsed.length > 500) return { error: "Maximum 500 contacts per import", result: null };
 
   const admin = createAdminClient();
 
-  // Batch upsert in chunks of 50
-  const chunkSize = 50;
-  for (let i = 0; i < parsed.length; i += chunkSize) {
-    const chunk = parsed.slice(i, i + chunkSize);
-    const rows = [];
+  for (const row of parsed) {
+    const validation = validateContactFields({
+      fullName: row.fullName,
+      email: row.email,
+      phone: row.phone,
+      role: input.role,
+    });
 
-    for (const row of chunk) {
-      // Shared validation per row: email regex, length caps, role allowlist, phone sanitize
-      const validation = validateContactFields({
-        fullName: row.fullName,
-        email: row.email,
-        phone: row.phone,
-        instagram: row.instagram,
-        role: input.role,
-      });
-
-      if (validation.error !== null) {
-        result.errors.push(
-          `Invalid contact (${row.email || "no email"}): ${validation.error}`
-        );
-        result.skipped++;
-        continue;
-      }
-      const sanitized = validation.data;
-      if (!sanitized.email) {
-        result.errors.push(
-          `Invalid contact (${row.email || "no email"}): email required`
-        );
-        result.skipped++;
-        continue;
-      }
-
-      rows.push({
-        collective_id: collectiveId,
-        contact_type: input.contactType,
-        email: sanitized.email,
-        full_name: sanitized.fullName ?? null,
-        phone: sanitized.phone ?? null,
-        instagram: sanitized.instagram ?? null,
-        role: sanitized.role ?? null,
-        source: "import",
-        source_detail: input.sourceDetail || null,
-        tags: input.tags ?? [],
-        updated_at: new Date().toISOString(),
-      });
+    if (validation.error !== null) {
+      result.errors.push(`Invalid contact (${row.email || "no email"}): ${validation.error}`);
+      result.skipped++;
+      continue;
     }
-
-    if (rows.length === 0) continue;
-
-    // Upsert with ON CONFLICT on (collective_id, email)
-    const { data: upserted, error: upsertError } = await admin.from("contacts")
-      .upsert(rows, {
-        onConflict: "collective_id,email",
-        ignoreDuplicates: false,
-      })
-      .select("id, created_at, updated_at");
-
-    if (upsertError) {
-      console.error("[importContacts] batch upsert error:", upsertError.message);
-      result.errors.push("Some contacts failed to import");
-      result.skipped += rows.length;
+    const sanitized = validation.data;
+    if (!sanitized.email) {
+      result.errors.push(`Invalid contact (${row.email || "no email"}): email required`);
+      result.skipped++;
       continue;
     }
 
-    // Count created vs updated by comparing created_at and updated_at
-    for (const rec of (upserted ?? []) as Record<string, unknown>[]) {
-      const created = new Date(rec.created_at as string).getTime();
-      const updated = new Date(rec.updated_at as string).getTime();
-      // If created_at is within 2 seconds of updated_at, it's a new record
-      if (Math.abs(updated - created) < 2000) {
-        result.created++;
-      } else {
-        result.updated++;
+    try {
+      // Create party
+      const { data: party, error: partyError } = await admin
+        .from("parties")
+        .insert({ display_name: sanitized.fullName ?? sanitized.email, type: "person" })
+        .select("id")
+        .maybeSingle();
+
+      if (partyError || !party) {
+        result.errors.push(`Failed to import contact (${sanitized.email})`);
+        result.skipped++;
+        continue;
       }
+
+      // Create the contact role
+      const now = new Date().toISOString();
+      const { error: roleError } = await admin.from("party_roles").insert({
+        party_id: party.id,
+        role: "contact",
+        collective_id: collectiveId,
+        metadata: {
+          contact_type: input.contactType,
+          source: "import",
+          source_detail: input.sourceDetail || null,
+          tags: input.tags ?? [],
+          role: sanitized.role ?? null,
+          updated_at: now,
+        },
+      });
+
+      if (roleError) {
+        result.errors.push(`Failed to import contact (${sanitized.email})`);
+        result.skipped++;
+        continue;
+      }
+
+      // Store email contact method
+      await admin.from("party_contact_methods").insert({
+        party_id: party.id,
+        type: "email",
+        value: sanitized.email,
+        is_primary: true,
+      });
+
+      // Store phone if provided
+      if (sanitized.phone) {
+        await admin.from("party_contact_methods").insert({
+          party_id: party.id,
+          type: "phone",
+          value: sanitized.phone,
+          is_primary: false,
+        });
+      }
+
+      result.created++;
+    } catch (rowErr) {
+      console.error("[importContacts] row error:", rowErr);
+      result.errors.push(`Failed to import contact (${row.email})`);
+      result.skipped++;
     }
   }
 
@@ -803,7 +777,6 @@ export async function addContact(
     fullName: string;
     email: string;
     phone?: string;
-    instagram?: string;
     contactType: "industry" | "fan";
     role?: string;
     tags?: string[];
@@ -816,16 +789,13 @@ export async function addContact(
   const auth = await verifyCollectiveAccess(collectiveId);
   if (auth.error) return { error: auth.error, contact: null };
 
-  // Rate limit: 20 adds per minute
   const rl = await rateLimitStrict(`add-contact:${auth.userId}`, 20, 60_000);
   if (!rl.success) return { error: "Rate limit exceeded. Try again in a minute.", contact: null };
 
-  // Shared validation: trims, length caps, email regex, role allowlist, phone sanitization
   const validation = validateContactFields({
     fullName: data.fullName,
     email: data.email,
     phone: data.phone,
-    instagram: data.instagram,
     notes: data.notes,
     role: data.role,
   });
@@ -839,34 +809,86 @@ export async function addContact(
   }
 
   const admin = createAdminClient();
+  const now = new Date().toISOString();
 
-  const { data: row, error } = await admin.from("contacts")
-    .upsert(
-      {
-        collective_id: collectiveId,
+  // 1. Create party
+  const { data: party, error: partyError } = await admin
+    .from("parties")
+    .insert({ display_name: sanitized.fullName ?? sanitized.email, type: "person" })
+    .select("id, display_name, created_at")
+    .maybeSingle();
+
+  if (partyError || !party) {
+    console.error("[addContact] party insert error:", partyError?.message);
+    return { error: "Failed to add contact", contact: null };
+  }
+
+  // 2. Create contact role
+  const { data: roleRow, error: roleError } = await admin
+    .from("party_roles")
+    .insert({
+      party_id: party.id,
+      role: "contact",
+      collective_id: collectiveId,
+      metadata: {
         contact_type: data.contactType,
-        email: sanitized.email,
-        full_name: sanitized.fullName ?? null,
-        phone: sanitized.phone ?? null,
-        instagram: sanitized.instagram ?? null,
-        role: sanitized.role ?? null,
         source: "manual",
         source_detail: "quick_add",
         tags: data.tags ?? [],
         notes: sanitized.notes ?? null,
-        updated_at: new Date().toISOString(),
+        role: sanitized.role ?? null,
+        updated_at: now,
       },
-      { onConflict: "collective_id,email", ignoreDuplicates: false }
-    )
-    .select("*")
+    })
+    .select("id, collective_id, party_id, created_at, metadata")
     .maybeSingle();
 
-  if (error || !row) {
-    if (error) console.error("[addContact] upsert error:", error.message);
+  if (roleError || !roleRow) {
+    console.error("[addContact] role insert error:", roleError?.message);
     return { error: "Failed to add contact", contact: null };
   }
 
-  return { error: null, contact: rowToContact(row as Record<string, unknown>) };
+  // 3. Store email contact method
+  await admin.from("party_contact_methods").insert({
+    party_id: party.id,
+    type: "email",
+    value: sanitized.email,
+    is_primary: true,
+  });
+
+  // 4. Store phone if provided
+  if (sanitized.phone) {
+    await admin.from("party_contact_methods").insert({
+      party_id: party.id,
+      type: "phone",
+      value: sanitized.phone,
+      is_primary: false,
+    });
+  }
+
+  // Build contact from what we just inserted
+  const contactMethods: { id: string; type: string; value: string; is_primary: boolean }[] = [
+    { id: "", type: "email", value: sanitized.email, is_primary: true },
+  ];
+  if (sanitized.phone) {
+    contactMethods.push({ id: "", type: "phone", value: sanitized.phone, is_primary: false });
+  }
+
+  const row: ContactRow = {
+    id: roleRow.id as string,
+    collective_id: collectiveId,
+    party_id: party.id,
+    created_at: roleRow.created_at as string,
+    metadata: roleRow.metadata as Record<string, unknown> | null,
+    parties: {
+      id: party.id,
+      display_name: party.display_name,
+      created_at: party.created_at,
+      party_contact_methods: contactMethods,
+    },
+  };
+
+  return { error: null, contact: rowToContact(row, collectiveId) };
   } catch (err) {
     console.error("[addContact] Unexpected error:", err);
     return { error: "Something went wrong", contact: null };
@@ -884,7 +906,6 @@ export async function updateContact(
     fullName?: string;
     email?: string;
     phone?: string;
-    instagram?: string;
     role?: string;
   }
 ): Promise<{ error: string | null; contact: Contact | null }> {
@@ -895,34 +916,31 @@ export async function updateContact(
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
   if (!user) return { error: "Not authenticated", contact: null };
 
-  // Rate limit: 30 updates per minute
   const rl = await rateLimitStrict(`update-contact:${user.id}`, 30, 60_000);
   if (!rl.success) return { error: "Rate limit exceeded. Try again in a minute.", contact: null };
 
   const admin = createAdminClient();
 
-  // First fetch the contact to verify access
-  const { data: existing } = await admin.from("contacts")
-    .select("collective_id")
+  // Fetch existing contact role
+  const { data: existing } = await admin
+    .from("party_roles")
+    .select("collective_id, party_id, metadata")
     .eq("id", contactId)
-    .is("deleted_at", null)
+    .eq("role", "contact")
     .maybeSingle();
 
   if (!existing) return { error: "Contact not found", contact: null };
+  if (!existing.collective_id) return { error: "Contact not found", contact: null };
 
-  const auth = await verifyCollectiveAccess(existing.collective_id as string);
+  const auth = await verifyCollectiveAccess(existing.collective_id);
   if (auth.error) return { error: auth.error, contact: null };
 
-  // Shared validation: trims, length caps, email regex, role allowlist, phone sanitization.
-  // Only the fields the caller provided will be validated + returned.
   const validation = validateContactFields({
     fullName: updates.fullName,
     email: updates.email,
     phone: updates.phone,
-    instagram: updates.instagram,
     notes: updates.notes,
     role: updates.role,
   });
@@ -931,31 +949,101 @@ export async function updateContact(
   }
   const sanitized = validation.data;
 
-  // Build update payload — only include provided fields
-  const payload: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
-  };
-  if (updates.tags !== undefined) payload.tags = updates.tags;
-  if (updates.followUpAt !== undefined) payload.follow_up_at = updates.followUpAt;
-  if (sanitized.fullName !== undefined) payload.full_name = sanitized.fullName;
-  if (sanitized.email !== undefined) payload.email = sanitized.email;
-  if (sanitized.phone !== undefined) payload.phone = sanitized.phone;
-  if (sanitized.instagram !== undefined) payload.instagram = sanitized.instagram;
-  if (sanitized.notes !== undefined) payload.notes = sanitized.notes;
-  if (sanitized.role !== undefined) payload.role = sanitized.role;
+  // Update party display_name if fullName changed
+  if (sanitized.fullName !== undefined && sanitized.fullName !== null) {
+    await admin
+      .from("parties")
+      .update({ display_name: sanitized.fullName })
+      .eq("id", existing.party_id);
+  }
 
-  const { data: row, error } = await admin.from("contacts")
-    .update(payload)
-    .eq("id", contactId)
-    .select("*")
-    .maybeSingle();
+  // Update email contact method
+  if (sanitized.email !== undefined && sanitized.email !== null) {
+    const { count: emailCount } = await admin
+      .from("party_contact_methods")
+      .select("*", { count: "exact", head: true })
+      .eq("party_id", existing.party_id)
+      .eq("type", "email");
 
-  if (error || !row) {
-    if (error) console.error("[updateContact] update error:", error.message);
+    if (emailCount && emailCount > 0) {
+      await admin
+        .from("party_contact_methods")
+        .update({ value: sanitized.email })
+        .eq("party_id", existing.party_id)
+        .eq("type", "email");
+    } else {
+      await admin.from("party_contact_methods").insert({
+        party_id: existing.party_id,
+        type: "email",
+        value: sanitized.email,
+        is_primary: true,
+      });
+    }
+  }
+
+  // Update phone contact method
+  if (sanitized.phone !== undefined) {
+    const { count: phoneCount } = await admin
+      .from("party_contact_methods")
+      .select("*", { count: "exact", head: true })
+      .eq("party_id", existing.party_id)
+      .eq("type", "phone");
+
+    if (sanitized.phone === null) {
+      await admin
+        .from("party_contact_methods")
+        .delete()
+        .eq("party_id", existing.party_id)
+        .eq("type", "phone");
+    } else if (phoneCount && phoneCount > 0) {
+      await admin
+        .from("party_contact_methods")
+        .update({ value: sanitized.phone })
+        .eq("party_id", existing.party_id)
+        .eq("type", "phone");
+    } else {
+      await admin.from("party_contact_methods").insert({
+        party_id: existing.party_id,
+        type: "phone",
+        value: sanitized.phone,
+        is_primary: false,
+      });
+    }
+  }
+
+  // Update metadata on the party_roles row
+  const now = new Date().toISOString();
+  const prevMeta = (existing.metadata as Record<string, unknown>) ?? {};
+  const newMeta: Record<string, unknown> = { ...prevMeta, updated_at: now };
+
+  if (updates.tags !== undefined) newMeta.tags = updates.tags;
+  if (updates.followUpAt !== undefined) newMeta.follow_up_at = updates.followUpAt;
+  if (sanitized.notes !== undefined) newMeta.notes = sanitized.notes;
+  if (sanitized.role !== undefined) newMeta.role = sanitized.role;
+
+  const { error: updateError } = await admin
+    .from("party_roles")
+    .update({ metadata: newMeta as unknown as { [key: string]: Json | undefined } })
+    .eq("id", contactId);
+
+  if (updateError) {
+    console.error("[updateContact] update error:", updateError.message);
     return { error: "Failed to update contact", contact: null };
   }
 
-  return { error: null, contact: rowToContact(row as Record<string, unknown>) };
+  // Re-fetch to build the response
+  const { data: refreshed } = await admin
+    .from("party_roles")
+    .select(CONTACT_JOIN)
+    .eq("id", contactId)
+    .maybeSingle();
+
+  if (!refreshed) return { error: "Failed to reload contact", contact: null };
+
+  return {
+    error: null,
+    contact: rowToContact(refreshed as unknown as ContactRow, existing.collective_id as string),
+  };
   } catch (err) {
     console.error("[updateContact] Unexpected error:", err);
     return { error: "Something went wrong", contact: null };
@@ -964,10 +1052,6 @@ export async function updateContact(
 
 // ── 6. getEventFanEmails ─────────────────────────────────────────────────────
 
-/**
- * Get all emails associated with a specific event — from tickets, RSVPs,
- * and guest list. Uses admin client to bypass RLS.
- */
 export async function getEventFanEmails(
   eventId: string
 ): Promise<{ error: string | null; emails: string[] }> {
@@ -980,12 +1064,10 @@ export async function getEventFanEmails(
 
     const admin = createAdminClient();
 
-    // Verify user has access to this event's collective
     const { data: event } = await admin
       .from("events")
       .select("collective_id")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
     if (!event) return { error: "Event not found", emails: [] };
 
@@ -999,33 +1081,22 @@ export async function getEventFanEmails(
 
     const emailSet = new Set<string>();
 
-    // 1. Ticket buyer emails (from metadata)
-    const { data: tickets } = await admin
-      .from("tickets")
+    // Ticket buyer emails (from order metadata)
+    const { data: orders } = await admin
+      .from("orders")
       .select("metadata")
       .eq("event_id", eventId)
-      .in("status", ["paid", "checked_in"]);
+      .eq("status", "paid");
 
-    for (const t of (tickets ?? []) as { metadata: Record<string, unknown> | null }[]) {
+    for (const o of (orders ?? []) as { metadata: Record<string, unknown> | null }[]) {
       const email =
-        (t.metadata?.customer_email as string) ||
-        (t.metadata?.buyer_email as string);
+        (o.metadata?.customer_email as string) ||
+        (o.metadata?.buyer_email as string) ||
+        (o.metadata?.email as string);
       if (email) emailSet.add(email.toLowerCase().trim());
     }
 
-    // 2. RSVP emails
-    const { data: rsvps } = await admin
-      .from("rsvps")
-      .select("email")
-      .eq("event_id", eventId)
-      .in("status", ["yes", "maybe"])
-      .not("email", "is", null);
-
-    for (const r of (rsvps ?? []) as { email: string | null }[]) {
-      if (r.email) emailSet.add(r.email.toLowerCase().trim());
-    }
-
-    // 3. Guest list emails
+    // Guest list emails
     const { data: guests } = await admin
       .from("guest_list")
       .select("email")
@@ -1055,10 +1126,6 @@ export interface ReachInsight {
   actionTarget?: string;
 }
 
-/**
- * Generate actionable Reach agent insights for the audience page.
- * Pure computation — no AI call. Returns insights sorted by impact.
- */
 export async function generateReachInsights(
   collectiveId: string
 ): Promise<{ error: string | null; insights: ReachInsight[] }> {
@@ -1070,65 +1137,35 @@ export async function generateReachInsights(
 
     const admin = createAdminClient();
 
-    // Fetch all fan contacts
-    const { data: fans } = await admin
-      .from("contacts")
-      .select("id, email, full_name, instagram, total_events, total_spend, tags, last_seen_at, created_at, metadata")
-      .eq("collective_id", collectiveId)
-      .eq("contact_type", "fan")
-      .is("deleted_at", null);
+    // Fetch all contact-role rows for this collective
+    const { data: contactRows } = await admin
+      .from("party_roles")
+      .select(CONTACT_JOIN)
+      .eq("role", "contact")
+      .eq("collective_id", collectiveId);
 
-    if (!fans || fans.length === 0) return { error: null, insights: [] };
+    if (!contactRows || contactRows.length === 0) return { error: null, insights: [] };
 
-    const allFans = fans as {
-      id: string; email: string | null; full_name: string | null;
-      instagram: string | null; total_events: number; total_spend: number;
-      tags: string[]; last_seen_at: string | null; created_at: string;
-      metadata: Record<string, unknown> | null;
-    }[];
+    const allContacts = (contactRows as unknown as ContactRow[]).map((row) =>
+      rowToContact(row, collectiveId)
+    );
+    const allFans = allContacts.filter((c) => c.contactType === "fan");
 
-    // Get event count for context
+    if (allFans.length === 0) return { error: null, insights: [] };
+
     const { count: eventCount } = await admin
       .from("events")
       .select("*", { count: "exact", head: true })
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     const totalEvents = eventCount ?? 0;
     const insights: ReachInsight[] = [];
 
-    // ── Insight: Fans with IG handles (ambassador potential) ──
-    const withIG = allFans.filter((f) => f.instagram);
-    const withoutIG = allFans.filter((f) => !f.instagram);
-    if (withIG.length > 0) {
-      const repeatWithIG = withIG.filter((f) => f.total_events >= 2);
-      if (repeatWithIG.length >= 3) {
-        insights.push({
-          id: "ambassador_candidates",
-          icon: "🚀",
-          title: `${repeatWithIG.length} repeat fans have IG handles`,
-          description: `These fans came back 2+ times and are reachable on Instagram. Arm them with promo codes to share — each one could bring 3-5 new people.`,
-          action: "Copy their @handles",
-          actionType: "copy_handles",
-        });
-      }
-    }
-
-    if (withoutIG.length > allFans.length * 0.5 && allFans.length >= 10) {
-      insights.push({
-        id: "missing_ig",
-        icon: "📱",
-        title: `${withoutIG.length} fans have no IG handle`,
-        description: `You're missing the main nightlife communication channel for ${Math.round((withoutIG.length / allFans.length) * 100)}% of your audience. Ask at the door or add a field to your checkout.`,
-      });
-    }
-
-    // ── Insight: Ambassador arming strategy ──
     const ambassadors = allFans.filter(
       (f) => f.tags?.includes("ambassador") || (f.metadata?.referrals_count as number) >= 3
     );
     const potentialAmbassadors = allFans.filter(
-      (f) => f.total_events >= 2 && f.instagram && !f.tags?.includes("ambassador")
+      (f) => f.totalEvents >= 2 && !f.tags?.includes("ambassador")
     );
 
     if (potentialAmbassadors.length > 0) {
@@ -1136,9 +1173,7 @@ export async function generateReachInsights(
         id: "potential_ambassadors",
         icon: "⭐",
         title: `${potentialAmbassadors.length} fans ready to become ambassadors`,
-        description: `They've come to multiple events and have IG handles. Give them a unique promo code, early access to tickets, and ask them to post your flyer on their story.`,
-        action: "Copy their @handles",
-        actionType: "copy_handles",
+        description: `They've come to multiple events. Give them a unique promo code, early access to tickets, and ask them to post your flyer on their story.`,
       });
     }
 
@@ -1154,10 +1189,9 @@ export async function generateReachInsights(
       });
     }
 
-    // ── Insight: New fans this month ──
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const newFans = allFans.filter((f) => new Date(f.created_at) >= thirtyDaysAgo);
+    const newFans = allFans.filter((f) => new Date(f.createdAt) >= thirtyDaysAgo);
     if (newFans.length > 0 && allFans.length > newFans.length) {
       const growthPct = Math.round((newFans.length / (allFans.length - newFans.length)) * 100);
       insights.push({
@@ -1170,9 +1204,8 @@ export async function generateReachInsights(
       });
     }
 
-    // ── Insight: Core crew identification ──
     if (totalEvents >= 2) {
-      const coreCrew = allFans.filter((f) => f.total_events >= totalEvents);
+      const coreCrew = allFans.filter((f) => f.totalEvents >= totalEvents);
       if (coreCrew.length > 0) {
         insights.push({
           id: "core_crew",
@@ -1185,11 +1218,10 @@ export async function generateReachInsights(
       }
     }
 
-    // ── Insight: Dormant fans (haven't been seen in 60+ days) ──
     const sixtyDaysAgo = new Date();
     sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
     const dormant = allFans.filter(
-      (f) => f.last_seen_at && new Date(f.last_seen_at) < sixtyDaysAgo && f.total_events >= 1
+      (f) => f.lastSeenAt && new Date(f.lastSeenAt) < sixtyDaysAgo && f.totalEvents >= 1
     );
     if (dormant.length >= 3) {
       insights.push({
@@ -1202,7 +1234,6 @@ export async function generateReachInsights(
       });
     }
 
-    // ── Insight: Email list health ──
     const withEmail = allFans.filter((f) => f.email);
     if (withEmail.length >= 10) {
       insights.push({
@@ -1225,15 +1256,6 @@ export async function generateReachInsights(
 
 // ── 8. syncContactMetrics ────────────────────────────────────────────────────
 
-/**
- * Sync total_spend, total_events, and last_seen_at from ticket purchases
- * into the contacts table. Matches tickets to contacts via email.
- *
- * Call this:
- * - When the audience page loads (debounced, max once per hour)
- * - After ticket purchase via Stripe webhook (future)
- * - After CSV import completes
- */
 export async function syncContactMetrics(
   collectiveId: string
 ): Promise<{ error: string | null; synced: number }> {
@@ -1243,18 +1265,15 @@ export async function syncContactMetrics(
     const auth = await verifyCollectiveAccess(collectiveId);
     if (auth.error) return { error: auth.error, synced: 0 };
 
-    // Rate limit: max once per hour per collective
     const { success: rlOk } = await rateLimitStrict(`sync-metrics:${collectiveId}`, 2, 3600_000);
-    if (!rlOk) return { error: null, synced: 0 }; // silently skip — not an error
+    if (!rlOk) return { error: null, synced: 0 };
 
     const admin = createAdminClient();
 
-    // 1. Get all events for this collective
     const { data: events } = await admin
       .from("events")
       .select("id, starts_at")
-      .eq("collective_id", collectiveId)
-      .is("deleted_at", null);
+      .eq("collective_id", collectiveId);
 
     if (!events || events.length === 0) return { error: null, synced: 0 };
 
@@ -1263,81 +1282,89 @@ export async function syncContactMetrics(
       (events as { id: string; starts_at: string }[]).map((e) => [e.id, e.starts_at])
     );
 
-    // 2. Fetch all paid/checked-in tickets in batches
-    const allTickets: { event_id: string; price_paid: number | null; metadata: Record<string, unknown> | null }[] = [];
+    const allOrders: { event_id: string; total: number; metadata: Record<string, unknown> | null }[] = [];
     const BATCH = 5000;
     for (let offset = 0; ; offset += BATCH) {
       const { data: batch, error: batchErr } = await admin
-        .from("tickets")
-        .select("event_id, price_paid, metadata")
+        .from("orders")
+        .select("event_id, total, metadata")
         .in("event_id", eventIds)
-        .in("status", ["paid", "checked_in"])
+        .eq("status", "paid")
         .range(offset, offset + BATCH - 1);
       if (batchErr || !batch || batch.length === 0) break;
-      allTickets.push(...(batch as typeof allTickets));
+      allOrders.push(...(batch as typeof allOrders));
       if (batch.length < BATCH) break;
     }
 
-    if (allTickets.length === 0) return { error: null, synced: 0 };
+    if (allOrders.length === 0) return { error: null, synced: 0 };
 
-    // 3. Aggregate by email: total_spend, event count, last event date
     const emailMetrics = new Map<string, {
       totalSpend: number;
       eventIds: Set<string>;
       lastEventDate: string;
     }>();
 
-    for (const ticket of allTickets) {
-      const meta = ticket.metadata;
+    for (const order of allOrders) {
+      const meta = order.metadata;
       const email =
         (meta?.customer_email as string) ||
-        (meta?.buyer_email as string);
+        (meta?.buyer_email as string) ||
+        (meta?.email as string);
       if (!email) continue;
       const normalized = email.toLowerCase().trim();
       if (!normalized) continue;
 
       const existing = emailMetrics.get(normalized);
-      const eventDate = eventDateMap.get(ticket.event_id) ?? "";
+      const eventDate = eventDateMap.get(order.event_id) ?? "";
 
       if (existing) {
-        existing.totalSpend += Number(ticket.price_paid) || 0;
-        existing.eventIds.add(ticket.event_id);
+        existing.totalSpend += Number(order.total) || 0;
+        existing.eventIds.add(order.event_id);
         if (eventDate > existing.lastEventDate) existing.lastEventDate = eventDate;
       } else {
         emailMetrics.set(normalized, {
-          totalSpend: Number(ticket.price_paid) || 0,
-          eventIds: new Set([ticket.event_id]),
+          totalSpend: Number(order.total) || 0,
+          eventIds: new Set([order.event_id]),
           lastEventDate: eventDate,
         });
       }
     }
 
-    // 4. Get all fan contacts for this collective
-    const { data: contacts } = await admin
-      .from("contacts")
-      .select("id, email")
-      .eq("collective_id", collectiveId)
-      .eq("contact_type", "fan")
-      .is("deleted_at", null);
+    // Fetch contact roles with their email contact methods
+    const { data: contactRoles } = await admin
+      .from("party_roles")
+      .select("id, party_id, metadata, parties(party_contact_methods(type, value))")
+      .eq("role", "contact")
+      .eq("collective_id", collectiveId);
 
-    if (!contacts || contacts.length === 0) return { error: null, synced: 0 };
+    if (!contactRoles || contactRoles.length === 0) return { error: null, synced: 0 };
 
-    // 5. Update each contact that has matching ticket data
     let synced = 0;
-    for (const contact of contacts as { id: string; email: string | null }[]) {
-      if (!contact.email) continue;
-      const normalized = contact.email.toLowerCase().trim();
+    for (const cr of contactRoles as {
+      id: string;
+      party_id: string;
+      metadata: Record<string, unknown> | null;
+      parties: { party_contact_methods: { type: string; value: string }[] } | null;
+    }[]) {
+      const emailMethod = cr.parties?.party_contact_methods?.find((m) => m.type === "email");
+      if (!emailMethod?.value) continue;
+
+      const normalized = emailMethod.value.toLowerCase().trim();
       const metrics = emailMetrics.get(normalized);
       if (!metrics) continue;
 
+      const prevMeta = cr.metadata ?? {};
+      const updatedMeta = {
+        ...prevMeta,
+        total_spend: metrics.totalSpend,
+        total_events: metrics.eventIds.size,
+        last_seen_at: metrics.lastEventDate || null,
+        updated_at: new Date().toISOString(),
+      };
       await admin
-        .from("contacts")
-        .update({
-          total_spend: metrics.totalSpend,
-          total_events: metrics.eventIds.size,
-          last_seen_at: metrics.lastEventDate || undefined,
-        })
-        .eq("id", contact.id);
+        .from("party_roles")
+        .update({ metadata: updatedMeta as unknown as { [key: string]: Json | undefined } })
+        .eq("id", cr.id);
       synced++;
     }
 
@@ -1347,4 +1374,3 @@ export async function syncContactMetrics(
     return { error: "Something went wrong", synced: 0 };
   }
 }
-

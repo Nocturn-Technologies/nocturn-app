@@ -78,7 +78,6 @@ export default function AudiencePage() {
           .from("events")
           .select("id, title, starts_at")
           .eq("collective_id", id)
-          .is("deleted_at", null)
           .order("starts_at", { ascending: false })
           .limit(50);
         setEvents((eventsRaw ?? []) as EventOption[]);
@@ -153,26 +152,15 @@ export default function AudiencePage() {
 
       let textToCopy = "";
       if (insight.actionType === "copy_handles") {
-        // Copy IG handles for the relevant segment
-        const fans = result.contacts.filter((c) => c.instagram);
-        if (insight.id === "ambassador_candidates" || insight.id === "potential_ambassadors") {
-          textToCopy = fans
-            .filter((c) => c.totalEvents >= 2)
-            .map((c) => `@${c.instagram!.replace(/^@/, "")}`)
-            .join("\n");
-        } else {
-          textToCopy = fans
-            .map((c) => `@${c.instagram!.replace(/^@/, "")}`)
-            .join("\n");
-        }
+        // IG handles removed — fall through to email copy
+        textToCopy = "";
       } else if (insight.actionType === "copy_emails") {
         const fans = result.contacts.filter((c) => c.email);
         if (insight.id === "core_crew") {
           const { count: eventCount } = await (await import("@/lib/supabase/client")).createClient()
             .from("events")
             .select("*", { count: "exact", head: true })
-            .eq("collective_id", collectiveId)
-            .is("deleted_at", null);
+            .eq("collective_id", collectiveId);
           textToCopy = fans
             .filter((c) => c.totalEvents >= (eventCount ?? 0))
             .map((c) => c.email!)

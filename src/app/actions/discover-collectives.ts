@@ -7,11 +7,8 @@ export interface DiscoverCollective {
   id: string;
   name: string;
   slug: string;
-  description: string | null;
   bio: string | null;
   logo_url: string | null;
-  website: string | null;
-  instagram: string | null;
   city: string | null;
   member_count: number;
   event_count: number;
@@ -62,7 +59,7 @@ export async function getDiscoverCollectives(opts?: {
   // Build query
   let builder = sb
     .from("collectives")
-    .select("id, name, slug, description, bio, logo_url, website, instagram, city, created_at", {
+    .select("id, name, slug, bio, logo_url, city, created_at", {
       count: "exact",
     });
 
@@ -84,7 +81,7 @@ export async function getDiscoverCollectives(opts?: {
         .replace(/%/g, "\\%")
         .replace(/_/g, "\\_");
       builder = builder.or(
-        `name.ilike.%${escaped}%,city.ilike.%${escaped}%,slug.ilike.%${escaped}%,description.ilike.%${escaped}%`
+        `name.ilike.%${escaped}%,city.ilike.%${escaped}%,slug.ilike.%${escaped}%,bio.ilike.%${escaped}%`
       );
     }
   }
@@ -165,12 +162,9 @@ export async function getDiscoverCollectives(opts?: {
       id: c.id,
       name: c.name,
       slug: c.slug,
-      description: c.description,
-      bio: c.bio,
-      logo_url: c.logo_url,
-      website: c.website,
-      instagram: c.instagram,
-      city: c.city,
+      bio: c.bio ?? null,
+      logo_url: c.logo_url ?? null,
+      city: c.city ?? null,
       member_count: memberMap.get(c.id) ?? 0,
       event_count: stats?.total ?? 0,
       recent_events_count: stats?.recent ?? 0,
@@ -279,28 +273,9 @@ export async function getMyConnectedCollectiveIds(): Promise<string[]> {
     const myCollectiveId = (membership as { collective_id?: string } | null)?.collective_id;
     if (!myCollectiveId) return [];
 
-    // Find collab channels where I'm owner OR partner, then extract the OTHER collective id
-    const [owned, partnered] = await Promise.all([
-      sb
-        .from("channels")
-        .select("partner_collective_id")
-        .eq("collective_id", myCollectiveId)
-        .eq("type", "collab"),
-      sb
-        .from("channels")
-        .select("collective_id")
-        .eq("partner_collective_id", myCollectiveId)
-        .eq("type", "collab"),
-    ]);
-
-    const ids = new Set<string>();
-    for (const row of (owned.data ?? []) as { partner_collective_id: string | null }[]) {
-      if (row.partner_collective_id) ids.add(row.partner_collective_id);
-    }
-    for (const row of (partnered.data ?? []) as { collective_id: string | null }[]) {
-      if (row.collective_id) ids.add(row.collective_id);
-    }
-    return Array.from(ids);
+    // Collab channel partner lookup not available in current schema
+    void myCollectiveId;
+    return [];
   } catch (err) {
     console.error("[getMyConnectedCollectiveIds]", err);
     return [];
@@ -325,10 +300,10 @@ export async function getCollectiveRecentEvents(
 ): Promise<CollectiveEventTile[]> {
   try {
     const sb = createAdminClient();
-    // Step 1: fetch events with venue_id (events table has no venue_name column)
+    // events now has venue_name as an inline column
     const { data: events } = await sb
       .from("events")
-      .select("id, title, flyer_url, starts_at, status, venue_id")
+      .select("id, title, flyer_url, starts_at, status, venue_name")
       .eq("collective_id", collectiveId)
       .neq("status", "draft")
       .order("starts_at", { ascending: false })
@@ -336,31 +311,19 @@ export async function getCollectiveRecentEvents(
 
     if (!events || events.length === 0) return [];
 
-    // Step 2: batch-resolve venue names (one query, not N)
-    const venueIds = Array.from(
-      new Set((events as { venue_id: string | null }[]).map((e) => e.venue_id).filter((v): v is string => !!v))
-    );
-    const venueMap = new Map<string, string>();
-    if (venueIds.length > 0) {
-      const { data: venues } = await sb.from("venues").select("id, name").in("id", venueIds);
-      for (const v of (venues ?? []) as { id: string; name: string }[]) {
-        venueMap.set(v.id, v.name);
-      }
-    }
-
     return (events as Array<{
       id: string;
       title: string;
       flyer_url: string | null;
       starts_at: string;
       status: string;
-      venue_id: string | null;
+      venue_name: string | null;
     }>).map((e) => ({
       id: e.id,
       title: e.title,
       flyer_url: e.flyer_url,
       starts_at: e.starts_at,
-      venue_name: e.venue_id ? venueMap.get(e.venue_id) ?? null : null,
+      venue_name: e.venue_name ?? null,
       status: e.status,
     }));
   } catch (err) {

@@ -18,7 +18,7 @@ export default async function PromotePage() {
   ]);
 
   const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
-  const totalClicks = externalEvents.reduce((sum, e) => sum + e.clickCount, 0);
+  const totalClicks = 0; // click tracking not available in external events
 
   return (
     <div className="space-y-6 overflow-x-hidden max-w-6xl mx-auto">

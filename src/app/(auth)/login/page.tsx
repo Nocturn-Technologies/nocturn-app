@@ -94,19 +94,16 @@ export default function LoginPage() {
       lockoutTimerRef.current = null;
     }
 
-    // Check denied/approval status before routing
-    const userMeta = data.user?.user_metadata;
-    if (userMeta?.is_denied === true) {
-      router.push("/account-denied");
-      router.refresh();
-      return;
-    }
+    const userType = data.user?.user_metadata?.user_type;
 
-    const userType = userMeta?.user_type;
-    if (
-      (userType === "collective" || userType === "promoter") &&
-      userMeta?.is_approved === false
-    ) {
+    // Approval is sourced from public.users so manual DB flips take effect immediately.
+    const { data: userRow } = await supabase
+      .from("users")
+      .select("is_approved")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (userRow?.is_approved === false) {
       router.push("/pending-approval");
       router.refresh();
       return;

@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
-import { DEFAULT_TIMEZONE } from "@/lib/utils";
 
 function slugify(text: string): string {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
@@ -75,39 +74,6 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
     return { error: "You're not a member of this collective.", eventSlug: null };
   }
 
-  // Optionally find or create venue
-  let venueId: string | null = null;
-  if (input.venue && input.venue.trim()) {
-    // Check if venue exists
-    const { data: existingVenue } = await admin
-      .from("venues")
-      .select("id")
-      .ilike("name", input.venue.trim())
-      .limit(1)
-      .maybeSingle();
-
-    if (existingVenue) {
-      venueId = existingVenue.id;
-    } else {
-      const venueSlug = slugify(input.venue.trim()) || `venue-${Date.now()}`;
-      const { data: newVenue } = await admin
-        .from("venues")
-        .insert({
-          name: input.venue.trim(),
-          slug: venueSlug,
-          address: null,
-          city: null,
-          capacity: null,
-        })
-        .select("id")
-        .maybeSingle();
-
-      if (newVenue) {
-        venueId = newVenue.id;
-      }
-    }
-  }
-
   // Create event slug
   const baseSlug = slugify(input.title);
   let eventSlug = baseSlug || `event-${Date.now()}`;
@@ -146,8 +112,12 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
   const doorsAt = new Date(startsAt.getTime() - 60 * 60 * 1000); // 1hr before
   const endsAt = new Date(startsAt.getTime() + 5 * 60 * 60 * 1000); // 5hrs after
 
-  // Create event as draft (status = 'draft' if no Stripe, 'published' if free)
-  const status = input.tierPrice === 0 ? "published" : "draft";
+  const isFree = input.tierPrice === 0;
+  // Publish free events immediately; paid events start as draft (need Stripe setup)
+  const status = isFree ? "published" : "draft";
+
+  // venue_name is a flat text column on events — no venue FK needed.
+  const venueName = input.venue && input.venue.trim() ? input.venue.trim() : null;
 
   const { data: event, error: eventError } = await admin
     .from("events")
@@ -156,13 +126,15 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
       slug: eventSlug,
       description: null,
       collective_id: collective.id,
-      venue_id: venueId,
+      venue_name: venueName,
       starts_at: startsAt.toISOString(),
       ends_at: endsAt.toISOString(),
       doors_at: doorsAt.toISOString(),
       status,
-      timezone: DEFAULT_TIMEZONE,
-      metadata: { vibe_tags: input.vibeTags, source: "onboarding" },
+      is_free: isFree,
+      is_published: isFree,
+      vibe_tags: input.vibeTags,
+      metadata: { source: "onboarding" },
     })
     .select("id, slug")
     .maybeSingle();
@@ -176,7 +148,7 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
     return { error: "Failed to create event.", eventSlug: null };
   }
 
-  // Create ticket tier
+  // Create ticket tier — sale_start_at not sales_start
   const { error: tierError } = await admin
     .from("ticket_tiers")
     .insert({

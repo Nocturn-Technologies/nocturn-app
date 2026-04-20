@@ -114,7 +114,6 @@ export default async function PublicCheckInPage({ params }: Props) {
         .from("events")
         .select("collective_id")
         .eq("id", event.id)
-        .is("deleted_at", null)
         .maybeSingle();
       const ev = evRaw as { collective_id: string } | null;
 

@@ -7,6 +7,7 @@ import { redactEmail } from "@/lib/log-redaction";
 
 /**
  * Join the waitlist for a sold-out ticket tier.
+ * Uses the ticket_waitlist table: id, tier_id, email, name, party_id, notified_at, created_at
  */
 export async function joinWaitlist(eventId: string, tierId: string, waitlistEmail?: string) {
   try {
@@ -25,7 +26,7 @@ export async function joinWaitlist(eventId: string, tierId: string, waitlistEmai
 
     const sb = createAdminClient();
 
-    // Verify tier is actually sold out
+    // Verify tier belongs to this event and check capacity
     const { data: tier } = await sb
       .from("ticket_tiers")
       .select("id, name, capacity")
@@ -35,26 +36,47 @@ export async function joinWaitlist(eventId: string, tierId: string, waitlistEmai
 
     if (!tier) return { error: "Ticket tier not found" };
 
+    // Count sold tickets for this tier
     const { count: soldCount } = await sb
       .from("tickets")
       .select("id", { count: "exact", head: true })
-      .eq("ticket_tier_id", tierId)
-      .in("status", ["paid", "checked_in"]);
+      .eq("tier_id", tierId)
+      .in("status", ["valid", "checked_in"]);
 
     const remaining = (tier.capacity ?? 0) - (soldCount ?? 0);
     if (remaining > 0) {
       return { error: "This tier still has tickets available — no need to waitlist!" };
     }
 
-    // Add to waitlist (upsert to handle duplicates gracefully)
+    // Resolve party_id from auth user if available
+    let partyId: string | null = null;
+    if (user) {
+      const { data: userRow } = await sb
+        .from("users")
+        .select("party_id")
+        .eq("id", user.id)
+        .maybeSingle();
+      partyId = userRow?.party_id ?? null;
+    }
+
+    // Add to ticket_waitlist — upsert to handle duplicates gracefully
+    // Unique constraint expected on (tier_id, email)
     const { error } = await sb
-      .from("waitlist_entries")
+      .from("ticket_waitlist")
       .upsert(
-        { event_id: eventId, tier_id: tierId, email: email.toLowerCase().trim(), status: "waiting" },
-        { onConflict: "event_id,tier_id,email" }
+        {
+          tier_id: tierId,
+          email: email.toLowerCase().trim(),
+          party_id: partyId,
+          notified_at: null,
+        },
+        { onConflict: "tier_id,email" }
       );
 
-    if (error) return { error: "Something went wrong" };
+    if (error) {
+      console.error("[joinWaitlist] upsert error:", error);
+      return { error: "Something went wrong" };
+    }
 
     return { error: null, message: "You're on the waitlist! We'll email you if a spot opens up." };
   } catch (err) {
@@ -65,7 +87,7 @@ export async function joinWaitlist(eventId: string, tierId: string, waitlistEmai
 
 /**
  * Notify waitlisted users when spots open (called after refund).
- * Notifies the next `count` people on the waitlist (oldest first).
+ * Notifies the next `count` people on the waitlist (oldest first, un-notified only).
  * @param count Number of people to notify (default 1). Pass the refunded ticket quantity.
  */
 export async function notifyNextOnWaitlist(eventId: string, tierId: string, count: number = 1) {
@@ -98,30 +120,22 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string, coun
     // Clamp count to a reasonable range
     const notifyCount = Math.max(1, Math.min(count, 100));
 
-    // Get the next N people waiting (oldest first)
+    // Get the next N people waiting (oldest first, not yet notified)
     const { data: waitlistEntries } = await sb
-      .from("waitlist_entries")
-      .select("id, email")
-      .eq("event_id", eventId)
+      .from("ticket_waitlist")
+      .select("id, email, name")
       .eq("tier_id", tierId)
-      .eq("status", "waiting")
+      .is("notified_at", null)
       .order("created_at", { ascending: true })
       .limit(notifyCount);
 
     if (!waitlistEntries || waitlistEntries.length === 0) return { notified: false, notifiedCount: 0 };
 
     // Get event + tier details for the email
-    const { data: event } = await sb
-      .from("events")
-      .select("title, slug, collectives(slug)")
-      .eq("id", eventId)
-      .maybeSingle();
-
-    const { data: tier } = await sb
-      .from("ticket_tiers")
-      .select("name")
-      .eq("id", tierId)
-      .maybeSingle();
+    const [{ data: event }, { data: tier }] = await Promise.all([
+      sb.from("events").select("title, slug, collectives(slug)").eq("id", eventId).maybeSingle(),
+      sb.from("ticket_tiers").select("name").eq("id", tierId).maybeSingle(),
+    ]);
 
     if (!event) return { notified: false, notifiedCount: 0 };
 
@@ -135,14 +149,14 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string, coun
     }
 
     const collective = event.collectives as unknown as { slug: string } | null;
-    const eventUrl = collective?.slug
+    const eventUrl = collective?.slug && event.slug
       ? `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${collective.slug}/${event.slug}`
       : `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/dashboard/events/${eventId}`;
 
     // Notify each waitlisted person — only mark as notified if email succeeds
     const notifiedEmails: string[] = [];
 
-    for (const entry of waitlistEntries) {
+    for (const entry of waitlistEntries as Array<{ id: string; email: string; name: string | null }>) {
       try {
         await sendEmail({
           to: entry.email,
@@ -167,14 +181,14 @@ export async function notifyNextOnWaitlist(eventId: string, tierId: string, coun
           `,
         });
 
-        // Only mark as notified after email successfully sent
+        // Mark as notified only after email succeeds
         const { error: updateError } = await sb
-          .from("waitlist_entries")
-          .update({ status: "notified", notified_at: new Date().toISOString() })
+          .from("ticket_waitlist")
+          .update({ notified_at: new Date().toISOString() })
           .eq("id", entry.id);
 
         if (updateError) {
-          console.error(`[waitlist] Failed to update status for ${redactEmail(entry.email)}:`, updateError);
+          console.error(`[waitlist] Failed to update notified_at for ${redactEmail(entry.email)}:`, updateError);
         }
 
         notifiedEmails.push(entry.email);

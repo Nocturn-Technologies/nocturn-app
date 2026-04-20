@@ -10,14 +10,35 @@ import {
   CheckCircle,
   ArrowLeft,
   ExternalLink,
-  Instagram,
   Music,
-  Globe,
   BarChart3,
   Calendar,
 } from "lucide-react";
 import { TYPE_BADGE_COLORS, TYPE_LABELS } from "@/lib/marketplace-constants";
 import { ProfileActions } from "./profile-actions";
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface MarketplaceProfile {
+  id: string;
+  slug: string;
+  party_id: string | null;
+  display_name: string | null;
+  user_type: string;
+  bio: string | null;
+  city: string | null;
+  photo_url: string | null;
+  cover_photo_url: string | null;
+  is_verified: boolean;
+  is_active: boolean;
+  genre: string[] | null;
+  services: string[] | null;
+  spotify: string | null;
+  rate_range: string | null;
+  availability: string | null;
+  portfolio_urls: string[] | null;
+  past_venues: string[] | null;
+}
 
 // ─── Helper ─────────────────────────────────────────────────────────────────
 
@@ -37,49 +58,33 @@ export default async function ProfileDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const profile = await getProfileBySlug(slug);
+  const rawProfile = await getProfileBySlug(slug);
 
-  if (!profile) {
+  if (!rawProfile) {
     notFound();
   }
 
+  const profile = rawProfile as unknown as MarketplaceProfile;
   const type = profile.user_type ?? "artist";
 
   // Fetch performance analytics (only meaningful for artist-type profiles)
   const performance =
-    type === "artist" && profile.user_id
-      ? await getProfilePerformanceWithCollective(profile.user_id)
+    type === "artist" && profile.party_id
+      ? await getProfilePerformanceWithCollective(profile.party_id)
       : null;
   const badgeColor = TYPE_BADGE_COLORS[type] ?? "bg-muted text-muted-foreground";
   const typeLabel = TYPE_LABELS[type] ?? type;
 
   const tags: string[] = [
-    ...(profile.genres ?? []),
+    ...(profile.genre ?? []),
     ...(profile.services ?? []),
   ];
 
   const socialLinks = [
     {
-      url: profile.instagram_handle
-        ? `https://instagram.com/${profile.instagram_handle.replace(/^@/, "")}`
-        : null,
-      label: "Instagram",
-      icon: Instagram,
-    },
-    {
-      url: profile.soundcloud_url,
-      label: "SoundCloud",
-      icon: Music,
-    },
-    {
-      url: profile.spotify_url,
+      url: profile.spotify,
       label: "Spotify",
       icon: Music,
-    },
-    {
-      url: profile.website_url,
-      label: "Website",
-      icon: Globe,
     },
   ].filter((s) => s.url);
 
@@ -118,11 +123,11 @@ export default async function ProfileDetailPage({
         <div className="flex items-end gap-4">
           {/* Avatar */}
           <div className="h-20 w-20 shrink-0 rounded-full border-4 border-card bg-nocturn/10 flex items-center justify-center overflow-hidden">
-            {profile.avatar_url ? (
+            {profile.photo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={profile.avatar_url}
-                alt={profile.display_name}
+                src={profile.photo_url}
+                alt={profile.display_name ?? ""}
                 className="h-full w-full object-cover"
               />
             ) : (
@@ -332,7 +337,7 @@ export default async function ProfileDetailPage({
       <div className="px-4 md:px-0">
         <ProfileActions
           profileId={profile.id}
-          profileName={profile.display_name}
+          profileName={profile.display_name ?? ""}
         />
       </div>
     </div>

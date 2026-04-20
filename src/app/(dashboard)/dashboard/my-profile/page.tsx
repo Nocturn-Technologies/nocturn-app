@@ -28,9 +28,6 @@ interface ProfileData {
   bio: string | null;
   city: string | null;
   user_type: string;
-  instagram_handle: string | null;
-  website_url: string | null;
-  soundcloud_url: string | null;
   spotify_url: string | null;
   genres: string[] | null;
   services: string[] | null;
@@ -90,9 +87,6 @@ export default function MyProfilePage() {
       setDisplayName(p.display_name ?? "");
       setBio(p.bio ?? "");
       setCity(p.city ?? "");
-      setInstagram(p.instagram_handle ?? "");
-      setWebsite(p.website_url ?? "");
-      setSoundcloud(p.soundcloud_url ?? "");
       setSpotify(p.spotify_url ?? "");
       setRateRange(p.rate_range ?? "");
       setAvailability(p.availability ?? "");
@@ -202,9 +196,6 @@ export default function MyProfilePage() {
       displayName: displayName || undefined,
       bio: bio || null,
       city: city || null,
-      instagramHandle: instagram || null,
-      websiteUrl: website || null,
-      soundcloudUrl: soundcloud || null,
       spotifyUrl: spotify || null,
       rateRange: rateRange || null,
       availability: availability || null,

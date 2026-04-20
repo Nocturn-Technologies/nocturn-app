@@ -35,6 +35,22 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  let approvalState:
+    | {
+        is_approved: boolean;
+      }
+    | null = null;
+
+  if (user) {
+    const { data } = await supabase
+      .from("users")
+      .select("is_approved")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    approvalState = data;
+  }
+
   // Protect dashboard routes
   if (!user && (request.nextUrl.pathname.startsWith("/dashboard") || request.nextUrl.pathname.startsWith("/onboarding"))) {
     const url = request.nextUrl.clone();
@@ -44,52 +60,25 @@ export async function updateSession(request: NextRequest) {
 
   // Check approval gate for onboarding too — prevent unapproved collectives from creating records
   if (user && request.nextUrl.pathname.startsWith("/onboarding")) {
-    const userType = user.user_metadata?.user_type;
-    const isApproved = user.user_metadata?.is_approved;
-    if ((userType === "collective" || userType === "promoter") && isApproved === false) {
+    if (approvalState?.is_approved === false) {
       const url = request.nextUrl.clone();
       url.pathname = "/pending-approval";
       return NextResponse.redirect(url);
     }
   }
 
-  // Check if user has been denied
+  // Check approval gate for all beta users
   if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
-    const isDenied = user.user_metadata?.is_denied;
-    if (isDenied === true) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/account-denied";
-      return NextResponse.redirect(url);
-    }
-  }
-
-  // Check approval gate for collective/promoter users
-  if (user && request.nextUrl.pathname.startsWith("/dashboard")) {
-    const userType = user.user_metadata?.user_type;
-    const isApproved = user.user_metadata?.is_approved;
-
-    // Only gate collectives and promoters; marketplace types are auto-approved
-    if ((userType === "collective" || userType === "promoter") && isApproved === false) {
+    if (approvalState?.is_approved === false) {
       const url = request.nextUrl.clone();
       url.pathname = "/pending-approval";
-      return NextResponse.redirect(url);
-    }
-  }
-
-  // If non-denied user visits account-denied, redirect to dashboard
-  if (user && request.nextUrl.pathname === "/account-denied") {
-    const isDenied = user.user_metadata?.is_denied;
-    if (isDenied !== true) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/dashboard";
       return NextResponse.redirect(url);
     }
   }
 
   // If approved user visits pending-approval, redirect to dashboard
   if (user && request.nextUrl.pathname === "/pending-approval") {
-    const isApproved = user.user_metadata?.is_approved;
-    if (isApproved !== false) {
+    if (approvalState?.is_approved !== false) {
       const url = request.nextUrl.clone();
       url.pathname = "/dashboard";
       return NextResponse.redirect(url);

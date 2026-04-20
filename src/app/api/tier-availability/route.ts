@@ -90,23 +90,35 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
 
-    const [{ data: tiers, error: tiersError }, { data: soldTickets, error: soldError }, { data: pendingTickets, error: pendingError }] = await Promise.all([
-      supabase.from("ticket_tiers").select("id, capacity").eq("event_id", eventId).eq("is_active", true),
-      supabase.from("tickets").select("ticket_tier_id").eq("event_id", eventId).in("status", ["paid", "checked_in"]),
-      supabase.from("tickets").select("ticket_tier_id").eq("event_id", eventId).eq("status", "pending").gt("created_at", new Date(Date.now() - 30 * 60 * 1000).toISOString()),
-    ]);
+    const { data: tiers, error: tiersError } = await supabase
+      .from("ticket_tiers")
+      .select("id, capacity")
+      .eq("event_id", eventId)
+      .eq("is_active", true);
 
-    if (tiersError || soldError || pendingError) {
-      console.error("[tier-availability] DB error:", tiersError || soldError || pendingError);
+    if (tiersError) {
+      console.error("[tier-availability] DB error:", tiersError);
       return NextResponse.json({ error: "Failed to fetch availability" }, { status: 500 });
     }
 
+    const tierIds = (tiers || []).map((t) => t.id);
+
     const soldCounts: Record<string, number> = {};
-    for (const t of soldTickets || []) {
-      if (t.ticket_tier_id) soldCounts[t.ticket_tier_id] = (soldCounts[t.ticket_tier_id] || 0) + 1;
-    }
-    for (const t of pendingTickets || []) {
-      if (t.ticket_tier_id) soldCounts[t.ticket_tier_id] = (soldCounts[t.ticket_tier_id] || 0) + 1;
+    if (tierIds.length > 0) {
+      const { data: soldTickets, error: soldError } = await supabase
+        .from("tickets")
+        .select("tier_id")
+        .in("tier_id", tierIds)
+        .in("status", ["valid", "checked_in"]);
+
+      if (soldError) {
+        console.error("[tier-availability] tickets error:", soldError);
+        return NextResponse.json({ error: "Failed to fetch availability" }, { status: 500 });
+      }
+
+      for (const t of soldTickets || []) {
+        if (t.tier_id) soldCounts[t.tier_id] = (soldCounts[t.tier_id] || 0) + 1;
+      }
     }
 
     const remaining: Record<string, number> = {};

@@ -36,7 +36,7 @@ export default async function EventFinancialsPage({ params }: Props) {
     getTicketSalesTrajectory(eventId),
     admin
       .from("settlements")
-      .select("id, status, collective_id, net_profit")
+      .select("id, status, collective_id, net_payout")
       .eq("event_id", eventId)
       .maybeSingle(),
   ]);
@@ -88,7 +88,7 @@ export default async function EventFinancialsPage({ params }: Props) {
           collectiveId={settlement.collective_id}
           eventId={eventId}
           status={settlement.status as "draft" | "pending_approval" | "approved" | "paid_out"}
-          profit={Number(settlement.net_profit) || 0}
+          profit={Number(settlement.net_payout) || 0}
         />
       )}
     </div>

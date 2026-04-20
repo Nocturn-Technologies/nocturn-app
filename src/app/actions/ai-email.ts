@@ -32,11 +32,10 @@ export async function generatePostEventEmail(eventId: string) {
   // Get event details
   const { data: eventRaw, error: eventError } = await admin
     .from("events")
-    .select("*, venues(name, city), collectives(name, slug)")
+    .select("*, venue_name, city, collectives(name, slug)")
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
-  const event = eventRaw as { id: string; title: string; slug: string; starts_at: string; collective_id: string | null; collectives: { name: string; slug: string } | null; venues: { name: string; city: string } | null; [key: string]: unknown } | null;
+  const event = eventRaw as { id: string; title: string; slug: string; starts_at: string; collective_id: string | null; collectives: { name: string; slug: string } | null; venue_name: string | null; city: string | null; [key: string]: unknown } | null;
 
   if (eventError) {
     console.error("[generatePostEventEmail] event lookup failed:", eventError);
@@ -60,22 +59,21 @@ export async function generatePostEventEmail(eventId: string) {
     .from("tickets")
     .select("*", { count: "exact", head: true })
     .eq("event_id", eventId)
-    .in("status", ["paid", "checked_in"]);
+    .in("status", ["valid", "checked_in"]);
 
   // Get lineup
   const { data: lineupRaw } = await admin
     .from("event_artists")
-    .select("artists(name)")
-    .eq("event_id", eventId)
-    .eq("status", "confirmed");
-  const lineup = lineupRaw as { artists: { name: string } | null }[] | null;
+    .select("name")
+    .eq("event_id", eventId);
+  const lineup = lineupRaw as { name: string | null }[] | null;
 
   const artistNames = (lineup ?? []).map((l) => {
-    return l.artists?.name ?? "";
+    return l.name ?? "";
   });
 
   const collective = event.collectives ?? { name: "Unknown", slug: "" };
-  const venue = event.venues;
+  const venue = event.venue_name ? { name: event.venue_name, city: event.city } : null;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -180,11 +178,10 @@ export async function generatePromoEmail(eventId: string) {
 
     const { data: eventRaw2, error: eventError2 } = await admin
       .from("events")
-      .select("*, venues(name, city, address), collectives(name, slug)")
+      .select("*, venue_name, venue_address, city, collectives(name, slug)")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
-    const event = eventRaw2 as { id: string; title: string; slug: string; starts_at: string; collective_id?: string; collectives: { name: string; slug: string } | null; venues: { name: string; city: string; address: string } | null; [key: string]: unknown } | null;
+    const event = eventRaw2 as { id: string; title: string; slug: string; starts_at: string; collective_id?: string; collectives: { name: string; slug: string } | null; venue_name: string | null; venue_address: string | null; city: string | null; [key: string]: unknown } | null;
 
     if (eventError2) {
       console.error("[generatePromoEmail] event lookup failed:", eventError2);
@@ -212,17 +209,16 @@ export async function generatePromoEmail(eventId: string) {
 
     const { data: lineupRaw2 } = await admin
       .from("event_artists")
-      .select("artists(name)")
-      .eq("event_id", eventId)
-      .eq("status", "confirmed");
-    const lineup = lineupRaw2 as { artists: { name: string } | null }[] | null;
+      .select("name")
+      .eq("event_id", eventId);
+    const lineup = lineupRaw2 as { name: string | null }[] | null;
 
     const artistNames = (lineup ?? []).map((l) => {
-      return l.artists?.name ?? "";
+      return l.name ?? "";
     });
 
     const collective = event.collectives ?? { name: "Unknown", slug: "" };
-    const venue = event.venues;
+    const venue = event.venue_name ? { name: event.venue_name, city: event.city, address: event.venue_address } : null;
     const eventDate = new Date(event.starts_at);
 
     const ticketInfo = (tiers ?? [])
@@ -263,7 +259,7 @@ function generateFallbackEmail(
   collectiveName: string,
   artists: string[],
   ticketsSold: number,
-  venue: { name: string; city: string } | null
+  venue: { name: string; city: string | null } | null
 ): string {
   return `Hey there,
 
