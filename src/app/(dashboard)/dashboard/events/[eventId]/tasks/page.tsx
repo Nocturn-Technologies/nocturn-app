@@ -997,17 +997,14 @@ function TaskCard({
   const dueLabel = relativeDue(task);
   const hasNote = typeof task.description === "string" && task.description.length > 0;
 
-  // "In progress" pop-in hint — the circle → clock → check cycle isn't obvious
-  // from the icon alone, so when the user lands on the intermediate state we
-  // briefly show a pill telling them to tap again to finish.
-  const [showInProgressHint, setShowInProgressHint] = useState(false);
+  const [statusHint, setStatusHint] = useState<"in_progress" | "done" | null>(null);
   const prevStatusRef = useRef<string>(task.status as string);
   useEffect(() => {
     const prev = prevStatusRef.current;
     const curr = task.status as string;
-    if (curr === "in_progress" && prev !== "in_progress") {
-      setShowInProgressHint(true);
-      const t = setTimeout(() => setShowInProgressHint(false), 1800);
+    if ((curr === "in_progress" && prev !== "in_progress") || (curr === "done" && prev !== "done")) {
+      setStatusHint(curr as "in_progress" | "done");
+      const t = setTimeout(() => setStatusHint(null), 1800);
       prevStatusRef.current = curr;
       return () => clearTimeout(t);
     }
@@ -1035,13 +1032,13 @@ function TaskCard({
           >
             {statusIcons[task.status as string]}
           </button>
-          {showInProgressHint && (
+          {statusHint && (
             <span
               role="status"
-              className="pointer-events-none absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap rounded-full bg-blue-500 text-white text-[11px] font-semibold px-2.5 py-1 shadow-lg shadow-blue-500/30 animate-in-progress-pop z-10"
+              className={`pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2 whitespace-nowrap rounded-full text-white text-[11px] font-semibold px-2.5 py-1 shadow-lg animate-in-progress-pop z-10 ${statusHint === "done" ? "bg-emerald-500 shadow-emerald-500/30" : "bg-blue-500 shadow-blue-500/30"}`}
             >
-              In progress — tap again to finish
-              <span className="absolute left-1/2 -top-1 -translate-x-1/2 w-2 h-2 bg-blue-500 rotate-45" />
+              <span className={`absolute -left-1 top-1/2 -translate-y-1/2 w-2 h-2 rotate-45 ${statusHint === "done" ? "bg-emerald-500" : "bg-blue-500"}`} />
+              {statusHint === "done" ? "Moved to completed" : "Moved to in progress"}
             </span>
           )}
         </div>

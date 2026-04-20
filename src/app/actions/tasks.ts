@@ -80,8 +80,8 @@ export async function applyPlaybook(eventId: string, playbookId: string) {
     const { data: templates, error: templatesError } = await admin
       .from("playbook_task_templates")
       .select("*")
-      .eq("playbook_id", playbookId)
-      .order("position");
+      .eq("template_id", playbookId)
+      .order("sort_order");
 
     if (templatesError) return { error: "Failed to fetch playbook templates" };
     if (!templates || templates.length === 0) return { error: "No tasks in playbook" };
@@ -236,6 +236,8 @@ export async function updateTaskStatus(taskId: string, status: string) {
 
     if (status === "done") {
       updates.completed_at = new Date().toISOString();
+    } else if (status === "todo" || status === "in_progress") {
+      updates.completed_at = null;
     }
 
     const { data: task, error } = await admin
