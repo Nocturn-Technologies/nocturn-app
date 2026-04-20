@@ -138,8 +138,8 @@ function getSmartActions(props: DashboardHomeProps) {
 
   if (props.upcomingCount === 0 && !props.hasDraftEvent) {
     actions.push({
-      title: "Create Your First Event",
-      description: "Nocturn can help you set up an event in minutes",
+      title: "Throw your first night",
+      description: "We'll help you set it up — venue, lineup, tickets",
       href: "/dashboard/events/new",
       icon: <Plus className="h-5 w-5" />,
       color: "text-nocturn",
@@ -148,8 +148,8 @@ function getSmartActions(props: DashboardHomeProps) {
     });
   } else if (props.hasDraftEvent) {
     actions.push({
-      title: `Publish ${props.draftEventTitle || "Your Event"}`,
-      description: "Your event is ready to go live",
+      title: `Go live with ${props.draftEventTitle || "your night"}`,
+      description: "Ready to sell tickets",
       href: "/dashboard/events",
       icon: <Send className="h-5 w-5" />,
       color: "text-emerald-400",
@@ -159,7 +159,7 @@ function getSmartActions(props: DashboardHomeProps) {
   } else if (props.nextEvent && props.nextEvent.daysUntil <= 7) {
     actions.push({
       title: `Promote ${props.nextEvent.title}`,
-      description: "Generate marketing content to fill the room",
+      description: "Generate marketing content",
       href: "/dashboard/marketing",
       icon: <Megaphone className="h-5 w-5" />,
       color: "text-nocturn",
@@ -168,8 +168,8 @@ function getSmartActions(props: DashboardHomeProps) {
     });
   } else {
     actions.push({
-      title: "Create New Event",
-      description: "Set up your next night out",
+      title: "Throw a new night",
+      description: "Line up the next one",
       href: "/dashboard/events/new",
       icon: <Plus className="h-5 w-5" />,
       color: "text-nocturn",
@@ -220,25 +220,25 @@ function getInsights(props: DashboardHomeProps): Array<{ text: string; href: str
 
   if (props.upcomingCount === 0) {
     insights.push({
-      text: "Create your first event to unlock marketing, ticketing, and finance tools.",
+      text: "Throw your first night to unlock marketing, ticketing, and money tools.",
       href: "/dashboard/events/new",
     });
   }
   if (props.totalRevenue === 0 && props.upcomingCount > 0) {
     insights.push({
-      text: "Publish your event and share the ticket link to start selling.",
+      text: "Go live and drop the link.",
       href: "/dashboard/events",
     });
   }
   if (props.nextEvent && props.nextEvent.daysUntil <= 14) {
     insights.push({
-      text: "Events with social media promotion sell 3x more tickets on average.",
+      text: "Nights promoted on socials pull 3× more.",
       href: "/dashboard/marketing",
     });
   }
   if (props.totalAttendees > 0) {
     insights.push({
-      text: `You have ${props.totalAttendees} attendee${props.totalAttendees !== 1 ? "s" : ""} in your CRM. Use email campaigns to bring them back.`,
+      text: `You have ${props.totalAttendees} ${props.totalAttendees !== 1 ? "regulars" : "regular"} in your CRM. Bring them back with an email.`,
       href: "/dashboard/attendees",
     });
   }
@@ -246,7 +246,7 @@ function getInsights(props: DashboardHomeProps): Array<{ text: string; href: str
   // Always have at least one insight
   if (insights.length === 0) {
     insights.push({
-      text: "Nocturn handles ticketing, settlements, and marketing — all powered by AI.",
+      text: "Nocturn runs the ticketing, settlements, and marketing — so you can run the night.",
       href: "/dashboard/marketing",
     });
   }
@@ -267,13 +267,13 @@ function SetupChecklist(props: DashboardHomeProps) {
 
   const steps = [
     {
-      label: "Create your collective",
+      label: "Name your crew",
       done: true, // always true — they're on the dashboard
       href: "/dashboard",
       icon: CheckCircle2,
     },
     {
-      label: "Create your first event",
+      label: "Throw your first night",
       done: (props.totalEventsCount ?? 0) > 0,
       href: "/dashboard/events/new",
       icon: Plus,
@@ -285,13 +285,13 @@ function SetupChecklist(props: DashboardHomeProps) {
       icon: Ticket,
     },
     {
-      label: "Publish your event",
+      label: "Go live",
       done: props.hasPublishedEvent ?? false,
       href: "/dashboard/events",
       icon: Globe,
     },
     {
-      label: "Sell your first ticket",
+      label: "Move your first ticket",
       done: (props.totalTicketsSold ?? 0) > 0,
       href: "/dashboard/events",
       icon: ShoppingBag,

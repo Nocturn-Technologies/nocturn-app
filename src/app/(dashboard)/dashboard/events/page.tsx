@@ -168,7 +168,7 @@ export default async function EventsPage() {
             <Link href="/dashboard/events/new">
               <Button className="bg-nocturn hover:bg-nocturn-light active:scale-95 transition-all duration-200 mt-2 min-h-[44px]">
                 <Plus className="mr-2 h-4 w-4" />
-                Create Your First Event
+                Throw your first night
               </Button>
             </Link>
           </CardContent>
