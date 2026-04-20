@@ -61,8 +61,9 @@ export default function InvitePage() {
         return;
       }
 
-      if (invitation.status !== "pending") {
-        setState(invitation.status === "expired" ? "expired" : "not-found");
+      // If accepted_at is set, invitation has already been used
+      if (invitation.accepted_at !== null) {
+        setState("not-found");
         return;
       }
 

@@ -1,8 +1,16 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/config";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const VALID_EMOJIS = new Set(["🔥", "💯", "🙌", "🎉", "💜"]);
+
+// event_reactions exists in the DB (via migration 20260323_event_reactions.sql) but
+// is not yet reflected in the generated database.types.ts. Use the untyped escape
+// hatch until types are regenerated post-migration.
+function untypedFrom(sb: ReturnType<typeof createAdminClient>, table: string) {
+  return (sb as unknown as SupabaseClient).from(table);
+}
 
 export async function addReaction(input: {
   eventId: string;
@@ -21,7 +29,6 @@ export async function addReaction(input: {
       .from("events")
       .select("id")
       .eq("id", input.eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     if (eventError) {
@@ -30,17 +37,15 @@ export async function addReaction(input: {
     }
     if (!event) return { error: "Event not found" };
 
-    const { error } = await supabase
-      .from("event_reactions")
-      .insert({
-        event_id: input.eventId,
-        emoji: input.emoji,
-        fingerprint: input.fingerprint.trim(),
-      });
+    const { error } = await untypedFrom(supabase, "event_reactions").insert({
+      event_id: input.eventId,
+      emoji: input.emoji,
+      fingerprint: input.fingerprint.trim(),
+    });
 
     if (error) {
       // Unique constraint violation means already reacted
-      if (error.code === "23505") return { error: "Already reacted" };
+      if ((error as { code: string }).code === "23505") return { error: "Already reacted" };
       console.error("[addReaction]", error);
       return { error: "Failed to add reaction" };
     }
@@ -58,8 +63,7 @@ export async function getReactionsByFingerprint(eventId: string, fingerprint: st
 
     const supabase = createAdminClient();
 
-    const { data, error } = await supabase
-      .from("event_reactions")
+    const { data, error } = await untypedFrom(supabase, "event_reactions")
       .select("emoji")
       .eq("event_id", eventId)
       .eq("fingerprint", fingerprint);
@@ -69,7 +73,7 @@ export async function getReactionsByFingerprint(eventId: string, fingerprint: st
       return [];
     }
 
-    return (data ?? []).map((r) => r.emoji);
+    return ((data ?? []) as { emoji: string }[]).map((r) => r.emoji);
   } catch (err) {
     console.error("[getReactionsByFingerprint]", err);
     return [];

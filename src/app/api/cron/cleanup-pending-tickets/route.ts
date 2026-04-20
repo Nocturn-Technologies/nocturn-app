@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       .delete()
       .eq("status", "pending")
       .lt("created_at", thirtyMinAgo)
-      .select("id, event_id, ticket_tier_id");
+      .select("id, event_id, tier_id");
 
     if (error) {
       console.error("[cleanup-pending-tickets] Delete failed:", error);

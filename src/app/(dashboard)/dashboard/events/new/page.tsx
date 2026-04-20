@@ -11,8 +11,8 @@ import {
   type BudgetResult,
   type BudgetInput,
   type ExpenseItem,
-  type ExpenseCategory,
 } from "@/app/actions/budget-planner";
+import type { ExpenseCategory } from "@/lib/expense-categories";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
 import { cascadeScenario, cascadeBreakEven, type TicketTierInput } from "@/lib/ticket-forecast";
 import { getMyCollectiveDefaults } from "@/app/actions/collective-settings";
@@ -782,7 +782,15 @@ function fmtCurrency(n: number, compact?: boolean): string {
   return `$${Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExpenses?: number }) {
+function InlinePnL({
+  tiers,
+  totalExpenses = 0,
+  additionalRevenue = 0,
+}: {
+  tiers: TicketTier[];
+  totalExpenses?: number;
+  additionalRevenue?: number;
+}) {
   const rates = [0.5, 0.75, 1.0, 1.25];
   const rateLabels = ["50%", "75%", "Sell-out", "Waitlist"];
 
@@ -800,10 +808,10 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
     return {
       rate,
       tierLines: result.perTier,
-      gross: result.revenue,
+      gross: result.revenue + additionalRevenue,
       totalSold: result.ticketsSold,
       waitlist: result.waitlistCount,
-      profit: result.revenue - totalExpenses,
+      profit: result.revenue + additionalRevenue - totalExpenses,
     };
   });
 
@@ -896,13 +904,24 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
               ))}
             </tr>
 
+            {additionalRevenue > 0 && (
+              <tr className="hover:bg-white/[0.02] transition-colors">
+                <td className="px-4 py-2 text-sm text-muted-foreground">Projected bar share</td>
+                {scenarios.map((_, i) => (
+                  <td key={i} className="text-right px-3 py-2 text-sm text-green-400">
+                    {fmtCurrency(additionalRevenue)}
+                  </td>
+                ))}
+              </tr>
+            )}
+
             {/* Buyer-paid platform fees note — informational, not deducted from operator */}
             <tr className="bg-nocturn/[0.04]">
               <td colSpan={5} className="px-4 py-1.5">
                 <div className="flex items-center gap-1.5">
                   <DollarSign className="h-3 w-3 text-nocturn" />
                   <span className="text-[11px] font-medium text-nocturn/90">
-                    You keep 100% — buyers cover platform fees at checkout
+                    Buyer covers platform fees at checkout
                   </span>
                 </div>
               </td>
@@ -957,7 +976,7 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
         const be = totalExpenses > 0
           ? cascadeBreakEven(
               tiers.map((t, i) => ({ name: t.name, price: t.price, capacity: t.capacity, sort_order: i })),
-              totalExpenses,
+              Math.max(0, totalExpenses - additionalRevenue),
             )
           : null;
         return (
@@ -988,7 +1007,17 @@ function InlinePnL({ tiers, totalExpenses = 0 }: { tiers: TicketTier[]; totalExp
 
 // ─── Live Forecast ────────────────────────────────────────────────────────────
 
-function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: TicketTier[]; totalExpenses?: number; onTiersUpdate?: (tiers: TicketTier[]) => void }) {
+function LiveForecast({
+  tiers,
+  totalExpenses = 0,
+  additionalRevenue = 0,
+  onTiersUpdate,
+}: {
+  tiers: TicketTier[];
+  totalExpenses?: number;
+  additionalRevenue?: number;
+  onTiersUpdate?: (tiers: TicketTier[]) => void;
+}) {
   const [priceMultiplier, setPriceMultiplier] = useState(1.0);
   const baseTiersRef = useRef<TicketTier[]>(tiers);
 
@@ -1021,7 +1050,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
       tiers.map((t, i) => ({ name: t.name, price: t.price, capacity: t.capacity, sort_order: i })),
       rate,
     );
-    const gross = result.revenue;
+    const gross = result.revenue + additionalRevenue;
     const profit = gross - totalExpenses;
     return { ticketsSold: result.ticketsSold, gross, net: gross, profit };
   }
@@ -1173,7 +1202,7 @@ function LiveForecast({ tiers, totalExpenses = 0, onTiersUpdate }: { tiers: Tick
 
       <p className="text-[11px] text-muted-foreground text-center">
         {totalExpenses > 0
-          ? `Profit = revenue \u2212 $${totalExpenses.toLocaleString()} expenses \u2022 You keep 100%, buyer covers fees`
+          ? `Profit = tickets + bar share \u2212 $${totalExpenses.toLocaleString()} expenses \u2022 Buyer covers fees`
           : "You keep 100% of ticket price \u2022 Buyer covers platform fees at checkout"}
       </p>
     </div>
@@ -1313,6 +1342,18 @@ function scaleBudgetTiers(
     name: t.name,
     price: Math.round(t.price * ratio),
     capacity: t.capacity,
+  }));
+}
+
+function multiplyBudgetTiers(
+  suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning?: string }>,
+  multiplier: number
+): TicketTier[] {
+  if (suggestedTiers.length === 0) return [];
+  return suggestedTiers.map((tier) => ({
+    name: tier.name,
+    price: Math.max(0, Math.round(tier.price * multiplier)),
+    capacity: tier.capacity,
   }));
 }
 
@@ -1483,16 +1524,21 @@ interface BudgetStepProps {
   venueCity: string;
   eventDate: string;
   venueCapacity: number | undefined;
+  projectedBarSales: number | "";
+  barPercent: number | "";
+  onProjectedBarSalesChange: (value: number | "") => void;
+  onBarPercentChange: (value: number | "") => void;
   onSkip: () => void;
   onCalculate: () => void;
   onSuggestTravel: () => void;
   tiers: TicketTier[];
-  onApplySuggestedTiers: () => void;
+  onApplySuggestedTiers: (tiers: TicketTier[]) => void;
 }
 
 function BudgetStep({
   draft, setDraft, result, calculating,
   venueCity, eventDate, venueCapacity,
+  projectedBarSales, barPercent, onProjectedBarSalesChange, onBarPercentChange,
   onSkip, onCalculate, onSuggestTravel,
   tiers, onApplySuggestedTiers,
 }: BudgetStepProps) {
@@ -1501,6 +1547,7 @@ function BudgetStep({
   // out the prices that landed so the operator doesn't have to bounce to the
   // Tickets step to confirm what changed.
   const [appliedNote, setAppliedNote] = useState<string | null>(null);
+  const [priceMultiplier, setPriceMultiplier] = useState(1);
   const hasAnyExpense =
     draft.talentFee.amount > 0 ||
     draft.venueRental > 0 ||
@@ -1540,6 +1587,40 @@ function BudgetStep({
   // Which prod chips are still available (already-added ones disappear from the tray).
   const addedCategories = new Set(draft.prodItems.map(p => p.category));
   const availableChips = PROD_CHIPS.filter(c => !addedCategories.has(c.category));
+  const suggestedPreview = result
+    ? multiplyBudgetTiers(result.suggestedTiers, priceMultiplier)
+    : [];
+  const suggestedCapacity = suggestedPreview.reduce((sum, tier) => sum + tier.capacity, 0);
+  const suggestedRevenue = suggestedPreview.reduce((sum, tier) => sum + tier.price * tier.capacity, 0);
+  const suggestedAvgPrice = suggestedCapacity > 0 ? suggestedRevenue / suggestedCapacity : 0;
+  const barShareRevenue =
+    typeof projectedBarSales === "number" && Number.isFinite(projectedBarSales)
+      ? projectedBarSales * ((typeof barPercent === "number" ? barPercent : 0) / 100)
+      : 0;
+  const liveScenarios = result
+    ? [
+        { label: "50%", rate: 0.5 },
+        { label: "75%", rate: 0.75 },
+        { label: "100%", rate: 1.0 },
+      ].map((scenario) => {
+        const projection = cascadeScenario(
+          suggestedPreview.map((tier, index) => ({
+            name: tier.name,
+            price: tier.price,
+            capacity: tier.capacity,
+            sort_order: index,
+          })),
+          scenario.rate
+        );
+        const gross = projection.revenue + barShareRevenue;
+        return {
+          label: scenario.label,
+          ticketsSold: projection.ticketsSold,
+          gross,
+          profit: gross - result.totalExpenses,
+        };
+      })
+    : [];
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -1712,8 +1793,24 @@ function BudgetStep({
                 className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Projected bar sales</label>
+              <NumberInput
+                value={typeof projectedBarSales === "number" ? projectedBarSales : 0}
+                onChange={onProjectedBarSalesChange}
+                className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Your bar share %</label>
+              <NumberInput
+                value={typeof barPercent === "number" ? barPercent : 0}
+                onChange={onBarPercentChange}
+                className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-nocturn/50"
+              />
+            </div>
           </div>
-          <p className="text-[11px] text-muted-foreground/70">All in {ec.toUpperCase()} — venue is paid locally.</p>
+          <p className="text-[11px] text-muted-foreground/70">All in {ec.toUpperCase()} — venue is paid locally. Your bar share feeds the forecast as extra revenue.</p>
         </div>
 
         {/* ── Production & Marketing (chip-add) ── */}
@@ -1843,30 +1940,86 @@ function BudgetStep({
             </p>
 
             <div className="space-y-1">
-              {result.scenarios.map((s, i) => (
+              {liveScenarios.map((s, i) => (
                 <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{s.label}</span>
+                  <span className="text-muted-foreground">{s.label} <span className="text-[11px] text-zinc-500">({s.ticketsSold} tix)</span></span>
                   <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {s.profit >= 0 ? "+" : ""}{s.profit.toLocaleString()} {result.eventCurrency.toUpperCase()}
+                    {s.profit >= 0 ? "+" : ""}{Math.round(s.profit).toLocaleString()} {result.eventCurrency.toUpperCase()}
                   </span>
                 </div>
               ))}
             </div>
 
-            {result.suggestedTiers.length > 0 && tiers.length > 0 && (
-              <button
-                onClick={() => {
-                  const note = result.suggestedTiers
-                    .map((t) => `${t.name} ${result.eventCurrency.toUpperCase()} ${t.price} (${t.capacity} tix)`)
-                    .join(" · ");
-                  onApplySuggestedTiers();
-                  setAppliedNote(note);
-                  setTimeout(() => setAppliedNote(null), 7000);
-                }}
-                className="text-xs text-nocturn hover:text-nocturn-light transition-colors"
-              >
-                Apply suggested tiers ({result.suggestedTiers.length} tiers)
-              </button>
+            {result.suggestedTiers.length > 0 && (
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Recommended tiers</p>
+                    <p className="text-[11px] text-muted-foreground">Simulate pricing here, then use the version you want for the event draft.</p>
+                  </div>
+                  <span className="rounded-full bg-zinc-900 px-2 py-1 text-[11px] text-zinc-300">
+                    {suggestedCapacity} cap • {fmtCurrency(suggestedAvgPrice)} avg
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>Price sensitivity</span>
+                    <span className="font-medium text-nocturn">{priceMultiplier.toFixed(2)}x</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.7}
+                    max={1.4}
+                    step={0.05}
+                    value={priceMultiplier}
+                    onChange={(e) => setPriceMultiplier(parseFloat(e.target.value))}
+                    className="w-full h-1.5 rounded-full appearance-none bg-zinc-800 accent-[#7B2FF7] cursor-pointer"
+                  />
+                  <div className="flex justify-between text-[11px] text-muted-foreground/70">
+                    <span>Lower</span>
+                    <span>Base</span>
+                    <span>Higher</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {suggestedPreview.map((tier, index) => {
+                    const original = result.suggestedTiers[index];
+                    return (
+                      <div key={`${tier.name}-${index}`} className="flex items-center justify-between rounded-lg border border-white/6 bg-zinc-900/70 px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium text-white">{tier.name}</p>
+                          <p className="text-[11px] text-muted-foreground">{tier.capacity} tickets</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-nocturn">{result.eventCurrency.toUpperCase()} {tier.price}</p>
+                          {original && original.price !== tier.price && (
+                            <p className="text-[11px] text-muted-foreground line-through">
+                              {result.eventCurrency.toUpperCase()} {original.price}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const note = suggestedPreview
+                      .map((t) => `${t.name} ${result.eventCurrency.toUpperCase()} ${t.price} (${t.capacity} tix)`)
+                      .join(" · ");
+                    onApplySuggestedTiers(suggestedPreview);
+                    setAppliedNote(note);
+                    setTimeout(() => setAppliedNote(null), 7000);
+                  }}
+                  className="w-full bg-nocturn hover:bg-[#6B1FE7] text-white rounded-xl min-h-[44px]"
+                >
+                  Use these tiers in event draft
+                </Button>
+              </div>
             )}
 
             {appliedNote && (
@@ -2026,6 +2179,10 @@ export default function NewEventPage() {
   // happened and summing native-currency numbers would mix units.
   // Bar minimum is a revenue threshold, not an expense (matches server logic).
   const totalExpenses = budgetResult?.totalExpenses ?? 0;
+  const projectedBarRevenue =
+    typeof formData.projectedBarSales === "number" && Number.isFinite(formData.projectedBarSales)
+      ? formData.projectedBarSales * ((typeof formData.barPercent === "number" ? formData.barPercent : 0) / 100)
+      : 0;
 
   // Validation per step
   function canAdvance(): boolean {
@@ -2223,11 +2380,7 @@ export default function NewEventPage() {
         venueCity: formData.venueCity || "",
         venueCapacity: typeof formData.venueCapacity === "number" ? formData.venueCapacity : 0,
         tiers: validTiers,
-        eventMode: formData.isFree ? "rsvp" : "ticketed",
         isFree: formData.isFree,
-        // Event currency = per-event override; createEvent falls back to the
-        // collective's default_currency if null.
-        currency: budgetDraft.eventCurrency,
         // Venue cost + deposit are authoritatively stored on events.venue_cost
         // and events.venue_deposit columns (not in the expenses table). The
         // wizard's local state carries them as scalar fields in the event
@@ -2236,6 +2389,8 @@ export default function NewEventPage() {
         barMinimum: budgetDraft.barMinimum || null,
         venueCost: budgetDraft.venueRental || null,
         venueDeposit: budgetDraft.deposit || null,
+        projectedBarSales: typeof formData.projectedBarSales === "number" ? formData.projectedBarSales : null,
+        barPercent: typeof formData.barPercent === "number" ? formData.barPercent : null,
         // Itemized expense rows — EXCLUDING venue_rental + deposit. Those
         // are already carried by venueCost / venueDeposit scalar fields
         // above; writing them to expenses too would double-count in the
@@ -2921,7 +3076,7 @@ export default function NewEventPage() {
 
             {/* Inline P&L forecast */}
             {tiers.length > 0 && tiers.some(t => t.price > 0) && (
-              <InlinePnL tiers={tiers} totalExpenses={totalExpenses} />
+              <InlinePnL tiers={tiers} totalExpenses={totalExpenses} additionalRevenue={projectedBarRevenue} />
             )}
 
             {/* Pricing insight */}
@@ -2946,15 +3101,16 @@ export default function NewEventPage() {
             venueCity={formData.venueCity}
             eventDate={formData.date}
             venueCapacity={typeof formData.venueCapacity === "number" ? formData.venueCapacity : undefined}
+            projectedBarSales={formData.projectedBarSales}
+            barPercent={formData.barPercent}
+            onProjectedBarSalesChange={(value) => setFormData((prev) => ({ ...prev, projectedBarSales: value }))}
+            onBarPercentChange={(value) => setFormData((prev) => ({ ...prev, barPercent: value }))}
             onSkip={goNext}
             onCalculate={handleCalculateBudget}
             onSuggestTravel={handleSuggestTravel}
             tiers={tiers}
-            onApplySuggestedTiers={() => {
-              if (!budgetResult) return;
-              const firstPrice = tiers[0]?.price;
-              const scaled = scaleBudgetTiers(budgetResult.suggestedTiers, firstPrice);
-              setTiers(scaled);
+            onApplySuggestedTiers={(nextTiers) => {
+              setTiers(nextTiers);
             }}
           />
         )}
@@ -3078,6 +3234,7 @@ export default function NewEventPage() {
               <LiveForecast
                 tiers={tiers}
                 totalExpenses={totalExpenses}
+                additionalRevenue={projectedBarRevenue}
                 onTiersUpdate={setTiers}
               />
             )}

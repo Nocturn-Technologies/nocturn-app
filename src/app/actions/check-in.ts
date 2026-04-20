@@ -18,7 +18,6 @@ async function verifyCheckInAccess(eventId: string) {
       .from("events")
       .select("collective_id")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     if (eventError) {
@@ -50,11 +49,11 @@ async function verifyCheckInAccess(eventId: string) {
 }
 
 /**
- * Validate and check in a ticket by its token.
+ * Validate and check in a ticket by its QR code token.
  * - Verifies the caller is authenticated and a member of the event's collective
  * - Verifies the ticket exists and belongs to the given event
- * - Ensures ticket status is 'paid' (not already checked in, refunded, etc.)
- * - Updates status to 'checked_in' with timestamp
+ * - Ensures ticket status is 'valid' (not already checked in, refunded, etc.)
+ * - Updates status to 'checked_in' and inserts a ticket_events audit record
  */
 export async function checkInTicket(ticketToken: string, eventId: string) {
   try {
@@ -76,6 +75,7 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
     const supabase = createAdminClient();
 
     // Fetch the ticket with event and tier info
+    // In the new schema: qr_code = the UUID token, no user join (holder_party_id → parties)
     const { data: ticket, error: fetchError } = await supabase
       .from("tickets")
       .select(
@@ -83,13 +83,13 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
         id,
         event_id,
         status,
-        checked_in_at,
-        ticket_token,
-        ticket_tiers:ticket_tier_id (name),
-        users!tickets_user_id_fkey (full_name, email)
+        qr_code,
+        holder_party_id,
+        tier_id,
+        ticket_tiers:tier_id (name)
       `
       )
-      .eq("ticket_token", ticketToken)
+      .eq("qr_code", ticketToken)
       .maybeSingle();
 
     if (fetchError || !ticket) {
@@ -109,10 +109,42 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
       };
     }
 
+    // Resolve guest name/email from the holder's party
+    let guestName = "Guest";
+    let guestEmail: string | null = null;
+    if (ticket.holder_party_id) {
+      const [{ data: party }, { data: contactMethod }] = await Promise.all([
+        supabase
+          .from("parties")
+          .select("display_name")
+          .eq("id", ticket.holder_party_id)
+          .maybeSingle(),
+        supabase
+          .from("party_contact_methods")
+          .select("value")
+          .eq("party_id", ticket.holder_party_id)
+          .eq("type", "email")
+          .eq("is_primary", true)
+          .maybeSingle(),
+      ]);
+      if (party?.display_name) guestName = party.display_name;
+      if (contactMethod?.value) guestEmail = contactMethod.value;
+    }
+
     // Check current status
     if (ticket.status === "checked_in") {
-      const checkedInTime = ticket.checked_in_at
-        ? new Date(ticket.checked_in_at).toLocaleTimeString("en-US", {
+      // Look up when they were checked in from ticket_events
+      const { data: checkInEvent } = await supabase
+        .from("ticket_events")
+        .select("occurred_at")
+        .eq("ticket_id", ticket.id)
+        .eq("event_type", "checked_in")
+        .order("occurred_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const checkedInTime = checkInEvent?.occurred_at
+        ? new Date(checkInEvent.occurred_at).toLocaleTimeString("en-US", {
             hour: "numeric",
             minute: "2-digit",
           })
@@ -124,31 +156,30 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
         duplicate: true,
         ticket: {
           tierName: ((ticket.ticket_tiers as Record<string, unknown> | null)?.name as string) ?? "General",
-          guestName: ((ticket.users as Record<string, unknown> | null)?.full_name as string) ?? "Guest",
-          guestEmail: ((ticket.users as Record<string, unknown> | null)?.email as string) ?? null,
+          guestName,
+          guestEmail,
         },
       };
     }
 
-    if (ticket.status !== "paid") {
+    if (ticket.status !== "valid") {
       return {
         success: false,
-        error: `Ticket status is '${ticket.status}' — only paid tickets can be checked in`,
+        error: `Ticket status is '${ticket.status}' — only valid tickets can be checked in`,
         ticket: null,
       };
     }
 
-    // Perform the check-in — atomic guard: only update if still "paid"
+    // Perform the check-in — atomic guard: only update if still "valid"
     // Prevents double check-in race condition from concurrent scans
     const now = new Date().toISOString();
     const { error: updateError, count: updateCount } = await supabase
       .from("tickets")
       .update({
         status: "checked_in",
-        checked_in_at: now,
       })
       .eq("id", ticket.id)
-      .eq("status", "paid");
+      .eq("status", "valid");
 
     if (updateError) {
       console.error("[check-in] Failed to update ticket:", updateError);
@@ -166,19 +197,30 @@ export async function checkInTicket(ticketToken: string, eventId: string) {
         duplicate: true,
         ticket: {
           tierName: (ticket.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
-          guestName: (ticket.users as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
-          guestEmail: (ticket.users as unknown as { full_name: string; email: string } | null)?.email ?? null,
+          guestName,
+          guestEmail,
         },
       };
     }
+
+    // Insert ticket_events audit record for the check-in
+    void supabase
+      .from("ticket_events")
+      .insert({
+        ticket_id: ticket.id,
+        event_type: "checked_in",
+        party_id: null, // could be the staff's party_id if available
+        metadata: { checked_in_at: now },
+      })
+      .then(() => {}, (e: unknown) => console.error("[check-in] ticket_events insert failed (non-blocking):", e));
 
     return {
       success: true,
       error: null,
       ticket: {
         tierName: (ticket.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
-        guestName: (ticket.users as unknown as { full_name: string; email: string } | null)?.full_name ?? "Guest",
-        guestEmail: (ticket.users as unknown as { full_name: string; email: string } | null)?.email ?? null,
+        guestName,
+        guestEmail,
       },
     };
   } catch (err) {
@@ -200,9 +242,9 @@ export interface CheckInStats {
 
 /**
  * Get check-in statistics for an event:
- * - Total paid/checked_in tickets
+ * - Total valid/checked_in tickets
  * - Number checked in
- * - Most recent check-ins
+ * - Most recent check-ins (sourced from ticket_events)
  */
 export async function getCheckInStats(eventId: string): Promise<CheckInStats> {
   try {
@@ -216,12 +258,12 @@ export async function getCheckInStats(eventId: string): Promise<CheckInStats> {
 
     const supabase = createAdminClient();
 
-    // Count total eligible tickets (paid + checked_in)
+    // Count total eligible tickets (valid + checked_in)
     const { count: totalTickets } = await supabase
       .from("tickets")
       .select("id", { count: "exact", head: true })
       .eq("event_id", eventId)
-      .in("status", ["paid", "checked_in"]);
+      .in("status", ["valid", "checked_in"]);
 
     // Count checked-in tickets
     const { count: checkedIn } = await supabase
@@ -230,31 +272,56 @@ export async function getCheckInStats(eventId: string): Promise<CheckInStats> {
       .eq("event_id", eventId)
       .eq("status", "checked_in");
 
-    // Get recent check-ins (last 20)
+    // Get recent check-ins: query checked_in tickets for this event,
+    // then look up the check-in timestamp from ticket_events
     const { data: recentData } = await supabase
       .from("tickets")
       .select(
         `
         id,
-        checked_in_at,
-        users!tickets_user_id_fkey (full_name),
-        ticket_tiers:ticket_tier_id (name)
+        holder_party_id,
+        ticket_tiers:tier_id (name)
       `
       )
       .eq("event_id", eventId)
       .eq("status", "checked_in")
-      .not("checked_in_at", "is", null)
-      .order("checked_in_at", { ascending: false })
+      .order("created_at", { ascending: false })
       .limit(20);
 
-    const recentCheckIns = (recentData ?? []).map((t) => ({
-      id: t.id,
-      guestName:
-        (t.users as unknown as { full_name: string } | null)?.full_name ?? "Guest",
-      tierName:
-        (t.ticket_tiers as unknown as { name: string } | null)?.name ?? "General",
-      checkedInAt: t.checked_in_at!,
-    }));
+    // For each checked-in ticket, look up the check-in event timestamp and guest name
+    const recentCheckIns = await Promise.all(
+      (recentData ?? []).map(async (t) => {
+        const tierData = t.ticket_tiers as unknown as { name: string } | null;
+
+        // Get the check-in timestamp
+        const { data: checkInEvent } = await supabase
+          .from("ticket_events")
+          .select("occurred_at")
+          .eq("ticket_id", t.id)
+          .eq("event_type", "checked_in")
+          .order("occurred_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // Get the guest name from the holder party
+        let guestName = "Guest";
+        if (t.holder_party_id) {
+          const { data: party } = await supabase
+            .from("parties")
+            .select("display_name")
+            .eq("id", t.holder_party_id)
+            .maybeSingle();
+          if (party?.display_name) guestName = party.display_name;
+        }
+
+        return {
+          id: t.id,
+          guestName,
+          tierName: tierData?.name ?? "General",
+          checkedInAt: checkInEvent?.occurred_at ?? new Date().toISOString(),
+        };
+      })
+    );
 
     return {
       totalTickets: totalTickets ?? 0,

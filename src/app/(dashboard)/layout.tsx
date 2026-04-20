@@ -19,15 +19,19 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
-  // Defense-in-depth: check approval status (middleware should catch this, but belt-and-suspenders)
-  const userType = user.user_metadata?.user_type;
-  const isApproved = user.user_metadata?.is_approved;
-  if ((userType === "collective" || userType === "promoter") && isApproved === false) {
-    redirect("/pending-approval");
-  }
-
   // Use admin client to check memberships (bypasses RLS chicken-and-egg issue)
   const admin = createAdminClient();
+
+  // Defense-in-depth: approval gate is sourced from public.users.
+  const { data: approvalState } = await admin
+    .from("users")
+    .select("is_approved")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (approvalState?.is_approved === false) {
+    redirect("/pending-approval");
+  }
 
   const { count } = await admin
     .from("collective_members")
@@ -70,7 +74,7 @@ export default async function DashboardLayout({
     });
 
   // Get user type from auth metadata or DB (reuse early `userType` or fall back to DB)
-  const resolvedUserType = userType ?? (profile as { user_type?: string } | null)?.user_type ?? "collective";
+  const resolvedUserType = user.user_metadata?.user_type ?? (profile as { user_type?: string } | null)?.user_type ?? "collective";
 
   return (
     <>

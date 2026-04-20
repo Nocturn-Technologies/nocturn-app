@@ -8,7 +8,7 @@ import { isValidUUID } from "@/lib/utils";
 /**
  * Seeds a demo collective with realistic past events, ticket sales,
  * settlements, and attendee data. Run once for Techstars demos.
- * 
+ *
  * Call from browser console: fetch('/api/seed-demo', { method: 'POST' })
  */
 export async function seedDemoData(collectiveId: string) {
@@ -48,57 +48,101 @@ export async function seedDemoData(collectiveId: string) {
     return { error: "Only collective owners and admins can seed demo data" };
   }
 
-  // Create 3 demo venues
-  const venues = [
-    { name: "The Velvet Underground", slug: "velvet-underground-to", address: "508 Queen St W", city: "Toronto", capacity: 350, contact_email: "bookings@velvetunderground.com" },
-    { name: "CODA", slug: "coda-to", address: "794 Bathurst St", city: "Toronto", capacity: 500, contact_email: "info@codatoronto.com" },
-    { name: "Nocturne Bar", slug: "nocturne-bar-to", address: "455 Spadina Ave", city: "Toronto", capacity: 200, contact_email: "events@nocturnebar.com" },
+  // Create 3 demo venues via parties + venue_profiles
+  const venueData = [
+    { name: "The Velvet Underground", slug: "velvet-underground-to", address: "508 Queen St W", city: "Toronto", capacity: 350 },
+    { name: "CODA", slug: "coda-to", address: "794 Bathurst St", city: "Toronto", capacity: 500 },
+    { name: "Nocturne Bar", slug: "nocturne-bar-to", address: "455 Spadina Ave", city: "Toronto", capacity: 200 },
   ];
 
-  const { data: insertedVenues, error: venueError } = await sb
-    .from("venues")
-    .upsert(venues, { onConflict: "slug" })
-    .select("id, name, capacity");
+  // Insert venue parties first
+  const { data: venueParties, error: venuePartyError } = await sb
+    .from("parties")
+    .insert(venueData.map((v) => ({ display_name: v.name, type: "venue" as const })))
+    .select("id");
 
-  if (venueError) {
-    console.error("[seedDemoData] Failed to create venues:", venueError);
+  if (venuePartyError || !venueParties || venueParties.length === 0) {
+    console.error("[seedDemoData] Failed to create venue parties:", venuePartyError);
     return { error: "Something went wrong" };
   }
-  if (!insertedVenues || insertedVenues.length === 0) {
-    return { error: "Failed to create venues" };
+
+  // Insert venue_profiles linked to parties
+  const { data: insertedVenues, error: venueProfileError } = await sb
+    .from("venue_profiles")
+    .upsert(
+      venueData.map((v, i) => ({
+        party_id: venueParties[i].id,
+        name: v.name,
+        slug: v.slug,
+        address: v.address,
+        city: v.city,
+        capacity: v.capacity,
+      })),
+      { onConflict: "slug" }
+    )
+    .select("id, name, capacity, party_id");
+
+  if (venueProfileError || !insertedVenues || insertedVenues.length === 0) {
+    console.error("[seedDemoData] Failed to create venue profiles:", venueProfileError);
+    return { error: "Something went wrong" };
   }
 
-  // Create 3 demo artists (small-collective scale — local DJs, modest fees)
-  const artists = [
+  // Create 3 demo artists via parties + artist_profiles (small-collective scale — local DJs, modest fees)
+  const artistData = [
     { name: "DJ Koda", slug: "dj-koda", genre: ["House", "Techno"], default_fee: 200 },
     { name: "Nadia Night", slug: "nadia-night", genre: ["Deep House", "Afro House"], default_fee: 250 },
     { name: "Pulse Collective", slug: "pulse-collective", genre: ["Drum & Bass", "Jungle"], default_fee: 175 },
   ];
 
-  const { data: insertedArtists, error: artistError } = await sb
-    .from("artists")
-    .upsert(artists, { onConflict: "slug" })
-    .select("id, name, default_fee");
+  // Insert artist parties first
+  const { data: artistParties, error: artistPartyError } = await sb
+    .from("parties")
+    .insert(artistData.map((a) => ({ display_name: a.name, type: "person" as const })))
+    .select("id");
 
-  if (artistError) {
-    console.error("[seedDemoData] Failed to create artists:", artistError);
+  if (artistPartyError || !artistParties || artistParties.length === 0) {
+    console.error("[seedDemoData] Failed to create artist parties:", artistPartyError);
     return { error: "Something went wrong" };
   }
-  if (!insertedArtists) {
-    console.error("[seedDemoData] Failed to create artists");
+
+  // Insert artist_profiles linked to parties
+  const { data: insertedArtists, error: artistProfileError } = await sb
+    .from("artist_profiles")
+    .upsert(
+      artistData.map((a, i) => ({
+        party_id: artistParties[i].id,
+        slug: a.slug,
+        genre: a.genre,
+        default_fee: a.default_fee,
+        is_active: true,
+        is_verified: false,
+      })),
+      { onConflict: "slug" }
+    )
+    .select("id, party_id, default_fee");
+
+  if (artistProfileError || !insertedArtists) {
+    console.error("[seedDemoData] Failed to create artist profiles:", artistProfileError);
     return { error: "Something went wrong" };
   }
+
+  // Look up artist display names from parties for event_artists inserts
+  const artistNames = artistData.map((a) => a.name);
+  const artistFees = artistData.map((a) => a.default_fee);
 
   // Create 3 past events (completed, with realistic dates)
+  // Events now use flat venue columns — no venue_id FK
   const now = new Date();
   const events = [
     {
       collective_id: collectiveId,
-      venue_id: insertedVenues[0].id,
+      venue_name: venueData[0].name,
+      venue_address: venueData[0].address,
+      city: venueData[0].city,
       title: "Deep Frequencies Vol. 3",
-      slug: "deep-frequencies-vol-3",
+      slug: `deep-frequencies-vol-3-${randomUUID().slice(0, 8)}`,
       status: "completed" as const,
-      starts_at: new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000).toISOString(), // 3 weeks ago
+      starts_at: new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000).toISOString(),
       ends_at: new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000 + 5 * 60 * 60 * 1000).toISOString(),
       doors_at: new Date(now.getTime() - 21 * 24 * 60 * 60 * 1000 - 1 * 60 * 60 * 1000).toISOString(),
       min_age: 19,
@@ -106,11 +150,13 @@ export async function seedDemoData(collectiveId: string) {
     },
     {
       collective_id: collectiveId,
-      venue_id: insertedVenues[1].id,
+      venue_name: venueData[1].name,
+      venue_address: venueData[1].address,
+      city: venueData[1].city,
       title: "Nocturnal Sounds: Opening Night",
-      slug: "nocturnal-sounds-opening",
+      slug: `nocturnal-sounds-opening-${randomUUID().slice(0, 8)}`,
       status: "completed" as const,
-      starts_at: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString(), // 2 weeks ago
+      starts_at: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString(),
       ends_at: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000 + 6 * 60 * 60 * 1000).toISOString(),
       doors_at: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000 - 1 * 60 * 60 * 1000).toISOString(),
       min_age: 19,
@@ -118,11 +164,13 @@ export async function seedDemoData(collectiveId: string) {
     },
     {
       collective_id: collectiveId,
-      venue_id: insertedVenues[2].id,
+      venue_name: venueData[2].name,
+      venue_address: venueData[2].address,
+      city: venueData[2].city,
       title: "Warehouse Sessions 001",
-      slug: "warehouse-sessions-001",
+      slug: `warehouse-sessions-001-${randomUUID().slice(0, 8)}`,
       status: "completed" as const,
-      starts_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(), // 1 week ago
+      starts_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
       ends_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000).toISOString(),
       doors_at: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000 - 1 * 60 * 60 * 1000).toISOString(),
       min_age: 19,
@@ -133,7 +181,7 @@ export async function seedDemoData(collectiveId: string) {
   const { data: insertedEvents, error: eventError } = await sb
     .from("events")
     .insert(events)
-    .select("id, title, venue_id");
+    .select("id, title");
 
   if (eventError || !insertedEvents) {
     console.error("[seedDemoData] Failed to create events:", eventError);
@@ -157,8 +205,8 @@ export async function seedDemoData(collectiveId: string) {
 
     // Create tiers (just Early Bird + GA — small crews rarely do 3 tiers)
     const tiers = [
-      { event_id: event.id, name: "Early Bird", price: config.earlyPrice, capacity: config.earlySold },
-      { event_id: event.id, name: "GA", price: config.gaPrice, capacity: config.gaSold + 20 },
+      { event_id: event.id, name: "Early Bird", price: config.earlyPrice, capacity: config.earlySold, sort_order: 0 },
+      { event_id: event.id, name: "GA", price: config.gaPrice, capacity: config.gaSold + 20, sort_order: 1 },
     ];
 
     const { data: insertedTiers, error: tierError } = await sb
@@ -171,16 +219,14 @@ export async function seedDemoData(collectiveId: string) {
     }
     if (!insertedTiers) continue;
 
-    // Create tickets (all checked_in for past events)
+    // Create tickets — new tickets table has minimal columns:
+    // event_id, tier_id, holder_party_id (nullable), qr_code (nullable), status, order_line_id (nullable)
     const soldCounts = [config.earlySold, config.gaSold];
     const allTickets: Array<{
       event_id: string;
-      ticket_tier_id: string;
-      status: "reserved" | "paid" | "checked_in" | "refunded" | "cancelled" | "free" | "pending";
-      price_paid: number;
-      currency: string;
-      ticket_token: string;
-      metadata: { demo: boolean; customer_email: string };
+      tier_id: string;
+      status: string;
+      qr_code: string;
     }> = [];
 
     for (let t = 0; t < insertedTiers.length; t++) {
@@ -189,12 +235,9 @@ export async function seedDemoData(collectiveId: string) {
       for (let j = 0; j < count; j++) {
         allTickets.push({
           event_id: event.id,
-          ticket_tier_id: tier.id,
+          tier_id: tier.id,
           status: "checked_in",
-          price_paid: tier.price,
-          currency: "usd",
-          ticket_token: randomUUID(),
-          metadata: { demo: true, customer_email: `attendee${j + 1}@demo.nocturn.app` },
+          qr_code: randomUUID(),
         });
       }
     }
@@ -207,39 +250,47 @@ export async function seedDemoData(collectiveId: string) {
       }
     }
 
-    // Book artists
+    // Book artists — event_artists uses name + party_id (no artist_id FK)
     const artistIndex = i % insertedArtists.length;
-    const secondArtist = (i + 1) % insertedArtists.length;
+    const secondArtistIndex = (i + 1) % insertedArtists.length;
     const { error: bookingErr } = await sb.from("event_artists").insert([
-      { event_id: event.id, artist_id: insertedArtists[artistIndex].id, fee: insertedArtists[artistIndex].default_fee, status: "confirmed" },
-      { event_id: event.id, artist_id: insertedArtists[secondArtist].id, fee: insertedArtists[secondArtist].default_fee, status: "confirmed" },
+      {
+        event_id: event.id,
+        name: artistNames[artistIndex],
+        party_id: insertedArtists[artistIndex].party_id,
+        fee: artistFees[artistIndex],
+        sort_order: 0,
+      },
+      {
+        event_id: event.id,
+        name: artistNames[secondArtistIndex],
+        party_id: insertedArtists[secondArtistIndex].party_id,
+        fee: artistFees[secondArtistIndex],
+        sort_order: 1,
+      },
     ]);
     if (bookingErr) {
       console.error("[seedDemoData] Failed to book artists:", bookingErr);
     }
 
     // Calculate and create settlement
-    // Buyer-pays pricing model → stripe/platform fees aren't organizer's costs
-    const grossRevenue = config.earlySold * config.earlyPrice
-      + config.gaSold * config.gaPrice;
-    const totalArtistFees = (insertedArtists[artistIndex].default_fee ?? 0) + (insertedArtists[secondArtist].default_fee ?? 0);
-    const venueFee = Math.round(grossRevenue * 0.15); // ~15% venue cut
-    const otherCosts = Math.round(grossRevenue * 0.08); // ~8% for promo/supplies
-    // total_costs is a generated column — let the DB compute it
-    const profit = grossRevenue - totalArtistFees - venueFee - otherCosts;
+    // New settlements schema: total_revenue, net_payout, stripe_fee, platform_fee
+    const grossRevenue = config.earlySold * config.earlyPrice + config.gaSold * config.gaPrice;
+    const totalArtistFees = artistFees[artistIndex] + artistFees[secondArtistIndex];
+    const venueFee = Math.round(grossRevenue * 0.15);
+    const otherCosts = Math.round(grossRevenue * 0.08);
+    const platformFee = Math.round(grossRevenue * 0.07);
+    const stripeFee = Math.round(grossRevenue * 0.029 + (config.earlySold + config.gaSold) * 0.3);
+    const netPayout = grossRevenue - totalArtistFees - venueFee - otherCosts - platformFee - stripeFee;
 
     const { error: settlementErr } = await sb.from("settlements").insert({
       event_id: event.id,
       collective_id: collectiveId,
       status: "approved",
-      gross_revenue: grossRevenue,
-      refunds_total: 0,
-      artist_fees_total: totalArtistFees,
-      venue_fee: venueFee,
-      other_costs: otherCosts,
-      stripe_fees: 0,
-      platform_fee: 0,
-      profit: profit,
+      total_revenue: grossRevenue,
+      net_payout: netPayout,
+      stripe_fee: stripeFee,
+      platform_fee: platformFee,
     });
     if (settlementErr) {
       console.error("[seedDemoData] Failed to create settlement:", settlementErr);
@@ -248,9 +299,8 @@ export async function seedDemoData(collectiveId: string) {
 
   // Summary
   const totalTickets = ticketConfigs.reduce((sum, c) => sum + c.earlySold + c.gaSold, 0);
-  const totalRevenue = ticketConfigs.reduce((sum, _c, i) => {
-    const cfg = ticketConfigs[i];
-    return sum + cfg.earlySold * cfg.earlyPrice + cfg.gaSold * cfg.gaPrice;
+  const totalRevenue = ticketConfigs.reduce((sum, c) => {
+    return sum + c.earlySold * c.earlyPrice + c.gaSold * c.gaPrice;
   }, 0);
 
   return {

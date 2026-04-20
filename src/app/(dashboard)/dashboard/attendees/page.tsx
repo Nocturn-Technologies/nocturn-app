@@ -273,12 +273,12 @@ export default function AttendeesPage() {
                       <p className="truncate font-medium text-sm">
                         {attendee.name || attendee.email}
                       </p>
-                      {attendee.source === "rsvp" && (
+                      {(attendee.source as string) === "rsvp" && (
                         <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
                           RSVP
                         </span>
                       )}
-                      {attendee.source === "both" && (
+                      {(attendee.source as string) === "both" && (
                         <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
                           VIP
                         </span>
@@ -323,12 +323,12 @@ export default function AttendeesPage() {
                         <p className="truncate font-medium text-sm">
                           {attendee.name || attendee.email}
                         </p>
-                        {attendee.source === "rsvp" && (
+                        {(attendee.source as string) === "rsvp" && (
                           <span className="shrink-0 rounded-full bg-sky-500/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-sky-400 ring-1 ring-inset ring-sky-500/20">
                             RSVP
                           </span>
                         )}
-                        {attendee.source === "both" && (
+                        {(attendee.source as string) === "both" && (
                           <span className="shrink-0 rounded-full bg-nocturn/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-nocturn ring-1 ring-inset ring-nocturn/20">
                             VIP
                           </span>

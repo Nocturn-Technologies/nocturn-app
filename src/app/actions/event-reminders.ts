@@ -7,6 +7,9 @@ import { escapeHtml } from "@/lib/html";
 /**
  * Send reminder emails to all ticket holders for events happening in the next 24 hours.
  * Designed to be called by a cron job or manual trigger.
+ *
+ * Buyer emails are resolved via orders → party_contact_methods (type='email'),
+ * since tickets no longer store metadata directly.
  */
 export async function sendEventReminders() {
   try {
@@ -14,12 +17,13 @@ export async function sendEventReminders() {
   const now = new Date();
   const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-  // Find events starting in the next 24 hours that haven't had reminders sent
+  // Find events starting in the next 24 hours that haven't had reminders sent.
+  // Events now use flat venue_name/venue_address columns (no venue FK).
+  // collective slug is fetched separately since events only store collective_id.
   const { data: events, error: eventsError } = await sb
     .from("events")
-    .select("id, title, slug, starts_at, doors_at, metadata, collectives(name, slug), venues(name, address, city)")
+    .select("id, title, slug, starts_at, doors_at, metadata, collective_id, venue_name, venue_address")
     .in("status", ["published", "upcoming"])
-    .is("deleted_at", null)
     .gte("starts_at", now.toISOString())
     .lte("starts_at", tomorrow.toISOString());
 
@@ -32,61 +36,67 @@ export async function sendEventReminders() {
     return { sent: 0, events: 0 };
   }
 
+  // Fetch collective slugs + names for all events in one query.
+  const collectiveIds = [...new Set(events.map((e) => e.collective_id))];
+  const { data: collectivesData } = await sb
+    .from("collectives")
+    .select("id, name, slug")
+    .in("id", collectiveIds);
+
+  const collectiveMap = new Map(
+    (collectivesData ?? []).map((c) => [c.id, c])
+  );
+
   let totalSent = 0;
   let eventsProcessed = 0;
 
   for (const event of events) {
     const meta = (event.metadata as Record<string, unknown>) || {};
 
-    // Skip if reminders already sent for this event
+    // Skip if reminders already sent for this event.
     if (meta.reminders_sent) continue;
 
-    const collective = event.collectives as unknown as { name: string; slug: string } | null;
-    const venue = event.venues as unknown as { name: string; address: string; city: string } | null;
+    const collective = collectiveMap.get(event.collective_id) ?? null;
 
     if (!collective) {
       console.warn(`[reminders] Event ${event.id} has no collective, skipping`);
       continue;
     }
 
-    // Get all ticket holder emails AND confirmed RSVP emails.
-    // Previously this only pulled from `tickets` — free RSVP-only events
-    // (hosts create these via the quick-event onboarding flow) would never
-    // trigger reminders because their attendees live in the `rsvps` table.
-    // Now we union both sources so "tomorrow night" reminders reach
-    // everyone who signaled they'd show up.
-    const [{ data: tickets, error: ticketsError }, { data: rsvps, error: rsvpsError }] = await Promise.all([
-      sb
-        .from("tickets")
-        .select("metadata")
-        .eq("event_id", event.id)
-        .in("status", ["paid", "checked_in"]),
-      sb
-        .from("rsvps")
-        .select("email")
-        .eq("event_id", event.id)
-        .in("status", ["going", "confirmed", "attending"]),
-    ]);
+    // Get all ticket holders' emails via orders → party_contact_methods.
+    // Tickets link to order_lines → orders → parties.
+    // party_contact_methods stores email addresses by type='email'.
+    const { data: eventOrders, error: ordersError } = await sb
+      .from("orders")
+      .select("party_id")
+      .eq("event_id", event.id)
+      .eq("status", "paid");
 
-    if (ticketsError) {
-      console.error(`[sendEventReminders] tickets query error for event ${event.id}:`, ticketsError.message);
+    if (ordersError) {
+      console.error(`[sendEventReminders] orders query error for event ${event.id}:`, ordersError.message);
       continue;
     }
-    if (rsvpsError) {
-      // Non-fatal — log and continue with ticket-holder emails only.
-      console.error(`[sendEventReminders] rsvps query error for event ${event.id}:`, rsvpsError.message);
+
+    const partyIds = [...new Set((eventOrders ?? []).map((o) => o.party_id))];
+
+    if (partyIds.length === 0) continue;
+
+    const { data: contactMethods, error: contactError } = await sb
+      .from("party_contact_methods")
+      .select("value")
+      .in("party_id", partyIds)
+      .eq("type", "email");
+
+    if (contactError) {
+      console.error(`[sendEventReminders] contact methods query error for event ${event.id}:`, contactError.message);
+      continue;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const emails = new Set<string>();
-    for (const ticket of tickets ?? []) {
-      const ticketMeta = ticket.metadata as Record<string, unknown>;
-      const email = (ticketMeta?.email as string) || (ticketMeta?.customer_email as string) || (ticketMeta?.buyer_email as string);
-      if (email && emailRegex.test(email)) emails.add(email.toLowerCase().trim());
-    }
-    for (const rsvp of rsvps ?? []) {
-      if (rsvp.email && emailRegex.test(rsvp.email)) {
-        emails.add(rsvp.email.toLowerCase().trim());
+    for (const cm of contactMethods ?? []) {
+      if (cm.value && emailRegex.test(cm.value)) {
+        emails.add(cm.value.toLowerCase().trim());
       }
     }
 
@@ -101,21 +111,21 @@ export async function sendEventReminders() {
     const html = `
       <div style="font-family: -apple-system, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #09090B; color: #FAFAFA;">
         <p style="color: #7B2FF7; font-size: 14px; font-weight: 600;">🌙 nocturn.</p>
-        
+
         <h2 style="margin: 16px 0 8px; font-size: 22px;">See you tomorrow night! 🎶</h2>
-        
+
         <div style="background: #18181B; border-radius: 12px; padding: 20px; margin: 16px 0;">
           <h3 style="margin: 0 0 12px; font-size: 18px; font-weight: 700;">${escapeHtml(event.title)}</h3>
           <p style="color: #A1A1AA; margin: 4px 0;">📅 ${eventDate.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", timeZone: tz })}</p>
           ${doorsTime ? `<p style="color: #A1A1AA; margin: 4px 0;">🚪 Doors: ${doorsTime.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz })}</p>` : ""}
           <p style="color: #A1A1AA; margin: 4px 0;">⏰ ${eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz })}</p>
-          ${venue ? `<p style="color: #A1A1AA; margin: 4px 0;">📍 ${escapeHtml(venue.name)}, ${escapeHtml(venue.city)}</p>` : ""}
+          ${event.venue_name ? `<p style="color: #A1A1AA; margin: 4px 0;">📍 ${escapeHtml(event.venue_name)}</p>` : ""}
         </div>
 
         <p style="color: #A1A1AA; line-height: 1.6; font-size: 15px;">
           Don't forget your QR code — you'll need it at the door. Open your ticket to have it ready.
         </p>
-        
+
         <a href="${eventUrl}" style="display: inline-block; margin: 16px 0; padding: 14px 28px; background: #7B2FF7; color: white; text-decoration: none; border-radius: 12px; font-weight: 600; font-size: 15px;">
           View Your Ticket →
         </a>
