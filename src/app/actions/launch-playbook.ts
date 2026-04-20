@@ -351,12 +351,12 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
       const [eventData, lineupData, tierData, allTierData] = await Promise.all([
         admin
           .from("events")
-          .select("title, slug, starts_at, vibe_tags, venues(name, city), collectives(name, slug)")
+          .select("title, slug, starts_at, vibe_tags, venue_name, city, collectives(name, slug)")
           .eq("id", eventId)
           .maybeSingle(),
         admin
           .from("event_artists")
-          .select("artists(name)")
+          .select("name")
           .eq("event_id", eventId),
         admin
           .from("ticket_tiers")
@@ -372,13 +372,13 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
 
       if (eventData.data) {
         const ev = eventData.data;
-        const venue = ev.venues as unknown as { name: string; city: string } | null;
+        const venue = (ev.venue_name as string | null) ? { name: ev.venue_name as string, city: ev.city as string | null } : null;
         const collective = ev.collectives as unknown as { name: string; slug: string } | null;
         const vibes = (ev.vibe_tags as string[]) ?? [];
         const vibeStr = vibes.length > 0 ? vibes.slice(0, 3).join(", ") : "underground";
 
         const artistNames = (lineupData.data ?? [])
-          .map((l) => (l.artists as unknown as { name: string })?.name)
+          .map((l) => (l as { name: string | null }).name)
           .filter(Boolean);
         const lineupStr = artistNames.length > 0 ? artistNames.join(", ") : "a curated lineup";
 

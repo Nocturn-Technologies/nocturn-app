@@ -86,8 +86,7 @@ export default async function DashboardPage() {
         .select("*", { count: "exact", head: true })
         .in("collective_id", collectiveIds)
         .in("status", ["published", "upcoming"])
-        .gte("starts_at", now)
-        .is("deleted_at", null),
+        .gte("starts_at", now),
 
       // Next event
       admin
@@ -96,7 +95,6 @@ export default async function DashboardPage() {
         .in("collective_id", collectiveIds)
         .in("status", ["published", "upcoming"])
         .gte("starts_at", now)
-        .is("deleted_at", null)
         .order("starts_at", { ascending: true })
         .limit(1),
 
@@ -106,7 +104,6 @@ export default async function DashboardPage() {
         .select("title")
         .in("collective_id", collectiveIds)
         .eq("status", "draft")
-        .is("deleted_at", null)
         .limit(1),
 
       // Attendee count (direct query instead of fetching event IDs first)
@@ -114,13 +111,14 @@ export default async function DashboardPage() {
         .from("tickets")
         .select("id, events!inner(collective_id)", { count: "exact", head: true })
         .in("events.collective_id", collectiveIds)
-        .in("status", ["paid", "checked_in"]),
+        .in("status", ["valid", "checked_in"]),
 
-      // Revenue via aggregate RPC (was a full ticket fetch then JS SUM —
-      // unbounded, could ship 10K+ rows per dashboard render for a
-      // collective with years of history). RPC returns `total_revenue` +
-      // `ticket_count` as scalars.
-      admin.rpc("get_collective_revenue", { p_collective_ids: collectiveIds }),
+      // Revenue via orders table — sum subtotal for paid orders belonging to this collective's events
+      admin
+        .from("orders")
+        .select("subtotal, events!inner(collective_id)")
+        .in("events.collective_id", collectiveIds)
+        .eq("status", "paid"),
 
       // Financial pulse — pass collectiveIds to skip redundant auth + membership re-fetch
       getFinancialPulse(collectiveIds).catch((err) => { console.error("[dashboard] getFinancialPulse failed:", err); return null; }),
@@ -135,8 +133,7 @@ export default async function DashboardPage() {
       admin
         .from("events")
         .select("*", { count: "exact", head: true })
-        .in("collective_id", collectiveIds)
-        .is("deleted_at", null),
+        .in("collective_id", collectiveIds),
 
       // Setup checklist: any event with ticket tiers
       admin
@@ -149,8 +146,7 @@ export default async function DashboardPage() {
         .from("events")
         .select("*", { count: "exact", head: true })
         .in("collective_id", collectiveIds)
-        .eq("status", "published")
-        .is("deleted_at", null),
+        .eq("status", "published"),
     ]);
 
     upcomingCount = upcomingResult.count ?? 0;
@@ -176,9 +172,11 @@ export default async function DashboardPage() {
     // Attendee count (already fetched in parallel above)
     totalAttendees = allEventsResult.count ?? 0;
 
-    // Revenue from actual ticket payments — via RPC, returns one row with
-    // `total_revenue` + `ticket_count` already summed server-side.
-    totalRevenue = Number(revenueResult.data?.[0]?.total_revenue ?? 0);
+    // Revenue from paid orders — sum subtotals client-side
+    totalRevenue = (revenueResult.data ?? []).reduce(
+      (sum, row) => sum + Number((row as { subtotal: number }).subtotal ?? 0),
+      0
+    );
 
     // Setup checklist data
     totalEventsCount = totalEventsResult.count ?? 0;

@@ -105,16 +105,15 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
   const { data: eventRow } = await admin
     .from("events")
-    .select("title, vibe_tags, collective_id, venues(name, city)")
+    .select("title, vibe_tags, collective_id, venue_name, city")
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
 
   if (!eventRow) {
     return NextResponse.json({ error: "Event not found" }, { status: 404 });
   }
 
-  const ev = eventRow as unknown as { title: string; vibe_tags: string[] | null; collective_id: string; venues: { name: string; city: string } | null };
+  const ev = eventRow as unknown as { title: string; vibe_tags: string[] | null; collective_id: string; venue_name: string | null; city: string | null };
 
   const { count: memberCount } = await admin
     .from("collective_members")
@@ -128,12 +127,11 @@ export async function POST(request: NextRequest) {
   }
 
   // Generate prompt server-side from structured event data
-  const venue = ev.venues;
   const { prompt, error: promptError } = await generatePosterPrompt({
     title: ev.title,
     genre: clientVibeTags ?? (ev.vibe_tags || []),
-    venueName: clientVenueName ?? venue?.name,
-    city: venue?.city,
+    venueName: clientVenueName ?? ev.venue_name ?? undefined,
+    city: ev.city ?? undefined,
     styleDirection: clientStyleDirection,
   });
 

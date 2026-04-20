@@ -216,7 +216,7 @@ export function ContactList({
           email: c.email ?? "",
           name: c.fullName,
           phone: c.phone,
-          instagram: c.instagram,
+          instagram: undefined,
           soundcloud_url: (c.metadata as Record<string, unknown>)?.soundcloud_url as string | undefined,
           spotify_url: (c.metadata as Record<string, unknown>)?.spotify_url as string | undefined,
           avatar_url: (c.metadata as Record<string, unknown>)?.avatar_url as string | undefined,

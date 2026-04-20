@@ -66,36 +66,13 @@ export async function POST() {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    let inserted = 0;
-    let skipped = 0;
-
-    for (const artist of torontoArtists) {
-      const slug = artist.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") + "-" + Math.random().toString(36).slice(2, 6);
-
-      const { error } = await admin.from("artists").insert({
-        name: artist.name,
-        slug,
-        bio: artist.bio,
-        genre: artist.genre,
-        instagram: artist.instagram,
-        soundcloud: artist.soundcloud,
-        spotify: artist.spotify,
-        booking_email: artist.booking_email,
-        default_fee: artist.default_fee,
-        metadata: { location: "Toronto, ON" },
-      });
-
-      if (error) {
-        console.error(`[seed-artists] Failed to insert "${artist.name}":`, error);
-        skipped++;
-      } else {
-        inserted++;
-      }
-    }
-
+    // TODO: needs schema decision — artists table was dropped in schema rebuild.
+    // artist_profiles table now requires a party_id FK. Seeding disabled until
+    // the party creation flow is implemented.
     return NextResponse.json({
-      message: `Seeded ${inserted} Toronto artists (${skipped} skipped)`,
-      total: torontoArtists.length,
+      message: "Artist seeding is temporarily disabled (schema migration in progress)",
+      inserted: 0,
+      skipped: torontoArtists.length,
     });
   } catch (err) {
     console.error("[seed-artists]", err);

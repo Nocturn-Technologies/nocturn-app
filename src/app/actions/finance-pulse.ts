@@ -47,7 +47,7 @@ export async function getFinancialPulse(preFetchedCollectiveIds?: string[]): Pro
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    // Wave 1: all collective-scoped queries run in parallel (no dependency on event IDs yet)
+    // Wave 1 — all collective-scoped queries run in parallel (no dependency on event IDs yet)
     const [currentEventsRes, pastEventsRes, outstandingRes] = await Promise.all([
       admin
         .from("events")
@@ -82,39 +82,32 @@ export async function getFinancialPulse(preFetchedCollectiveIds?: string[]): Pro
     const currentEventIds = currentEvents.map((e) => e.id);
     const pastEventIds = pastEvents.map((e) => e.id);
 
-    // Wave 2: all event-scoped aggregations run in parallel
-    const [ticketsRes, currentSettlementsRes, pastSettlementsRes] = await Promise.all([
+    // Wave 2 — all event-scoped aggregations run in parallel
+    const [ordersRes, expensesRes, pastSettlementsRes] = await Promise.all([
       currentEventIds.length > 0
-        ? admin.from("tickets").select("price_paid").in("event_id", currentEventIds).in("status", ["paid", "checked_in"])
-        : Promise.resolve({ data: [], error: null } as { data: { price_paid: number }[]; error: null }),
+        ? admin.from("orders").select("total").in("event_id", currentEventIds).eq("status", "paid")
+        : Promise.resolve({ data: [], error: null } as { data: { total: number }[]; error: null }),
       currentEventIds.length > 0
-        ? admin.from("settlements").select("total_costs").in("event_id", currentEventIds)
-        : Promise.resolve({ data: [], error: null } as { data: { total_costs: number | null }[]; error: null }),
+        ? admin.from("event_expenses").select("amount").in("event_id", currentEventIds)
+        : Promise.resolve({ data: [], error: null } as { data: { amount: number | null }[]; error: null }),
       pastEventIds.length > 0
-        ? admin.from("settlements").select("event_id, net_profit").in("event_id", pastEventIds)
-        : Promise.resolve({ data: [], error: null } as { data: { event_id: string; net_profit: number | null }[]; error: null }),
+        ? admin.from("settlements").select("event_id, net_payout").in("event_id", pastEventIds)
+        : Promise.resolve({ data: [], error: null } as { data: { event_id: string; net_payout: number | null }[]; error: null }),
     ]);
 
-    const tickets = ticketsRes.data ?? [];
-    const currentSettlements = currentSettlementsRes.data ?? [];
-    const pastSettlements = pastSettlementsRes.data ?? [];
-
-    const revenue = tickets.reduce((sum, t) => sum + (Number(t.price_paid) || 0), 0);
-
-    // total_costs is a GENERATED column that already sums
-    // artist_fees_total + venue_fee + platform_fee + stripe_fees + other_costs.
-    const expenses = currentSettlements.reduce((sum, s) => sum + (Number(s.total_costs) || 0), 0);
+    const revenue = (ordersRes.data ?? []).reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    const expenses = (expensesRes.data ?? []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const netPL = revenue - expenses;
 
-    // Build recent-events trend chart from past settlements (net_profit is a GENERATED column)
-    const profitByEvent = new Map<string, number>();
-    for (const s of pastSettlements) {
-      profitByEvent.set(s.event_id, Number(s.net_profit) || 0);
+    // Build recent-events trend chart from past settlements (net_payout = revenue after fees)
+    const payoutByEvent = new Map<string, number>();
+    for (const s of pastSettlementsRes.data ?? []) {
+      payoutByEvent.set(s.event_id, Number(s.net_payout) || 0);
     }
 
     const recentEvents: Array<{ title: string; profit: number }> = [];
     for (const e of pastEvents) {
-      recentEvents.push({ title: e.title, profit: profitByEvent.get(e.id) ?? 0 });
+      recentEvents.push({ title: e.title, profit: payoutByEvent.get(e.id) ?? 0 });
       if (recentEvents.length >= 5) break;
     }
     if (recentEvents.length === 0) {

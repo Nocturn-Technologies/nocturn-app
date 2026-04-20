@@ -22,8 +22,30 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { getStripe } from "@/lib/stripe";
 import { isValidUUID } from "@/lib/utils";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+// Helper to bypass generated-type constraints for Stripe columns not yet
+// reflected in the schema (stripe_account_id, stripe_charges_enabled, etc.)
+function untypedCollectives(admin: ReturnType<typeof createAdminClient>) {
+  return (admin as unknown as SupabaseClient).from("collectives");
+}
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
+
+// Stripe Connect columns on collectives exist in the database but are not yet
+// in the generated types. Extend with a local interface and use as unknown as.
+interface CollectiveWithStripe {
+  id: string;
+  name: string;
+  metadata: Record<string, unknown> | null;
+  stripe_account_id: string | null;
+  stripe_charges_enabled: boolean;
+  stripe_payouts_enabled: boolean;
+  stripe_details_submitted: boolean;
+  stripe_requirements_currently_due: string[] | null;
+  stripe_disabled_reason: string | null;
+  stripe_status_updated_at: string | null;
+}
 
 // Shape returned to the client for the Payouts card state machine.
 export type ConnectStatus = {
@@ -65,18 +87,21 @@ async function assertCollectiveAdmin(collectiveId: string) {
     return { error: "Only collective owners and admins can manage payouts" as const };
   }
 
-  const { data: collective, error: collectiveError } = await admin
-    .from("collectives")
-    .select("id, name, stripe_account_id, default_currency, metadata")
+  const { data: rawCollective, error: collectiveError } = await untypedCollectives(admin)
+    .select("id, name, metadata, stripe_account_id, stripe_charges_enabled, stripe_payouts_enabled, stripe_details_submitted, stripe_requirements_currently_due, stripe_disabled_reason, stripe_status_updated_at")
     .eq("id", collectiveId)
-    .is("deleted_at", null)
-    .maybeSingle();
+    .maybeSingle() as {
+      data: CollectiveWithStripe | null;
+      error: { message: string } | null;
+    };
 
-  if (collectiveError || !collective) {
+  if (collectiveError || !rawCollective) {
     return { error: "Collective not found" as const };
   }
 
-  return { user, admin, collective } as const;
+  const collective = rawCollective;
+
+  return { user, admin, collective };
 }
 
 /**
@@ -103,7 +128,7 @@ export async function createConnectAccount(collectiveId: string) {
     // metadata.city — Stripe overrides it if the operator enters an address
     // in a different country. Default to US if unset (majority of target
     // collectives are US + Canada; either triggers the right Express form).
-    const collectiveCity = (collective.metadata as { city?: string } | null)?.city;
+    const collectiveCity = collective.metadata?.["city"] as string | undefined;
     const country = inferCountryFromCity(collectiveCity) ?? "US";
 
     let account: Stripe.Account;
@@ -133,8 +158,7 @@ export async function createConnectAccount(collectiveId: string) {
       return { error: "Failed to create Stripe account. Please try again." };
     }
 
-    const { error: updateError } = await admin
-      .from("collectives")
+    const { error: updateError } = await untypedCollectives(admin)
       .update({ stripe_account_id: account.id })
       .eq("id", collective.id);
 
@@ -218,7 +242,8 @@ export async function getConnectStatus(
 
     const { admin, collective } = auth;
 
-    if (!collective.stripe_account_id) {
+    const stripeAccountId = collective.stripe_account_id;
+    if (!stripeAccountId) {
       return {
         error: null,
         status: {
@@ -236,13 +261,22 @@ export async function getConnectStatus(
     // stripe_status_updated_at; if it's recent and caller didn't force a
     // refresh, return the denorm columns.
     if (!opts?.forceRefresh) {
-      const { data: cached } = await admin
-        .from("collectives")
+      const { data: cached } = await untypedCollectives(admin)
         .select(
           "stripe_charges_enabled, stripe_payouts_enabled, stripe_details_submitted, stripe_requirements_currently_due, stripe_disabled_reason, stripe_status_updated_at"
         )
         .eq("id", collective.id)
-        .maybeSingle();
+        .maybeSingle() as {
+          data: Pick<
+            CollectiveWithStripe,
+            | "stripe_charges_enabled"
+            | "stripe_payouts_enabled"
+            | "stripe_details_submitted"
+            | "stripe_requirements_currently_due"
+            | "stripe_disabled_reason"
+            | "stripe_status_updated_at"
+          > | null;
+        };
 
       const updatedAt = cached?.stripe_status_updated_at
         ? new Date(cached.stripe_status_updated_at).getTime()
@@ -254,7 +288,7 @@ export async function getConnectStatus(
         return {
           error: null,
           status: {
-            accountId: collective.stripe_account_id,
+            accountId: stripeAccountId,
             chargesEnabled: cached.stripe_charges_enabled,
             payoutsEnabled: cached.stripe_payouts_enabled,
             detailsSubmitted: cached.stripe_details_submitted,
@@ -268,15 +302,14 @@ export async function getConnectStatus(
     // Cold fetch from Stripe + refresh the denorm cache in the background.
     let account: Stripe.Account;
     try {
-      account = await getStripe().accounts.retrieve(collective.stripe_account_id);
+      account = await getStripe().accounts.retrieve(stripeAccountId);
     } catch (stripeErr) {
       console.error("[stripe-connect] accounts.retrieve error:", stripeErr);
       return { error: "Failed to reach Stripe", status: null };
     }
 
     // Best-effort cache refresh — don't block on this.
-    void admin
-      .from("collectives")
+    void untypedCollectives(admin)
       .update({
         stripe_charges_enabled: account.charges_enabled ?? false,
         stripe_payouts_enabled: account.payouts_enabled ?? false,
@@ -317,11 +350,12 @@ export async function createLoginLink(collectiveId: string) {
 
     const { collective } = auth;
 
-    if (!collective.stripe_account_id) {
+    const stripeAccountId = collective.stripe_account_id;
+    if (!stripeAccountId) {
       return { error: "No Stripe account connected yet" };
     }
 
-    const link = await getStripe().accounts.createLoginLink(collective.stripe_account_id);
+    const link = await getStripe().accounts.createLoginLink(stripeAccountId);
     return { error: null, url: link.url };
   } catch (err) {
     console.error("[stripe-connect] createLoginLink error:", err);

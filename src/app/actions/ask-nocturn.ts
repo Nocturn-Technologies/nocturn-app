@@ -62,7 +62,7 @@ export async function askNocturn(
     const [
       upcomingRes,
       recentRes,
-      monthTicketsRes,
+      monthOrdersRes,
       audienceRes,
       tasksRes,
       collectiveRes,
@@ -77,29 +77,28 @@ export async function askNocturn(
         .order("starts_at", { ascending: true })
         .limit(5),
 
-      // Recent completed events
+      // Recent completed events — revenue comes from orders, not tickets.price_paid
       sb
         .from("events")
-        .select("title, starts_at, status, tickets(id, status, price_paid)")
+        .select("id, title, starts_at, status, tickets(id, status), orders(total, status)")
         .eq("collective_id", collectiveId)
         .eq("status", "completed")
         .order("starts_at", { ascending: false })
         .limit(5),
 
-      // Tickets sold this month (for revenue)
+      // Orders paid this month (for revenue)
       sb
-        .from("tickets")
-        .select("price_paid, status, created_at, events!inner(collective_id)")
+        .from("orders")
+        .select("total, created_at, events!inner(collective_id)")
         .eq("events.collective_id", collectiveId)
-        .in("status", ["paid", "checked_in"])
+        .eq("status", "paid")
         .gte("created_at", monthStart),
 
-      // Audience stats — email is in metadata jsonb, not a column
+      // Audience stats — unique attendees via attendee_profiles
       sb
-        .from("tickets")
-        .select("metadata, status, events!inner(collective_id)")
-        .eq("events.collective_id", collectiveId)
-        .in("status", ["paid", "checked_in"]),
+        .from("attendee_profiles")
+        .select("id, email")
+        .eq("collective_id", collectiveId),
 
       // Open tasks
       sb
@@ -140,14 +139,17 @@ export async function askNocturn(
       contextLines.push("");
     }
 
-    // Recent completed events
+    // Recent completed events — revenue from orders
     const recent = recentRes.data || [];
     if (recent.length > 0) {
       contextLines.push("RECENT COMPLETED EVENTS:");
       for (const e of recent) {
-        const tickets = (e.tickets as unknown as { id: string; status: string; price_paid: number }[]) || [];
+        const tickets = (e.tickets as unknown as { id: string; status: string }[]) || [];
         const paid = tickets.filter((t) => ["paid", "checked_in"].includes(t.status));
-        const revenue = paid.reduce((s, t) => s + Number(t.price_paid || 0), 0);
+        const eventOrders = (e.orders as unknown as { total: number; status: string }[]) || [];
+        const revenue = eventOrders
+          .filter((o) => o.status === "paid")
+          .reduce((s, o) => s + Number(o.total || 0), 0);
         const date = e.starts_at
           ? new Date(e.starts_at).toLocaleDateString("en", { month: "short", day: "numeric" })
           : "";
@@ -156,27 +158,24 @@ export async function askNocturn(
       contextLines.push("");
     }
 
-    // Monthly revenue
-    const monthTickets = monthTicketsRes.data || [];
-    const monthRevenue = monthTickets.reduce((s, t) => s + Number(t.price_paid || 0), 0);
-    contextLines.push(`THIS MONTH: $${monthRevenue.toFixed(0)} revenue from ${monthTickets.length} tickets`);
+    // Monthly revenue from orders
+    const monthOrders = monthOrdersRes.data || [];
+    const monthRevenue = monthOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+    contextLines.push(`THIS MONTH: $${monthRevenue.toFixed(0)} revenue from ${monthOrders.length} orders`);
     contextLines.push("");
 
-    // Audience stats — email stored in metadata jsonb
-    const allTickets = audienceRes.data || [];
-    const getEmail = (t: { metadata?: unknown }) =>
-      ((t.metadata as Record<string, unknown> | null)?.customer_email as string) ?? null;
-    const uniqueEmails = new Set(allTickets.map(getEmail).filter(Boolean));
+    // Audience stats from attendee_profiles
+    const audienceProfiles = audienceRes.data || [];
+    const uniqueCount = audienceProfiles.length;
     const emailCounts: Record<string, number> = {};
-    for (const t of allTickets) {
-      const email = getEmail(t);
-      if (email) {
-        emailCounts[email] = (emailCounts[email] || 0) + 1;
+    for (const ap of audienceProfiles as { id: string; email: string | null }[]) {
+      if (ap.email) {
+        emailCounts[ap.email] = (emailCounts[ap.email] || 0) + 1;
       }
     }
     const repeatCount = Object.values(emailCounts).filter((c) => c > 1).length;
-    const repeatRate = uniqueEmails.size > 0 ? Math.round((repeatCount / uniqueEmails.size) * 100) : 0;
-    contextLines.push(`AUDIENCE: ${uniqueEmails.size} unique attendees, ${repeatRate}% repeat rate`);
+    const repeatRate = uniqueCount > 0 ? Math.round((repeatCount / uniqueCount) * 100) : 0;
+    contextLines.push(`AUDIENCE: ${uniqueCount} unique attendees, ${repeatRate}% repeat rate`);
     contextLines.push("");
 
     // Open tasks

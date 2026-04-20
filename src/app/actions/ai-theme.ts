@@ -105,7 +105,6 @@ async function verifyEventAccess(userId: string, eventId: string) {
     .from("events")
     .select("id, collective_id")
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
   if (eventErr || !event) return null;
   return event;
@@ -241,7 +240,6 @@ Rules:
       .from("events")
       .select("metadata")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     const existingMetadata = (currentEvent?.metadata ?? {}) as Record<string, unknown>;
@@ -259,8 +257,7 @@ Rules:
         // Cast to satisfy the generated Json type — metadata is jsonb.
         metadata: newMetadata as unknown as { [key: string]: Json | undefined },
       })
-      .eq("id", eventId)
-      .is("deleted_at", null);
+      .eq("id", eventId);
 
     if (updateErr) {
       console.error("[ai-theme] event update error:", updateErr.message);
@@ -309,7 +306,6 @@ export async function clearEventFlyer(
       .from("events")
       .select("metadata")
       .eq("id", eventId)
-      .is("deleted_at", null)
       .maybeSingle();
 
     const existingMetadata = (currentEvent?.metadata ?? {}) as Record<string, unknown>;
@@ -322,8 +318,7 @@ export async function clearEventFlyer(
         flyer_url: null,
         metadata: newMetadata as unknown as { [key: string]: Json | undefined },
       })
-      .eq("id", eventId)
-      .is("deleted_at", null);
+      .eq("id", eventId);
 
     if (error) {
       console.error("[clearEventFlyer] update error:", error.message);

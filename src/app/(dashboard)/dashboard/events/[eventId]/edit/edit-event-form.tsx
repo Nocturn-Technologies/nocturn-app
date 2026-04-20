@@ -76,6 +76,7 @@ interface EventData {
   venueDeposit: number | null;
   venueCost: number | null;
   estimatedBarRevenue: number | null;
+  barPercent: number | null;
   // v2 multi-currency budget
   currency: string;
   expenses: ExpenseRow[];
@@ -102,6 +103,7 @@ export function EditEventForm({ event }: { event: EventData }) {
   const [venueDeposit, setVenueDeposit] = useState(event.venueDeposit ?? "");
   const [venueCostVal, setVenueCostVal] = useState(event.venueCost ?? "");
   const [estimatedBarRevenue, setEstimatedBarRevenue] = useState(event.estimatedBarRevenue ?? "");
+  const [barPercent, setBarPercent] = useState(event.barPercent ?? "");
   const [eventCurrency, setEventCurrency] = useState(event.currency);
   const [expenses, setExpenses] = useState<ExpenseRow[]>(event.expenses);
   const [removedExpenseIds, setRemovedExpenseIds] = useState<string[]>([]);
@@ -183,7 +185,8 @@ export function EditEventForm({ event }: { event: EventData }) {
       venueDeposit: venueDeposit ? Number(venueDeposit) : null,
       venueCost: venueCostVal ? Number(venueCostVal) : null,
       estimatedBarRevenue: estimatedBarRevenue ? Number(estimatedBarRevenue) : null,
-      currency: eventCurrency,
+      projectedBarSales: estimatedBarRevenue ? Number(estimatedBarRevenue) : null,
+      barPercent: barPercent ? Number(barPercent) : null,
       // Only send rows with a label — drops blank scaffolding without surprising the operator.
       expenseItems: expenses
         .filter((e) => e.label.trim().length > 0)
@@ -409,7 +412,7 @@ export function EditEventForm({ event }: { event: EventData }) {
               <p className="text-[11px] text-muted-foreground">Minimum bar sales required by venue</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="estimatedBarRevenue">Estimated Bar Revenue ($)</Label>
+              <Label htmlFor="estimatedBarRevenue">Projected Bar Sales ($)</Label>
               <Input
                 id="estimatedBarRevenue"
                 type="number"
@@ -420,7 +423,24 @@ export function EditEventForm({ event }: { event: EventData }) {
                 onChange={(e) => setEstimatedBarRevenue(e.target.value ? Number(e.target.value) : "")}
                 placeholder="e.g. 4000"
               />
-              <p className="text-[11px] text-muted-foreground">Your estimate of total bar sales for the night</p>
+              <p className="text-[11px] text-muted-foreground">Total venue bar sales you expect for the night</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="barPercent">Your Bar Share (%)</Label>
+              <Input
+                id="barPercent"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                max="100"
+                step="0.01"
+                value={barPercent}
+                onChange={(e) => setBarPercent(e.target.value ? Number(e.target.value) : "")}
+                placeholder="e.g. 20"
+              />
+              <p className="text-[11px] text-muted-foreground">Percent of bar sales paid back to the event</p>
             </div>
           </div>
           {barMinimum && estimatedBarRevenue && Number(estimatedBarRevenue) < Number(barMinimum) && (
