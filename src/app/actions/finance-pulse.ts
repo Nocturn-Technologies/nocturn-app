@@ -11,165 +11,112 @@ export interface FinancialPulseData {
   recentEvents: Array<{ title: string; profit: number }>;
 }
 
-export async function getFinancialPulse(): Promise<FinancialPulseData> {
+// Accept collectiveIds as optional param so callers (like /dashboard) that already
+// have the user's memberships can skip the redundant auth + membership queries
+// (~200ms round-trip saved on cold path).
+export async function getFinancialPulse(preFetchedCollectiveIds?: string[]): Promise<FinancialPulseData> {
   try {
-    const supabase = await createServerClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return { revenue: 0, expenses: 0, netPL: 0, outstandingSettlements: 0, recentEvents: [] };
-    }
-
     const admin = createAdminClient();
 
-    // Get user's collectives
-    const { data: memberships, error: membershipsError } = await admin
-      .from("collective_members")
-      .select("collective_id")
-      .eq("user_id", user.id)
-      .is("deleted_at", null);
-
-    if (membershipsError) {
-      console.error("[getFinancialPulse] memberships query error:", membershipsError.message);
-      return { revenue: 0, expenses: 0, netPL: 0, outstandingSettlements: 0, recentEvents: [] };
+    // Resolve collectiveIds — fast path if caller passed them, slow path otherwise
+    let collectiveIds: string[];
+    if (preFetchedCollectiveIds) {
+      collectiveIds = preFetchedCollectiveIds;
+    } else {
+      const supabase = await createServerClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return { revenue: 0, expenses: 0, netPL: 0, outstandingSettlements: 0, recentEvents: [] };
+      }
+      const { data: memberships, error: membershipsError } = await admin
+        .from("collective_members")
+        .select("collective_id")
+        .eq("user_id", user.id)
+        .is("deleted_at", null);
+      if (membershipsError) {
+        console.error("[getFinancialPulse] memberships query error:", membershipsError.message);
+        return { revenue: 0, expenses: 0, netPL: 0, outstandingSettlements: 0, recentEvents: [] };
+      }
+      collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
     }
-
-    const collectiveIds = memberships?.map((m) => m.collective_id) ?? [];
 
     if (collectiveIds.length === 0) {
       return { revenue: 0, expenses: 0, netPL: 0, outstandingSettlements: 0, recentEvents: [] };
     }
 
-    // Get this month's start date
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    // Current events = this month + upcoming (for revenue/expense calc)
-    const { data: currentEvents, error: currentEventsError } = await admin
-      .from("events")
-      .select("id, title, starts_at")
-      .in("collective_id", collectiveIds)
-      .gte("starts_at", monthStart)
-      .order("starts_at", { ascending: true })
-      .limit(20);
+    // Wave 1 — all collective-scoped queries run in parallel (no dependency on event IDs yet)
+    const [currentEventsRes, pastEventsRes, outstandingRes] = await Promise.all([
+      admin
+        .from("events")
+        .select("id, title, starts_at")
+        .in("collective_id", collectiveIds)
+        .gte("starts_at", monthStart)
+        .order("starts_at", { ascending: true })
+        .limit(20),
+      admin
+        .from("events")
+        .select("id, title, starts_at")
+        .in("collective_id", collectiveIds)
+        .lt("starts_at", monthStart)
+        .eq("status", "completed")
+        .order("starts_at", { ascending: false })
+        .limit(5),
+      admin
+        .from("settlements")
+        .select("*", { count: "exact", head: true })
+        .in("collective_id", collectiveIds)
+        .eq("status", "draft"),
+    ]);
 
-    if (currentEventsError) {
-      console.error("[getFinancialPulse] current events query error:", currentEventsError.message);
-    }
+    if (currentEventsRes.error) console.error("[getFinancialPulse] current events error:", currentEventsRes.error.message);
+    if (pastEventsRes.error) console.error("[getFinancialPulse] past events error:", pastEventsRes.error.message);
+    if (outstandingRes.error) console.error("[getFinancialPulse] outstanding error:", outstandingRes.error.message);
 
-    const currentEventIds = currentEvents?.map((e) => e.id) ?? [];
+    const currentEvents = currentEventsRes.data ?? [];
+    const pastEvents = pastEventsRes.data ?? [];
+    const outstandingSettlements = outstandingRes.count ?? 0;
 
-    // Recent past events (for the trend chart)
-    const { data: pastEvents, error: pastEventsError } = await admin
-      .from("events")
-      .select("id, title, starts_at")
-      .in("collective_id", collectiveIds)
-      .lt("starts_at", monthStart)
-      .eq("status", "completed")
-      .order("starts_at", { ascending: false })
-      .limit(5);
+    const currentEventIds = currentEvents.map((e) => e.id);
+    const pastEventIds = pastEvents.map((e) => e.id);
 
-    if (pastEventsError) {
-      console.error("[getFinancialPulse] past events query error:", pastEventsError.message);
-    }
+    // Wave 2 — all event-scoped aggregations run in parallel
+    const [ordersRes, expensesRes, pastSettlementsRes] = await Promise.all([
+      currentEventIds.length > 0
+        ? admin.from("orders").select("total").in("event_id", currentEventIds).eq("status", "paid")
+        : Promise.resolve({ data: [], error: null } as { data: { total: number }[]; error: null }),
+      currentEventIds.length > 0
+        ? admin.from("event_expenses").select("amount").in("event_id", currentEventIds)
+        : Promise.resolve({ data: [], error: null } as { data: { amount: number | null }[]; error: null }),
+      pastEventIds.length > 0
+        ? admin.from("settlements").select("event_id, net_payout").in("event_id", pastEventIds)
+        : Promise.resolve({ data: [], error: null } as { data: { event_id: string; net_payout: number | null }[]; error: null }),
+    ]);
 
-    // Revenue for current events — sum orders.total where status='paid'
-    let revenue = 0;
-    if (currentEventIds.length > 0) {
-      const { data: orders, error: ordersError } = await admin
-        .from("orders")
-        .select("total")
-        .in("event_id", currentEventIds)
-        .eq("status", "paid");
-
-      if (ordersError) {
-        console.error("[getFinancialPulse] orders query error:", ordersError.message);
-      }
-
-      revenue = (orders ?? []).reduce(
-        (sum, o) => sum + (Number(o.total) || 0),
-        0
-      );
-    }
-
-    // Expenses for current events — sum event_expenses.amount
-    let expenses = 0;
-    if (currentEventIds.length > 0) {
-      const { data: currentExpenses, error: expensesError } = await admin
-        .from("event_expenses")
-        .select("amount")
-        .in("event_id", currentEventIds);
-
-      if (expensesError) {
-        console.error("[getFinancialPulse] current expenses query error:", expensesError.message);
-      }
-
-      expenses = (currentExpenses ?? []).reduce(
-        (sum, e) => sum + (Number(e.amount) || 0),
-        0
-      );
-    }
-
-    // Calculate net P&L
+    const revenue = (ordersRes.data ?? []).reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+    const expenses = (expensesRes.data ?? []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
     const netPL = revenue - expenses;
 
-    // Count outstanding (unapproved) settlements
-    const { count: outstandingCount, error: outstandingError } = await admin
-      .from("settlements")
-      .select("*", { count: "exact", head: true })
-      .in("collective_id", collectiveIds)
-      .eq("status", "draft");
-
-    if (outstandingError) {
-      console.error("[getFinancialPulse] outstanding settlements query error:", outstandingError.message);
+    // Build recent-events trend chart from past settlements (net_payout = revenue after fees)
+    const payoutByEvent = new Map<string, number>();
+    for (const s of pastSettlementsRes.data ?? []) {
+      payoutByEvent.set(s.event_id, Number(s.net_payout) || 0);
     }
 
-    const outstandingSettlements = outstandingCount ?? 0;
-
-    // Build recent events trend chart from the last 5 completed events
-    // settlements.net_payout = revenue after platform_fee + stripe_fee deducted
     const recentEvents: Array<{ title: string; profit: number }> = [];
-    const pastEventIds = (pastEvents ?? []).map((e) => e.id);
-
-    if (pastEventIds.length > 0) {
-      const { data: pastSettlements, error: pastSettlementsError } = await admin
-        .from("settlements")
-        .select("event_id, net_payout")
-        .in("event_id", pastEventIds);
-
-      if (pastSettlementsError) {
-        console.error("[getFinancialPulse] past settlements query error:", pastSettlementsError.message);
-      }
-
-      const payoutByEvent = new Map<string, number>();
-      for (const s of pastSettlements ?? []) {
-        const p = Number(s.net_payout) || 0;
-        payoutByEvent.set(s.event_id, p);
-      }
-
-      for (const e of pastEvents ?? []) {
-        recentEvents.push({
-          title: e.title,
-          profit: payoutByEvent.get(e.id) ?? 0,
-        });
-        if (recentEvents.length >= 5) break;
-      }
+    for (const e of pastEvents) {
+      recentEvents.push({ title: e.title, profit: payoutByEvent.get(e.id) ?? 0 });
+      if (recentEvents.length >= 5) break;
     }
-
-    // Fallback: if no past events, show current events so the card isn't empty
-    if (recentEvents.length === 0 && currentEvents) {
+    if (recentEvents.length === 0) {
       for (const e of currentEvents.slice(0, 5)) {
         recentEvents.push({ title: e.title, profit: 0 });
       }
     }
 
-    return {
-      revenue,
-      expenses,
-      netPL,
-      outstandingSettlements,
-      recentEvents,
-    };
+    return { revenue, expenses, netPL, outstandingSettlements, recentEvents };
   } catch (err) {
     console.error("[getFinancialPulse]", err);
     return { revenue: 0, expenses: 0, netPL: 0, outstandingSettlements: 0, recentEvents: [] };

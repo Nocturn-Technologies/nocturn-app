@@ -120,8 +120,8 @@ export default async function DashboardPage() {
         .in("events.collective_id", collectiveIds)
         .eq("status", "paid"),
 
-      // Financial pulse (catch individually to prevent entire page crash)
-      getFinancialPulse().catch((err) => { console.error("[dashboard] getFinancialPulse failed:", err); return null; }),
+      // Financial pulse — pass collectiveIds to skip redundant auth + membership re-fetch
+      getFinancialPulse(collectiveIds).catch((err) => { console.error("[dashboard] getFinancialPulse failed:", err); return null; }),
 
       // Action items / alerts (catch individually to prevent entire page crash)
       getActionItems().catch((err) => { console.error("[dashboard] getActionItems failed:", err); return [] as Awaited<ReturnType<typeof getActionItems>>; }),
