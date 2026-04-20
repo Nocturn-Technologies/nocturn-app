@@ -48,59 +48,49 @@ export async function rateLimitStrict(
 ): Promise<{ success: boolean; remaining: number }> {
   try {
     const admin = createAdminClient();
-    const db = admin;
-
-    // Count active entries within the window (not expired)
     const now = new Date();
     const windowEnd = new Date(now.getTime() + windowMs).toISOString();
-    const { count, error: countError } = await db
+
+    // Fetch existing row for this key
+    const { data: existing } = await admin
       .from("rate_limits")
-      .select("*", { count: "exact", head: true })
+      .select("count, window_end")
       .eq("key", key)
-      .gte("window_end", now.toISOString());
+      .maybeSingle();
 
-    if (countError) {
-      throw new Error(`[rate-limit] count failed for key "${key}": ${countError.message}`);
+    if (existing && new Date(existing.window_end) > now) {
+      // Active window — check and increment counter
+      if ((existing.count ?? 0) >= limit) {
+        return { success: false, remaining: 0 };
+      }
+      await admin
+        .from("rate_limits")
+        .update({ count: (existing.count ?? 0) + 1 })
+        .eq("key", key);
+      return { success: true, remaining: limit - (existing.count ?? 0) - 1 };
     }
 
-    const currentCount = count ?? 0;
-
-    if (currentCount >= limit) {
-      return { success: false, remaining: 0 };
-    }
-
-    // Insert new entry
-    const { error: insertError } = await db.from("rate_limits").insert({
-      key,
-      window_end: windowEnd,
-      created_at: now.toISOString(),
-    });
-
-    if (insertError) {
-      throw new Error(`[rate-limit] insert failed for key "${key}": ${insertError.message}`);
-    }
-
-    return { success: true, remaining: limit - currentCount - 1 };
+    // No active window — upsert to reset counter
+    await admin.from("rate_limits").upsert(
+      { key, count: 1, window_end: windowEnd, created_at: now.toISOString() },
+      { onConflict: "key" }
+    );
+    return { success: true, remaining: limit - 1 };
   } catch (error) {
-    // DB unavailable — fail closed to prevent abuse in serverless
-    console.error("[rate-limit] DB unavailable, failing closed:", error);
-    return { success: false, remaining: 0 };
+    // DB unavailable — fail open for AI features (degraded but not broken)
+    console.error("[rate-limit] DB unavailable, failing open:", error);
+    return { success: true, remaining: 0 };
   }
 }
 
 async function persistRateLimit(key: string, _limit: number, windowMs: number) {
   try {
     const admin = createAdminClient();
-    const db = admin;
     const now = new Date();
-    const { error } = await db.from("rate_limits").insert({
-      key,
-      window_end: new Date(now.getTime() + windowMs).toISOString(),
-      created_at: now.toISOString(),
-    });
-    if (error) {
-      throw error;
-    }
+    await admin.from("rate_limits").upsert(
+      { key, count: 1, window_end: new Date(now.getTime() + windowMs).toISOString(), created_at: now.toISOString() },
+      { onConflict: "key" }
+    );
   } catch {
     // Non-critical — in-memory still works
   }

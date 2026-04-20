@@ -124,8 +124,7 @@ export async function getCompanyFinancials(): Promise<{
       .from("events")
       .select("id")
       .in("collective_id", collectiveIds)
-      .in("status", ["completed", "published"])
-      .is("deleted_at", null);
+      .in("status", ["completed", "published"]);
 
     const settledEventIds = (settlements ?? []).map((s) => s.event_id);
 
@@ -225,7 +224,6 @@ export async function getEventFinancialSummaries(): Promise<{
         .select("id, title, starts_at, status")
         .in("collective_id", collectiveIds)
         .in("status", ["published", "completed", "draft"])
-        .is("deleted_at", null)
         .order("starts_at", { ascending: false }),
     ]);
 

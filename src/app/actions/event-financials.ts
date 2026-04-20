@@ -237,8 +237,10 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
 
     const commercial = readEventCommercialConfig(event.metadata);
     const estimatedBarRevenue = getProjectedBarRevenue(commercial);
+    // additionalRevenue is display-only (projected bar share) — NOT counted in
+    // actual P&L since bar revenue is not collected by the collective until wrap.
     const additionalRevenue = estimatedBarRevenue ?? 0;
-    const grossRevenue = ticketRevenue + additionalRevenue;
+    const grossRevenue = ticketRevenue; // actual collected revenue only
     const projectedBarSales = commercial.projectedBarSales ?? 0;
     const barMinimum = commercial.barMinimum;
     const barShortfall = barMinimum != null ? Math.max(0, barMinimum - projectedBarSales) : 0;
