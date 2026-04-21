@@ -399,6 +399,17 @@ export async function createCollective(formData: {
     return { error: "Failed to add you as admin" };
   }
 
+  // Seed a #general channel so the team chat isn't empty on first load.
+  // Best-effort — the Messages page also has a lazy-create fallback, but
+  // landing on a populated chat is a better first impression than an empty
+  // state asking the operator to create a conversation themselves.
+  const { error: channelError } = await admin
+    .from("channels")
+    .insert({ collective_id: collective.id, name: "General", type: "general", created_by: user.id });
+  if (channelError) {
+    console.error("[createCollective] general channel seed error (non-blocking):", channelError.message);
+  }
+
   return { error: null };
   } catch (err) {
     console.error("[createCollective] Unexpected error:", err);
