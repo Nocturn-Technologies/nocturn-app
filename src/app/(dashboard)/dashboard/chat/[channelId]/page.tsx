@@ -378,32 +378,15 @@ export default function ChatRoomPage() {
       .getPublicUrl(fileName);
     const voiceUrl = urlData.publicUrl;
 
-    // PR #93 dropped voice_url / voice_duration / type — store the public URL
-    // inline in content as a stopgap until a voice_notes sibling table lands.
-    const { data, error: insertError } = await supabase
-      .from("messages")
-      .insert({
-        channel_id: channelId,
-        user_id: userId,
-        content: `🎙️ Voice note (${Math.round(duration)}s): ${voiceUrl}`,
-      })
-      .select()
-      .maybeSingle();
-
-    if (insertError) {
-      console.error("[voice] Message insert failed:", insertError.message);
-      setVoiceError("Voice message failed to send. Please try again.");
-      setTimeout(() => setVoiceError(null), 5000);
-      return;
-    }
-
-    if (data) {
-      setMessages((prev) => {
-        const exists = prev.find((m) => m.id === data.id);
-        if (exists) return prev;
-        return [...prev, data as unknown as Message];
-      });
-    }
+    // TODO(governance): voice notes need a governed storage shape — see
+    // docs/DB_Data_Governance.md § 2 Q5 (sibling transactional table like
+    // `message_attachments`) or § 2 Q6 (config columns on `messages`).
+    // PR #93 dropped voice_url/voice_duration/type; don't stuff URL into
+    // `content` as a workaround — discussing with Andrew in NOC-21.
+    void voiceUrl;
+    void duration;
+    setVoiceError("Voice notes paused pending attachment-shape decision (NOC-21).");
+    setTimeout(() => setVoiceError(null), 5000);
   };
 
   // Format timestamp

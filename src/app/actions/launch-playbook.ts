@@ -425,19 +425,17 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
           // Don't schedule in the past
           if (dueDate < new Date()) dueDate.setTime(Date.now() + (i + 1) * 3600000);
 
-          // Content task details (platform/caption/hashtags/etc.) previously
-          // lived in `metadata` JSON; that column was dropped in PR #93.
-          // Caption is inlined into the description so the info survives
-          // until a content_meta sibling table is built (NOC-20).
-          const inlineDescription = [
-            post.caption,
-            post.hashtags?.length ? `\n${post.hashtags.join(" ")}` : "",
-            post.tip ? `\n💡 ${post.tip}` : "",
-          ].filter(Boolean).join("").slice(0, 2000);
+          // TODO(governance): content tasks need a governed shape per
+          // docs/DB_Data_Governance.md § 2 Q4/Q6 — `content_meta JSONB`
+          // on event_tasks (config tier) or sibling table. Hashtags +
+          // tips dropped here rather than smuggled into a free-text
+          // description; full restoration tracked in NOC-20.
+          void post.hashtags;
+          void post.tip;
           return {
             event_id: eventId,
             title: `${platformLabels[post.platform] ?? post.platform} post — ${post.phase}`,
-            description: inlineDescription,
+            description: (post.caption ?? "").slice(0, 500),
             status: "todo",
             assigned_to: null,
             due_at: dueDate.toISOString(),
