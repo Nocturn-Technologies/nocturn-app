@@ -52,7 +52,6 @@ interface DashboardShellProps {
 /* ── Desktop sidebar nav items (6 core sections) ── */
 const sidebarNavItems = [
   { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/events", label: "Ops", icon: Calendar },
   { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
@@ -63,7 +62,6 @@ const sidebarNavItems = [
 const mobileTabItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/events", label: "Ops", icon: Calendar },
-  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
 ];
 
@@ -77,12 +75,10 @@ const moreDrawerItems = [
 const promoterSidebarItems = [
   { href: "/dashboard/promote", label: "Promote", icon: Megaphone },
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
-  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
 ];
 
 const promoterMobileTabItems = [
   { href: "/dashboard/promote", label: "Promote", icon: Megaphone },
-  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
@@ -97,14 +93,12 @@ const marketplaceSidebarItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/my-profile", label: "My Profile", icon: UserCircle },
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
-  { href: "/dashboard/chat", label: "Messages", icon: MessageSquare },
 ];
 
 const marketplaceMobileTabItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/my-profile", label: "Profile", icon: UserCircle },
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
-  { href: "/dashboard/chat", label: "Chat", icon: MessageSquare },
 ];
 
 const marketplaceMoreItems: typeof marketplaceSidebarItems = [];
