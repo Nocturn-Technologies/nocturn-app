@@ -22,24 +22,29 @@ function sanitizeUrl(url: string): string {
 }
 
 function baseTemplate(content: string): string {
+  // Fonts: Outfit for headings, DM Sans for body. Loaded via Google Fonts
+  // link — most modern email clients honour webfonts; Apple Mail, Gmail, and
+  // iOS Mail render them, Outlook desktop falls back to the system stack.
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@500;700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    body { margin: 0; padding: 0; background: #09090B; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    body { margin: 0; padding: 0; background: #09090B; font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
     .container { max-width: 480px; margin: 0 auto; padding: 40px 24px; }
-    .logo { color: #7B2FF7; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; }
+    .logo { color: #7B2FF7; font-family: 'Outfit', -apple-system, sans-serif; font-size: 26px; font-weight: 700; letter-spacing: -0.5px; text-decoration: none; }
     .content { margin-top: 32px; color: #FAFAFA; font-size: 15px; line-height: 1.6; }
-    .content h2 { color: #FAFAFA; font-size: 20px; font-weight: 600; margin: 0 0 16px 0; }
+    .content h2 { color: #FAFAFA; font-family: 'Outfit', -apple-system, sans-serif; font-size: 22px; font-weight: 700; letter-spacing: -0.3px; margin: 0 0 16px 0; }
     .content p { margin: 0 0 16px 0; color: #A1A1AA; }
-    .btn { display: inline-block; background: #7B2FF7; color: #FFFFFF !important; padding: 12px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 15px; margin: 8px 0 24px 0; }
-    .btn:hover { background: #A855F7; }
-    .footer { margin-top: 40px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.1); color: #52525B; font-size: 12px; }
+    .btn { display: inline-block; background: #7B2FF7; color: #FFFFFF !important; padding: 14px 32px; border-radius: 10px; text-decoration: none; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 15px; margin: 8px 0 24px 0; }
+    .btn:hover { background: #9D5CFF; }
+    .footer { margin-top: 40px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); color: #52525B; font-size: 12px; line-height: 1.5; }
     .footer a { color: #7B2FF7; text-decoration: none; }
+    .tagline { color: #71717A; font-style: italic; font-size: 13px; margin: 0 0 8px 0; }
     .highlight { color: #7B2FF7; font-weight: 600; }
-    .card { background: #1C1C22; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 20px; margin: 16px 0; }
+    .card { background: #18181B; border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 20px; margin: 16px 0; }
   </style>
 </head>
 <body>
@@ -49,7 +54,8 @@ function baseTemplate(content: string): string {
       ${content}
     </div>
     <div class="footer">
-      <p>Powered by <a href="https://app.trynocturn.com">nocturn.</a> — AI for music collectives and promoters</p>
+      <p class="tagline">You run the night. Nocturn runs the business.</p>
+      <p>Powered by <a href="https://app.trynocturn.com">nocturn.</a></p>
     </div>
   </div>
 </body>
@@ -68,6 +74,45 @@ export function welcomeEmail(name: string, collectiveName: string): string {
     </div>
     <a href="https://app.trynocturn.com/dashboard" class="btn">Open Dashboard →</a>
     <p>Need help? Just reply to this email.</p>
+  `);
+}
+
+/**
+ * Lineup invite — sent to a DJ / artist when a collective books them onto
+ * an event. Unlike a generic magic link, this puts the event + collective +
+ * set details up front so the artist immediately understands what the email
+ * is about and what to do.
+ */
+export function lineupInviteEmail(params: {
+  artistFirstName: string;
+  collectiveName: string;
+  eventTitle: string;
+  eventDate: string;
+  venueName: string | null;
+  setTime: string | null;
+  feeDisplay: string | null;
+  acceptLink: string;
+}): string {
+  const safeFirst = escapeHtml(params.artistFirstName || "there");
+  const safeCollective = escapeHtml(params.collectiveName);
+  const safeEvent = escapeHtml(params.eventTitle);
+  const safeDate = escapeHtml(params.eventDate);
+  const safeVenue = params.venueName ? escapeHtml(params.venueName) : null;
+  const safeSet = params.setTime ? escapeHtml(params.setTime) : null;
+  const safeFee = params.feeDisplay ? escapeHtml(params.feeDisplay) : null;
+  return baseTemplate(`
+    <h2>${safeFirst} — you're booked 🎧</h2>
+    <p><span class="highlight">${safeCollective}</span> added you to the lineup for <span class="highlight">${safeEvent}</span>. Here are the details:</p>
+    <div class="card">
+      <p style="color:#FAFAFA; margin:0 0 10px 0; font-family:'Outfit',sans-serif; font-size:18px; font-weight:700;">${safeEvent}</p>
+      <p style="margin:0 0 4px 0;">📅 ${safeDate}</p>
+      ${safeVenue ? `<p style="margin:0 0 4px 0;">📍 ${safeVenue}</p>` : ""}
+      ${safeSet ? `<p style="margin:0 0 4px 0;">🎛️ Set: ${safeSet}</p>` : ""}
+      ${safeFee ? `<p style="margin:8px 0 0 0; color:#7B2FF7; font-weight:600;">Fee: ${safeFee}</p>` : ""}
+    </div>
+    <p>Accept the booking on Nocturn to see your advance, confirm set time, and coordinate with the crew.</p>
+    <a href="${sanitizeUrl(params.acceptLink)}" class="btn">Review & confirm →</a>
+    <p style="color:#71717A; font-size:13px;">Not expecting this? You can ignore the email — nothing changes on your end.</p>
   `);
 }
 
