@@ -10,22 +10,27 @@ import { MicButton, VoicePlayback, mimeToExt } from "@/components/voice-note";
 import { ChatMemberList } from "@/components/chat/member-list";
 import { InviteMemberModal } from "@/components/chat/invite-member-modal";
 
+// PR #93 slimmed `messages` to: id, channel_id, user_id (nullable), party_id,
+// content, created_at, updated_at. The fields below for voice / type / metadata
+// are kept optional to accommodate the pre-rebuild UI that referenced them, but
+// nothing is written to those columns anymore — voice notes + event cards will
+// need their own first-class columns or a sibling table in a follow-up.
 interface Message {
   id: string;
   channel_id: string;
-  user_id: string;
+  user_id: string | null;
   content: string;
-  type: "text" | "voice" | "ai" | "system" | "event_card";
-  voice_url: string | null;
-  voice_duration: number | null;
-  metadata: Record<string, unknown> | null;
+  type?: "text" | "voice" | "ai" | "system" | "event_card";
+  voice_url?: string | null;
+  voice_duration?: number | null;
+  metadata?: Record<string, unknown> | null;
   created_at: string;
 }
 
 interface Channel {
   id: string;
   collective_id: string;
-  event_id: string | null;
+  event_id?: string | null;
   name: string;
   type: "general" | "event" | "collab";
 }
@@ -222,23 +227,21 @@ export default function ChatRoomPage() {
       user_id: userId,
       content,
       type: "text",
-      voice_url: null,
-      voice_duration: null,
-      metadata: null,
       created_at: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, optimisticMsg]);
     setInput("");
 
-    // Send to server in background — don't block UI
+    // Send to server in background — don't block UI.
+    // PR #93 dropped messages.type / voice_url / voice_duration / metadata,
+    // so only the four live columns get written.
     supabase
       .from("messages")
       .insert({
         channel_id: channelId,
         user_id: userId,
         content,
-        type: "text",
       })
       .select()
       .maybeSingle()
@@ -311,12 +314,9 @@ export default function ChatRoomPage() {
             {
               id: aiMessageId || crypto.randomUUID(),
               channel_id: channelId,
-              user_id: null as unknown as string,
+              user_id: null,
               content: aiContent,
               type: "ai" as const,
-              voice_url: null,
-              voice_duration: null,
-              metadata: null,
               created_at: new Date().toISOString(),
             },
           ];
@@ -332,12 +332,9 @@ export default function ChatRoomPage() {
         {
           id: crypto.randomUUID(),
           channel_id: channelId,
-          user_id: null as unknown as string,
+          user_id: null,
           content: fallback,
           type: "ai" as const,
-          voice_url: null,
-          voice_duration: null,
-          metadata: null,
           created_at: new Date().toISOString(),
         },
       ]);
@@ -381,33 +378,15 @@ export default function ChatRoomPage() {
       .getPublicUrl(fileName);
     const voiceUrl = urlData.publicUrl;
 
-    const { data, error: insertError } = await supabase
-      .from("messages")
-      .insert({
-        channel_id: channelId,
-        user_id: userId,
-        content: "",
-        type: "voice",
-        voice_url: voiceUrl,
-        voice_duration: duration,
-      })
-      .select()
-      .maybeSingle();
-
-    if (insertError) {
-      console.error("[voice] Message insert failed:", insertError.message);
-      setVoiceError("Voice message failed to send. Please try again.");
-      setTimeout(() => setVoiceError(null), 5000);
-      return;
-    }
-
-    if (data) {
-      setMessages((prev) => {
-        const exists = prev.find((m) => m.id === data.id);
-        if (exists) return prev;
-        return [...prev, data as unknown as Message];
-      });
-    }
+    // TODO(governance): voice notes need a governed storage shape — see
+    // docs/DB_Data_Governance.md § 2 Q5 (sibling transactional table like
+    // `message_attachments`) or § 2 Q6 (config columns on `messages`).
+    // PR #93 dropped voice_url/voice_duration/type; don't stuff URL into
+    // `content` as a workaround — discussing with Andrew in NOC-21.
+    void voiceUrl;
+    void duration;
+    setVoiceError("Voice notes paused pending attachment-shape decision (NOC-21).");
+    setTimeout(() => setVoiceError(null), 5000);
   };
 
   // Format timestamp
