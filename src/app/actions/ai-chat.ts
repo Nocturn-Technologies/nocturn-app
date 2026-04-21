@@ -3,8 +3,9 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { generateWithClaude } from "@/lib/claude";
-import { getCollectiveContext } from "@/lib/ai-context";
+import { getEventContext, getCollectiveContext } from "@/lib/ai-context";
 import { rateLimitStrict } from "@/lib/rate-limit";
+import { addExpense } from "@/app/actions/event-financials";
 
 import { SYSTEM_PROMPTS } from "@/lib/ai-prompts";
 
@@ -48,10 +49,10 @@ export async function generateChatResponse(
     // 1. Fetch channel to determine context type + agent
     const { data: channelRaw, error: channelError } = await sb
       .from("channels")
-      .select("id, collective_id, name")
+      .select("id, event_id, collective_id, name")
       .eq("id", channelId)
       .maybeSingle();
-    const channel = channelRaw as { id: string; collective_id: string | null; name: string } | null;
+    const channel = channelRaw as { id: string; event_id: string | null; collective_id: string | null; name: string } | null;
 
     if (channelError || !channel) {
       console.error("Failed to fetch channel:", channelError);
@@ -71,12 +72,14 @@ export async function generateChatResponse(
         }
       }
 
-      // 2. Fetch the appropriate context (channels are now collective-scoped only)
+      // 2. Fetch the appropriate context
       let contextData: string;
-      if (channel.collective_id) {
+      if (channel.event_id) {
+        contextData = await getEventContext(channel.event_id);
+      } else if (channel.collective_id) {
         contextData = await getCollectiveContext(channel.collective_id);
       } else {
-        contextData = "No collective data available for this channel.";
+        contextData = "No event or collective data available for this channel.";
       }
 
       // 3. Build system prompt with the right agent + real data
@@ -102,7 +105,7 @@ export async function generateChatResponse(
   try {
     const { data: insertedMsg } = await sb.from("messages").insert({
       channel_id: channelId,
-      user_id: "00000000-0000-0000-0000-000000000000",
+      user_id: null,
       content: aiContent,
     }).select("id").maybeSingle();
     if (insertedMsg) messageId = insertedMsg.id;
@@ -119,20 +122,54 @@ export async function generateChatResponse(
 
 /**
  * Add an expense from chat context.
- * NOTE: Channels are no longer linked to events directly. This function
- * now returns a user-facing error directing operators to the event page.
- * Kept for API compatibility — callers should use addExpense() directly.
+ * Called when a user types something like "add $500 venue rental expense" in an event channel.
  */
 export async function addExpenseFromChat(
-  _channelId: string,
-  _description: string,
-  _amount: number,
-  _category: string = "other"
+  channelId: string,
+  description: string,
+  amount: number,
+  category: string = "other"
 ): Promise<{ error: string | null; success: boolean }> {
-  return {
-    error: "Expenses can no longer be added from chat. Please add expenses from the event's Finance tab.",
-    success: false,
-  };
+  try {
+    if (!channelId?.trim()) return { error: "Channel ID is required", success: false };
+    if (!description?.trim()) return { error: "Description is required", success: false };
+    if (typeof amount !== "number" || amount <= 0) return { error: "Amount must be a positive number", success: false };
+
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", success: false };
+
+    const sb = createAdminClient();
+
+    // Get channel to find event_id
+    const { data: channel, error: channelError } = await sb
+      .from("channels")
+      .select("event_id")
+      .eq("id", channelId)
+      .maybeSingle();
+
+    if (channelError) {
+      console.error("[addExpenseFromChat] channel lookup failed:", channelError);
+      return { error: "Something went wrong", success: false };
+    }
+
+    if (!channel?.event_id) return { error: "This channel is not linked to an event", success: false };
+
+    const result = await addExpense(channel.event_id, { description, category, amount });
+    if (result.error) return { error: result.error, success: false };
+
+    // Post a system message confirming the expense was added
+    await sb.from("messages").insert({
+      channel_id: channelId,
+      user_id: user.id,
+      content: `Added expense: ${description} — $${amount.toFixed(2)} (${category})`,
+    });
+
+    return { error: null, success: true };
+  } catch (err) {
+    console.error("[addExpenseFromChat]", err);
+    return { error: "Something went wrong", success: false };
+  }
 }
 
 function fallbackResponse(message: string): string {

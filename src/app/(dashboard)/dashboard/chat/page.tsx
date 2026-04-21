@@ -49,10 +49,15 @@ import { useConfirm } from "@/components/ui/confirm-dialog";
 
 interface Channel {
   id: string;
-  collective_id: string | null;
-  name: string | null;
-  type: string;
+  collective_id: string;
+  // event_id / partner_collective_id / metadata were dropped in PR #93 schema rebuild.
+  // Kept optional for any remnant writes; all reads tolerate undefined.
+  event_id?: string | null;
+  partner_collective_id?: string | null;
+  name: string;
+  type: "general" | "event" | "collab";
   created_at: string;
+  metadata?: Record<string, string>;
 }
 
 interface ChannelWithMeta extends Channel {
@@ -61,7 +66,6 @@ interface ChannelWithMeta extends Channel {
   unread: boolean;
   unread_count: number;
   event_date?: string;
-  event_id?: string | null;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -156,7 +160,7 @@ function ChannelRow({
       className="flex items-center gap-3 px-4 py-3 min-h-[48px] hover:bg-white/[0.04] active:bg-white/[0.06] transition-colors duration-200 border-b border-white/5 last:border-b-0"
     >
       {/* Avatar */}
-      {icon ?? <Avatar name={ch.name ?? ""} />}
+      {icon ?? <Avatar name={ch.name} />}
 
       {/* Content */}
       <div className="flex-1 min-w-0">
@@ -301,37 +305,11 @@ export default function ChatPage() {
       });
     }
 
-    // Get events for this collective to auto-create event channels
-    const { data: events } = await supabase
-      .from("events")
-      .select("id, title, starts_at")
-      .eq("collective_id", collectiveId)
-      .order("starts_at", { ascending: true });
-
-    if (events && events.length > 0) {
-      // Note: channels no longer has event_id column — event channels are identified by name matching
-      const { data: existingEventChannels } = await supabase
-        .from("channels")
-        .select("name")
-        .eq("collective_id", collectiveId)
-        .eq("type", "event");
-
-      const existingEventNames = new Set(
-        existingEventChannels?.map((c) => c.name) ?? []
-      );
-
-      const newChannels = events
-        .filter((e) => !existingEventNames.has(e.title))
-        .map((e) => ({
-          collective_id: collectiveId,
-          name: e.title,
-          type: "event" as const,
-        }));
-
-      if (newChannels.length > 0) {
-        await supabase.from("channels").insert(newChannels);
-      }
-    }
+    // NOTE: per-event channels disabled after PR #93 — channels.event_id column
+    // was dropped in the schema rebuild. Team chat now focuses on the general
+    // channel + cross-collective collab channels only until a replacement link
+    // (e.g. channel name prefix, or a new channel<->event join table) is wired up.
+    const events: { id: string; title: string; starts_at: string }[] = [];
 
     // Fetch all channels with last message info
     const { data: allChannels } = await supabase
@@ -358,14 +336,6 @@ export default function ChatPage() {
           .limit(1);
 
         const lastMsg = msgs?.[0];
-        let eventDate: string | undefined;
-
-        if (events) {
-          const evt = events.find(
-            (e: { title: string }) => e.title === ch.name
-          );
-          if (evt) eventDate = (evt as { starts_at: string }).starts_at;
-        }
 
         return {
           ...ch,
@@ -373,7 +343,6 @@ export default function ChatPage() {
           last_message_at: lastMsg?.created_at,
           unread: false,
           unread_count: 0,
-          event_date: eventDate,
         };
       })
     );
@@ -494,7 +463,7 @@ export default function ChatPage() {
       const q = searchQuery.toLowerCase();
       return list.filter(
         (ch) =>
-          (ch.name?.toLowerCase().includes(q) ?? false) ||
+          ch.name.toLowerCase().includes(q) ||
           ch.last_message?.toLowerCase().includes(q)
       );
     },

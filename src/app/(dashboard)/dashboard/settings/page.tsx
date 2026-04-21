@@ -70,23 +70,25 @@ export default function SettingsPage() {
           .limit(1);
 
         if (memberships && memberships.length > 0) {
+          // Post-PR #93: collectives shape is lean — bio + city are first-class
+          // columns, and instagram/website were dropped entirely. UI still
+          // renders the inputs for now so operators don't lose the ability to
+          // enter them; values are no-ops until a social-links table lands.
           const c = memberships[0].collectives as unknown as {
             id: string;
             name: string;
             slug: string;
-            description: string | null;
-            instagram: string | null;
-            website: string | null;
-            metadata: { city?: string } | null;
+            bio: string | null;
+            city: string | null;
           };
           setCollectiveId(c.id);
           setName(c.name);
           setSlug(c.slug);
-          setBio(c.description ?? "");
-          setCity(c.metadata?.city ?? "");
-          setInstagram(c.instagram ?? "");
-          setWebsite(c.website ?? "");
-          setCollectiveMetadata(c.metadata ?? null);
+          setBio(c.bio ?? "");
+          setCity(c.city ?? "");
+          setInstagram("");
+          setWebsite("");
+          setCollectiveMetadata(null);
         }
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : "Failed to load settings");
@@ -131,15 +133,16 @@ export default function SettingsPage() {
     setError(null);
     setSuccess(false);
 
+    // PR #93 dropped description/instagram/website/metadata from collectives —
+    // bio + city are now first-class. instagram + website inputs still render
+    // but get dropped here (until a social-links table exists).
     const { error: collectiveError } = await supabase
       .from("collectives")
       .update({
         name,
         slug,
-        description: bio || null,
-        instagram: instagram || null,
-        website: website || null,
-        metadata: { ...(collectiveMetadata ?? {}), city },
+        bio: bio || null,
+        city: city || null,
       })
       .eq("id", collectiveId);
 
