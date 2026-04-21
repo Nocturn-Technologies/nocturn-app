@@ -25,7 +25,6 @@ import {
   addRevenueLine,
   updateRevenueLine,
   deleteRevenueLine,
-  updateEventBarSettings,
 } from "@/app/actions/event-financials";
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -587,15 +586,9 @@ export function EventPnlSpreadsheet({ financials }: Props) {
     });
   };
 
-  const handleUpdateBarSettings = async (
-    field: "barMinimum" | "actualBarRevenue",
-    value: number
-  ) => {
-    startTransition(async () => {
-      const result = await updateEventBarSettings(financials.eventId, { [field]: value });
-      if (result.error) setError(result.error);
-    });
-  };
+  // handleUpdateBarSettings removed alongside the gated UI in the Bar
+  // Minimum & Actuals card (NOC-32). The server action stub stays in
+  // place until Andrew picks the new schema location.
 
   const pnlRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -1302,65 +1295,25 @@ export function EventPnlSpreadsheet({ financials }: Props) {
 
       </div>{/* close pnlRef wrapper */}
 
-      {/* Bar Settings — editable minimum and actual.
-          The shortfall is computed server-side from these two and rendered
-          as an expense line above. Click either number to edit it inline. */}
-      <div className="rounded-xl border border-border p-4 bg-card space-y-3">
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm font-medium">Bar Minimum &amp; Actuals</p>
-            <p className="text-xs text-muted-foreground">
-              Track venue bar minimums. If actuals fall short, the difference shows up as an expense automatically.
+      {/* Bar Settings — paused until schema decision lands (NOC-32).
+          PR #93 dropped events.bar_minimum + events.actual_bar_revenue;
+          updateEventBarSettings is now a stub that always errors. The
+          editable inputs are hidden so operators don't waste time typing
+          values that won't save. The shortfall computation still runs
+          when the underlying values exist (via event_expenses), so this
+          gate only affects the manual entry surface. */}
+      <div className="rounded-xl border border-border p-4 bg-card space-y-2">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-nocturn/10">
+            <DollarSign className="h-5 w-5 text-nocturn" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium">Bar Minimum &amp; Actuals — paused</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Bar tracking is offline while we decide where this data lives in the new schema (NOC-32). Your event P&amp;L still computes correctly from expenses; only the manual bar-minimum entry is gated.
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-border bg-background/50 p-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-              Bar Minimum
-            </p>
-            <EditableAmountCell
-              value={financials.barMinimum ?? 0}
-              onSave={async (v) => {
-                await handleUpdateBarSettings("barMinimum", v);
-              }}
-              format={formatCurrency}
-            />
-          </div>
-          <div className="rounded-lg border border-border bg-background/50 p-3">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">
-              Actual Bar Revenue
-            </p>
-            <EditableAmountCell
-              value={financials.actualBarRevenue ?? 0}
-              onSave={async (v) => {
-                await handleUpdateBarSettings("actualBarRevenue", v);
-              }}
-              format={formatCurrency}
-            />
-          </div>
-        </div>
-        {financials.barMinimum != null && financials.barMinimum > 0 && (
-          <p
-            className={`text-xs ${
-              financials.barShortfall > 0
-                ? "text-amber-400"
-                : financials.actualBarRevenue != null
-                  ? "text-green-400"
-                  : depositAtRisk > 0
-                    ? "text-amber-400"
-                    : "text-muted-foreground"
-            }`}
-          >
-            {financials.barShortfall > 0
-              ? `${formatCurrency(financials.barShortfall)} short — added to expenses`
-              : financials.actualBarRevenue != null
-                ? "Minimum met"
-                : depositAtRisk > 0
-                  ? `Your estimated bar (${formatCurrency(estimatedBar)}) is below the minimum — ${formatCurrency(depositAtRisk)} deposit at risk`
-                  : "Enter actual bar revenue to track shortfall"}
-          </p>
-        )}
       </div>
     </div>
   );
