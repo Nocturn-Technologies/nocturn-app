@@ -185,11 +185,11 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   if (!eventRow || eventRow.status === "draft") notFound();
 
   // Adapt to the legacy shape the rest of the page expects: synthesise a
-  // `venues` object from the flat columns + add event_mode placeholder so
-  // downstream renders don't need to change yet.
+  // `venues` object from the flat columns. NOC-31: removed the event_mode
+  // placeholder — the column was dropped in PR #93 and mode is now derived
+  // from is_free + tier prices (see below).
   const event = {
     ...eventRow,
-    event_mode: null as string | null,
     venues: eventRow.venue_name
       ? { name: eventRow.venue_name, address: eventRow.venue_address ?? "", city: eventRow.city ?? "", capacity: eventRow.capacity ?? 0 }
       : null,
@@ -278,19 +278,21 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // event_reactions table removed in schema rebuild — empty map keeps the widget happy
   const reactionCounts: Record<string, number> = {};
 
-  // Mode detection: free RSVP events show the RSVP widget instead of (or in addition to) tickets.
+  // Mode detection: NOC-31 — the `event_mode` column was dropped in PR #93.
+  // Mode is now derived from is_free + tier prices:
+  //   - is_free === true  OR  all tiers $0  OR  no tiers   → RSVP
+  //   - otherwise                                          → ticketed
   //
-  // Effectively-free fallback: if the organizer left event_mode on "ticketed" but every
-  // tier is $0 (or there are no tiers, or is_free is explicitly set), we treat the event
-  // as RSVP-only for display. This guarantees the public page never shows "$0+ Get Tickets"
-  // on a free event, and always shows the RSVP widget which collects guest name + email.
-  const rawMode = (event.event_mode ?? "ticketed") as "ticketed" | "rsvp" | "hybrid";
+  // Hybrid mode (tickets + RSVP simultaneously) is not reachable here. It
+  // was an unused concept in practice — no UI path explicitly set it, and
+  // this derivation covers every real-world case. If product calls for it
+  // back, that's a schema change + feature ticket (not a silent bug).
   const allTiersFree = !!tiers && tiers.length > 0 && tiers.every((t) => Number(t.price) === 0);
   const noTiers = !tiers || tiers.length === 0;
   const isEffectivelyFree = event.is_free === true || allTiersFree || noTiers;
-  const eventMode: "ticketed" | "rsvp" | "hybrid" = isEffectivelyFree ? "rsvp" : rawMode;
-  const showRsvp = eventMode === "rsvp" || eventMode === "hybrid";
-  const showTickets = (eventMode === "ticketed" || eventMode === "hybrid") && !isEffectivelyFree;
+  const eventMode: "ticketed" | "rsvp" = isEffectivelyFree ? "rsvp" : "ticketed";
+  const showRsvp = eventMode === "rsvp";
+  const showTickets = eventMode === "ticketed";
 
   // RSVP counts + current user's RSVP + event updates — fetched in parallel for RSVP/hybrid events
   const [rsvpCountsResult, myRsvpResult, updatesResult, currentUserResult, publicRsvpsResult] = await Promise.all([
