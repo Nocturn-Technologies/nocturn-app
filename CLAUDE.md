@@ -12,7 +12,7 @@ Mobile-first web app for nightlife promoters and collectives. Manage events, sel
 - **31 lib files** (7,328 lines)
 - **58 components** across 10 subdirectories
 - **3 custom hooks** (notifications, speech, shake)
-- **48 database tables** + 2 views + 13 custom DB functions
+- **45 database tables** + 2 views + 13 custom DB functions
 - **176 indexes**, **66 RLS policies**, **10 applied migrations**
 - **28 dependencies** + **12 devDependencies**
 - **0 `as any` casts**, **0 `eslint-disable` comments**, **0 unsafe non-null assertions**
@@ -220,10 +220,12 @@ import { createClient } from "@/lib/supabase/client";
 - Brand accents: `bg-nocturn`, `text-nocturn`, `hover:bg-nocturn-light`
 - Never use light theme
 
-## Database (48 tables + 2 views)
+## Database (45 tables + 2 views)
+
+> Audited against QA (vtkvhdaadobigtojmztg) on 2026-04-21. See `docs/DB_Data_Governance.md` for full schema reference.
 
 ### Tables
-artists, attendee_profiles, audit_logs, campaign_segments, channels, collective_members, collectives, contacts, email_campaigns, event_activity, event_analytics, event_artists, event_cards, event_collectives, event_expenses, event_reactions, event_tasks, events, expenses, external_events, guest_list, invitations, marketplace_inquiries, marketplace_profiles, marketplace_saved, messages, payment_events, payouts, playbook_task_templates, playbook_templates, promo_clicks, promo_codes, promo_links, rate_limits, recordings, saved_venues, segment_members, segments, settlement_lines, settlements, split_items, ticket_tiers, ticket_waitlist, tickets, transactions, users, venues, waitlist_entries
+artist_profiles, attendee_profiles, audit_logs, channel_members, channels, collective_members, collectives, email_campaigns, event_activity, event_analytics, event_artists, event_cards, event_expenses, event_status_log, event_tasks, events, external_events, guest_list, invitations, messages, order_lines, orders, parties, party_contact_methods, party_roles, payment_events, payouts, playbook_task_templates, playbook_templates, promo_clicks, promo_code_usage, promo_codes, promo_links, rate_limits, recordings, saved_venues, settlement_lines, settlements, ticket_events, ticket_tiers, ticket_waitlist, tickets, users, venue_profiles, waitlist_entries
 
 ### Views
 event_dashboard, promoter_performance
