@@ -198,15 +198,8 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
       .limit(6),
   ]);
 
-  // event_reactions exists in DB but not in generated types — use untyped client
-  const { data: reactionRowsRaw } = await (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> })
-    .from("event_reactions")
-    .select("emoji")
-    .eq("event_id", event.id);
-
   const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number; sort_order: number; tickets_sold: number }[] | null;
   const artists = artistsRaw as { party_id: string | null; name: string | null; set_time: string | null; role: string | null }[] | null;
-  const reactionRows = reactionRowsRaw as { emoji: string }[] | null;
   const pastEvents = pastEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string }[] | null;
   const nearbyEvents = nearbyEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string; collective_id: string; collectives: { name: string; slug: string } | null; venue_name: string | null; city: string | null }[] | null;
 
@@ -217,11 +210,8 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   }
   const ticketsSold = (tiers || []).reduce((sum, t) => sum + (t.tickets_sold ?? 0), 0);
 
-
+  // event_reactions table was dropped — stubs return empty until table is restored
   const reactionCounts: Record<string, number> = {};
-  for (const r of reactionRows || []) {
-    reactionCounts[r.emoji] = (reactionCounts[r.emoji] || 0) + 1;
-  }
 
   // Mode detection: free RSVP events show the RSVP widget instead of (or in addition to) tickets.
   //
