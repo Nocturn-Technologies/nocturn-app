@@ -306,10 +306,20 @@ export async function updateTaskDetails(
     if (error) return { error: "Failed to update task" };
 
     const changes: string[] = [];
-    if (updates.title !== undefined) changes.push("renamed");
+    if (updates.title !== undefined) {
+      const short = updates.title.length > 60 ? `${updates.title.slice(0, 60)}…` : updates.title;
+      changes.push(`renamed to "${short}"`);
+    }
     if (updates.assignedTo !== undefined) changes.push(updates.assignedTo ? "reassigned" : "unassigned");
     if (updates.dueAt !== undefined) changes.push(`due date ${updates.dueAt ? "set" : "cleared"}`);
-    if (updates.description !== undefined) changes.push("note updated");
+    if (updates.description !== undefined) {
+      if (!updates.description) {
+        changes.push("note cleared");
+      } else {
+        const short = updates.description.length > 80 ? `${updates.description.slice(0, 80)}…` : updates.description;
+        changes.push(`note: "${short}"`);
+      }
+    }
 
     const { error: activityError } = await admin.from("event_activity").insert({
       event_id: taskCheck.event_id,

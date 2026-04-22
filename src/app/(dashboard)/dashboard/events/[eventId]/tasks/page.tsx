@@ -280,38 +280,48 @@ function EventTasksPageInner() {
     await updateTaskStatus(taskId, newStatus);
   }
 
+  // Background refresh so the Activity tab reflects task edits without a
+  // full reload. Fire-and-forget — cards don't wait on it to show "Saved".
+  function refreshActivity() {
+    getEventActivity(eventId).then(setActivity).catch(() => {});
+  }
+
   async function handleAssign(taskId: string, userId: string | null) {
-    // Optimistic update only — no reload to avoid re-render glitches
     setTasks((prev) =>
       prev.map((t) => ((t.id as string) === taskId ? { ...t, assigned_to: userId } : t))
     );
-    await updateTaskDetails(taskId, { assignedTo: userId });
+    const res = await updateTaskDetails(taskId, { assignedTo: userId });
+    refreshActivity();
+    return res;
   }
 
   async function handleSetDue(taskId: string, dueDate: string | null) {
-    // Optimistic update only — no reload to avoid date picker glitches on mobile
     setTasks((prev) =>
       prev.map((t) => ((t.id as string) === taskId ? { ...t, due_at: dueDate ? new Date(dueDate).toISOString() : null } : t))
     );
-    await updateTaskDetails(taskId, { dueAt: dueDate ? new Date(dueDate).toISOString() : null });
+    const res = await updateTaskDetails(taskId, { dueAt: dueDate ? new Date(dueDate).toISOString() : null });
+    refreshActivity();
+    return res;
   }
 
   async function handleUpdateNote(taskId: string, note: string) {
-    await updateTaskDetails(taskId, { description: note || null });
-    // Update local state without full reload for snappy UX
+    const res = await updateTaskDetails(taskId, { description: note || null });
     setTasks((prev) =>
       prev.map((t) => ((t.id as string) === taskId ? { ...t, description: note || null } : t))
     );
+    refreshActivity();
+    return res;
   }
 
   async function handleUpdateTitle(taskId: string, title: string) {
     const trimmed = title.trim();
-    if (!trimmed) return; // Empty-title guard; card reverts in-component.
-    // Optimistic update first so the card doesn't flicker back to the old title.
+    if (!trimmed) return { error: "empty" }; // Card reverts in-component.
     setTasks((prev) =>
       prev.map((t) => ((t.id as string) === taskId ? { ...t, title: trimmed } : t))
     );
-    await updateTaskDetails(taskId, { title: trimmed });
+    const res = await updateTaskDetails(taskId, { title: trimmed });
+    refreshActivity();
+    return res;
   }
 
   async function handleAddSuggestion(suggestion: Suggestion, idx: number) {
@@ -919,6 +929,9 @@ export default function EventTasksPage() {
 
 // ─── Category Group ───────────────────────────────────────────────────────────
 
+type SaveResult = { error: string | null };
+type SaveHandler<T> = (taskId: string, value: T) => Promise<SaveResult>;
+
 function CategoryGroup({
   config,
   tasks,
@@ -936,10 +949,10 @@ function CategoryGroup({
   doneCount: number;
   members: Member[];
   onStatusChange: (taskId: string, status: string) => void;
-  onAssign: (taskId: string, userId: string | null) => void;
-  onSetDue: (taskId: string, dueDate: string | null) => void;
-  onUpdateNote: (taskId: string, note: string) => void;
-  onUpdateTitle: (taskId: string, title: string) => void;
+  onAssign: SaveHandler<string | null>;
+  onSetDue: SaveHandler<string | null>;
+  onUpdateNote: SaveHandler<string>;
+  onUpdateTitle: SaveHandler<string>;
   hideDone: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -1000,10 +1013,10 @@ function TaskCard({
   task: Task;
   members: Member[];
   onStatusChange: (taskId: string, status: string) => void;
-  onAssign: (taskId: string, userId: string | null) => void;
-  onSetDue: (taskId: string, dueDate: string | null) => void;
-  onUpdateNote: (taskId: string, note: string) => void;
-  onUpdateTitle: (taskId: string, title: string) => void;
+  onAssign: SaveHandler<string | null>;
+  onSetDue: SaveHandler<string | null>;
+  onUpdateNote: SaveHandler<string>;
+  onUpdateTitle: SaveHandler<string>;
 }) {
   const [showActions, setShowActions] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
@@ -1012,6 +1025,19 @@ function TaskCard({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(String(task.title));
   const titleInputRef = useRef<HTMLInputElement>(null);
+  // "Saved" pulse: set to Date.now() on a successful server write, auto-
+  // clears after 1.5s. Gives the user a clear signal that their edit
+  // landed rather than silently going through.
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (!savedAt) return;
+    const t = setTimeout(() => setSavedAt(null), 1500);
+    return () => clearTimeout(t);
+  }, [savedAt]);
+  async function flashSave(p: Promise<SaveResult>) {
+    const res = await p;
+    if (res && !res.error) setSavedAt(Date.now());
+  }
   const isDone = task.status === "done";
   const nextStatus = task.status === "todo" ? "in_progress" : task.status === "in_progress" ? "done" : "todo";
   const assignee = task.assigned_user as unknown as { full_name: string; email: string } | null;
@@ -1045,7 +1071,7 @@ function TaskCard({
   }, [editingTitle]);
 
   function saveNote() {
-    onUpdateNote(task.id as string, noteValue.trim());
+    flashSave(onUpdateNote(task.id as string, noteValue.trim()));
     setEditingNote(false);
   }
 
@@ -1053,12 +1079,12 @@ function TaskCard({
     const next = titleDraft.trim();
     const current = String(task.title);
     if (!next || next === current) {
-      // Empty reverts, unchanged skips — in either case just exit edit mode.
+      // Empty reverts, unchanged skips — no save flash either way.
       setTitleDraft(current);
       setEditingTitle(false);
       return;
     }
-    onUpdateTitle(task.id as string, next);
+    flashSave(onUpdateTitle(task.id as string, next));
     setEditingTitle(false);
   }
 
@@ -1069,8 +1095,17 @@ function TaskCard({
 
   return (
     <div
-      className={`relative rounded-lg border p-3 transition-all duration-200 hover:border-nocturn/20 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : ""}`}
+      className={`relative rounded-lg border p-3 transition-all duration-200 hover:border-nocturn/20 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : ""} ${savedAt ? "ring-1 ring-emerald-500/40" : ""}`}
     >
+      {savedAt && (
+        <span
+          role="status"
+          aria-live="polite"
+          className="absolute top-2 right-2 z-10 flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-400 text-[11px] font-semibold px-2 py-0.5 animate-in-progress-pop pointer-events-none"
+        >
+          <Check className="h-3 w-3" /> Saved
+        </span>
+      )}
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
           <button
@@ -1103,7 +1138,7 @@ function TaskCard({
               }}
               maxLength={200}
               aria-label="Edit task title"
-              className={`block w-full text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}
+              className={`block w-full text-base md:text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}
             />
           ) : (
             <button
@@ -1151,7 +1186,7 @@ function TaskCard({
                 <select
                   className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[44px]"
                   value={(task.assigned_to as string) ?? ""}
-                  onChange={(e) => onAssign(task.id as string, e.target.value || null)}
+                  onChange={(e) => flashSave(onAssign(task.id as string, e.target.value || null))}
                 >
                   <option value="">Unassigned</option>
                   {members.map((m) => (
@@ -1165,7 +1200,7 @@ function TaskCard({
                   type="date"
                   className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[44px]"
                   value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
-                  onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
+                  onChange={(e) => flashSave(onSetDue(task.id as string, e.target.value || null))}
                 />
               </div>
             </div>
@@ -1221,10 +1256,10 @@ function ContentTaskCard({
   task: Task;
   members: Member[];
   onStatusChange: (taskId: string, status: string) => void;
-  onAssign: (taskId: string, userId: string | null) => void;
-  onSetDue: (taskId: string, dueDate: string | null) => void;
-  onUpdateNote: (taskId: string, note: string) => void;
-  onUpdateTitle: (taskId: string, title: string) => void;
+  onAssign: SaveHandler<string | null>;
+  onSetDue: SaveHandler<string | null>;
+  onUpdateNote: SaveHandler<string>;
+  onUpdateTitle: SaveHandler<string>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1235,6 +1270,16 @@ function ContentTaskCard({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(String(task.title));
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (!savedAt) return;
+    const t = setTimeout(() => setSavedAt(null), 1500);
+    return () => clearTimeout(t);
+  }, [savedAt]);
+  async function flashSave(p: Promise<SaveResult>) {
+    const res = await p;
+    if (res && !res.error) setSavedAt(Date.now());
+  }
 
   const meta = (task.metadata as Record<string, unknown>) ?? {};
   const platform = (meta.platform as string) ?? "";
@@ -1273,7 +1318,7 @@ function ContentTaskCard({
   }, [editingTitle]);
 
   function saveNote() {
-    onUpdateNote(task.id as string, noteValue.trim());
+    flashSave(onUpdateNote(task.id as string, noteValue.trim()));
     setEditingNote(false);
   }
 
@@ -1285,7 +1330,7 @@ function ContentTaskCard({
       setEditingTitle(false);
       return;
     }
-    onUpdateTitle(task.id as string, next);
+    flashSave(onUpdateTitle(task.id as string, next));
     setEditingTitle(false);
   }
 
@@ -1295,7 +1340,16 @@ function ContentTaskCard({
   }
 
   return (
-    <div className={`rounded-lg border p-3 space-y-2 transition-all duration-200 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : platformColor[platform.toLowerCase()] ?? ""}`}>
+    <div className={`relative rounded-lg border p-3 space-y-2 transition-all duration-200 ${isDone ? "opacity-50" : ""} ${overdue ? "border-red-500/30 bg-red-500/5" : platformColor[platform.toLowerCase()] ?? ""} ${savedAt ? "ring-1 ring-emerald-500/40" : ""}`}>
+      {savedAt && (
+        <span
+          role="status"
+          aria-live="polite"
+          className="absolute top-2 right-2 z-10 flex items-center gap-1 rounded-full bg-emerald-500/15 text-emerald-400 text-[11px] font-semibold px-2 py-0.5 animate-in-progress-pop pointer-events-none"
+        >
+          <Check className="h-3 w-3" /> Saved
+        </span>
+      )}
       {/* Top row */}
       <div className="flex items-start gap-3">
         <span className="text-lg shrink-0 mt-0.5">{emoji}</span>
@@ -1313,7 +1367,7 @@ function ContentTaskCard({
               }}
               maxLength={200}
               aria-label="Edit task title"
-              className={`block w-full text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : ""}`}
+              className={`block w-full text-base md:text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : ""}`}
             />
           ) : (
             <button
@@ -1364,7 +1418,7 @@ function ContentTaskCard({
               <select
                 className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[44px]"
                 value={(task.assigned_to as string) ?? ""}
-                onChange={(e) => onAssign(task.id as string, e.target.value || null)}
+                onChange={(e) => flashSave(onAssign(task.id as string, e.target.value || null))}
               >
                 <option value="">Unassigned</option>
                 {members.map((m) => (
@@ -1378,7 +1432,7 @@ function ContentTaskCard({
                 type="date"
                 className="rounded-md border bg-background px-2 py-1 text-base md:text-xs min-h-[44px]"
                 value={getDueAt(task) ? new Date(getDueAt(task)!).toISOString().slice(0, 10) : ""}
-                onChange={(e) => onSetDue(task.id as string, e.target.value || null)}
+                onChange={(e) => flashSave(onSetDue(task.id as string, e.target.value || null))}
               />
             </div>
           </div>
