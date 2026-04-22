@@ -304,6 +304,16 @@ function EventTasksPageInner() {
     );
   }
 
+  async function handleUpdateTitle(taskId: string, title: string) {
+    const trimmed = title.trim();
+    if (!trimmed) return; // Empty-title guard; card reverts in-component.
+    // Optimistic update first so the card doesn't flicker back to the old title.
+    setTasks((prev) =>
+      prev.map((t) => ((t.id as string) === taskId ? { ...t, title: trimmed } : t))
+    );
+    await updateTaskDetails(taskId, { title: trimmed });
+  }
+
   async function handleAddSuggestion(suggestion: Suggestion, idx: number) {
     setAddingSuggestionIdx(idx);
     // NOC-32: category + priority columns dropped in PR #93. Suggestion
@@ -752,6 +762,7 @@ function EventTasksPageInner() {
                     onAssign={handleAssign}
                     onSetDue={handleSetDue}
                     onUpdateNote={handleUpdateNote}
+                    onUpdateTitle={handleUpdateTitle}
                     hideDone={hideDone}
                   />
                 );
@@ -822,6 +833,7 @@ function EventTasksPageInner() {
                   onAssign={handleAssign}
                   onSetDue={handleSetDue}
                   onUpdateNote={handleUpdateNote}
+                  onUpdateTitle={handleUpdateTitle}
                 />
               ))}
             </div>
@@ -916,6 +928,7 @@ function CategoryGroup({
   onAssign,
   onSetDue,
   onUpdateNote,
+  onUpdateTitle,
   hideDone,
 }: {
   config: { color: string; label: string; emoji: string };
@@ -926,6 +939,7 @@ function CategoryGroup({
   onAssign: (taskId: string, userId: string | null) => void;
   onSetDue: (taskId: string, dueDate: string | null) => void;
   onUpdateNote: (taskId: string, note: string) => void;
+  onUpdateTitle: (taskId: string, title: string) => void;
   hideDone: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -963,6 +977,7 @@ function CategoryGroup({
               onAssign={onAssign}
               onSetDue={onSetDue}
               onUpdateNote={onUpdateNote}
+              onUpdateTitle={onUpdateTitle}
             />
           ))}
         </div>
@@ -980,6 +995,7 @@ function TaskCard({
   onAssign,
   onSetDue,
   onUpdateNote,
+  onUpdateTitle,
 }: {
   task: Task;
   members: Member[];
@@ -987,11 +1003,15 @@ function TaskCard({
   onAssign: (taskId: string, userId: string | null) => void;
   onSetDue: (taskId: string, dueDate: string | null) => void;
   onUpdateNote: (taskId: string, note: string) => void;
+  onUpdateTitle: (taskId: string, title: string) => void;
 }) {
   const [showActions, setShowActions] = useState(false);
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState(typeof task.description === "string" ? task.description : "");
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(String(task.title));
+  const titleInputRef = useRef<HTMLInputElement>(null);
   const isDone = task.status === "done";
   const nextStatus = task.status === "todo" ? "in_progress" : task.status === "in_progress" ? "done" : "todo";
   const assignee = task.assigned_user as unknown as { full_name: string; email: string } | null;
@@ -1017,9 +1037,34 @@ function TaskCard({
     if (editingNote && noteRef.current) noteRef.current.focus();
   }, [editingNote]);
 
+  useEffect(() => {
+    if (editingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [editingTitle]);
+
   function saveNote() {
     onUpdateNote(task.id as string, noteValue.trim());
     setEditingNote(false);
+  }
+
+  function saveTitle() {
+    const next = titleDraft.trim();
+    const current = String(task.title);
+    if (!next || next === current) {
+      // Empty reverts, unchanged skips — in either case just exit edit mode.
+      setTitleDraft(current);
+      setEditingTitle(false);
+      return;
+    }
+    onUpdateTitle(task.id as string, next);
+    setEditingTitle(false);
+  }
+
+  function cancelTitle() {
+    setTitleDraft(String(task.title));
+    setEditingTitle(false);
   }
 
   return (
@@ -1044,16 +1089,38 @@ function TaskCard({
             </span>
           )}
         </div>
-        <button
-          type="button"
-          className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
-          onClick={() => setShowActions(!showActions)}
-          aria-expanded={showActions}
-        >
-          <span className={`block text-sm font-medium ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}>
-            {String(task.title)}
-          </span>
-          <span className="flex items-center gap-2 mt-1 flex-wrap">
+        <div className="flex-1 min-w-0">
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              type="text"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); saveTitle(); }
+                if (e.key === "Escape") { e.preventDefault(); cancelTitle(); }
+              }}
+              maxLength={200}
+              aria-label="Edit task title"
+              className={`block w-full text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingTitle(true)}
+              className={`block w-full text-left text-sm font-medium bg-transparent border-0 p-0 cursor-text hover:text-foreground transition-colors ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}
+              aria-label="Click to edit title"
+            >
+              {String(task.title)}
+            </button>
+          )}
+          <button
+            type="button"
+            className="w-full text-left bg-transparent border-0 p-0 cursor-pointer flex items-center gap-2 mt-1 flex-wrap min-h-[20px]"
+            onClick={() => setShowActions(!showActions)}
+            aria-expanded={showActions}
+          >
             {dueLabel && (
               <span className={`text-[11px] font-medium ${overdue ? "text-red-400" : "text-muted-foreground"}`}>
                 {overdue ? "🔴 " : ""}{dueLabel}
@@ -1069,8 +1136,9 @@ function TaskCard({
                 <StickyNote className="h-2.5 w-2.5 inline" /> {String(task.description)}
               </span>
             )}
-          </span>
-        </button>
+            <ChevronDown className={`h-3 w-3 text-muted-foreground/60 ml-auto transition-transform ${showActions ? "rotate-180" : ""}`} />
+          </button>
+        </div>
       </div>
 
       {/* Inline actions — assign + due date + note */}
@@ -1148,6 +1216,7 @@ function ContentTaskCard({
   onAssign,
   onSetDue,
   onUpdateNote,
+  onUpdateTitle,
 }: {
   task: Task;
   members: Member[];
@@ -1155,6 +1224,7 @@ function ContentTaskCard({
   onAssign: (taskId: string, userId: string | null) => void;
   onSetDue: (taskId: string, dueDate: string | null) => void;
   onUpdateNote: (taskId: string, note: string) => void;
+  onUpdateTitle: (taskId: string, title: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -1162,6 +1232,9 @@ function ContentTaskCard({
   const [editingNote, setEditingNote] = useState(false);
   const [noteValue, setNoteValue] = useState(typeof task.description === "string" ? task.description : "");
   const noteRef = useRef<HTMLTextAreaElement>(null);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState(String(task.title));
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const meta = (task.metadata as Record<string, unknown>) ?? {};
   const platform = (meta.platform as string) ?? "";
@@ -1192,9 +1265,33 @@ function ContentTaskCard({
     if (editingNote && noteRef.current) noteRef.current.focus();
   }, [editingNote]);
 
+  useEffect(() => {
+    if (editingTitle && titleInputRef.current) {
+      titleInputRef.current.focus();
+      titleInputRef.current.select();
+    }
+  }, [editingTitle]);
+
   function saveNote() {
     onUpdateNote(task.id as string, noteValue.trim());
     setEditingNote(false);
+  }
+
+  function saveTitle() {
+    const next = titleDraft.trim();
+    const current = String(task.title);
+    if (!next || next === current) {
+      setTitleDraft(current);
+      setEditingTitle(false);
+      return;
+    }
+    onUpdateTitle(task.id as string, next);
+    setEditingTitle(false);
+  }
+
+  function cancelTitle() {
+    setTitleDraft(String(task.title));
+    setEditingTitle(false);
   }
 
   return (
@@ -1202,16 +1299,38 @@ function ContentTaskCard({
       {/* Top row */}
       <div className="flex items-start gap-3">
         <span className="text-lg shrink-0 mt-0.5">{emoji}</span>
-        <button
-          type="button"
-          className="flex-1 min-w-0 text-left bg-transparent border-0 p-0 cursor-pointer"
-          onClick={() => setShowActions(!showActions)}
-          aria-expanded={showActions}
-        >
-          <span className={`block text-sm font-medium ${isDone ? "line-through text-muted-foreground" : ""}`}>
-            {String(task.title)}
-          </span>
-          <span className="flex items-center gap-2 mt-1 flex-wrap">
+        <div className="flex-1 min-w-0">
+          {editingTitle ? (
+            <input
+              ref={titleInputRef}
+              type="text"
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") { e.preventDefault(); saveTitle(); }
+                if (e.key === "Escape") { e.preventDefault(); cancelTitle(); }
+              }}
+              maxLength={200}
+              aria-label="Edit task title"
+              className={`block w-full text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : ""}`}
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setEditingTitle(true)}
+              className={`block w-full text-left text-sm font-medium bg-transparent border-0 p-0 cursor-text hover:text-foreground transition-colors ${isDone ? "line-through text-muted-foreground" : ""}`}
+              aria-label="Click to edit title"
+            >
+              {String(task.title)}
+            </button>
+          )}
+          <button
+            type="button"
+            className="w-full text-left bg-transparent border-0 p-0 cursor-pointer flex items-center gap-2 mt-1 flex-wrap min-h-[20px]"
+            onClick={() => setShowActions(!showActions)}
+            aria-expanded={showActions}
+          >
             <span className="rounded-full bg-white/5 border border-white/10 px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
               {phase}
             </span>
@@ -1223,8 +1342,9 @@ function ContentTaskCard({
             {assignee && (
               <span className="text-[11px] text-muted-foreground">→ {assignee.full_name ?? assignee.email}</span>
             )}
-          </span>
-        </button>
+            <ChevronDown className={`h-3 w-3 text-muted-foreground/60 ml-auto transition-transform ${showActions ? "rotate-180" : ""}`} />
+          </button>
+        </div>
         <Button
           size="sm"
           variant={isDone ? "default" : "outline"}
