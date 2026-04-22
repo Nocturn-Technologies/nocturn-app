@@ -3,7 +3,6 @@
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
 import { syncEventMembers } from "@/app/actions/chat-members";
-import type { Json } from "@/lib/supabase/database.types";
 
 function slugify(text: string): string {
   return text
@@ -16,8 +15,6 @@ export async function createArtist(formData: {
   name: string;
   bio: string | null;
   genre: string[];
-  instagram: string | null;
-  soundcloud: string | null;
   spotify: string | null;
   bookingEmail: string | null;
   defaultFee: number | null;
@@ -39,31 +36,15 @@ export async function createArtist(formData: {
     sanitizedBio = formData.bio;
   }
 
-  // Social handles: cap 100
+  // Spotify handle: cap 100
   const capSocial = (field: string | null, label: string): { value: string | null; error: string | null } => {
     if (field == null) return { value: null, error: null };
     if (typeof field !== "string") return { value: null, error: `Invalid ${label}` };
     if (field.length > 100) return { value: null, error: `${label} must be under 100 characters` };
     return { value: field, error: null };
   };
-  const ig = capSocial(formData.instagram, "Instagram");
-  if (ig.error) return { error: ig.error, artist: null };
-  const sc = capSocial(formData.soundcloud, "SoundCloud");
-  if (sc.error) return { error: sc.error, artist: null };
   const sp = capSocial(formData.spotify, "Spotify");
   if (sp.error) return { error: sp.error, artist: null };
-
-  // Website: cap 300, require https:// if present
-  let sanitizedWebsite: string | null = null;
-  if (formData.website != null && formData.website !== "") {
-    if (typeof formData.website !== "string" || formData.website.length > 300) {
-      return { error: "Invalid website URL", artist: null };
-    }
-    if (!/^https:\/\//i.test(formData.website)) {
-      return { error: "Website must start with https://", artist: null };
-    }
-    sanitizedWebsite = formData.website;
-  }
 
   // Booking email: validate format
   let sanitizedEmail: string | null = null;
@@ -74,14 +55,12 @@ export async function createArtist(formData: {
     sanitizedEmail = formData.bookingEmail.toLowerCase().trim();
   }
 
-  // Phone: cap 30 chars, allow digits/spaces/+/-/()
-  let sanitizedPhone: string | null = null;
+  // Phone: cap 30 chars (stored as contact method separately — validated here for caller convenience)
   if (formData.phone != null && formData.phone !== "") {
     if (typeof formData.phone !== "string") return { error: "Invalid phone", artist: null };
     const trimmedPhone = formData.phone.trim();
     if (trimmedPhone.length > 30) return { error: "Phone must be under 30 characters", artist: null };
     if (!/^[\d\s+\-()]+$/.test(trimmedPhone)) return { error: "Phone can only contain digits, spaces, +, -, ()", artist: null };
-    sanitizedPhone = trimmedPhone;
   }
 
   // Default fee: finite, 0 to 1_000_000
@@ -112,32 +91,61 @@ export async function createArtist(formData: {
   const admin = createAdminClient();
   const slug = slugify(trimmedName) + "-" + Math.random().toString(36).slice(2, 6);
 
-  const metadata: Record<string, unknown> = {};
-  if (formData.location) metadata.location = formData.location;
-  if (sanitizedWebsite) metadata.website = sanitizedWebsite;
+  // 1. Create the party record
+  const { data: party, error: partyError } = await admin
+    .from("parties")
+    .insert({ display_name: trimmedName, type: "person" })
+    .select("id")
+    .maybeSingle();
 
-  const { data: artist, error } = await admin.from("artists")
+  if (partyError || !party) {
+    console.error("[createArtist] party insert error:", partyError?.message);
+    return { error: "Failed to create artist", artist: null };
+  }
+
+  // 2. Create the artist_profile linked to that party
+  const { data: artist, error } = await admin
+    .from("artist_profiles")
     .insert({
-      name: trimmedName,
+      party_id: party.id,
       slug,
       bio: sanitizedBio,
       genre: sanitizedGenre,
-      instagram: ig.value,
-      soundcloud: sc.value,
       spotify: sp.value,
       booking_email: sanitizedEmail,
-      phone: sanitizedPhone,
       default_fee: sanitizedFee,
-      metadata: metadata as unknown as Json,
     })
-    .select("id, name, slug")
+    .select("id, slug, party_id")
     .maybeSingle();
 
   if (error) {
     console.error("[createArtist] insert error:", (error as { message: string }).message);
     return { error: "Failed to create artist", artist: null };
   }
-  return { error: null, artist: artist as { id: string; name: string; slug: string } };
+
+  // 3. Store phone as a contact method (best-effort)
+  if (formData.phone) {
+    const trimmedPhone = formData.phone.trim();
+    try {
+      await admin.from("party_contact_methods").insert({
+        party_id: party.id,
+        type: "phone",
+        value: trimmedPhone,
+        is_primary: true,
+      });
+    } catch (phoneErr) {
+      console.error("[createArtist] phone contact method insert failed (non-blocking):", phoneErr);
+    }
+  }
+
+  return {
+    error: null,
+    artist: { id: artist!.id, name: trimmedName, slug: artist!.slug } as {
+      id: string;
+      name: string;
+      slug: string;
+    },
+  };
   } catch (err) {
     console.error("[createArtist] Unexpected error:", err);
     return { error: "Something went wrong", artist: null };
@@ -178,10 +186,7 @@ export async function addArtistToEvent(formData: {
     sanitizedNotes = formData.notes;
   }
 
-  // Validate setTime: HH:MM (24h) or ISO date string. We accept both forms
-  // and resolve to a real timestamptz before insert (the column is timestamp
-  // with time zone, not a clock time — so a bare "22:00" would otherwise
-  // fail at insert time).
+  // Validate setTime: HH:MM (24h) or ISO date string.
   const hhmm = /^([01]\d|2[0-3]):[0-5]\d$/;
   let setTimeIsHhmm = false;
   if (formData.setTime != null && formData.setTime !== "") {
@@ -216,8 +221,6 @@ export async function addArtistToEvent(formData: {
   if (!event) return { error: "Event not found" };
 
   // Resolve HH:MM into a full ISO timestamp anchored to the event's date.
-  // If the set time is earlier than the event start (e.g. event starts 22:00,
-  // artist plays at 02:00), assume it rolls over to the next day.
   let resolvedSetTime: string | null = null;
   if (formData.setTime != null && formData.setTime !== "") {
     if (setTimeIsHhmm && event.starts_at) {
@@ -242,14 +245,26 @@ export async function addArtistToEvent(formData: {
     .is("deleted_at", null);
   if (!memberCount || memberCount === 0) return { error: "Not authorized" };
 
+  // Look up the artist_profile to get the party_id and display name
+  const { data: artistProfile } = await admin
+    .from("artist_profiles")
+    .select("party_id, booking_email, parties(display_name)")
+    .eq("id", formData.artistId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (!artistProfile) return { error: "Artist not found" };
+
+  const artistName =
+    (artistProfile.parties as { display_name: string } | null)?.display_name ?? "";
+
   const { error } = await admin.from("event_artists").insert({
     event_id: formData.eventId,
-    artist_id: formData.artistId,
+    party_id: artistProfile.party_id,
+    name: artistName,
     fee: formData.fee,
     set_time: resolvedSetTime,
-    set_duration: formData.setDuration,
-    status: "pending",
-    booked_by: user.id,
+    set_length: formData.setDuration,
     notes: sanitizedNotes,
   });
 
@@ -260,31 +275,6 @@ export async function addArtistToEvent(formData: {
 
   // Auto-add artist to event chat (non-blocking)
   void syncEventMembers(formData.eventId).catch((err) => console.error("[artists] sync event chat failed:", err));
-
-  // Contact upsert — best-effort industry sync for booked artist
-  try {
-    const { data: artist } = await admin.from("artists")
-      .select("id, name, booking_email, instagram, soundcloud, spotify")
-      .eq("id", formData.artistId)
-      .maybeSingle();
-
-    if (artist?.booking_email) {
-      await admin.from("contacts").upsert({
-        collective_id: event.collective_id,
-        contact_type: "industry",
-        email: artist.booking_email.toLowerCase().trim(),
-        full_name: artist.name ?? null,
-        source: "artist_booking",
-        role: "artist",
-        artist_id: artist.id,
-        instagram: artist.instagram ?? null,
-        last_seen_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "collective_id,email", ignoreDuplicates: false });
-    }
-  } catch (contactErr) {
-    console.error("[artists] Contact upsert on booking failed (non-blocking):", contactErr);
-  }
 
   return { error: null };
   } catch (err) {
@@ -339,8 +329,9 @@ export async function updateBookingStatus(formData: {
     .is("deleted_at", null);
   if (!memberCount || memberCount === 0) return { error: "Not authorized" };
 
+  // event_artists no longer has a status column — store in role instead.
   const { error } = await admin.from("event_artists")
-    .update({ status: formData.status })
+    .update({ role: formData.status })
     .eq("id", formData.eventArtistId);
 
   if (error) {
@@ -357,8 +348,8 @@ export async function updateBookingStatus(formData: {
 /**
  * Creates a brand-new artist and immediately books them onto an event in a
  * single round-trip. If an email is supplied and `sendInvite` is true, also
- * fires off a Supabase magic-link invite (non-blocking — the booking succeeds
- * even if the invite email fails).
+ * fires off a branded Nocturn magic-link invite (non-blocking — the booking
+ * succeeds even if the invite email fails).
  */
 export async function createArtistAndAddToEvent(formData: {
   eventId: string;
@@ -374,14 +365,10 @@ export async function createArtistAndAddToEvent(formData: {
   try {
     if (!formData?.eventId?.trim()) return { error: "Event ID is required", artistId: null };
 
-    // Reuse createArtist's validation by calling it directly. It also handles
-    // collective ownership / auth via createServerClient under the hood.
     const created = await createArtist({
       name: formData.name,
       bio: null,
       genre: [],
-      instagram: null,
-      soundcloud: null,
       spotify: null,
       bookingEmail: formData.email,
       defaultFee: formData.fee,
@@ -392,8 +379,6 @@ export async function createArtistAndAddToEvent(formData: {
       return { error: created.error ?? "Failed to create artist", artistId: null };
     }
 
-    // Book onto the event using the existing pathway (which handles auth,
-    // ownership, set-time resolution, chat sync, contact upsert, etc).
     const booked = await addArtistToEvent({
       eventId: formData.eventId,
       artistId: created.artist.id,

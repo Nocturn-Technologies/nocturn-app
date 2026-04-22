@@ -169,7 +169,8 @@ export default function SettingsPage() {
     if (collectivePartyId) {
       // For each social, upsert if a value is present, delete the row otherwise.
       // UNIQUE(party_id, type) makes onConflict deterministic.
-      const upserts: Array<Promise<unknown>> = [];
+      // PostgrestFilterBuilder is thenable but not a strict Promise — use PromiseLike.
+      const upserts: Array<PromiseLike<unknown>> = [];
       for (const [type, value] of [["instagram", instagram], ["website", website]] as const) {
         if (value && value.trim().length > 0) {
           upserts.push(
