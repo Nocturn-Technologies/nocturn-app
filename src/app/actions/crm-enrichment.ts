@@ -17,11 +17,11 @@ export async function enrichAttendeeCRM(eventId: string) {
   const admin = createAdminClient();
 
   // Verify ownership
+  // Post-#93: events dropped deleted_at (status lifecycle replaces soft delete).
   const { data: ev, error: evError } = await admin
     .from("events")
     .select("collective_id")
     .eq("id", eventId)
-    .is("deleted_at", null)
     .maybeSingle();
   if (evError) {
     console.error("[enrichAttendeeCRM] event query error:", evError.message);

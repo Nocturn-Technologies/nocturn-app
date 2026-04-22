@@ -35,8 +35,11 @@ interface Booking {
   id: string;
   fee: number | null;
   set_time: string | null;
-  set_duration: number | null;
-  status: string;
+  // Post-#93 rename: set_duration -> set_length. Booking state column was
+  // also dropped; presence in event_artists implies confirmed. `role`
+  // stores lineup position (headliner / support / opener).
+  set_length: number | null;
+  role: string | null;
   notes: string | null;
   events: {
     id: string;
@@ -83,11 +86,13 @@ export default function ArtistDetailPage() {
       });
     }
 
-    // Get all bookings for this artist with event details
+    // Get all bookings for this artist with event details.
+    // Post-#93: set_duration -> set_length; status column dropped (bookings
+    // in the table are implicitly confirmed); role stores lineup position.
     const { data: bookingData } = await supabase
       .from("event_artists")
       .select(
-        "id, fee, set_time, set_duration, status, notes, events(id, title, starts_at, status)"
+        "id, fee, set_time, set_length, role, notes, events(id, title, starts_at, status)"
       )
       .eq("party_id", artistId)
       .order("created_at", { ascending: false });
@@ -147,34 +152,31 @@ export default function ArtistDetailPage() {
     );
   }
 
+  // Post-#93: booking.status column dropped — no "cancelled" state to
+  // filter by. Everything in the table is considered active.
   const upcoming = bookings.filter(
-    (b) =>
-      b.events &&
-      new Date(b.events.starts_at) >= new Date() &&
-      b.status !== "cancelled"
+    (b) => b.events && new Date(b.events.starts_at) >= new Date()
   );
   const past = bookings.filter(
-    (b) =>
-      b.events &&
-      (new Date(b.events.starts_at) < new Date() || b.status === "cancelled")
+    (b) => b.events && new Date(b.events.starts_at) < new Date()
   );
 
+  // Post-#93: booking state column dropped. Presence in event_artists
+  // implies confirmed; role stores lineup position.
   const totalEarnings = bookings
-    .filter((b) => b.status === "confirmed" && b.fee)
+    .filter((b) => b.fee)
     .reduce((sum, b) => sum + (b.fee ?? 0), 0);
 
-  const statusColors: Record<string, string> = {
-    pending: "bg-yellow-500/10 text-yellow-500",
-    confirmed: "bg-emerald-500/10 text-emerald-500",
-    declined: "bg-red-500/10 text-red-500",
-    cancelled: "bg-muted text-muted-foreground",
+  const roleColors: Record<string, string> = {
+    headliner: "bg-nocturn/10 text-nocturn",
+    support: "bg-emerald-500/10 text-emerald-500",
+    opener: "bg-yellow-500/10 text-yellow-500",
   };
 
-  const statusIcons: Record<string, typeof Check> = {
-    pending: Clock,
-    confirmed: Check,
-    declined: X,
-    cancelled: X,
+  const roleIcons: Record<string, typeof Check> = {
+    headliner: Check,
+    support: Check,
+    opener: Clock,
   };
 
   return (
@@ -294,7 +296,7 @@ export default function ArtistDetailPage() {
             Upcoming Events
           </h2>
           {upcoming.map((booking) => (
-            <BookingCard key={booking.id} booking={booking} statusColors={statusColors} statusIcons={statusIcons} />
+            <BookingCard key={booking.id} booking={booking} roleColors={roleColors} roleIcons={roleIcons} />
           ))}
         </div>
       )}
@@ -306,7 +308,7 @@ export default function ArtistDetailPage() {
             Past Events
           </h2>
           {past.map((booking) => (
-            <BookingCard key={booking.id} booking={booking} statusColors={statusColors} statusIcons={statusIcons} />
+            <BookingCard key={booking.id} booking={booking} roleColors={roleColors} roleIcons={roleIcons} />
           ))}
         </div>
       )}
@@ -336,15 +338,16 @@ export default function ArtistDetailPage() {
 
 function BookingCard({
   booking,
-  statusColors,
-  statusIcons,
+  roleColors,
+  roleIcons,
 }: {
   booking: Booking;
-  statusColors: Record<string, string>;
-  statusIcons: Record<string, typeof Check>;
+  roleColors: Record<string, string>;
+  roleIcons: Record<string, typeof Check>;
 }) {
   const date = new Date(booking.events.starts_at);
-  const StatusIcon = statusIcons[booking.status] ?? Clock;
+  const roleKey = booking.role ?? "";
+  const RoleIcon = roleIcons[roleKey] ?? Clock;
 
   return (
     <Link href={`/dashboard/events/${booking.events.id}/lineup`}>
@@ -362,16 +365,16 @@ function BookingCard({
             <p className="font-medium truncate">{booking.events.title}</p>
             <div className="flex items-center gap-3 text-xs text-muted-foreground">
               {booking.fee && <span>${booking.fee}</span>}
-              {booking.set_duration && <span>{booking.set_duration}min</span>}
+              {booking.set_length && <span>{booking.set_length}min</span>}
             </div>
           </div>
           <span
             className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium capitalize ${
-              statusColors[booking.status] ?? ""
+              roleColors[roleKey] ?? "bg-muted text-muted-foreground"
             }`}
           >
-            <StatusIcon className="h-3 w-3" />
-            {booking.status}
+            <RoleIcon className="h-3 w-3" />
+            {booking.role ?? "artist"}
           </span>
         </CardContent>
       </Card>
