@@ -5,13 +5,18 @@
 ## What is this?
 Mobile-first web app for nightlife promoters and collectives. Manage events, sell tickets, coordinate teams, discover venues, and record calls — all from your phone or desktop. Built with Next.js + Supabase + Stripe.
 
-## Codebase Stats (audited 2026-04-21 — post entity-arch rebuild / PR #93)
-- **63 app routes** (page.tsx) + **20 API route files** + **8 layouts**
-- **69 server action files** under `src/app/actions/`
-- **38 lib files**, **76 components**, **3 custom hooks**
-- **46 database tables**, **0 views** (dropped), **party-centric identity model**
-- **Middleware convention**: `src/proxy.ts` (Next.js 16 renamed `middleware.ts` → `proxy.ts`)
-- **Zero TypeScript errors** — build passes clean. Zero `as any`, zero `eslint-disable`.
+## Codebase Stats (audited 2026-04-04)
+- **310 TypeScript files** (118 .ts + 192 .tsx) — **~68,800 lines of code**
+- **61 app routes** (page.tsx) + **17 API routes** (route.ts) + **7 layouts**
+- **61 server action files** — 130+ exported functions (16,070 lines)
+- **31 lib files** (7,328 lines)
+- **58 components** across 10 subdirectories
+- **3 custom hooks** (notifications, speech, shake)
+- **45 database tables** + 2 views + 13 custom DB functions
+- **176 indexes**, **66 RLS policies**, **10 applied migrations**
+- **28 dependencies** + **12 devDependencies**
+- **0 `as any` casts**, **0 `eslint-disable` comments**, **0 unsafe non-null assertions**
+- **Zero TypeScript errors** — build passes clean
 
 ## Current Priority: Customer Pitch & Onboarding
 Shawn is actively pitching collectives as potential customers. The primary workflow right now is:
@@ -128,11 +133,10 @@ src/
 │   │       ├── discover/        — Marketplace discovery + profile pages (2 routes)
 │   │       ├── events/          — Events CRUD + 17 sub-pages per event (21 routes)
 │   │       ├── finance/         — Event P&L + settlements + per-event financials (2 routes)
-│   │       ├── inquiries/       — Inquiry management (reads orders/parties now, not marketplace_*)
+│   │       ├── inquiries/       — Marketplace inquiry management
 │   │       ├── marketing/       — AI email composer + send to attendees (2 routes)
 │   │       ├── members/         — Team management + invitations
 │   │       ├── my-profile/      — User profile editing
-│   │       ├── network/         — Collective network / social graph (NEW, post-rebuild)
 │   │       ├── promo-insights/  — Promoter performance dashboard
 │   │       ├── promote/         — Promo tools
 │   │       ├── record/          — Voice recording + AI transcription
@@ -140,17 +144,16 @@ src/
 │   │       └── venues/          — Venue discovery + saved venues + my venues (2 routes)
 │   ├── (public)/        — Public event pages, ticket view, check-in, invites (6 routes)
 │   ├── admin/           — Admin dashboard (cookie-based auth with timing-safe comparison)
-│   ├── api/             — 20 route files (checkout, webhooks, cron, seeding, tier-availability, venues-search, OG images)
+│   ├── api/             — 15 API routes (checkout, webhooks, cron, seeding, OG images)
 │   ├── auth/            — Confirm + reset password
 │   ├── go/              — Short URL redirects
 │   ├── legal/           — Terms of Service, Privacy Policy
 │   ├── og-image/        — Dynamic OG image generation (2 routes)
 │   ├── onboarding/      — Collective onboarding + marketplace onboarding (2 routes)
-│   └── actions/         — 69 server action files (rewritten against parties/orders/profiles)
-├── components/          — 76 components (ui/, public-event/, onboarding/, finance/, etc.)
+│   └── actions/         — 61 server action files (130+ exported functions)
+├── components/          — 58 components (ui/, public-event/, onboarding/, finance/, etc.)
 ├── hooks/               — 3 hooks (notifications, speech, shake)
-├── lib/                 — 38 utility files (supabase, stripe, email, analytics, AI, etc.)
-└── proxy.ts             — Next.js 16 middleware convention (renamed from middleware.ts)
+└── lib/                 — 31 utility files (supabase, stripe, email, analytics, AI, etc.)
 ```
 
 ### Event Sub-Pages (17 routes per event)
@@ -196,7 +199,7 @@ import { createClient } from "@/lib/supabase/client";
 - Relationship joins typed with `as unknown as SomeType` pattern (not `as any`)
 
 ### Security Patterns
-- **RLS on all 46 tables** — no exceptions
+- **RLS on all 48 tables** — 66 policies, no exceptions
 - **Admin panel**: Cookie-based auth with `crypto.timingSafeEqual` + HMAC-signed session token
 - **UUID validation**: Shared `isValidUUID()` utility, layout-level validation for `[eventId]` routes
 - **PostgREST injection**: `sanitizePostgRESTInput()` strips dangerous chars before `.or()` filters
@@ -217,99 +220,64 @@ import { createClient } from "@/lib/supabase/client";
 - Brand accents: `bg-nocturn`, `text-nocturn`, `hover:bg-nocturn-light`
 - Never use light theme
 
-## Database (46 tables, party-centric — rebuilt in PR #93, 2026-04-19)
+## Database (45 tables + 2 views)
 
-> Schema was rebuilt around a **party-centric identity model**. `parties` is the universal identity (person | organization | venue). Contact info, roles, and ownership all hang off parties. Old contact-scattered tables (`artists`, `venues`, `contacts`, `marketplace_*`) are gone. Always verify against `src/lib/supabase/database.types.ts` before asserting column shapes.
+> Audited against QA (vtkvhdaadobigtojmztg) on 2026-04-21. See `docs/DB_Data_Governance.md` for full schema reference.
 
-### Identity & roles (new)
-- **parties** — `id`, `type` (person|organization|venue), `display_name`
-- **party_contact_methods** — email/phone/instagram/soundcloud/spotify/website/twitter. UNIQUE (party_id, type)
-- **party_roles** — artist | collective | venue_operator | platform_user | contact. Optionally scoped to `collective_id`. UNIQUE (party_id, role, collective_id)
-- **artist_profiles** — replaces `artists`. `party_id` FK (UNIQUE, required). Has slug/bio/genre[]/booking_email/default_fee/spotify/services[]/rate_range/availability/portfolio_urls[]/past_venues[]/is_verified/is_active/deleted_at
-- **venue_profiles** — replaces `venues`. `party_id` FK (UNIQUE, required). Has slug/name/city/address/capacity/amenities[]/photo_url/cover_photo_url
+### Tables
+artist_profiles, attendee_profiles, audit_logs, channel_members, channels, collective_members, collectives, email_campaigns, event_activity, event_analytics, event_artists, event_cards, event_expenses, event_status_log, event_tasks, events, external_events, guest_list, invitations, messages, order_lines, orders, parties, party_contact_methods, party_roles, payment_events, payouts, playbook_task_templates, playbook_templates, promo_clicks, promo_code_usage, promo_codes, promo_links, rate_limits, recordings, saved_venues, settlement_lines, settlements, ticket_events, ticket_tiers, ticket_waitlist, tickets, users, venue_profiles, waitlist_entries
 
-### Purchase chain (new)
-- **orders** — permanent purchase record: `party_id`, `event_id`, `stripe_payment_intent_id`, `promo_code_id`, `subtotal`, `platform_fee`, `stripe_fee`, `total`, `currency`, `status` (pending|paid|failed|refunded|partially_refunded)
-- **order_lines** — `order_id`, `tier_id`, `quantity`, `unit_price`, `subtotal`, `refunded_quantity`
-- **tickets** — now has `order_line_id` and `holder_party_id` (FK → parties). Still has `event_id` + `tier_id`
+### Views
+event_dashboard, promoter_performance
 
-### Lifecycle logs (new, immutable)
-- **ticket_events** — purchased | transferred | checked_in | refunded | voided, per ticket
-- **event_status_log** — draft | published | cancelled | wrapped, per event
-- **promo_code_usage** — one row per use (replaces `promo_codes.times_used` counter, which was dropped)
-
-### Everything else (46 tables total)
-artist_profiles, attendee_profiles, audit_logs, channel_members, channels, collective_members, collectives, email_campaigns, event_activity, event_analytics, event_artists, event_cards, event_expenses, event_status_log, event_tasks, events, external_events, guest_list, invitations, messages, order_lines, orders, parties, party_contact_methods, party_roles, payment_events, payouts, playbook_task_templates, playbook_templates, promo_clicks, promo_code_usage, promo_codes, promo_links, rate_limits, recordings, saved_venues, settlement_lines, settlements, ticket_events, ticket_tiers, ticket_waitlist, tickets, users, venue_profiles, waitlist_entries, webhook_events
-
-### Tables DROPPED in PR #93 (do NOT reference in new code)
-- `artists`, `venues` — replaced by `artist_profiles` / `venue_profiles`
-- `contacts`, `marketplace_profiles`, `marketplace_inquiries`, `marketplace_saved` — replaced by party model
-- `segments`, `campaign_segments`, `segment_members` — never implemented
-- `split_items`, `transactions` — orphaned
-- `event_reactions`, `event_collectives`, `waitlist_entries` (old), `expenses` — not present
-- Views `event_dashboard`, `promoter_performance` — dropped
-
-### Custom DB Functions (post-rebuild)
-`acquire_ticket_lock(p_tier_id)`, `check_and_reserve_capacity(p_tier_id, p_quantity)`, `claim_promo_code(p_code, p_event_id)`, `fulfill_tickets_atomic(p_event_id, p_holder_party_id, p_order_line_id, p_quantity, p_tier_id)`, `get_user_collectives()`, `has_collective_role(p_collective_id, p_role | p_roles[])`, `increment_analytics_counter(p_event_id, p_field, p_value?)`, `increment_attendee_profile(p_collective_id, p_email, p_name, p_party_id, p_spend, p_ticket_count)`, `increment_promo_click(p_code | p_link_id)`, `track_ticket_sale(p_tier_id, p_quantity)`, `track_ticket_refund(p_tier_id, p_quantity)`.
-
-All RPCs use **p_**-prefixed param names. `track_ticket_sale/refund` take `tier_id` (not `event_id`). `fulfill_tickets_atomic` now requires `order_line_id` + `holder_party_id`.
+### Custom DB Functions (13)
+acquire_ticket_lock, audit_financial_change (trigger), check_and_reserve_capacity, claim_promo_code, fulfill_tickets_atomic, get_user_collectives, has_collective_role, increment_analytics_counter, increment_attendee_profile, increment_promo_click, track_ticket_refund, track_ticket_sale, update_updated_at (trigger)
 
 ### Key Column Notes
-- `users.party_id` — FK → parties (nullable). This is how app users link to the identity graph. Auth ID is still `users.id` (matches `auth.uid()`).
-- `tickets.holder_party_id` — FK → parties (nullable). The owner of the ticket. `user_id` is gone from tickets.
-- `tickets.order_line_id` — FK → order_lines (nullable for legacy/free tickets).
-- `events.starts_at` / `ends_at` / `doors_at` — TIMESTAMPTZ (NOT `date`, `start_time`).
-- `events.flyer_url` (NOT `cover_image_url`).
-- `events.venue_party_id` — FK → parties (replaces old `venue_id` → venues).
-- `events.published_at` — added 2026-04-19.
-- `ticket_tiers.price` — dollars as NUMERIC(10,2) (NOT cents).
-- `ticket_tiers.capacity` (NOT `quantity`) — nullable.
-- `attendee_profiles.user_id` — nullable (guest checkouts). Also now has `party_id` FK.
-- `channels.collective_id` — nullable (enables direct DM channels without a collective owner).
-- `messages.user_id` — NOT NULL. AI bot posts use UUID `00000000-0000-0000-0000-000000000000`.
-- `invitations` — uses `accepted_at` timestamp pattern (old `status` column removed).
-- `settlements` — columns are `total_revenue` / `net_payout` (renamed from `gross_revenue` / `net_profit`).
-- `promo_links` — column is `code` (renamed from `token`). No `promoter_id` or `external_event_id`.
-- `saved_venues` — uses `venue_party_id` FK (not `venue_id`).
-- `event_artists.artist_id` — nullable (old FK dropped). Use `party_id` going forward.
+- `events.starts_at` / `ends_at` / `doors_at` — TIMESTAMPTZ (NOT `date`, `start_time`, etc.)
+- `events.flyer_url` (NOT `cover_image_url`)
+- `ticket_tiers.price` — dollars as NUMERIC(10,2) (NOT cents)
+- `ticket_tiers.capacity` (NOT `quantity`) — nullable
+- `venues.slug` — NOT NULL, auto-generated via slugify()
+- `attendee_profiles.user_id` — nullable (guest checkouts)
+- `audit_logs.action` — TEXT (not enum, stores custom action strings)
 
-### Migrations of note
-- `20260419000001_drop_orphaned_tables.sql` — drops segments/split_items/transactions + unused junction tables
-- `20260419000002_entity_architecture.sql` — adds parties/party_contact_methods/party_roles/ticket_events/event_status_log/promo_code_usage, adds `party_id` FKs everywhere
-- `20260419000003_full_schema_rebuild.sql` — adds orders/order_lines/artist_profiles/venue_profiles, modifies tickets, drops replaced tables
-- `20260419201107_drop_users_is_denied.sql` — removes `users.is_denied`
-- `20260419234500_add_events_published_at.sql` — adds `events.published_at`
-- Rollback partial: `supabase/migrations/_rollback_entity_arch.sql` restores social columns and drops the identity tables, but does NOT undo the orders/profiles rebuild (migration 003).
+### Migrations (10 applied)
+1. `fix_security_definer_views_and_audit_logs` — Security definer fixes
+2. `add_vibe_tags_and_min_age_columns` — Event vibe tags
+3. `create_channels_and_messages` — Chat infrastructure
+4. `payment_events_log` — Payment event tracking
+5. `unified_contacts` — Contact management
+6. `enable_rls_event_analytics_and_payment_events` — RLS on analytics tables
+7. `add_compound_indexes_for_hot_paths` — Performance indexes
+8. `add_missing_enums_columns_tables` — Schema alignment (13 tables, 6 enum values)
+9. `add_missing_rpcs_table_column` — 6 RPCs, rate_limits table, is_denied column
+10. `fix_attendee_profiles_user_id_nullable` — Guest checkout support
 
-### QA bootstrap files (idempotent, QA project `vtkvhdaadobigtojmztg` only)
-`QA_BOOTSTRAP.sql`, `QA_FULL_SCHEMA.sql`, `QA_RLS.sql` — bring QA to prod parity + full schema/RLS snapshots. Not normal migration files.
-
-## API Routes (20 route files)
+## API Routes (15)
 
 ### Payments
-- `POST /api/checkout` — Stripe checkout session creation (now writes an `orders` row + `order_lines`)
+- `POST /api/checkout` — Stripe checkout session creation
 - `POST /api/create-payment-intent` — Direct payment intent
-- `POST /api/webhooks/stripe` — Stripe webhook handler; dedupes via `webhook_events`; on success marks `orders.status = 'paid'` and calls `fulfill_tickets_atomic`
+- `POST /api/webhooks/stripe` — Stripe webhook handler (payment success, refunds, disputes)
 - `GET /api/stripe/connect/callback` — Stripe Connect OAuth callback
-- `GET /api/tier-availability` — Live ticket tier capacity for public event pages
 
 ### Auth
 - `GET /api/auth/callback` — Supabase auth callback
-- `GET /api/approve-user` — Admin user approval/denial (fallback URL defaults to prod — set `NEXT_PUBLIC_APP_URL` on QA)
+- `GET /api/approve-user` — Admin user approval/denial
 
 ### Cron
 - `GET /api/cron/reminders` — Event reminder emails (24hr before)
 
 ### Data
 - `GET /api/events/list` — Public event listing
-- `GET /api/venues-search` — Venue lookup (reads `venue_profiles` via party)
-- `POST /api/marketplace-inquiry-email` — Inquiry notifications (lives on, backed by parties now)
+- `POST /api/marketplace-inquiry-email` — Marketplace inquiry notifications
 - `GET /api/unsplash` — Unsplash image proxy
 
 ### Seeding
 - `POST /api/seed-demo` — Demo data seeder
-- `POST /api/seed-artists` — Artist data seeder (writes `parties` + `artist_profiles`)
-- `POST /api/seed-venues` — Venue data seeder (writes `parties` + `venue_profiles`)
+- `POST /api/seed-artists` — Artist data seeder
+- `POST /api/seed-venues` — Venue data seeder
 
 ### Utilities
 - `GET /api/generate-poster` — AI poster generation

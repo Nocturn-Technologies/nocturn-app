@@ -30,13 +30,13 @@ export default function SettingsPage() {
 
   // Collective fields
   const [collectiveId, setCollectiveId] = useState("");
+  const [collectivePartyId, setCollectivePartyId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
   const [bio, setBio] = useState("");
   const [city, setCity] = useState("");
   const [instagram, setInstagram] = useState("");
   const [website, setWebsite] = useState("");
-  const [collectiveMetadata, setCollectiveMetadata] = useState<Record<string, unknown> | null>(null);
 
   // User profile fields
   const [fullName, setFullName] = useState("");
@@ -70,23 +70,39 @@ export default function SettingsPage() {
           .limit(1);
 
         if (memberships && memberships.length > 0) {
+          // Post-PR #93: collectives shape is lean. bio + city are first-class
+          // columns on `collectives`. Instagram / website / other socials live
+          // in `party_contact_methods` keyed by the collective's `party_id`
+          // (DB_Data_Governance § 3 + Part 2.A). One row per (party_id, type).
           const c = memberships[0].collectives as unknown as {
             id: string;
             name: string;
             slug: string;
-            description: string | null;
-            instagram: string | null;
-            website: string | null;
-            metadata: { city?: string } | null;
+            bio: string | null;
+            city: string | null;
+            party_id: string | null;
           };
           setCollectiveId(c.id);
+          setCollectivePartyId(c.party_id);
           setName(c.name);
           setSlug(c.slug);
-          setBio(c.description ?? "");
-          setCity(c.metadata?.city ?? "");
-          setInstagram(c.instagram ?? "");
-          setWebsite(c.website ?? "");
-          setCollectiveMetadata(c.metadata ?? null);
+          setBio(c.bio ?? "");
+          setCity(c.city ?? "");
+
+          if (c.party_id) {
+            const { data: contacts } = await supabase
+              .from("party_contact_methods")
+              .select("type, value")
+              .eq("party_id", c.party_id)
+              .in("type", ["instagram", "website"]);
+            const ig = contacts?.find((m) => m.type === "instagram");
+            const web = contacts?.find((m) => m.type === "website");
+            setInstagram(ig?.value ?? "");
+            setWebsite(web?.value ?? "");
+          } else {
+            setInstagram("");
+            setWebsite("");
+          }
         }
       } catch (err) {
         setLoadError(err instanceof Error ? err.message : "Failed to load settings");
@@ -131,15 +147,16 @@ export default function SettingsPage() {
     setError(null);
     setSuccess(false);
 
+    // Post-PR #93: collectives carries name/slug/bio/city only.
+    // Socials (instagram/website) write to `party_contact_methods` keyed by
+    // the collective's `party_id` per DB_Data_Governance § 3.
     const { error: collectiveError } = await supabase
       .from("collectives")
       .update({
         name,
         slug,
-        description: bio || null,
-        instagram: instagram || null,
-        website: website || null,
-        metadata: { ...(collectiveMetadata ?? {}), city },
+        bio: bio || null,
+        city: city || null,
       })
       .eq("id", collectiveId);
 
@@ -147,6 +164,42 @@ export default function SettingsPage() {
       setError(collectiveError.message);
       setSaving(false);
       return;
+    }
+
+    if (collectivePartyId) {
+      // For each social, upsert if a value is present, delete the row otherwise.
+      // UNIQUE(party_id, type) makes onConflict deterministic.
+      // PostgrestFilterBuilder is thenable but not a strict Promise — use PromiseLike.
+      const upserts: Array<PromiseLike<unknown>> = [];
+      for (const [type, value] of [["instagram", instagram], ["website", website]] as const) {
+        if (value && value.trim().length > 0) {
+          upserts.push(
+            supabase
+              .from("party_contact_methods")
+              .upsert(
+                { party_id: collectivePartyId, type, value: value.trim(), is_primary: true },
+                { onConflict: "party_id,type" }
+              )
+          );
+        } else {
+          upserts.push(
+            supabase
+              .from("party_contact_methods")
+              .delete()
+              .eq("party_id", collectivePartyId)
+              .eq("type", type)
+          );
+        }
+      }
+      const results = await Promise.allSettled(upserts);
+      const firstErr = results
+        .map((r) => (r.status === "fulfilled" ? (r.value as { error: { message: string } | null }).error : null))
+        .find((e) => e != null);
+      if (firstErr) {
+        setError(firstErr.message);
+        setSaving(false);
+        return;
+      }
     }
 
     setSuccess(true);

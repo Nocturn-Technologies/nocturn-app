@@ -329,8 +329,7 @@ export async function updateBookingStatus(formData: {
     .is("deleted_at", null);
   if (!memberCount || memberCount === 0) return { error: "Not authorized" };
 
-  // event_artists no longer has a status column — store in notes field or
-  // just acknowledge. Since the schema changed, we store status info in role.
+  // event_artists no longer has a status column — store in role instead.
   const { error } = await admin.from("event_artists")
     .update({ role: formData.status })
     .eq("id", formData.eventArtistId);
@@ -347,9 +346,10 @@ export async function updateBookingStatus(formData: {
 }
 
 /**
- * Creates a brand-new artist and immediately books them onto an event.
- * If an email is supplied and `sendInvite` is true, also fires a Supabase
- * magic-link invite (non-blocking).
+ * Creates a brand-new artist and immediately books them onto an event in a
+ * single round-trip. If an email is supplied and `sendInvite` is true, also
+ * fires off a branded Nocturn magic-link invite (non-blocking — the booking
+ * succeeds even if the invite email fails).
  */
 export async function createArtistAndAddToEvent(formData: {
   eventId: string;
@@ -392,15 +392,87 @@ export async function createArtistAndAddToEvent(formData: {
       return { error: booked.error, artistId: created.artist.id };
     }
 
-    // Optional magic-link invite (best-effort)
+    // Optional invite. Best-effort — never block the booking on an email
+    // failure. We send a fully-branded Nocturn email (Resend) with event
+    // details + an accept link that takes the artist through a Supabase
+    // magic-link sign-in on the landing side. Previously this used
+    // `admin.auth.admin.inviteUserByEmail`, which fired Supabase's default
+    // template with no event context and off-brand styling.
     if (formData.sendInvite && formData.email) {
       try {
+        const sbServer = await createServerClient();
+        const { data: { user: currentUser } } = await sbServer.auth.getUser();
         const admin = createAdminClient();
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "https://app.trynocturn.com";
-        await admin.auth.admin.inviteUserByEmail(formData.email.toLowerCase().trim(), {
-          redirectTo: `${appUrl}/dashboard/artists/me`,
-          data: { full_name: formData.name, user_type: "artist", artist_profile_id: created.artist.id },
+        const email = formData.email.toLowerCase().trim();
+
+        // Generate a magic link the artist can click to land on /dashboard/artists/me
+        // without setting a password.
+        const { data: linkData } = await admin.auth.admin.generateLink({
+          type: "magiclink",
+          email,
+          options: {
+            redirectTo: `${appUrl}/dashboard/artists/me`,
+            data: { full_name: formData.name, user_type: "artist", artist_id: created.artist.id },
+          },
         });
+        const actionLink = linkData?.properties?.action_link
+          ?? `${appUrl}/login?email=${encodeURIComponent(email)}`;
+
+        // Pull event + collective context for a useful email body.
+        const [{ data: eventRow }, { data: collectiveRow }] = await Promise.all([
+          admin
+            .from("events")
+            .select("title, starts_at, venue_name, collective_id")
+            .eq("id", formData.eventId)
+            .maybeSingle(),
+          currentUser
+            ? admin
+                .from("collective_members")
+                .select("collective_id, collectives:collective_id(name)")
+                .eq("user_id", currentUser.id)
+                .is("deleted_at", null)
+                .limit(1)
+                .maybeSingle()
+            : Promise.resolve({ data: null }),
+        ]);
+
+        const eventTitle = eventRow?.title ?? "an upcoming event";
+        const eventDate = eventRow?.starts_at
+          ? new Date(eventRow.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+          : "TBD";
+        const venueName = eventRow?.venue_name ?? null;
+        const collectiveName = ((collectiveRow?.collectives as unknown as { name?: string } | null)?.name) ?? "A collective";
+        const setTime = formData.setTime
+          ? `${new Date(formData.setTime).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}${formData.setDuration ? ` (${formData.setDuration} min)` : ""}`
+          : null;
+        const feeDisplay = typeof formData.fee === "number" && formData.fee > 0
+          ? `CA$${formData.fee.toFixed(2)}`
+          : null;
+
+        const firstName = (formData.name ?? "").trim().split(/\s+/)[0] ?? "there";
+
+        const { lineupInviteEmail } = await import("@/lib/email/templates");
+        const { sendEmail } = await import("@/lib/email/send");
+        const html = lineupInviteEmail({
+          artistFirstName: firstName,
+          collectiveName,
+          eventTitle,
+          eventDate,
+          venueName,
+          setTime,
+          feeDisplay,
+          acceptLink: actionLink,
+        });
+
+        const result = await sendEmail({
+          to: email,
+          subject: `You're booked — ${eventTitle}`,
+          html,
+        });
+        if (result.error) {
+          console.error("[createArtistAndAddToEvent] lineup invite email failed:", result.error);
+        }
       } catch (inviteErr) {
         console.error("[createArtistAndAddToEvent] invite failed (non-blocking):", inviteErr);
       }

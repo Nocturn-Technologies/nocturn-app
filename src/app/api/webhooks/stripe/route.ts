@@ -15,7 +15,7 @@
  * Both endpoints POST to this same route; we try both signatures in turn
  * and branch on event.type.
  *
- * Deduplication: webhook_events table with unique stripe_event_id constraint.
+ * Deduplication: payment_events table with unique stripe_event_id constraint.
  * Orders are looked up by stripe_payment_intent_id. Tickets are fulfilled via
  * the fulfill_tickets_atomic RPC and tracked via the ticket_events lifecycle table.
  */
@@ -33,7 +33,8 @@ import type { Json } from "@/lib/supabase/database.types";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
-/** Log a raw Stripe event to the payment_events table. Fire-and-forget. */
+/** Log a raw Stripe event to the payment_events table. Fire-and-forget.
+ *  Uses upsert so the dedup row inserted up-front gets enriched with full data. */
 async function logStripePaymentEvent(
   supabase: AdminClient,
   opts: {
@@ -50,18 +51,23 @@ async function logStripePaymentEvent(
   }
 ) {
   try {
-    await supabase.from("payment_events").insert({
-      stripe_event_id: opts.stripeEventId,
-      stripe_payment_intent_id: opts.stripePaymentIntentId,
-      event_type: opts.eventType,
-      event_id: opts.eventId,
-      order_id: opts.orderId,
-      amount: opts.amountDollars,
-      currency: opts.currency ?? "cad",
-      customer_email: opts.customerEmail,
-      status: opts.status,
-      metadata: (opts.metadata ?? {}) as unknown as Json,
-    });
+    await supabase.from("payment_events").upsert(
+      {
+        stripe_event_id: opts.stripeEventId,
+        stripe_payment_intent_id: opts.stripePaymentIntentId,
+        event_type: opts.eventType,
+        event_id: opts.eventId,
+        order_id: opts.orderId,
+        amount: opts.amountDollars,
+        currency: opts.currency ?? "cad",
+        customer_email: opts.customerEmail,
+        status: opts.status,
+        metadata: (opts.metadata ?? {}) as unknown as Json,
+        is_processed: true,
+        processed_at: new Date().toISOString(),
+      },
+      { onConflict: "stripe_event_id" }
+    );
   } catch (err) {
     console.error("[stripe-webhook] payment_events log failed (non-fatal):", err);
   }
@@ -176,19 +182,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Dedup via webhook_events table — INSERT-first, rely on unique stripe_event_id constraint.
+  // Dedup via payment_events table — INSERT-first, rely on unique stripe_event_id constraint.
   // Handles Stripe retries so a replayed event doesn't re-fulfill tickets.
   const supabaseForDedup = createAdminClient();
   try {
     const { error: dedupErr } = await supabaseForDedup
-      .from("webhook_events")
+      .from("payment_events")
       .insert({ stripe_event_id: event.id, event_type: event.type });
     if (dedupErr) {
       if (dedupErr.code === "23505") {
         console.info(`[stripe-webhook] Duplicate event ${event.id} (${event.type}) — skipping`);
         return NextResponse.json({ received: true, duplicate: true });
       }
-      console.warn(`[stripe-webhook] webhook_events insert failed (non-fatal): ${dedupErr.message}`);
+      console.warn(`[stripe-webhook] payment_events dedup insert failed (non-fatal): ${dedupErr.message}`);
     }
   } catch (dedupErr) {
     console.warn("[stripe-webhook] Dedup pre-check failed (non-fatal):", dedupErr);
