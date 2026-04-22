@@ -14,7 +14,7 @@ import {
 } from "@/app/actions/budget-planner";
 import type { ExpenseCategory } from "@/lib/expense-categories";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
-import { cascadeScenario, cascadeBreakEven, type TicketTierInput } from "@/lib/ticket-forecast";
+import { cascadeScenario, cascadeBreakEven, multiplyBudgetTiers, type TicketTierInput } from "@/lib/ticket-forecast";
 import { getMyCollectiveDefaults } from "@/app/actions/collective-settings";
 import { applyLaunchPlaybook } from "@/app/actions/launch-playbook";
 import { createClient } from "@/lib/supabase/client";
@@ -1080,7 +1080,7 @@ function LiveForecast({
           <div className="flex items-center gap-1.5">
             <TrendingUp className="h-3.5 w-3.5 text-nocturn" />
             <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-              Revenue Forecast
+              {totalExpenses > 0 ? "Profit Forecast" : "Revenue Forecast"}
             </span>
           </div>
           <p className={`mt-1.5 text-3xl font-bold leading-none ${totalExpenses > 0 ? (projections[2].profit >= 0 ? "text-green-400" : "text-red-400") : "text-white"}`}>
@@ -1342,18 +1342,6 @@ function scaleBudgetTiers(
     name: t.name,
     price: Math.round(t.price * ratio),
     capacity: t.capacity,
-  }));
-}
-
-function multiplyBudgetTiers(
-  suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning?: string }>,
-  multiplier: number
-): TicketTier[] {
-  if (suggestedTiers.length === 0) return [];
-  return suggestedTiers.map((tier) => ({
-    name: tier.name,
-    price: Math.max(0, Math.round(tier.price * multiplier)),
-    capacity: tier.capacity,
   }));
 }
 
@@ -1621,6 +1609,21 @@ function BudgetStep({
         };
       })
     : [];
+
+  // Recompute break-even live off the slider-adjusted tiers so it tracks the
+  // "Price sensitivity" control. result.breakEven is frozen at Calculate Budget
+  // time and would otherwise show stale numbers while the operator simulates.
+  const liveBreakEven = result && suggestedPreview.length > 0
+    ? cascadeBreakEven(
+        suggestedPreview.map((t, i) => ({
+          name: t.name,
+          price: t.price,
+          capacity: t.capacity,
+          sort_order: i,
+        })),
+        result.totalExpenses,
+      )
+    : result?.breakEven;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -1936,7 +1939,7 @@ function BudgetStep({
             )}
 
             <p className="text-xs text-zinc-400 pt-1">
-              Break-even: <span className="text-white font-medium">{result.breakEven.ticketsNeeded} tickets</span> at {result.breakEven.atPrice} {result.eventCurrency.toUpperCase()}
+              Break-even: <span className="text-white font-medium">{(liveBreakEven ?? result.breakEven).ticketsNeeded} tickets</span> at {(liveBreakEven ?? result.breakEven).atPrice} {result.eventCurrency.toUpperCase()}
             </p>
 
             <div className="space-y-1">
