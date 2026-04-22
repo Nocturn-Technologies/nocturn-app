@@ -69,15 +69,16 @@ interface DashboardHomeProps {
   hasPublishedEvent?: boolean;
   totalTicketsSold?: number;
   actionItems?: ActionItemData[];
+  // NOC-32: priority + isContent removed — event_tasks.priority and
+  // .metadata were dropped in PR #93. See NOC-32 for re-introduction
+  // options if product needs task priority back.
   myTasks?: Array<{
     id: string;
     title: string;
     eventTitle: string;
     eventId: string;
     dueAt: string | null;
-    priority: string | null;
     status: string;
-    isContent: boolean;
   }>;
 }
 
@@ -510,16 +511,13 @@ export function DashboardHome(props: DashboardHomeProps) {
               <Link key={task.id} href={`/dashboard/events/${task.eventId}/tasks`}>
                 <Card className="rounded-2xl hover:border-nocturn/20 hover:shadow-md hover:shadow-nocturn/5 transition-all duration-200 active:scale-[0.98]">
                   <CardContent className="p-3 flex items-center gap-3">
-                    <div className={`h-2 w-2 rounded-full shrink-0 ${
-                      task.priority === "urgent" ? "bg-red-500" :
-                      task.priority === "high" ? "bg-amber-500" :
-                      "bg-nocturn"
-                    }`} />
+                    {/* NOC-32: priority dot color logic removed — priority column
+                        dropped in PR #93. Flat nocturn dot for all tasks. */}
+                    <div className="h-2 w-2 rounded-full shrink-0 bg-nocturn" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{task.title}</p>
                       <p className="text-xs text-muted-foreground truncate">{task.eventTitle}{task.dueAt ? ` · Due ${formatRelativeDate(task.dueAt)}` : ""}</p>
                     </div>
-                    {task.isContent && <span className="text-xs bg-nocturn/10 text-nocturn px-2 py-0.5 rounded-full shrink-0">Content</span>}
                   </CardContent>
                 </Card>
               </Link>

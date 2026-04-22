@@ -157,9 +157,13 @@ function EventTasksPageInner() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [eventDate, setEventDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"tasks" | "content" | "feed">(() => {
+  // NOC-32: "content" tab removed — it was populated by filtering
+  // event_tasks.metadata.task_type === "content", and the metadata column
+  // was dropped in PR #93 so the tab is permanently empty. If URL has
+  // ?tab=content legacy link, land on Tasks instead.
+  const [activeTab, setActiveTab] = useState<"tasks" | "feed">(() => {
     const tab = searchParams.get("tab");
-    return tab === "content" ? "content" : "tasks";
+    return tab === "feed" ? "feed" : "tasks";
   });
 
   // Filters
@@ -217,10 +221,12 @@ function EventTasksPageInner() {
     }
     setAdding(true);
     setFormError(null);
+    // NOC-32: category param dropped — event_tasks.category column removed
+    // in PR #93. newCategory state is still captured for future re-add.
+    void newCategory;
     const result = await createEventTask({
       eventId,
       title: newTitle,
-      category: newCategory,
       dueDate: newDueDate || undefined,
     });
     if (result?.error) {
@@ -300,12 +306,13 @@ function EventTasksPageInner() {
 
   async function handleAddSuggestion(suggestion: Suggestion, idx: number) {
     setAddingSuggestionIdx(idx);
+    // NOC-32: category + priority columns dropped in PR #93. Suggestion
+    // shape still carries them for future UI use (scoring, sorting) but
+    // they're not persisted.
     await createEventTask({
       eventId,
       title: suggestion.title,
       description: suggestion.description,
-      category: suggestion.category,
-      priority: suggestion.priority,
     });
     await loadAll(false);
     setAddingSuggestionIdx(null);
@@ -538,19 +545,14 @@ function EventTasksPageInner() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — NOC-32 removed the Content tab (permanently empty after
+          event_tasks.metadata was dropped in PR #93). */}
       <div className="flex gap-1 rounded-lg bg-muted p-1">
         <button
           onClick={() => setActiveTab("tasks")}
           className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors min-h-[44px] ${activeTab === "tasks" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
         >
           <ListChecks className="inline h-4 w-4 mr-1" /> Tasks
-        </button>
-        <button
-          onClick={() => setActiveTab("content")}
-          className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors min-h-[44px] ${activeTab === "content" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
-        >
-          <Image className="inline h-4 w-4 mr-1" /> Content
         </button>
         <button
           onClick={() => setActiveTab("feed")}
@@ -759,8 +761,8 @@ function EventTasksPageInner() {
         </div>
       )}
 
-      {/* ═══ CONTENT TAB ═══ */}
-      {activeTab === "content" && (
+      {/* ═══ CONTENT TAB (NOC-32: removed — metadata column dropped) ═══ */}
+      {false && (
         <div className="space-y-4">
           {/* Search + filters for content */}
           <div className="relative">

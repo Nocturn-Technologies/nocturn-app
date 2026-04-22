@@ -157,13 +157,13 @@ export async function getEventTasks(eventId: string) {
 }
 
 // Create a single task
-// TODO(audit): validate priority/category enums, UUID-validate assignedTo
+// NOC-32: category + priority params removed — underlying columns were
+// dropped in PR #93. Previous versions silently discarded these at INSERT
+// (type lie). If product wants them back, file a schema ticket first.
 export async function createEventTask(input: {
   eventId: string;
   title: string;
   description?: string;
-  category?: string;
-  priority?: string;
   assignedTo?: string;
   dueDate?: string;
 }) {
