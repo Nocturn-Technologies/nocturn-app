@@ -86,16 +86,23 @@ INSERT INTO artist_profiles (party_id, slug, bio, genre, default_fee, is_verifie
    ARRAY['afrobeats','uk garage'], 450, false, true)
 ON CONFLICT (party_id) DO NOTHING;
 
+-- Every seeded person gets a `demo+<slug>@trynocturn.com` email so it's
+-- unambiguous when a real operator sees one in a contact card that this
+-- row is demo data, not a live collaborator. Unique per party.
 INSERT INTO party_contact_methods (party_id, type, value, is_primary) VALUES
-  ('d2000000-0000-0000-0000-000000000001', 'instagram', '@lockeight', true),
-  ('d2000000-0000-0000-0000-000000000001', 'soundcloud', 'https://soundcloud.com/lockeight', false),
-  ('d2000000-0000-0000-0000-000000000002', 'instagram', '@midnightrivers', true),
-  ('d2000000-0000-0000-0000-000000000002', 'email',     'book@midnightrivers.com', false),
-  ('d2000000-0000-0000-0000-000000000003', 'instagram', '@jovanekay', true),
-  ('d2000000-0000-0000-0000-000000000003', 'spotify',   'https://open.spotify.com/artist/jovanekay', false),
-  ('d2000000-0000-0000-0000-000000000004', 'instagram', '@silvatwin.dj', true),
-  ('d2000000-0000-0000-0000-000000000005', 'instagram', '@nalavance', true),
-  ('d2000000-0000-0000-0000-000000000005', 'spotify',   'https://open.spotify.com/artist/nalavance', false)
+  ('d2000000-0000-0000-0000-000000000001', 'email',      'demo+lockeight@trynocturn.com',                        true),
+  ('d2000000-0000-0000-0000-000000000001', 'instagram',  '@lockeight',                                           false),
+  ('d2000000-0000-0000-0000-000000000001', 'soundcloud', 'https://soundcloud.com/lockeight',                     false),
+  ('d2000000-0000-0000-0000-000000000002', 'email',      'demo+midnightrivers@trynocturn.com',                   true),
+  ('d2000000-0000-0000-0000-000000000002', 'instagram',  '@midnightrivers',                                      false),
+  ('d2000000-0000-0000-0000-000000000003', 'email',      'demo+jovanekay@trynocturn.com',                        true),
+  ('d2000000-0000-0000-0000-000000000003', 'instagram',  '@jovanekay',                                           false),
+  ('d2000000-0000-0000-0000-000000000003', 'spotify',    'https://open.spotify.com/artist/jovanekay',            false),
+  ('d2000000-0000-0000-0000-000000000004', 'email',      'demo+silvatwin@trynocturn.com',                        true),
+  ('d2000000-0000-0000-0000-000000000004', 'instagram',  '@silvatwin.dj',                                        false),
+  ('d2000000-0000-0000-0000-000000000005', 'email',      'demo+nalavance@trynocturn.com',                        true),
+  ('d2000000-0000-0000-0000-000000000005', 'instagram',  '@nalavance',                                           false),
+  ('d2000000-0000-0000-0000-000000000005', 'spotify',    'https://open.spotify.com/artist/nalavance',            false)
 ON CONFLICT DO NOTHING;
 
 -- No Sleep Club's own party gets a contact row too (Instagram) so the
@@ -103,6 +110,128 @@ ON CONFLICT DO NOTHING;
 INSERT INTO party_contact_methods (party_id, type, value, is_primary) VALUES
   ('3cce7480-0977-49c4-aadc-6a25d254ab4e', 'instagram', '@nosleep.club.to', true),
   ('3cce7480-0977-49c4-aadc-6a25d254ab4e', 'website',   'https://nosleep.club', false)
+ON CONFLICT DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════════════════════
+-- NON-DJ MARKETPLACE PROFILES — one person/org per Discover → People role
+-- Stored as `artist_profiles` rows (the universal marketplace table) with
+-- `services[]` as the discriminator. Matches what searchProfiles returns
+-- and what TYPE_LABELS in src/lib/marketplace-constants.ts recognises.
+-- Every profile has `demo+<slug>@trynocturn.com` as its email so it's
+-- unambiguous these are demo identities, not live collaborators.
+-- ═══════════════════════════════════════════════════════════════════════
+
+-- People (type=person)
+INSERT INTO parties (id, type, display_name) VALUES
+  ('d2000000-0000-0000-0000-000000000006', 'person',       'Kiara Lens'),          -- photographer
+  ('d2000000-0000-0000-0000-000000000007', 'person',       'Reel North'),          -- videographer
+  ('d2000000-0000-0000-0000-000000000008', 'person',       'Dara Pham'),           -- artist_manager
+  ('d2000000-0000-0000-0000-000000000009', 'person',       'Ellis Wong'),          -- tour_manager
+  ('d2000000-0000-0000-0000-00000000000a', 'person',       'Halle Rook'),          -- booking_agent
+  ('d2000000-0000-0000-0000-00000000000b', 'person',       'Mercury One'),         -- mc_host
+  ('d2000000-0000-0000-0000-00000000000c', 'person',       'Lucy Ford')            -- promoter
+ON CONFLICT (id) DO NOTHING;
+
+-- Organisations (type=organization — agencies, studios, sponsor brand)
+INSERT INTO parties (id, type, display_name) VALUES
+  ('d3000000-0000-0000-0000-000000000002', 'organization', 'Glyph Studio'),        -- graphic_designer
+  ('d3000000-0000-0000-0000-000000000003', 'organization', 'Low End Sound'),       -- sound_production
+  ('d3000000-0000-0000-0000-000000000004', 'organization', 'Chromaflare'),         -- lighting_production
+  ('d3000000-0000-0000-0000-000000000005', 'organization', 'Doors & Lines Co.'),   -- event_staff
+  ('d3000000-0000-0000-0000-000000000006', 'organization', 'Signal PR'),           -- pr_publicist
+  ('d3000000-0000-0000-0000-000000000007', 'organization', 'Low Tide Drinks')      -- sponsor
+ON CONFLICT (id) DO NOTHING;
+
+-- All marketplace identities get the `artist` party_role (only enum value
+-- that currently applies to service providers — see docs/DB_Data_Governance.md
+-- Part 2.A). Scoped to collective_id = NULL = platform-wide.
+INSERT INTO party_roles (party_id, role, collective_id) VALUES
+  ('d2000000-0000-0000-0000-000000000006', 'artist', NULL),
+  ('d2000000-0000-0000-0000-000000000007', 'artist', NULL),
+  ('d2000000-0000-0000-0000-000000000008', 'artist', NULL),
+  ('d2000000-0000-0000-0000-000000000009', 'artist', NULL),
+  ('d2000000-0000-0000-0000-00000000000a', 'artist', NULL),
+  ('d2000000-0000-0000-0000-00000000000b', 'artist', NULL),
+  ('d2000000-0000-0000-0000-00000000000c', 'artist', NULL),
+  ('d3000000-0000-0000-0000-000000000002', 'artist', NULL),
+  ('d3000000-0000-0000-0000-000000000003', 'artist', NULL),
+  ('d3000000-0000-0000-0000-000000000004', 'artist', NULL),
+  ('d3000000-0000-0000-0000-000000000005', 'artist', NULL),
+  ('d3000000-0000-0000-0000-000000000006', 'artist', NULL),
+  ('d3000000-0000-0000-0000-000000000007', 'artist', NULL)
+ON CONFLICT (party_id, role, collective_id) DO NOTHING;
+
+-- artist_profiles rows — services[] drives the Discover role filter chip.
+-- Values match PEOPLE_PRIMARY + PEOPLE_MORE in discover/page.tsx.
+INSERT INTO artist_profiles (party_id, slug, bio, services, rate_range, is_verified, is_active) VALUES
+  ('d2000000-0000-0000-0000-000000000006', 'kiara-lens',
+   'Night photographer. Resident at warehouse parties + weekly editorials.',
+   ARRAY['photographer'], '$400–800 / night', false, true),
+  ('d2000000-0000-0000-0000-000000000007', 'reel-north',
+   'Run-and-gun event video. Same-night recap reels, 48h turnaround on long-form.',
+   ARRAY['videographer'], '$600–1,200 / event', false, true),
+  ('d2000000-0000-0000-0000-000000000008', 'dara-pham',
+   'Artist manager. Represents 4 Toronto-based house DJs. Full-service — bookings, contracts, ride-outs.',
+   ARRAY['artist_manager'], '15% commission', false, true),
+  ('d2000000-0000-0000-0000-000000000009', 'ellis-wong',
+   'Tour manager — North American circuit. Comfortable with 20–200 cap rooms, solo or with crew.',
+   ARRAY['tour_manager'], '$1,500 / weekend', false, true),
+  ('d2000000-0000-0000-0000-00000000000a', 'halle-rook',
+   'Booking agent. Specialises in melodic techno + deep house. Toronto, Montreal, NYC routes.',
+   ARRAY['booking_agent'], '10% of fee', false, true),
+  ('d2000000-0000-0000-0000-00000000000b', 'mercury-one',
+   'MC / host — intro sets, crowd work, breakdowns. Comfortable on mic without breaking the vibe.',
+   ARRAY['mc_host'], '$200–400 / set', false, true),
+  ('d2000000-0000-0000-0000-00000000000c', 'lucy-ford',
+   'Promoter. 3 years running house nights across the Dundas West strip. 400+ person mailing list.',
+   ARRAY['promoter'], 'flat or % — flexible', false, true),
+  ('d3000000-0000-0000-0000-000000000002', 'glyph-studio',
+   'Design studio for nightlife. Flyers, IG templates, merch. Lead time 1–2 weeks.',
+   ARRAY['graphic_designer'], '$300–1,500 / project', false, true),
+  ('d3000000-0000-0000-0000-000000000003', 'low-end-sound',
+   'Turnkey PA + engineering for 150–500 cap rooms. Funktion-One and d&b rigs available.',
+   ARRAY['sound_production'], '$600–2,000 / night', false, true),
+  ('d3000000-0000-0000-0000-000000000004', 'chromaflare',
+   'Lighting + visuals. Intelligent fixtures, haze, LED mapping. Works with any venue rider.',
+   ARRAY['lighting_production'], '$400–1,500 / event', false, true),
+  ('d3000000-0000-0000-0000-000000000005', 'doors-and-lines',
+   'Door + security + coat check staffing. Insured, licensed, experienced with QR + paper lists.',
+   ARRAY['event_staff'], '$25–40 / hr per head', false, true),
+  ('d3000000-0000-0000-0000-000000000006', 'signal-pr',
+   'PR + press outreach for dance music. Blogs, local media, artist interviews.',
+   ARRAY['pr_publicist'], '$500–2,000 / campaign', false, true),
+  ('d3000000-0000-0000-0000-000000000007', 'low-tide-drinks',
+   'RTD alcohol sponsor. Comps product + signage for 200+ cap house nights in Toronto.',
+   ARRAY['sponsor'], 'in-kind + $500 fee', false, true)
+ON CONFLICT (party_id) DO NOTHING;
+
+-- One demo email per profile — makes it obvious in contact cards these
+-- aren't live people. Demo address is reserved under trynocturn.com so
+-- no real outbound email can accidentally go to a demo identity.
+INSERT INTO party_contact_methods (party_id, type, value, is_primary) VALUES
+  ('d2000000-0000-0000-0000-000000000006', 'email',     'demo+kiaralens@trynocturn.com',     true),
+  ('d2000000-0000-0000-0000-000000000006', 'instagram', '@kiaralens.jpg',                    false),
+  ('d2000000-0000-0000-0000-000000000007', 'email',     'demo+reelnorth@trynocturn.com',     true),
+  ('d2000000-0000-0000-0000-000000000007', 'instagram', '@reelnorth.co',                     false),
+  ('d2000000-0000-0000-0000-000000000008', 'email',     'demo+darapham@trynocturn.com',      true),
+  ('d2000000-0000-0000-0000-000000000008', 'instagram', '@darapham',                         false),
+  ('d2000000-0000-0000-0000-000000000009', 'email',     'demo+elliswong@trynocturn.com',     true),
+  ('d2000000-0000-0000-0000-00000000000a', 'email',     'demo+hallerook@trynocturn.com',     true),
+  ('d2000000-0000-0000-0000-00000000000a', 'instagram', '@hallerook.bookings',               false),
+  ('d2000000-0000-0000-0000-00000000000b', 'email',     'demo+mercuryone@trynocturn.com',    true),
+  ('d2000000-0000-0000-0000-00000000000b', 'instagram', '@mercuryone.mc',                    false),
+  ('d2000000-0000-0000-0000-00000000000c', 'email',     'demo+lucyford@trynocturn.com',      true),
+  ('d2000000-0000-0000-0000-00000000000c', 'instagram', '@lucyford.promotes',                false),
+  ('d3000000-0000-0000-0000-000000000002', 'email',     'demo+glyphstudio@trynocturn.com',   true),
+  ('d3000000-0000-0000-0000-000000000002', 'website',   'https://demo-glyph.studio',         false),
+  ('d3000000-0000-0000-0000-000000000003', 'email',     'demo+lowendsound@trynocturn.com',   true),
+  ('d3000000-0000-0000-0000-000000000003', 'website',   'https://demo-lowend.sound',         false),
+  ('d3000000-0000-0000-0000-000000000004', 'email',     'demo+chromaflare@trynocturn.com',   true),
+  ('d3000000-0000-0000-0000-000000000005', 'email',     'demo+doorsandlines@trynocturn.com', true),
+  ('d3000000-0000-0000-0000-000000000006', 'email',     'demo+signalpr@trynocturn.com',      true),
+  ('d3000000-0000-0000-0000-000000000006', 'website',   'https://demo-signalpr.agency',      false),
+  ('d3000000-0000-0000-0000-000000000007', 'email',     'demo+lowtidedrinks@trynocturn.com', true),
+  ('d3000000-0000-0000-0000-000000000007', 'website',   'https://demo-lowtide.drinks',       false)
 ON CONFLICT DO NOTHING;
 
 -- ═══════════════════════════════════════════════════════════════════════
