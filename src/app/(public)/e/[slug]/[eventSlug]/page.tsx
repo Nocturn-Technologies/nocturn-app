@@ -254,7 +254,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
         artists: row.name ? { name: row.name, genre: row.artist_profiles?.genre ?? null } : null,
       }))
     : null;
-  const reactionRows: { emoji: string }[] | null = null;
   const pastEvents = pastEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string }[] | null;
   const nearbyEventsRawTyped = nearbyEventsRaw as { title: string; slug: string; flyer_url: string | null; starts_at: string; collective_id: string; venue_name: string | null; city: string | null; collectives: { name: string; slug: string } | null }[] | null;
   const nearbyEvents = nearbyEventsRawTyped
@@ -276,10 +275,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
   }
 
-
-  // event_reactions table removed in PR #93 schema rebuild — empty map
-  // keeps the <EventReactions /> widget happy (it renders a 0-count state).
-  void reactionRows;
+  // event_reactions table removed in schema rebuild — empty map keeps the widget happy
   const reactionCounts: Record<string, number> = {};
 
   // Mode detection: free RSVP events show the RSVP widget instead of (or in addition to) tickets.
