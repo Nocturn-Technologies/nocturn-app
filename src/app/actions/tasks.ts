@@ -268,13 +268,22 @@ export async function updateTaskStatus(taskId: string, status: string) {
 // Update task details (assign, due date)
 export async function updateTaskDetails(
   taskId: string,
-  updates: { assignedTo?: string | null; dueAt?: string | null; description?: string | null }
+  updates: { title?: string; assignedTo?: string | null; dueAt?: string | null; description?: string | null }
 ) {
   try {
     const supabase = await createServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return { error: "Not authenticated" };
     if (!taskId?.trim()) return { error: "Task ID is required" };
+
+    // Title validation mirrors createEventTask: trim, non-empty, ≤ 200 chars.
+    // Applied here only when the caller is updating the title.
+    if (updates.title !== undefined) {
+      const trimmed = updates.title.trim();
+      if (!trimmed) return { error: "Task title is required" };
+      if (trimmed.length > 200) return { error: "Task title must be under 200 characters" };
+      updates.title = trimmed;
+    }
 
     const admin = createAdminClient();
     const { data: taskCheck, error: taskCheckError } = await admin
@@ -286,6 +295,7 @@ export async function updateTaskDetails(
     if (!taskCheck || !(await verifyEventAccess(user.id, taskCheck.event_id))) return { error: "Not authorized" };
 
     const dbUpdates: Record<string, unknown> = {};
+    if (updates.title !== undefined) dbUpdates.title = updates.title;
     if (updates.assignedTo !== undefined) dbUpdates.assigned_to = updates.assignedTo;
     if (updates.dueAt !== undefined) dbUpdates.due_at = updates.dueAt;
     if (updates.description !== undefined) dbUpdates.description = updates.description;
@@ -296,6 +306,7 @@ export async function updateTaskDetails(
     if (error) return { error: "Failed to update task" };
 
     const changes: string[] = [];
+    if (updates.title !== undefined) changes.push("renamed");
     if (updates.assignedTo !== undefined) changes.push(updates.assignedTo ? "reassigned" : "unassigned");
     if (updates.dueAt !== undefined) changes.push(`due date ${updates.dueAt ? "set" : "cleared"}`);
     if (updates.description !== undefined) changes.push("note updated");
