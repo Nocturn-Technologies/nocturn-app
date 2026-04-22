@@ -819,7 +819,7 @@ export function EventPnlSpreadsheet({ financials }: Props) {
             <div className={`px-4 py-4 flex items-center justify-between ${isProfitable ? "bg-green-500/10" : "bg-red-500/10"}`}>
               <span className="text-sm font-bold uppercase tracking-wide">{isProfitable ? "Profit" : "Loss"}</span>
               <span className={`text-lg font-black font-mono tabular-nums ${isProfitable ? "text-green-400" : "text-red-400"}`}>
-                {isProfitable ? "" : "-"}{formatCurrency(Math.abs(financials.profitLoss))}
+                <span className="whitespace-nowrap">{isProfitable ? "" : "\u2212"}{formatCurrency(Math.abs(financials.profitLoss))}</span>
               </span>
             </div>
           </div>
@@ -1281,15 +1281,15 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                   <span className={`text-lg font-black font-mono tabular-nums ${
                     isProfitable ? "text-green-400" : "text-red-400"
                   }`}>
-                    {isProfitable ? "" : "-"}{formatCurrency(Math.abs(financials.profitLoss))}
+                    <span className="whitespace-nowrap">{isProfitable ? "" : "\u2212"}{formatCurrency(Math.abs(financials.profitLoss))}</span>
                   </span>
                 </td>
                 {forecasts.map((f, fi) => (
                   <td key={fi} className="px-3 py-4 text-right">
-                    <span className={`text-sm font-bold font-mono tabular-nums ${
+                    <span className={`text-sm font-bold font-mono tabular-nums whitespace-nowrap ${
                       f.profit >= 0 ? "text-green-400" : "text-red-400"
                     }`}>
-                      {f.profit < 0 && "−"}{formatCurrency(Math.abs(f.profit))}
+                      {f.profit < 0 ? "\u2212" : ""}{formatCurrency(Math.abs(f.profit))}
                     </span>
                   </td>
                 ))}

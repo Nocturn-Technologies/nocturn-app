@@ -16,6 +16,12 @@ function formatCurrency(n: number): string {
   }).format(n);
 }
 
+// Signed currency in a single non-breaking chunk so the minus sign never
+// wraps onto its own line inside tight table cells.
+function formatSignedCurrency(n: number): string {
+  return n < 0 ? `\u2212${formatCurrency(Math.abs(n))}` : formatCurrency(n);
+}
+
 interface Props {
   financials: EventFinancials;
   forecast: ForecastData | null;
@@ -278,12 +284,11 @@ export function EventFinancialsDashboard({ financials, forecast, trajectory }: P
                             </td>
                             <td className="px-3 py-2 text-right text-xs font-mono tabular-nums">
                               <span
-                                className={
+                                className={`whitespace-nowrap ${
                                   s.profit >= 0 ? "text-emerald-400" : "text-red-400"
-                                }
+                                }`}
                               >
-                                {s.profit >= 0 ? "" : "-"}
-                                {formatCurrency(Math.abs(s.profit))}
+                                {formatSignedCurrency(s.profit)}
                               </span>
                             </td>
                           </tr>
