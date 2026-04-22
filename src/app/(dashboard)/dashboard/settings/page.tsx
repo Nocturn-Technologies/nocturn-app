@@ -492,7 +492,7 @@ function CurrencyCard() {
             value={currency}
             onChange={(e) => setCurrency(e.target.value)}
             disabled={loading || saving}
-            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px] disabled:opacity-50"
+            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 text-base md:text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px] disabled:opacity-50"
           >
             {SUPPORTED_CURRENCIES.map(c => (
               <option key={c.code} value={c.code}>{c.label}</option>

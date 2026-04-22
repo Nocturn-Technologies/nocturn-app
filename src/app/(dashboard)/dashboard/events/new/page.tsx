@@ -1479,7 +1479,7 @@ function MoneyRow({ label, placeholder, value, onChange, eventCurrency, Icon, on
           value={value.currency}
           onChange={(e) => onChange({ ...value, currency: e.target.value })}
           aria-label={`${label} currency`}
-          className="bg-zinc-900 border border-white/10 rounded-lg px-2 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[40px] min-w-[72px]"
+          className="bg-zinc-900 border border-white/10 rounded-lg px-2 text-base md:text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px] min-w-[72px]"
         >
           {SUPPORTED_CURRENCIES.map(c => (
             <option key={c.code} value={c.code}>{c.code.toUpperCase()}</option>
@@ -1654,7 +1654,7 @@ function BudgetStep({
             value={ec}
             onChange={(e) => setDraft(prev => ({ ...prev, eventCurrency: e.target.value }))}
             aria-label="Event currency"
-            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px]"
+            className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 text-base md:text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px]"
           >
             {SUPPORTED_CURRENCIES.map(c => (
               <option key={c.code} value={c.code}>{c.label}</option>
@@ -1852,7 +1852,7 @@ function BudgetStep({
                       value={p.currency}
                       onChange={(e) => updateProdItem(i, { currency: e.target.value })}
                       aria-label={`${p.label} currency`}
-                      className="bg-zinc-900 border border-white/10 rounded-lg px-2 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[40px] min-w-[72px]"
+                      className="bg-zinc-900 border border-white/10 rounded-lg px-2 text-base md:text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px] min-w-[72px]"
                     >
                       {SUPPORTED_CURRENCIES.map(c => (
                         <option key={c.code} value={c.code}>{c.code.toUpperCase()}</option>

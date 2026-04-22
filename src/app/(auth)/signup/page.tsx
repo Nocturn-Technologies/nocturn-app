@@ -234,7 +234,7 @@ export default function SignupPage() {
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="font-semibold text-sm text-foreground">{label}</p>
                       {tagline && (
-                        <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-nocturn-glow bg-nocturn/10 border border-nocturn/20 rounded-full px-2 py-0.5">
+                        <span className="text-[11px] font-mono font-medium uppercase tracking-wider text-nocturn-glow bg-nocturn/10 border border-nocturn/20 rounded-full px-2 py-0.5">
                           {tagline}
                         </span>
                       )}

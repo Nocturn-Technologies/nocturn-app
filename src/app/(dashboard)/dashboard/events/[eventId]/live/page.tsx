@@ -287,7 +287,7 @@ export default function LiveEventPage() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             <LiveBadge />
-            <div className="section-label-mono !mb-0 text-[10px]">DOORS OPEN · {formatElapsed(elapsed)}</div>
+            <div className="section-label-mono !mb-0 text-[11px]">DOORS OPEN · {formatElapsed(elapsed)}</div>
           </div>
           <h1 className="text-xl font-bold truncate font-heading mt-1 tracking-[-0.02em]">
             {event.title}
@@ -324,7 +324,7 @@ export default function LiveEventPage() {
       {/* Secondary stats — Door revenue row */}
       <div className="grid grid-cols-2 gap-px bg-white/[0.06] border border-white/[0.06] rounded-xl overflow-hidden">
         <div className="bg-background p-5">
-          <div className="section-label-mono !mb-2 !text-[10px]">THE DOOR</div>
+          <div className="section-label-mono !mb-2 !text-[11px]">THE DOOR</div>
           <div className="flex items-baseline gap-1.5">
             <span className="font-heading text-3xl font-semibold text-white tabular-nums">
               ${revenue.toLocaleString()}
@@ -335,7 +335,7 @@ export default function LiveEventPage() {
           </p>
         </div>
         <div className="bg-background p-5">
-          <div className="section-label-mono !mb-2 !text-[10px]">WALK-UPS</div>
+          <div className="section-label-mono !mb-2 !text-[11px]">WALK-UPS</div>
           <div className="flex items-baseline gap-1.5">
             <span className="font-heading text-3xl font-semibold text-white tabular-nums">
               {recentCheckIns.filter(c => c.tier_name === "Walk-up" || c.tier_name === "Door").length}
@@ -359,7 +359,7 @@ export default function LiveEventPage() {
         return (
           <div className={`rounded-xl border ${atRisk ? "border-red-500/25 bg-red-500/[0.04]" : "border-emerald-500/25 bg-emerald-500/[0.04]"} p-5`}>
             <div className="flex items-center justify-between mb-3">
-              <div className="section-label-mono !mb-0 !text-[10px]">BAR MINIMUM</div>
+              <div className="section-label-mono !mb-0 !text-[11px]">BAR MINIMUM</div>
               <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${atRisk ? "bg-red-400" : "bg-emerald-400"}`} />
                 <span className={`text-[11px] font-mono uppercase tracking-widest ${atRisk ? "text-red-400" : "text-emerald-400"}`}>
@@ -390,7 +390,7 @@ export default function LiveEventPage() {
 
       {/* Quick Actions */}
       <div>
-        <div className="section-label-mono mb-3 !text-[10px]">QUICK ACTIONS</div>
+        <div className="section-label-mono mb-3 !text-[11px]">QUICK ACTIONS</div>
         <div className="grid grid-cols-2 gap-px bg-white/[0.06] border border-white/[0.06] rounded-xl overflow-hidden">
           <Link href={`/dashboard/events/${eventId}/check-in`} className="group">
             <button className="w-full flex flex-col items-center justify-center gap-2 bg-background p-5 min-h-[88px] hover:bg-nocturn/[0.04] active:scale-[0.98] transition-all">
@@ -442,7 +442,7 @@ export default function LiveEventPage() {
       {/* Door Activity Feed */}
       <div className="rounded-xl border border-white/[0.06] bg-background overflow-hidden">
         <div className="px-5 py-3 border-b border-white/[0.06]">
-          <div className="section-label-mono !mb-0 !text-[10px]">DOOR ACTIVITY</div>
+          <div className="section-label-mono !mb-0 !text-[11px]">DOOR ACTIVITY</div>
         </div>
         {recentCheckIns.length === 0 ? (
           <div className="px-5 py-10 text-center">

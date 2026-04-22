@@ -467,7 +467,7 @@ export function EditEventForm({ event }: { event: EventData }) {
               id="eventCurrency"
               value={eventCurrency}
               onChange={(e) => setEventCurrency(e.target.value)}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px]"
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl px-3 text-base md:text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px]"
             >
               {SUPPORTED_CURRENCIES.map((c) => (
                 <option key={c.code} value={c.code}>{c.label}</option>
@@ -516,7 +516,7 @@ export function EditEventForm({ event }: { event: EventData }) {
                         value={row.currency}
                         onChange={(e) => updateExpense(i, { currency: e.target.value })}
                         aria-label={`${row.label || "Row"} currency`}
-                        className="bg-zinc-900 border border-white/10 rounded-lg px-2 text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[40px] min-w-[72px]"
+                        className="bg-zinc-900 border border-white/10 rounded-lg px-2 text-base md:text-sm text-white focus:border-nocturn/50 focus:outline-none min-h-[44px] min-w-[72px]"
                       >
                         {SUPPORTED_CURRENCIES.map((c) => (
                           <option key={c.code} value={c.code}>{c.code.toUpperCase()}</option>

@@ -1103,7 +1103,7 @@ function TaskCard({
               }}
               maxLength={200}
               aria-label="Edit task title"
-              className={`block w-full text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}
+              className={`block w-full text-base md:text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : priorityColors[task.priority as string] ?? ""}`}
             />
           ) : (
             <button
@@ -1313,7 +1313,7 @@ function ContentTaskCard({
               }}
               maxLength={200}
               aria-label="Edit task title"
-              className={`block w-full text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : ""}`}
+              className={`block w-full text-base md:text-sm font-medium bg-zinc-900 border border-nocturn/50 rounded px-2 py-1 outline-none text-foreground ${isDone ? "line-through text-muted-foreground" : ""}`}
             />
           ) : (
             <button
