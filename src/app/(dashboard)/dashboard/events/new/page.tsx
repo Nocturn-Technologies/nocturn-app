@@ -14,7 +14,7 @@ import {
 } from "@/app/actions/budget-planner";
 import type { ExpenseCategory } from "@/lib/expense-categories";
 import { SUPPORTED_CURRENCIES } from "@/lib/currency";
-import { cascadeScenario, cascadeBreakEven, type TicketTierInput } from "@/lib/ticket-forecast";
+import { cascadeScenario, cascadeBreakEven, multiplyBudgetTiers, type TicketTierInput } from "@/lib/ticket-forecast";
 import { getMyCollectiveDefaults } from "@/app/actions/collective-settings";
 import { applyLaunchPlaybook } from "@/app/actions/launch-playbook";
 import { createClient } from "@/lib/supabase/client";
@@ -1342,18 +1342,6 @@ function scaleBudgetTiers(
     name: t.name,
     price: Math.round(t.price * ratio),
     capacity: t.capacity,
-  }));
-}
-
-function multiplyBudgetTiers(
-  suggestedTiers: Array<{ name: string; price: number; capacity: number; reasoning?: string }>,
-  multiplier: number
-): TicketTier[] {
-  if (suggestedTiers.length === 0) return [];
-  return suggestedTiers.map((tier) => ({
-    name: tier.name,
-    price: Math.max(0, Math.round((tier.price * multiplier) / 5) * 5),
-    capacity: tier.capacity,
   }));
 }
 

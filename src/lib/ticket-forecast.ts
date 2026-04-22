@@ -190,6 +190,27 @@ export function cascadeBreakEven(
 }
 
 /**
+ * Scale each tier's price by `multiplier` and snap to the nearest $5.
+ *
+ * Used by the Budget step's "Price sensitivity" slider. Promoters price
+ * doors in $5 increments, so a 0.85x pass on a $25 tier should land at
+ * $20, not $21. Rounding to the nearest dollar (the old behavior)
+ * produced awkward prices like CAD 21/30/38/47 that no operator would
+ * actually charge.
+ */
+export function multiplyBudgetTiers<T extends { name: string; price: number; capacity: number }>(
+  suggestedTiers: T[],
+  multiplier: number,
+): Array<{ name: string; price: number; capacity: number }> {
+  if (suggestedTiers.length === 0) return [];
+  return suggestedTiers.map((tier) => ({
+    name: tier.name,
+    price: Math.max(0, Math.round((tier.price * multiplier) / 5) * 5),
+    capacity: tier.capacity,
+  }));
+}
+
+/**
  * Format a ScenarioResult's sold-pct label for display. Caps at 100% for
  * cascade-capped values and adds a "+N waitlist" suffix when there was
  * excess demand.
