@@ -321,20 +321,17 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
         }
       }
 
+      // PR #93 dropped priority / metadata from event_tasks. Playbook
+      // priority + category are lost until flat columns are added back
+      // (tracked in NOC-20). Event creation no longer 400s on this insert.
       return {
         event_id: eventId,
         title: t.title,
         description: t.description,
         status: "todo",
-        priority: t.priority,
         assigned_to: t.ownerType === "current" ? user.id : null,
         due_at: dueDate.toISOString(),
-        metadata: {
-          created_by: user.id,
-          source: `playbook:${playbookId}`,
-          category: t.category,
-          position: i,
-        },
+        created_by: user.id,
       };
     });
 
@@ -428,26 +425,21 @@ export async function applyLaunchPlaybook(eventId: string, playbookId: string) {
           // Don't schedule in the past
           if (dueDate < new Date()) dueDate.setTime(Date.now() + (i + 1) * 3600000);
 
+          // TODO(governance): content tasks need a governed shape per
+          // docs/DB_Data_Governance.md § 2 Q4/Q6 — `content_meta JSONB`
+          // on event_tasks (config tier) or sibling table. Hashtags +
+          // tips dropped here rather than smuggled into a free-text
+          // description; full restoration tracked in NOC-20.
+          void post.hashtags;
+          void post.tip;
           return {
             event_id: eventId,
             title: `${platformLabels[post.platform] ?? post.platform} post — ${post.phase}`,
-            description: post.caption.slice(0, 500),
+            description: (post.caption ?? "").slice(0, 500),
             status: "todo",
-            priority: "medium",
             assigned_to: null,
             due_at: dueDate.toISOString(),
-            metadata: {
-              created_by: user.id,
-              source: `playbook:${playbookId}:content`,
-              category: "content",
-              task_type: "content",
-              platform: post.platform,
-              caption: post.caption,
-              hashtags: post.hashtags,
-              tip: post.tip,
-              phase: post.phase,
-              position: 1000 + i,
-            },
+            created_by: user.id,
           };
         });
 
