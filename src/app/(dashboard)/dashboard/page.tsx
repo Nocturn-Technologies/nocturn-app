@@ -207,14 +207,14 @@ export default async function DashboardPage() {
       totalTicketsSold={totalTicketsSold}
       actionItems={actionItems}
       myTasks={myTasksData.map((t: Record<string, unknown>) => ({
+        // NOC-32: priority + metadata.task_type dropped in PR #93.
+        // Dashboard Home no longer surfaces priority dots or the Content pill.
         id: t.id as string,
         title: t.title as string,
         eventTitle: ((t.events as Record<string, unknown>)?.title as string) ?? "Event",
         eventId: t.event_id as string,
         dueAt: (t.due_at as string) ?? null,
-        priority: (t.priority as string) ?? null,
         status: (t.status as string) ?? "todo",
-        isContent: ((t.metadata as Record<string, unknown>)?.task_type as string) === "content",
       }))}
     />
   );
