@@ -231,7 +231,8 @@ export default function AudiencePage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-heading tracking-tight text-foreground">
-            Your Fans
+            {/* B11: unified page title with nav label "Audience" */}
+            Audience
           </h1>
           {reachInsight ? (
             <p className="mt-1 text-sm text-muted-foreground flex items-center gap-1.5">

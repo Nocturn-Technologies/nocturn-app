@@ -1295,7 +1295,11 @@ function PlaybookSelector({
                 )}
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">{opt.description}</p>
-              <p className="text-[11px] text-muted-foreground mt-1">{opt.taskCount} tasks with auto-assigned due dates</p>
+              {/* B14: card advertises ops-task count; actual applied total also
+                  includes AI-generated content tasks. Show "+ content prompts"
+                  so the count operators see here matches the reality of the
+                  tasks page. */}
+              <p className="text-[11px] text-muted-foreground mt-1">{opt.taskCount} ops tasks + content prompts, auto-scheduled</p>
             </div>
           </button>
         ))}
