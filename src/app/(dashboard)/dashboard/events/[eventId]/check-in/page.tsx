@@ -467,7 +467,13 @@ export default function CheckInScannerPage() {
                   / {stats.totalTickets}
                 </span>
               </p>
-              <p className="text-xs text-muted-foreground">checked in</p>
+              {/* B13: spell out "of tickets sold" — "0 / 0 checked in" looked
+                  like a broken denominator when no tickets had been sold yet. */}
+              <p className="text-xs text-muted-foreground">
+                {stats.totalTickets === 0
+                  ? "no tickets sold yet"
+                  : "checked in of sold"}
+              </p>
             </div>
           </div>
           <div className="text-right">

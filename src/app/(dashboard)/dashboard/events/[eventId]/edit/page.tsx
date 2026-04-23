@@ -44,13 +44,17 @@ export default async function EditEventPage({ params }: Props) {
   // Default to USD (currency column removed from schema)
   const resolvedCurrency = "usd";
 
-  // Only draft events can be edited
-  if (event.status !== "draft") {
+  // B05: allow edits on draft AND published events. Completed / settled / cancelled
+  // stay locked because tickets have transacted and changing title/date would
+  // mislead attendees. The server action (events.ts updateEvent) scopes which
+  // fields a published event can still mutate.
+  const EDITABLE_STATUSES = ["draft", "published"];
+  if (!EDITABLE_STATUSES.includes(event.status)) {
     return (
       <div className="mx-auto max-w-2xl py-12 text-center">
         <h1 className="text-2xl font-bold mb-2">Cannot Edit Event</h1>
         <p className="text-muted-foreground">
-          Only draft events can be edited. This event has status &ldquo;{event.status}&rdquo;.
+          Events in status &ldquo;{event.status}&rdquo; are locked. Duplicate the event to create a new draft instead.
         </p>
       </div>
     );

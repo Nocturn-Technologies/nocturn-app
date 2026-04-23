@@ -13,8 +13,8 @@ export default function EventNotFound() {
         Event Not Found
       </h1>
       <p className="mb-8 max-w-sm text-base text-white/50">
-        This event may have been removed, renamed, or hasn&apos;t been published
-        yet. Check the link and try again.
+        This event isn&apos;t available. Check the link, or head back to
+        Nocturn to find another night.
       </p>
 
       <Link
