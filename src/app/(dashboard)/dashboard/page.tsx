@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/config";
 import { getFinancialPulse } from "@/app/actions/finance-pulse";
 import { getActionItems } from "@/app/actions/action-items";
 import { getMyTasks } from "@/app/actions/tasks";
+import { isDemoUser } from "@/lib/demo/demo-mode";
 
 export default async function DashboardPage() {
   const supabase = await createServerClient();
@@ -183,6 +184,21 @@ export default async function DashboardPage() {
     hasTicketTiers = (ticketTiersResult.count ?? 0) > 0;
     hasPublishedEvent = (publishedEventsResult.count ?? 0) > 0;
     totalTicketsSold = totalAttendees; // totalAttendees is already paid/checked_in tickets
+  }
+
+  // Demo-mode overlay — pitch account gets populated home stats so the
+  // dashboard hero + checklist feel fullsome for customer demos.
+  if (isDemoUser(user.email) && totalRevenue === 0 && totalAttendees === 0) {
+    upcomingCount = 2;
+    nextEvent = { title: "Deep Frequencies Vol. 3", daysUntil: 18 };
+    hasDraftEvent = true;
+    draftEventTitle = "Summer Rooftop Session";
+    totalRevenue = 12480;
+    totalAttendees = 487;
+    totalEventsCount = 6;
+    hasTicketTiers = true;
+    hasPublishedEvent = true;
+    totalTicketsSold = 487;
   }
 
   // ── AI Briefing loads AFTER the page renders (streamed in) ──

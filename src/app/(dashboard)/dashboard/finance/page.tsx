@@ -22,6 +22,13 @@ import {
 import { CompanyOverview } from "@/components/finance/company-overview";
 import { EventFinancialsTable } from "@/components/finance/event-financials-table";
 import { RevenueForecast } from "@/components/finance/revenue-forecast";
+import { isDemoUser } from "@/lib/demo/demo-mode";
+import {
+  DEMO_COMPANY_FINANCIALS,
+  DEMO_EVENT_FIN_SUMMARIES,
+  DEMO_REVENUE_FORECASTS,
+  DEMO_SETTLEMENTS,
+} from "@/lib/demo/demo-finance";
 
 
 export default async function FinancePage() {
@@ -87,11 +94,11 @@ export default async function FinancePage() {
       : Promise.resolve({ data: null }),
   ]);
 
-  const financials = financialsResult.data;
-  const eventSummaries = eventSummariesResult.data ?? [];
-  const forecasts = forecastResult.data ?? [];
+  let financials = financialsResult.data;
+  let eventSummaries = eventSummariesResult.data ?? [];
+  let forecasts = forecastResult.data ?? [];
 
-  const hasDataError =
+  let hasDataError =
     "error" in financialsResult ||
     "error" in eventSummariesResult ||
     "error" in forecastResult;
@@ -114,13 +121,28 @@ export default async function FinancePage() {
 
   type UnsettledEvent = { id: string; title: string; starts_at: string };
 
-  const settlements = (
+  let settlements = (
     (settlementsResult.data ?? []) as unknown as Settlement[]
   );
   const settledEventIds = settlements.map((s) => s.event_id);
-  const unsettledEvents = (
+  let unsettledEvents = (
     (unsettledResult.data ?? []) as UnsettledEvent[]
   ).filter((e) => !settledEventIds.includes(e.id));
+
+  // Demo-mode overlay — pitch account gets populated financial snapshot
+  // so the Money tab feels fullsome even without real ticket sales yet.
+  if (
+    isDemoUser(user.email) &&
+    !(financials && financials.totalRevenue > 0) &&
+    eventSummaries.every((e) => e.grossRevenue === 0)
+  ) {
+    financials = DEMO_COMPANY_FINANCIALS;
+    eventSummaries = DEMO_EVENT_FIN_SUMMARIES;
+    forecasts = DEMO_REVENUE_FORECASTS;
+    settlements = DEMO_SETTLEMENTS as unknown as Settlement[];
+    unsettledEvents = [];
+    hasDataError = false;
+  }
 
   const hasEvents =
     (financials && financials.totalEvents > 0) ||
