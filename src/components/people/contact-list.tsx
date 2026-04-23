@@ -69,6 +69,10 @@ interface ContactListProps {
   eventFilter?: string | null;
   /** Emails of attendees for the selected event (used with eventFilter) */
   eventAttendeeEmails?: Set<string>;
+  /** Demo-mode override — when set, skips server fetch and renders these values. */
+  demoContacts?: PeopleContact[];
+  demoAggStats?: { totalRevenue: number; avgSpend: number; repeatRate: number; newThisMonth: number };
+  demoSegmentCounts?: Record<string, number>;
 }
 
 // ── Sort types ──────────────────────────────────────────────────────────────
@@ -172,6 +176,9 @@ export function ContactList({
   onImportClick,
   eventFilter,
   eventAttendeeEmails,
+  demoContacts,
+  demoAggStats,
+  demoSegmentCounts,
 }: ContactListProps) {
   const [contacts, setContacts] = useState<PeopleContact[]>([]);
   const [stats, setStats] = useState<PeopleStats>({ total: 0 });
@@ -244,6 +251,14 @@ export function ContactList({
   }, [collectiveId, contactType]);
 
   useEffect(() => {
+    // Demo-mode short-circuit — skip server fetch entirely.
+    if (demoContacts) {
+      setContacts(demoContacts);
+      setStats({ total: demoContacts.length, ...(demoSegmentCounts ?? {}) });
+      if (demoAggStats) setAggStats(demoAggStats);
+      setLoading(false);
+      return;
+    }
     fetchContacts();
     // Fire-and-forget: sync contact metrics from ticket data (rate-limited to 1x/hour)
     if (contactType === "fan") {
@@ -254,7 +269,7 @@ export function ContactList({
         });
       });
     }
-  }, [fetchContacts, collectiveId, contactType]);
+  }, [fetchContacts, collectiveId, contactType, demoContacts, demoAggStats, demoSegmentCounts]);
 
   // ── Export + Copy handlers ──
 
