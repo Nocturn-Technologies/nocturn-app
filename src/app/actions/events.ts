@@ -357,7 +357,10 @@ export async function createEvent(input: CreateEventInput) {
   // back without asking the user to re-enter every cost. Failure here is
   // non-fatal — the event itself is already saved and the user can re-add
   // expenses manually on the financials page.
-  type BudgetExpenseRow = { event_id: string; category: string; description: string; amount: number };
+  // NOC-35 dual-write: every insert populates both amount (legacy) and
+  // actual_amount (new, symmetric with event_revenue_lines). amount gets
+  // dropped in a Phase-B follow-up once no readers remain.
+  type BudgetExpenseRow = { event_id: string; category: string; description: string; amount: number; actual_amount: number };
   const budgetExpenseRows: BudgetExpenseRow[] = [];
 
   if (input.expenseItems && input.expenseItems.length > 0) {
@@ -369,6 +372,7 @@ export async function createEvent(input: CreateEventInput) {
         description: it.label.slice(0, 200),
         category: it.category,
         amount: amt,
+        actual_amount: amt,
       });
     }
   } else {
@@ -377,21 +381,21 @@ export async function createEvent(input: CreateEventInput) {
     if (talentFeeClean && talentFeeClean > 0) {
       budgetExpenseRows.push({
         event_id: event.id,
-        description: "Talent fee", category: "artist", amount: talentFeeClean,
+        description: "Talent fee", category: "artist", amount: talentFeeClean, actual_amount: talentFeeClean,
       });
     }
     if (travelCostClean && travelCostClean > 0) {
       budgetExpenseRows.push({
         event_id: event.id,
         description: "Talent travel (flights, hotel, transport)",
-        category: "transportation", amount: travelCostClean,
+        category: "transportation", amount: travelCostClean, actual_amount: travelCostClean,
       });
     }
     if (otherExpensesClean && otherExpensesClean > 0) {
       budgetExpenseRows.push({
         event_id: event.id,
         description: "Other expenses (sound, lights, security, promo)",
-        category: "other", amount: otherExpensesClean,
+        category: "other", amount: otherExpensesClean, actual_amount: otherExpensesClean,
       });
     }
   }
@@ -634,6 +638,7 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
             description: label,
             category,
             amount: amt,
+            actual_amount: amt, // NOC-35 dual-write
           })
           .eq("id", it.id)
           .eq("event_id", eventId); // tenancy guard
@@ -648,6 +653,7 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
             description: label,
             category,
             amount: amt,
+            actual_amount: amt, // NOC-35 dual-write
           });
         if (insErr) {
           console.error("[updateEvent] expense insert error:", insErr.message);
@@ -1022,7 +1028,8 @@ export async function duplicateEvent(sourceEventId: string) {
         .order("sort_order", { ascending: true }),
       admin
         .from("event_expenses")
-        .select("description, category, amount")
+        // NOC-35: pull both columns so the clone lands with actual_amount too.
+        .select("description, category, amount, actual_amount")
         .eq("event_id", sourceEventId),
     ]);
 
@@ -1113,12 +1120,17 @@ export async function duplicateEvent(sourceEventId: string) {
     // Clone expense rows (best-effort — non-fatal).
     if (sourceExpensesRes.data && sourceExpensesRes.data.length > 0) {
       const { error: expErr } = await admin.from("event_expenses").insert(
-        sourceExpensesRes.data.map((e) => ({
-          event_id: newEvent.id,
-          description: e.description,
-          category: e.category,
-          amount: e.amount,
-        }))
+        sourceExpensesRes.data.map((e) => {
+          // NOC-35 dual-write — prefer actual_amount, fall back to amount.
+          const amt = Number(e.actual_amount ?? e.amount) || 0;
+          return {
+            event_id: newEvent.id,
+            description: e.description,
+            category: e.category,
+            amount: amt,
+            actual_amount: amt,
+          };
+        })
       );
       if (expErr) {
         console.error("[duplicateEvent] expense clone failed (non-fatal):", expErr.message);

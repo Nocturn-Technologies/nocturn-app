@@ -175,19 +175,20 @@ export async function generateEventForecast(
   // they are tracked as categorised rows in event_expenses instead.
   const talentTravelCosts = 0;
 
-  // Get all expenses (venue cost, travel, other) from event_expenses
+  // Get all expenses (venue cost, travel, other) from event_expenses.
+  // NOC-35: prefer actual_amount; fall back to amount during rename window.
   const { data: expensesRaw } = await admin
     .from("event_expenses")
-    .select("amount, category")
+    .select("amount, actual_amount, category")
     .eq("event_id", eventId);
-  const expenseRows = expensesRaw as { amount: number; category: string }[] | null;
+  const expenseRows = expensesRaw as { amount: number; actual_amount: number | null; category: string }[] | null;
 
   const venueCost = (expenseRows ?? [])
     .filter((e) => e.category === "venue")
-    .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    .reduce((s, e) => s + (Number(e.actual_amount ?? e.amount) || 0), 0);
   const estimatedExpenses = (expenseRows ?? [])
     .filter((e) => e.category !== "venue")
-    .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    .reduce((s, e) => s + (Number(e.actual_amount ?? e.amount) || 0), 0);
 
   // Bar minimum / venue deposit are no longer stored on events.
   // Default to zero so the rest of the forecast math still works.
@@ -473,18 +474,19 @@ export async function getTicketSalesTrajectory(
 
     const artistFees = bookings.reduce((s, b) => s + (Number(b.fee) || 0), 0);
 
+    // NOC-35: prefer actual_amount; fall back to amount during rename window.
     const { data: expensesRaw } = await admin
       .from("event_expenses")
-      .select("amount, category")
+      .select("amount, actual_amount, category")
       .eq("event_id", eventId);
-    const expenseRows = (expensesRaw ?? []) as { amount: number; category: string }[];
+    const expenseRows = (expensesRaw ?? []) as { amount: number; actual_amount: number | null; category: string }[];
 
     const venueCost = expenseRows
       .filter((e) => e.category === "venue")
-      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      .reduce((s, e) => s + (Number(e.actual_amount ?? e.amount) || 0), 0);
     const estimatedExpenses = expenseRows
       .filter((e) => e.category !== "venue")
-      .reduce((s, e) => s + (Number(e.amount) || 0), 0);
+      .reduce((s, e) => s + (Number(e.actual_amount ?? e.amount) || 0), 0);
     // Bar revenue / minimums are no longer stored on events
     const estimatedBarRevenue = 0;
 

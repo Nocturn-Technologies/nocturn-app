@@ -64,9 +64,10 @@ export default async function EditEventPage({ params }: Props) {
     .order("sort_order");
 
   // Fetch itemized expenses.
+  // NOC-35: read actual_amount (new) + amount (legacy) during rename window.
   const { data: expenseRows } = await admin
     .from("event_expenses")
-    .select("id, category, description, amount")
+    .select("id, category, description, amount, actual_amount, projected_amount")
     .eq("event_id", eventId)
     .order("created_at");
 
@@ -119,7 +120,8 @@ export default async function EditEventPage({ params }: Props) {
         id: r.id,
         category: r.category ?? "other",
         label: r.description ?? "",
-        amount: Number(r.amount ?? 0),
+        // NOC-35: prefer actual_amount, fall back to amount during rename window.
+        amount: Number(r.actual_amount ?? r.amount ?? 0),
         currency: resolvedCurrency,
       })) ?? [],
   };

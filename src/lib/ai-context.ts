@@ -24,7 +24,8 @@ export async function getEventContext(eventId: string): Promise<string> {
     ),
     sb.from("event_artists").select("name, fee, set_time").eq("event_id", eventId),
     sb.from("event_tasks").select("title, status").eq("event_id", eventId),
-    sb.from("event_expenses").select("description, category, amount").eq("event_id", eventId),
+    // NOC-35: include actual_amount so the AI context uses the symmetric column.
+    sb.from("event_expenses").select("description, category, amount, actual_amount").eq("event_id", eventId),
     sb.from("orders").select("id, total, status").eq("event_id", eventId).eq("status", "paid"),
   ]);
 

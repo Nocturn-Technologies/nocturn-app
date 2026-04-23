@@ -690,6 +690,7 @@ export type Database = {
       }
       event_expenses: {
         Row: {
+          actual_amount: number | null
           amount: number
           category: string
           created_at: string
@@ -698,8 +699,10 @@ export type Database = {
           event_id: string
           id: string
           is_paid: boolean
+          projected_amount: number | null
         }
         Insert: {
+          actual_amount?: number | null
           amount: number
           category: string
           created_at?: string
@@ -708,8 +711,10 @@ export type Database = {
           event_id: string
           id?: string
           is_paid?: boolean
+          projected_amount?: number | null
         }
         Update: {
+          actual_amount?: number | null
           amount?: number
           category?: string
           created_at?: string
@@ -718,6 +723,7 @@ export type Database = {
           event_id?: string
           id?: string
           is_paid?: boolean
+          projected_amount?: number | null
         }
         Relationships: [
           {

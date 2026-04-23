@@ -161,12 +161,13 @@ export async function getCompanyFinancials(): Promise<{
     // Fetch event_expenses for all settled events for the totalExpenses field
     let totalEventExpenses = 0;
     if (settledEventIds.length > 0) {
+      // NOC-35: read actual_amount with amount fallback.
       const { data: expenses } = await admin
         .from("event_expenses")
-        .select("amount")
+        .select("amount, actual_amount")
         .in("event_id", settledEventIds);
       totalEventExpenses = (expenses ?? []).reduce(
-        (sum, e) => sum + Number(e.amount),
+        (sum, e) => sum + Number(e.actual_amount ?? e.amount),
         0
       );
     }

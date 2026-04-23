@@ -88,15 +88,16 @@ export async function getFinancialPulse(preFetchedCollectiveIds?: string[]): Pro
         ? admin.from("orders").select("total").in("event_id", currentEventIds).eq("status", "paid")
         : Promise.resolve({ data: [], error: null } as { data: { total: number }[]; error: null }),
       currentEventIds.length > 0
-        ? admin.from("event_expenses").select("amount").in("event_id", currentEventIds)
-        : Promise.resolve({ data: [], error: null } as { data: { amount: number | null }[]; error: null }),
+        // NOC-35: select actual_amount (new) + amount (legacy) until Phase-B drops amount.
+        ? admin.from("event_expenses").select("amount, actual_amount").in("event_id", currentEventIds)
+        : Promise.resolve({ data: [], error: null } as { data: { amount: number | null; actual_amount: number | null }[]; error: null }),
       pastEventIds.length > 0
         ? admin.from("settlements").select("event_id, net_payout").in("event_id", pastEventIds)
         : Promise.resolve({ data: [], error: null } as { data: { event_id: string; net_payout: number | null }[]; error: null }),
     ]);
 
     const revenue = (ordersRes.data ?? []).reduce((sum, o) => sum + (Number(o.total) || 0), 0);
-    const expenses = (expensesRes.data ?? []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const expenses = (expensesRes.data ?? []).reduce((sum, e) => sum + (Number(e.actual_amount ?? e.amount) || 0), 0);
     const netPL = revenue - expenses;
 
     // Build recent-events trend chart from past settlements (net_payout = revenue after fees)

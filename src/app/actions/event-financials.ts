@@ -147,7 +147,10 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
         .eq("status", "paid"),
       admin
         .from("event_expenses")
-        .select("id, description, category, amount")
+        // NOC-35: read actual_amount with fallback to amount during the
+        // two-step rename window. amount stays in the schema until the
+        // Phase-B follow-up confirms no readers remain.
+        .select("id, description, category, amount, actual_amount, projected_amount")
         .eq("event_id", eventId)
         .order("created_at"),
       admin
@@ -211,7 +214,9 @@ export async function getEventFinancials(eventId: string): Promise<{ error: stri
       id: e.id,
       description: e.description ?? "",
       category: e.category ?? "other",
-      amount: Number(e.amount) || 0,
+      // NOC-35: prefer actual_amount (symmetric with event_revenue_lines);
+      // fall back to legacy amount for any row not yet backfilled.
+      amount: Number(e.actual_amount ?? e.amount) || 0,
       originalAmount: null,
       originalCurrency: null,
       fxRate: null,
@@ -304,7 +309,10 @@ export async function addExpense(eventId: string, data: { description: string; c
     if (ownership.error) return { error: ownership.error };
 
     const admin = createAdminClient();
-    // event_expenses: event_id, category, description, amount, is_paid, created_by
+    // event_expenses: event_id, category, description, amount, actual_amount, is_paid, created_by
+    // NOC-35 dual-write: populate both amount (legacy) and actual_amount
+    // (new, symmetric with event_revenue_lines) with the same value.
+    // amount gets dropped in a Phase-B follow-up ticket.
     const { error } = await admin
       .from("event_expenses")
       .insert({
@@ -312,6 +320,7 @@ export async function addExpense(eventId: string, data: { description: string; c
         category,
         description: desc,
         amount,
+        actual_amount: amount,
         is_paid: false,
         created_by: user.id,
       });
@@ -368,7 +377,12 @@ export async function updateExpense(expenseId: string, data: { description?: str
     const updatePayload: Record<string, unknown> = {};
     if (data.description !== undefined) updatePayload.description = data.description.trim();
     if (data.category !== undefined) updatePayload.category = data.category;
-    if (data.amount !== undefined) updatePayload.amount = Math.round(data.amount * 100) / 100;
+    // NOC-35 dual-write: amount change propagates to actual_amount too.
+    if (data.amount !== undefined) {
+      const rounded = Math.round(data.amount * 100) / 100;
+      updatePayload.amount = rounded;
+      updatePayload.actual_amount = rounded;
+    }
 
     const { error } = await admin
       .from("event_expenses")

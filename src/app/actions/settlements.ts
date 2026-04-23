@@ -61,7 +61,8 @@ export async function generateSettlement(eventId: string) {
       .eq("event_id", eventId),
     admin
       .from("event_expenses")
-      .select("id, description, amount, category")
+      // NOC-35: actual_amount + amount during dual-read window.
+      .select("id, description, amount, actual_amount, projected_amount, category")
       .eq("event_id", eventId),
   ]);
 
@@ -89,9 +90,9 @@ export async function generateSettlement(eventId: string) {
     0
   );
 
-  // Expenses
+  // Expenses — NOC-35: prefer actual_amount, fall back to legacy amount.
   const totalExpenses = (expenses ?? []).reduce(
-    (sum, e) => sum + (Number(e.amount) || 0),
+    (sum, e) => sum + (Number(e.actual_amount ?? e.amount) || 0),
     0
   );
 
@@ -189,12 +190,12 @@ export async function generateSettlement(eventId: string) {
     }
   }
 
-  // Expense lines
+  // Expense lines — NOC-35: prefer actual_amount over amount.
   for (const expense of expenses ?? []) {
     lines.push({
       settlement_id: settlement.id,
       description: `${expense.category}: ${expense.description ?? ""}`,
-      amount: Number(expense.amount),
+      amount: Number(expense.actual_amount ?? expense.amount) || 0,
       type: "expense",
     });
   }
@@ -392,12 +393,15 @@ export async function addEventExpense(input: {
 
   if (!count || count === 0) return { error: "You don't have permission to add expenses to this event" };
 
-  // event_expenses schema: event_id, category, description, amount, is_paid, created_by
+  // event_expenses schema: event_id, category, description, amount, actual_amount, is_paid, created_by
+  // NOC-35 dual-write: write to both amount and actual_amount until Phase B.
+  const rounded = Math.round(input.amount * 100) / 100;
   const { error } = await admin.from("event_expenses").insert({
     event_id: input.eventId,
     category: input.category,
     description: input.description.slice(0, 500),
-    amount: Math.round(input.amount * 100) / 100,
+    amount: rounded,
+    actual_amount: rounded,
     is_paid: false,
     created_by: user.id,
   });

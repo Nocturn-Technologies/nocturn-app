@@ -93,9 +93,10 @@ export async function generateAutoSettlement(eventId: string) {
   );
 
   // 4. Fetch event expenses (non-talent costs like venue, equipment, etc.)
+  // NOC-35: select actual_amount alongside amount; prefer actual_amount.
   const { data: expenses, error: expensesError } = await admin
     .from("event_expenses")
-    .select("amount, category")
+    .select("amount, actual_amount, category")
     .eq("event_id", eventId);
 
   if (expensesError) {
@@ -104,7 +105,7 @@ export async function generateAutoSettlement(eventId: string) {
   }
 
   const totalExpenses = (expenses ?? []).reduce(
-    (sum, e) => sum + (Number(e.amount) || 0),
+    (sum, e) => sum + (Number(e.actual_amount ?? e.amount) || 0),
     0
   );
 
