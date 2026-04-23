@@ -835,25 +835,38 @@ export function EventPnlSpreadsheet({ financials }: Props) {
                 <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[120px]">
                   Actual
                 </th>
-                {fLabels.map((label, i) => (
-                  <th
-                    key={i}
-                    className={`px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider w-[100px] ${
-                      i === 2 ? "text-nocturn" : "text-muted-foreground/70"
-                    }`}
-                  >
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span>{label}</span>
-                      {/* Ticket-count cue per scenario — shows the cascade math */}
-                      <span className="text-[11px] font-normal text-muted-foreground/70 tabular-nums normal-case">
-                        {forecasts[i].ticketsSold} tix
-                        {forecasts[i].waitlist > 0 && (
-                          <span className="text-nocturn/70 ml-0.5">+{forecasts[i].waitlist}</span>
-                        )}
-                      </span>
-                    </div>
-                  </th>
-                ))}
+                {fLabels.map((label, i) => {
+                  // B15: explicit tooltip on each column header. The
+                  // "Waitlist" column models 125% demand — if you sold out
+                  // plus had 25% more would-be buyers convert after a
+                  // capacity bump or refunds. Operators asked "what does
+                  // +250 tix at sell-out mean?" so spell it out on hover.
+                  const tooltip = i === 3
+                    ? "Revenue if 25% more demand converted beyond capacity (refunds, waitlist, capacity increase)"
+                    : i === 2
+                    ? "Revenue at 100% sell-through"
+                    : `Revenue at ${label} sell-through`;
+                  return (
+                    <th
+                      key={i}
+                      title={tooltip}
+                      className={`px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider w-[100px] ${
+                        i === 2 ? "text-nocturn" : "text-muted-foreground/70"
+                      }`}
+                    >
+                      <div className="flex flex-col items-end gap-0.5">
+                        <span>{label}</span>
+                        {/* Ticket-count cue per scenario — shows the cascade math */}
+                        <span className="text-[11px] font-normal text-muted-foreground/70 tabular-nums normal-case">
+                          {forecasts[i].ticketsSold} tix
+                          {forecasts[i].waitlist > 0 && (
+                            <span className="text-nocturn/70 ml-0.5">+{forecasts[i].waitlist}</span>
+                          )}
+                        </span>
+                      </div>
+                    </th>
+                  );
+                })}
                 <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground uppercase tracking-wider w-[60px]">
 
                 </th>

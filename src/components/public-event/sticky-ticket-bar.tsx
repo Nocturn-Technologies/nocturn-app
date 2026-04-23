@@ -37,7 +37,9 @@ export function StickyTicketBar({ lowestPrice, accentColor, ticketSectionId }: S
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 animate-slide-in-up">
-      <div className="border-t border-white/5 bg-[#09090B]/95 backdrop-blur-xl px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      {/* B20: solid background on the sticky bar. Previously 95% opacity +
+          blur let description text bleed through visibly on mobile. */}
+      <div className="border-t border-white/5 bg-[#09090B] backdrop-blur-xl px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="mx-auto max-w-[640px] flex items-center gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-white">Tickets available</p>

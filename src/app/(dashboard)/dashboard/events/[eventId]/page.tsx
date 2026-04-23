@@ -447,22 +447,20 @@ export default async function EventDetailPage({ params }: Props) {
           />
         </ActionSection>
 
-        <ActionSection title="Run the Night">
-          <ActionTile
-            href={`/dashboard/events/${event.id}/chat`}
-            icon={MessageSquare}
-            label="Team Chat"
-            tone="nocturn"
-          />
-          {(event.status === "published" || event.status === "upcoming") && (
+        {/* B06/B07: chat is not in MVP (NOC-25). Hide the Team Chat tile
+            entirely instead of linking to the "Chat is paused" placeholder.
+            Check-in remains the sole Run-the-Night action until chat ships
+            in Phase 2. */}
+        {(event.status === "published" || event.status === "upcoming") && (
+          <ActionSection title="Run the Night">
             <ActionTile
               href={`/dashboard/events/${event.id}/check-in`}
               icon={ScanLine}
               label="Check-in"
               tone="nocturn"
             />
-          )}
-        </ActionSection>
+          </ActionSection>
+        )}
 
         <ActionSection title="Money">
           <ActionTile
