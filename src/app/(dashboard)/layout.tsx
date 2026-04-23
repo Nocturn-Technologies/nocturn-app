@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { SessionTimeout } from "@/components/session-timeout";
@@ -16,7 +17,20 @@ export default async function DashboardLayout({
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    // B21: preserve the requested path so login can round-trip the user back
+    // to the page they were trying to open (e.g. a shared check-in link).
+    // Middleware / Next provides the original pathname via x-invoke-path /
+    // x-pathname on the forwarded headers — read either and fall back to "".
+    const h = await headers();
+    const nextPath =
+      h.get("x-invoke-path") ??
+      h.get("x-pathname") ??
+      h.get("next-url") ??
+      "";
+    const qs = nextPath && nextPath.startsWith("/")
+      ? `?redirect=${encodeURIComponent(nextPath)}`
+      : "";
+    redirect(`/login${qs}`);
   }
 
   // Use admin client to check memberships (bypasses RLS chicken-and-egg issue)

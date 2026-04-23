@@ -44,6 +44,16 @@ import { RsvpLiveList } from "@/components/events/rsvp-live-list";
 import { TicketHoldersLiveList } from "@/components/events/ticket-holders-live-list";
 import { listEventTicketHolders } from "@/app/actions/ticket-holders";
 import { listEventRsvps } from "@/app/actions/rsvps";
+// B02: centralized TZ formatters so server and client render the same string.
+// Previously `eventDate.toLocaleDateString("en", ...)` ran in the server's
+// UTC context, flipping a 10 PM Toronto event to "Apr 26 02:00". The helpers
+// pin to America/Toronto until we add per-event timezone (NOC-XX / S01).
+import {
+  formatEventLongDate,
+  formatEventTime,
+  formatEventShortDate,
+  formatEventMonthAbbr,
+} from "@/lib/date";
 
 interface Props {
   params: Promise<{ eventId: string }>;
@@ -301,12 +311,12 @@ export default async function EventDetailPage({ params }: Props) {
     ? `${process.env.NEXT_PUBLIC_APP_URL || "https://nocturn.app"}${publicUrl}`
     : null;
 
-  // Format date for share card
-  const dayName = eventDate.toLocaleDateString("en", { weekday: "short" }).toUpperCase();
-  const monthName = eventDate.toLocaleDateString("en", { month: "short" }).toUpperCase();
-  const dayNum = eventDate.getDate();
-  const timeStr = eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" });
-  const shareCardDate = `${dayName} ${monthName} ${dayNum} \u2022 ${timeStr}`;
+  // Format date for share card (B02 — TZ-anchored)
+  const dayName = formatEventShortDate(eventDate).split(" ")[0].toUpperCase();
+  const monthName = formatEventMonthAbbr(eventDate);
+  const dayNumStr = formatEventShortDate(eventDate).split(" ")[2] ?? "";
+  const timeStr = formatEventTime(eventDate);
+  const shareCardDate = `${dayName} ${monthName} ${dayNumStr} \u2022 ${timeStr}`;
   const shareCardVenue = venue ? `${venue.name} \u2022 ${venue.city}` : "";
   const lowestPrice = tiers && tiers.length > 0
     ? `$${Math.min(...tiers.map((t) => Number(t.price)))}+`
@@ -380,6 +390,27 @@ export default async function EventDetailPage({ params }: Props) {
               label="Edit Event"
               tone="nocturn"
             />
+            {/* B08: expose Duplicate in Draft too — "copy an in-progress
+                event and tweak the date" is a real workflow for recurring
+                series; previously only surfaced in the post-event Wrap Up
+                section. */}
+            <DuplicateEventTile eventId={event.id} />
+          </ActionSection>
+        )}
+
+        {/* B05: on a published event, still expose Edit so operators can
+            fix typos in description / flyer / times without first cancelling
+            the event. The server action (events.ts updateEvent) will enforce
+            which fields are safe to mutate while published. */}
+        {event.status === "published" && (
+          <ActionSection title="Edit">
+            <ActionTile
+              href={`/dashboard/events/${event.id}/edit`}
+              icon={Pencil}
+              label="Edit Event"
+              tone="nocturn"
+            />
+            <DuplicateEventTile eventId={event.id} />
           </ActionSection>
         )}
 
@@ -528,32 +559,15 @@ export default async function EventDetailPage({ params }: Props) {
             <div className="flex items-center gap-2 text-sm">
               <Calendar className="h-4 w-4 shrink-0 text-muted-foreground" />
               <span className="truncate">
-                {eventDate.toLocaleDateString("en", {
-                  weekday: "long",
-                  month: "long",
-                  day: "numeric",
-                  year: "numeric",
-                })}
+                {formatEventLongDate(eventDate)}
               </span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
               <span className="truncate">
-                {doorsAt &&
-                  `Doors ${doorsAt.toLocaleTimeString("en", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })} · `}
-                Start{" "}
-                {eventDate.toLocaleTimeString("en", {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-                {endsAt &&
-                  ` · End ${endsAt.toLocaleTimeString("en", {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}`}
+                {doorsAt && `Doors ${formatEventTime(doorsAt)} · `}
+                Start {formatEventTime(eventDate)}
+                {endsAt && ` · End ${formatEventTime(endsAt)}`}
               </span>
             </div>
           </div>

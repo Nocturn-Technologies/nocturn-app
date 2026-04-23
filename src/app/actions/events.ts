@@ -447,8 +447,11 @@ export async function updateEvent(eventId: string, input: UpdateEventInput) {
   if (ownership.error) return { error: ownership.error };
   if (!ownership.event) return { error: "Event not found." };
 
-  if (ownership.event.status !== "draft") {
-    return { error: "Only draft events can be edited." };
+  // B05: draft + published are editable. Completed/settled/cancelled remain
+  // locked. The UI mirrors this decision in edit/page.tsx.
+  const EDITABLE_STATUSES = ["draft", "published"];
+  if (!EDITABLE_STATUSES.includes(ownership.event.status)) {
+    return { error: `Events in status "${ownership.event.status}" can't be edited — duplicate the event to make changes.` };
   }
 
   const admin = createAdminClient();
@@ -765,9 +768,15 @@ export async function publishEvent(eventId: string) {
   // TODO: needs schema decision — stripe_account_id/stripe_charges_enabled/stripe_details_submitted
   // columns were removed from collectives in the schema rebuild. Stripe check skipped for now.
 
+  // B09: set published_at so analytics (funnel, sales curve, days-since-publish)
+  // have a ground-truth timestamp. Previously only status/is_published flipped.
   const { error: publishError } = await admin
     .from("events")
-    .update({ status: "published", is_published: true })
+    .update({
+      status: "published",
+      is_published: true,
+      published_at: new Date().toISOString(),
+    })
     .eq("id", eventId);
 
   if (publishError) {

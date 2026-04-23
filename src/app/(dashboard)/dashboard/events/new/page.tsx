@@ -612,7 +612,12 @@ function getQuickDates(): Array<{ key: string; label: string; sub: string; ymd: 
   const fmt = (d: Date) =>
     d.toLocaleDateString("en", { month: "short", day: "numeric" });
 
-  return [
+  // B12: dedupe chips that collapse to the same calendar day. Happens when
+  // "tomorrow" IS the upcoming Friday/Saturday. Previously the picker showed
+  // "Tomorrow Apr 24" and "This Fri Apr 24" as two separate chips pointing
+  // at the same date, which looked like a bug to operators.
+  const seen = new Set<string>();
+  const chips = [
     { key: "tonight", label: "Tonight", sub: fmt(today), ymd: formatLocalYmd(today) },
     { key: "tomorrow", label: "Tomorrow", sub: fmt(tomorrow), ymd: formatLocalYmd(tomorrow) },
     { key: "this-fri", label: "This Fri", sub: fmt(thisFri), ymd: formatLocalYmd(thisFri) },
@@ -620,6 +625,11 @@ function getQuickDates(): Array<{ key: string; label: string; sub: string; ymd: 
     { key: "next-fri", label: "Next Fri", sub: fmt(nextFri), ymd: formatLocalYmd(nextFri) },
     { key: "next-sat", label: "Next Sat", sub: fmt(nextSat), ymd: formatLocalYmd(nextSat) },
   ];
+  return chips.filter((c) => {
+    if (seen.has(c.ymd)) return false;
+    seen.add(c.ymd);
+    return true;
+  });
 }
 
 function QuickDatePicker({ value, onChange }: { value: string; onChange: (ymd: string) => void }) {
@@ -1091,7 +1101,7 @@ function LiveForecast({
           <p className="text-[11px] text-muted-foreground mt-1">
             {totalExpenses > 0
               ? `${fmtCurrency(projections[2].net)} − ${fmtCurrency(totalExpenses)} expenses at sell-out`
-              : "max net revenue at sell-out"}
+              : "projected gross at sell-out"}
           </p>
         </div>
         <span className="shrink-0 text-[11px] text-muted-foreground bg-zinc-800 rounded-full px-2 py-0.5">

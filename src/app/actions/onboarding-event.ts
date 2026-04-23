@@ -113,8 +113,10 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
   const endsAt = new Date(startsAt.getTime() + 5 * 60 * 60 * 1000); // 5hrs after
 
   const isFree = input.tierPrice === 0;
-  // Publish free events immediately; paid events start as draft (need Stripe setup)
-  const status = isFree ? "published" : "draft";
+  // B09 + unblock onboarding for paid: Nocturn is merchant-of-record (no
+  // per-collective Stripe Connect needed), so paid events from onboarding
+  // can publish immediately alongside free ones. Draft-on-paid was stale.
+  const nowIso = new Date().toISOString();
 
   // venue_name is a flat text column on events — no venue FK needed.
   const venueName = input.venue && input.venue.trim() ? input.venue.trim() : null;
@@ -130,9 +132,10 @@ export async function createOnboardingEvent(input: OnboardingEventInput) {
       starts_at: startsAt.toISOString(),
       ends_at: endsAt.toISOString(),
       doors_at: doorsAt.toISOString(),
-      status,
+      status: "published",
       is_free: isFree,
-      is_published: isFree,
+      is_published: true,
+      published_at: nowIso,
       vibe_tags: input.vibeTags,
       metadata: { source: "onboarding" },
     })

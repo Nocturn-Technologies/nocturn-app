@@ -225,6 +225,7 @@ export default function SignupPage() {
                     setUserType(type);
                     setStep("form");
                   }}
+                  aria-label={`${label} — ${description}`}
                   className="group w-full flex items-start gap-3 rounded-xl border border-border p-3.5 text-left transition-all hover:border-nocturn/40 hover:bg-nocturn/5 active:scale-[0.98] min-h-[56px]"
                 >
                   <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-nocturn/[0.08] shrink-0 mt-0.5">
@@ -262,6 +263,7 @@ export default function SignupPage() {
                     setUserType(type);
                     setStep("form");
                   }}
+                  aria-label={`Sign up as ${label}`}
                   className="flex items-center gap-2.5 rounded-lg border border-border p-2.5 text-left transition-all hover:border-nocturn/40 hover:bg-nocturn/5 active:scale-[0.98] min-h-[44px]"
                 >
                   <div className="flex h-7 w-7 items-center justify-center rounded-md border border-white/10 bg-nocturn/[0.08] shrink-0">
