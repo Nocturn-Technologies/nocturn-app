@@ -3,7 +3,7 @@ import { NocturnLogo } from "@/components/nocturn-logo";
 
 export const metadata: Metadata = {
   title: { default: "Nocturn", template: "%s — Nocturn" },
-  description: "Sign in to your Nocturn account. AI-powered operations for music collectives and promoters.",
+  description: "Sign in to your Nocturn account. Where music collectives run their nights.",
 };
 
 export default function AuthLayout({
@@ -37,7 +37,7 @@ export default function AuthLayout({
             <NocturnLogo size="lg" />
           </div>
           <p className="mt-3 text-[13px] tracking-wide text-muted-foreground">
-            AI for music collectives and promoters
+            Where music collectives run their nights
           </p>
         </div>
 

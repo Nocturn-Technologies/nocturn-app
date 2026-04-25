@@ -1,4 +1,4 @@
-# Nocturn — AI for Music Collectives and Promoters
+# Nocturn — Where Music Collectives Run Their Nights
 
 > This is the ONLY active codebase. The mobile repo (nocturn-mobile) is archived — all features were merged here.
 
