@@ -115,6 +115,15 @@ interface BudgetDraft {
     amount: number;
     currency: string;
   }>;
+  // Non-ticket revenue tracked alongside expenses so the forecast reflects
+  // the full P&L. Sponsorship, bar guarantees, merch, raffles, drink-ticket
+  // pre-sales — all the income streams that exist outside ticket sales.
+  // Stored in event currency (no FX) for v1; cross-currency revenue can
+  // come later if operators ask for it.
+  otherRevenue: Array<{
+    label: string;
+    amount: number;
+  }>;
 }
 
 function defaultBudgetDraft(eventCurrency = "usd"): BudgetDraft {
@@ -132,6 +141,7 @@ function defaultBudgetDraft(eventCurrency = "usd"): BudgetDraft {
     barMinimum: 0,
     deposit: 0,
     prodItems: [],
+    otherRevenue: [],
   };
 }
 
@@ -165,7 +175,9 @@ function flattenBudget(draft: BudgetDraft): ExpenseItem[] {
 // ─── Draft Persistence ─────────────────────────────────────────────────────
 
 const DRAFT_STORAGE_KEY = "nocturn-event-draft";
-const DRAFT_VERSION = 4;
+// Bumped from 4 → 5 when otherRevenue was added to BudgetDraft (NOC-48).
+// Old drafts without the field would crash the new render code.
+const DRAFT_VERSION = 5;
 
 type WizardStep = "details" | "venue" | "tickets" | "budget" | "review";
 
@@ -1562,6 +1574,10 @@ function BudgetStep({
   // Tickets step to confirm what changed.
   const [appliedNote, setAppliedNote] = useState<string | null>(null);
   const [priceMultiplier, setPriceMultiplier] = useState(1);
+  // Calculate-Budget is enabled if any budget row has a positive amount —
+  // expenses OR other-revenue. Free events with sponsorship-only entries
+  // still want to see the net surfaced; gating purely on expenses would
+  // block that flow.
   const hasAnyExpense =
     draft.talentFee.amount > 0 ||
     draft.venueRental > 0 ||
@@ -1570,7 +1586,8 @@ function BudgetStep({
     draft.travel.hotel.amount > 0 ||
     draft.travel.transport.amount > 0 ||
     draft.travel.perDiem.amount > 0 ||
-    draft.prodItems.some(p => p.amount > 0);
+    draft.prodItems.some(p => p.amount > 0) ||
+    draft.otherRevenue.some(r => r.amount > 0);
 
   function updateTravel(key: keyof BudgetDraft["travel"], value: AmountInCurrency) {
     setDraft(prev => ({ ...prev, travel: { ...prev.travel, [key]: value } }));
@@ -1597,6 +1614,40 @@ function BudgetStep({
   function removeProdItem(idx: number) {
     setDraft(prev => ({ ...prev, prodItems: prev.prodItems.filter((_, i) => i !== idx) }));
   }
+
+  // Other-revenue helpers — mirror the prodItems chip pattern but for income.
+  // Sponsorships, bar guarantees, merch, drink-ticket pre-sales, raffles —
+  // anything that adds to the night's revenue outside of ticket sales. Stored
+  // in event currency to keep the math simple for v1.
+  function addRevenueItem(label: string) {
+    setDraft(prev => ({
+      ...prev,
+      otherRevenue: [...prev.otherRevenue, { label, amount: 0 }],
+    }));
+  }
+
+  function addCustomRevenueItem() {
+    addRevenueItem("Other revenue");
+  }
+
+  function updateRevenueItem(idx: number, partial: Partial<BudgetDraft["otherRevenue"][number]>) {
+    setDraft(prev => ({
+      ...prev,
+      otherRevenue: prev.otherRevenue.map((r, i) => (i === idx ? { ...r, ...partial } : r)),
+    }));
+  }
+
+  function removeRevenueItem(idx: number) {
+    setDraft(prev => ({ ...prev, otherRevenue: prev.otherRevenue.filter((_, i) => i !== idx) }));
+  }
+
+  // Total non-ticket revenue in event currency. Folded into liveScenarios
+  // gross alongside ticket sales + bar share, so the 50/75/100% projections
+  // and the "free event" net all reflect the full P&L.
+  const otherRevenueTotal = draft.otherRevenue.reduce(
+    (sum, r) => sum + (Number.isFinite(r.amount) ? r.amount : 0),
+    0,
+  );
 
   // Which prod chips are still available (already-added ones disappear from
   // the tray). Talent chips are exempt — operators commonly add multiple
@@ -1632,7 +1683,10 @@ function BudgetStep({
           })),
           scenario.rate
         );
-        const gross = projection.revenue + barShareRevenue;
+        // Gross = ticket revenue + bar share + non-ticket income (sponsorship,
+        // merch, etc.). Fold otherRevenueTotal in here so the 50/75/100%
+        // projections reflect the real margin operators will see.
+        const gross = projection.revenue + barShareRevenue + otherRevenueTotal;
         return {
           label: scenario.label,
           ticketsSold: projection.ticketsSold,
@@ -1926,6 +1980,87 @@ function BudgetStep({
           )}
         </div>
 
+        {/* ── Other revenue ── */}
+        <div className="space-y-2 border-t border-white/5 pt-4">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
+              <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+              Other revenue
+            </span>
+            <span className="text-[11px] text-muted-foreground/70">offsets your costs in the forecast</span>
+          </div>
+
+          {draft.otherRevenue.length > 0 && (
+            <div className="space-y-2">
+              {draft.otherRevenue.map((r, i) => (
+                <div key={i} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <input
+                      type="text"
+                      value={r.label}
+                      onChange={(e) => updateRevenueItem(i, { label: e.target.value })}
+                      placeholder="Label"
+                      maxLength={64}
+                      className="flex-1 bg-transparent text-xs font-medium text-zinc-300 placeholder:text-zinc-500 outline-none focus:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeRevenueItem(i)}
+                      aria-label={`Remove ${r.label}`}
+                      className="text-zinc-500 hover:text-red-400 transition-colors p-1"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <NumberInput
+                      value={r.amount}
+                      onChange={(n) => updateRevenueItem(i, { amount: n })}
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-emerald-500/50 flex-1"
+                    />
+                    <span className="inline-flex items-center px-2 text-xs text-zinc-400 min-w-[44px] justify-center bg-zinc-900 border border-white/10 rounded-lg">
+                      {ec.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Chip tray for revenue */}
+          <div className="flex flex-wrap gap-2">
+            {[
+              "Sponsorship",
+              "Bar guarantee",
+              "Merch",
+              "Drink ticket pre-sales",
+              "Raffle / donation",
+            ].map((label) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => addRevenueItem(label)}
+                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-white transition-all active:scale-[0.97] min-h-[44px]"
+              >
+                <Plus className="h-3 w-3" />
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={addCustomRevenueItem}
+              className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-400 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-white transition-all active:scale-[0.97] min-h-[44px]"
+            >
+              <Plus className="h-3 w-3" />
+              Custom
+            </button>
+          </div>
+
+          {draft.otherRevenue.length === 0 && (
+            <p className="text-[11px] text-muted-foreground/70">Sponsorship, bar guarantee, merch — anything that adds revenue alongside tickets.</p>
+          )}
+        </div>
+
         {/* Calculate */}
         <Button
           onClick={onCalculate}
@@ -1970,13 +2105,52 @@ function BudgetStep({
               </div>
             )}
 
+            {/* Other revenue summary — folded into the forecast math, surfaced
+                here so operators see why their net looks higher than ticket-only. */}
+            {otherRevenueTotal > 0 && (
+              <div className="space-y-1 pt-1 border-t border-white/5">
+                {draft.otherRevenue
+                  .filter((r) => r.amount > 0)
+                  .map((r, i) => (
+                    <div key={i} className="flex items-center justify-between text-[11px] text-emerald-400/80">
+                      <span>+ {r.label}</span>
+                      <span>{Math.round(r.amount).toLocaleString()} {ec.toUpperCase()}</span>
+                    </div>
+                  ))}
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="text-emerald-400 font-medium">Other revenue</span>
+                  <span className="text-emerald-400 font-semibold">
+                    +{Math.round(otherRevenueTotal).toLocaleString()} {ec.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            )}
+
             {isFree ? (
               // Free events have no ticket revenue → break-even, sell-through
-              // scenarios, and tier recommendations don't apply. Just show the
-              // operator what this night is going to cost them out of pocket.
-              <p className="text-xs text-zinc-400 pt-1">
-                Free event — these costs are out of pocket. Track them here so your settlement and P&amp;L stay accurate.
-              </p>
+              // scenarios, and tier recommendations don't apply. If the operator
+              // has other revenue (sponsorship, etc.) we show net = revenue −
+              // costs so they know whether the night profits, breaks even, or
+              // costs them money. Otherwise the costs are pure out-of-pocket.
+              otherRevenueTotal > 0 ? (
+                (() => {
+                  const net = otherRevenueTotal - result.totalExpenses;
+                  const isProfit = net >= 0;
+                  return (
+                    <p className="text-xs text-zinc-400 pt-1">
+                      Free event net:{" "}
+                      <span className={`font-medium ${isProfit ? "text-green-400" : "text-red-400"}`}>
+                        {isProfit ? "+" : "−"}{Math.abs(Math.round(net)).toLocaleString()} {ec.toUpperCase()}
+                      </span>{" "}
+                      (other revenue − costs)
+                    </p>
+                  );
+                })()
+              ) : (
+                <p className="text-xs text-zinc-400 pt-1">
+                  Free event — these costs are out of pocket. Track them here so your settlement and P&amp;L stay accurate.
+                </p>
+              )
             ) : (
               <p className="text-xs text-zinc-400 pt-1">
                 Break-even: <span className="text-white font-medium">{(liveBreakEven ?? result.breakEven).ticketsNeeded} tickets</span> at {(liveBreakEven ?? result.breakEven).atPrice} {result.eventCurrency.toUpperCase()}
