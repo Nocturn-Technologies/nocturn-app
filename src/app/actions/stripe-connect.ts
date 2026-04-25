@@ -24,27 +24,25 @@ import { getStripe } from "@/lib/stripe";
 import { isValidUUID } from "@/lib/utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-// Helper to bypass generated-type constraints for Stripe columns not yet
-// reflected in the schema (stripe_account_id, stripe_charges_enabled, etc.)
+// Helper to bypass generated-type constraints for stripe_account_id, which
+// the entity-architecture rebuild removed from the generated DB types even
+// though NOC-39 added the column back.
 function untypedCollectives(admin: ReturnType<typeof createAdminClient>) {
   return (admin as unknown as SupabaseClient).from("collectives");
 }
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com";
 
-// Stripe Connect columns on collectives exist in the database but are not yet
-// in the generated types. Extend with a local interface and use as unknown as.
+// Per Andrew's NOC-39 architecture decision: store stripe_account_id only,
+// fetch every status field live from Stripe API. Zero caching, zero drift.
+// The denormalized columns (stripe_charges_enabled etc.) were dropped from
+// the schema in the entity-architecture rebuild — only stripe_account_id
+// was restored — so this struct intentionally has just the one field.
 interface CollectiveWithStripe {
   id: string;
   name: string;
-  metadata: Record<string, unknown> | null;
+  city: string | null;
   stripe_account_id: string | null;
-  stripe_charges_enabled: boolean;
-  stripe_payouts_enabled: boolean;
-  stripe_details_submitted: boolean;
-  stripe_requirements_currently_due: string[] | null;
-  stripe_disabled_reason: string | null;
-  stripe_status_updated_at: string | null;
 }
 
 // Shape returned to the client for the Payouts card state machine.
@@ -87,8 +85,10 @@ async function assertCollectiveAdmin(collectiveId: string) {
     return { error: "Only collective owners and admins can manage payouts" as const };
   }
 
+  // Only query columns that exist post entity-architecture rebuild.
+  // Status flags come live from Stripe API in getConnectStatus().
   const { data: rawCollective, error: collectiveError } = await untypedCollectives(admin)
-    .select("id, name, metadata, stripe_account_id, stripe_charges_enabled, stripe_payouts_enabled, stripe_details_submitted, stripe_requirements_currently_due, stripe_disabled_reason, stripe_status_updated_at")
+    .select("id, name, city, stripe_account_id")
     .eq("id", collectiveId)
     .maybeSingle() as {
       data: CollectiveWithStripe | null;
@@ -124,12 +124,12 @@ export async function createConnectAccount(collectiveId: string) {
     }
 
     // Country is inferred from the operator's billing address during the
-    // hosted onboarding flow. We pass the best guess we have from collective
-    // metadata.city — Stripe overrides it if the operator enters an address
-    // in a different country. Default to US if unset (majority of target
-    // collectives are US + Canada; either triggers the right Express form).
-    const collectiveCity = collective.metadata?.["city"] as string | undefined;
-    const country = inferCountryFromCity(collectiveCity) ?? "US";
+    // hosted onboarding flow. We pass the best guess we have from the
+    // collective.city flat column — Stripe overrides it if the operator
+    // enters an address in a different country. Default to US if unset
+    // (majority of target collectives are US + Canada; either triggers
+    // the right Express form).
+    const country = inferCountryFromCity(collective.city ?? undefined) ?? "US";
 
     let account: Stripe.Account;
     try {
@@ -221,26 +221,22 @@ export async function createOnboardingLink(collectiveId: string) {
 }
 
 /**
- * Fetch current onboarding status. Reads the denormalized fields on
- * collectives first (kept in sync by the account.updated webhook) and
- * only falls through to Stripe when we have no cached value yet — that
- * is, for the first load after account creation but before the first
- * webhook arrives. Saves a Stripe API call on every Settings mount.
+ * Fetch current onboarding status. Always live from Stripe API per Andrew's
+ * NOC-39 architecture: store account_id only, no cached status columns.
  *
- * Pass `forceRefresh: true` to bypass the cache (e.g. immediately after
- * the user returns from hosted onboarding).
+ * The `forceRefresh` option is kept for API compatibility with the call
+ * sites (PayoutsCard passes it after the operator returns from onboarding)
+ * but is now a no-op — every call is a fresh Stripe lookup.
  */
-const STATUS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
 export async function getConnectStatus(
   collectiveId: string,
-  opts?: { forceRefresh?: boolean }
+  _opts?: { forceRefresh?: boolean }
 ): Promise<{ error: string | null; status: ConnectStatus | null }> {
   try {
     const auth = await assertCollectiveAdmin(collectiveId);
     if ("error" in auth) return { error: auth.error ?? "Something went wrong", status: null };
 
-    const { admin, collective } = auth;
+    const { collective } = auth;
 
     const stripeAccountId = collective.stripe_account_id;
     if (!stripeAccountId) {
@@ -257,49 +253,6 @@ export async function getConnectStatus(
       };
     }
 
-    // Try cached status first. The account.updated webhook populates
-    // stripe_status_updated_at; if it's recent and caller didn't force a
-    // refresh, return the denorm columns.
-    if (!opts?.forceRefresh) {
-      const { data: cached } = await untypedCollectives(admin)
-        .select(
-          "stripe_charges_enabled, stripe_payouts_enabled, stripe_details_submitted, stripe_requirements_currently_due, stripe_disabled_reason, stripe_status_updated_at"
-        )
-        .eq("id", collective.id)
-        .maybeSingle() as {
-          data: Pick<
-            CollectiveWithStripe,
-            | "stripe_charges_enabled"
-            | "stripe_payouts_enabled"
-            | "stripe_details_submitted"
-            | "stripe_requirements_currently_due"
-            | "stripe_disabled_reason"
-            | "stripe_status_updated_at"
-          > | null;
-        };
-
-      const updatedAt = cached?.stripe_status_updated_at
-        ? new Date(cached.stripe_status_updated_at).getTime()
-        : 0;
-      const isCacheFresh =
-        updatedAt > 0 && Date.now() - updatedAt < STATUS_CACHE_TTL_MS;
-
-      if (cached && isCacheFresh) {
-        return {
-          error: null,
-          status: {
-            accountId: stripeAccountId,
-            chargesEnabled: cached.stripe_charges_enabled,
-            payoutsEnabled: cached.stripe_payouts_enabled,
-            detailsSubmitted: cached.stripe_details_submitted,
-            requirements: cached.stripe_requirements_currently_due ?? [],
-            disabledReason: cached.stripe_disabled_reason,
-          },
-        };
-      }
-    }
-
-    // Cold fetch from Stripe + refresh the denorm cache in the background.
     let account: Stripe.Account;
     try {
       account = await getStripe().accounts.retrieve(stripeAccountId);
@@ -307,20 +260,6 @@ export async function getConnectStatus(
       console.error("[stripe-connect] accounts.retrieve error:", stripeErr);
       return { error: "Failed to reach Stripe", status: null };
     }
-
-    // Best-effort cache refresh — don't block on this.
-    void untypedCollectives(admin)
-      .update({
-        stripe_charges_enabled: account.charges_enabled ?? false,
-        stripe_payouts_enabled: account.payouts_enabled ?? false,
-        stripe_details_submitted: account.details_submitted ?? false,
-        stripe_requirements_currently_due:
-          account.requirements?.currently_due ?? [],
-        stripe_disabled_reason:
-          account.requirements?.disabled_reason ?? null,
-        stripe_status_updated_at: new Date().toISOString(),
-      })
-      .eq("id", collective.id);
 
     return {
       error: null,
