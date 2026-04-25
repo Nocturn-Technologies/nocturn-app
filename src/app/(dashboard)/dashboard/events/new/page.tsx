@@ -1511,7 +1511,14 @@ function MoneyRow({ label, placeholder, value, onChange, eventCurrency, Icon, on
 
 // Chip-add row definitions for Production & Marketing. One tap adds a row
 // with the label + default category prefilled; operator fills amount + currency.
+// "Other talent" / "Opener" / "MC" let operators add multiple talent fees
+// beyond the headliner — e.g., support DJ, MC, opener — each with its own
+// amount + currency. They're all stored under the canonical "talent" category
+// so settlement + finance treat them identically.
 const PROD_CHIPS: Array<{ category: ExpenseCategory; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { category: "talent",          label: "Other talent",    icon: Music },
+  { category: "talent",          label: "Opener",          icon: Music },
+  { category: "talent",          label: "MC / Host",       icon: Music },
   { category: "ads",             label: "Ads",             icon: Megaphone },
   { category: "graphic_design",  label: "Graphic design",  icon: Sparkles },
   { category: "photo",           label: "Photo",           icon: Sparkles },
@@ -1591,9 +1598,15 @@ function BudgetStep({
     setDraft(prev => ({ ...prev, prodItems: prev.prodItems.filter((_, i) => i !== idx) }));
   }
 
-  // Which prod chips are still available (already-added ones disappear from the tray).
+  // Which prod chips are still available (already-added ones disappear from
+  // the tray). Talent chips are exempt — operators commonly add multiple
+  // talent rows (headliner + opener + MC), so we keep those available even
+  // after one's been added. Other chips (ads, photo, etc.) typically only
+  // need one entry per event, so they hide after first add to reduce clutter.
   const addedCategories = new Set(draft.prodItems.map(p => p.category));
-  const availableChips = PROD_CHIPS.filter(c => !addedCategories.has(c.category));
+  const availableChips = PROD_CHIPS.filter(
+    c => c.category === "talent" || !addedCategories.has(c.category),
+  );
   const suggestedPreview = result
     ? multiplyBudgetTiers(result.suggestedTiers, priceMultiplier)
     : [];

@@ -466,9 +466,29 @@ export function RsvpWidget({
             /* text-base (16px) prevents iOS Safari auto-zoom on focus. */
             className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
           />
+          {/* Mobile first — phone is the primary identifier (matches Partiful /
+              Dice / Posh patterns). Email follows so we can still send the
+              confirmation receipt + access link. */}
+          <div className="relative">
+            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <label htmlFor="rsvp-phone" className="sr-only">Mobile number</label>
+            <input
+              id="rsvp-phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              enterKeyHint="next"
+              placeholder="Mobile number"
+              value={guestPhone}
+              onChange={(e) => setGuestPhone(e.target.value)}
+              required
+              maxLength={32}
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
+            />
+          </div>
           <div className="relative">
             <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
-            <label htmlFor="rsvp-email" className="sr-only">Email address</label>
+            <label htmlFor="rsvp-email" className="sr-only">Email for your confirmation</label>
             <input
               id="rsvp-email"
               type="email"
@@ -477,29 +497,12 @@ export function RsvpWidget({
               autoCapitalize="off"
               autoCorrect="off"
               spellCheck={false}
-              enterKeyHint="next"
-              placeholder="you@example.com"
+              enterKeyHint="done"
+              placeholder="Email for your confirmation"
               value={guestEmail}
               onChange={(e) => setGuestEmail(e.target.value)}
               required
               maxLength={320}
-              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
-            />
-          </div>
-          <div className="relative">
-            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
-            <label htmlFor="rsvp-phone" className="sr-only">Phone number</label>
-            <input
-              id="rsvp-phone"
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              enterKeyHint="done"
-              placeholder="(555) 123-4567"
-              value={guestPhone}
-              onChange={(e) => setGuestPhone(e.target.value)}
-              required
-              maxLength={32}
               className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
             />
           </div>
