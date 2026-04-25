@@ -1535,6 +1535,10 @@ interface BudgetStepProps {
   onSuggestTravel: () => void;
   tiers: TicketTier[];
   onApplySuggestedTiers: (tiers: TicketTier[]) => void;
+  // Free events skip ticket-priced break-even, sell-through scenarios,
+  // and recommended-tier suggestions — none of that math applies when
+  // there's no ticket price to charge.
+  isFree: boolean;
 }
 
 function BudgetStep({
@@ -1543,6 +1547,7 @@ function BudgetStep({
   projectedBarSales, barPercent, onProjectedBarSalesChange, onBarPercentChange,
   onSkip, onCalculate, onSuggestTravel,
   tiers, onApplySuggestedTiers,
+  isFree,
 }: BudgetStepProps) {
   const ec = draft.eventCurrency;
   // Local "just applied" announcement for the suggested-tiers button. Spells
@@ -1952,22 +1957,33 @@ function BudgetStep({
               </div>
             )}
 
-            <p className="text-xs text-zinc-400 pt-1">
-              Break-even: <span className="text-white font-medium">{(liveBreakEven ?? result.breakEven).ticketsNeeded} tickets</span> at {(liveBreakEven ?? result.breakEven).atPrice} {result.eventCurrency.toUpperCase()}
-            </p>
+            {isFree ? (
+              // Free events have no ticket revenue → break-even, sell-through
+              // scenarios, and tier recommendations don't apply. Just show the
+              // operator what this night is going to cost them out of pocket.
+              <p className="text-xs text-zinc-400 pt-1">
+                Free event — these costs are out of pocket. Track them here so your settlement and P&amp;L stay accurate.
+              </p>
+            ) : (
+              <p className="text-xs text-zinc-400 pt-1">
+                Break-even: <span className="text-white font-medium">{(liveBreakEven ?? result.breakEven).ticketsNeeded} tickets</span> at {(liveBreakEven ?? result.breakEven).atPrice} {result.eventCurrency.toUpperCase()}
+              </p>
+            )}
 
-            <div className="space-y-1">
-              {liveScenarios.map((s, i) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{s.label} <span className="text-[11px] text-zinc-500">({s.ticketsSold} tix)</span></span>
-                  <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {s.profit >= 0 ? "+" : ""}{Math.round(s.profit).toLocaleString()} {result.eventCurrency.toUpperCase()}
-                  </span>
-                </div>
-              ))}
-            </div>
+            {!isFree && (
+              <div className="space-y-1">
+                {liveScenarios.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">{s.label} <span className="text-[11px] text-zinc-500">({s.ticketsSold} tix)</span></span>
+                    <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {s.profit >= 0 ? "+" : ""}{Math.round(s.profit).toLocaleString()} {result.eventCurrency.toUpperCase()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
-            {result.suggestedTiers.length > 0 && (
+            {!isFree && result.suggestedTiers.length > 0 && (
               <div className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -2049,8 +2065,9 @@ function BudgetStep({
 
         {/* Market pricing sanity-check — sits next to the cost-plus suggestion
             so operators don't anchor on expense-driven prices without seeing
-            what the local market is actually charging. */}
-        {result && venueCity && eventDate && result.suggestedTiers.length > 0 && (
+            what the local market is actually charging. Free events skip this
+            entirely (no price to sanity-check). */}
+        {!isFree && result && venueCity && eventDate && result.suggestedTiers.length > 0 && (
           <PricingInsight
             city={venueCity}
             date={eventDate}
@@ -3129,6 +3146,7 @@ export default function NewEventPage() {
             onApplySuggestedTiers={(nextTiers) => {
               setTiers(nextTiers);
             }}
+            isFree={formData.isFree}
           />
         )}
 
