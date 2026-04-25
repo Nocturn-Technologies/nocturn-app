@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       artist_profiles: {
@@ -397,6 +372,7 @@ export type Database = {
           name: string
           party_id: string | null
           slug: string
+          stripe_account_id: string | null
           updated_at: string
           vibe: string | null
         }
@@ -413,6 +389,7 @@ export type Database = {
           name: string
           party_id?: string | null
           slug: string
+          stripe_account_id?: string | null
           updated_at?: string
           vibe?: string | null
         }
@@ -429,6 +406,7 @@ export type Database = {
           name?: string
           party_id?: string | null
           slug?: string
+          stripe_account_id?: string | null
           updated_at?: string
           vibe?: string | null
         }
@@ -784,36 +762,48 @@ export type Database = {
           completed_at: string | null
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           description: string | null
           due_at: string | null
           event_id: string
           id: string
+          metadata: Json | null
+          priority: string | null
           status: string
           title: string
+          updated_at: string
         }
         Insert: {
           assigned_to?: string | null
           completed_at?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           description?: string | null
           due_at?: string | null
           event_id: string
           id?: string
+          metadata?: Json | null
+          priority?: string | null
           status?: string
           title: string
+          updated_at?: string
         }
         Update: {
           assigned_to?: string | null
           completed_at?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           description?: string | null
           due_at?: string | null
           event_id?: string
           id?: string
+          metadata?: Json | null
+          priority?: string | null
           status?: string
           title?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -841,10 +831,12 @@ export type Database = {
       }
       events: {
         Row: {
+          bar_minimum: number | null
           capacity: number | null
           city: string | null
           collective_id: string
           created_at: string
+          currency: string
           description: string | null
           doors_at: string | null
           ends_at: string | null
@@ -866,10 +858,12 @@ export type Database = {
           vibe_tags: string[] | null
         }
         Insert: {
+          bar_minimum?: number | null
           capacity?: number | null
           city?: string | null
           collective_id: string
           created_at?: string
+          currency?: string
           description?: string | null
           doors_at?: string | null
           ends_at?: string | null
@@ -891,10 +885,12 @@ export type Database = {
           vibe_tags?: string[] | null
         }
         Update: {
+          bar_minimum?: number | null
           capacity?: number | null
           city?: string | null
           collective_id?: string
           created_at?: string
+          currency?: string
           description?: string | null
           doors_at?: string | null
           ends_at?: string | null
@@ -1812,6 +1808,69 @@ export type Database = {
           },
         ]
       }
+      rsvps: {
+        Row: {
+          access_token: string
+          created_at: string
+          email: string | null
+          event_id: string
+          full_name: string | null
+          holder_party_id: string | null
+          id: string
+          message: string | null
+          phone: string | null
+          plus_ones: number
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          access_token?: string
+          created_at?: string
+          email?: string | null
+          event_id: string
+          full_name?: string | null
+          holder_party_id?: string | null
+          id?: string
+          message?: string | null
+          phone?: string | null
+          plus_ones?: number
+          status: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          email?: string | null
+          event_id?: string
+          full_name?: string | null
+          holder_party_id?: string | null
+          id?: string
+          message?: string | null
+          phone?: string | null
+          plus_ones?: number
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rsvps_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rsvps_holder_party_id_fkey"
+            columns: ["holder_party_id"]
+            isOneToOne: false
+            referencedRelation: "parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_venues: {
         Row: {
           created_at: string
@@ -2608,9 +2667,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       audit_action: ["INSERT", "UPDATE", "DELETE"],
