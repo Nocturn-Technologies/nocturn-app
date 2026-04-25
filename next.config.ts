@@ -74,6 +74,16 @@ const nextConfig: NextConfig = {
   },
   experimental: {
     optimizePackageImports: ["lucide-react", "@supabase/supabase-js", "@stripe/react-stripe-js", "date-fns", "qrcode", "posthog-js"],
+    // Lift the server-action body limit to 10 MB so flyer uploads from
+    // modern phone cameras (3-5 MB JPGs are common) actually go through.
+    // Default is 1 MB — anything above silently throws a Next.js boundary
+    // error, which the client catches as "Something went wrong" with no
+    // useful detail. The ai-theme upload already caps individual files
+    // at 10 MB on the server (MAX_FILE_BYTES in src/app/actions/ai-theme.ts),
+    // so 10 MB matches.
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
   },
   skipTrailingSlashRedirect: true,
   poweredByHeader: false,
