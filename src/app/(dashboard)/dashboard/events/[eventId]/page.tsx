@@ -382,28 +382,13 @@ export default async function EventDetailPage({ params }: Props) {
           need by intent ("plan it" / "run it" / "money" / "after") rather
           than scanning a wall of buttons. */}
       <div className="space-y-5">
-        {event.status === "draft" && (
-          <ActionSection title="Draft">
-            <ActionTile
-              href={`/dashboard/events/${event.id}/edit`}
-              icon={Pencil}
-              label="Edit Event"
-              tone="nocturn"
-            />
-            {/* B08: expose Duplicate in Draft too — "copy an in-progress
-                event and tweak the date" is a real workflow for recurring
-                series; previously only surfaced in the post-event Wrap Up
-                section. */}
-            <DuplicateEventTile eventId={event.id} />
-          </ActionSection>
-        )}
-
-        {/* B05: on a published event, still expose Edit so operators can
-            fix typos in description / flyer / times without first cancelling
-            the event. The server action (events.ts updateEvent) will enforce
-            which fields are safe to mutate while published. */}
-        {event.status === "published" && (
-          <ActionSection title="Edit">
+        {/* Setup — Edit + Duplicate. Visible for every state except completed
+            and settled (which get their own Wrap Up section with Duplicate).
+            Duplicate is the foundation of recurring/weekly series — operators
+            clone last week's event and tweak the date. Surface it everywhere
+            so it's never more than one tap away. (B05/B08.) */}
+        {event.status !== "completed" && event.status !== "settled" && (
+          <ActionSection title="Setup">
             <ActionTile
               href={`/dashboard/events/${event.id}/edit`}
               icon={Pencil}
