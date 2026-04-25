@@ -400,12 +400,45 @@ export function TicketSection({
             </div>
           </div>
 
-          {/* Mobile number — surfaced first to align with how Partiful/Dice/Posh
-              collect contact info. Phone is the primary identifier; email is
-              secondary (still required for the receipt + QR code). */}
+          {/* Email primary — receipt + QR codes are emailed, so this is the
+              field buyers expect first. Phone is collected too but follows
+              email. (We don't have SMS notifications wired up yet, so leading
+              with phone would over-promise.) */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-white/60" htmlFor="ticket-email">
+              Email for tickets
+            </label>
+            <div className="relative">
+              <input
+                id="ticket-email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`w-full rounded-xl border bg-white/[0.03] px-4 py-3.5 pr-10 text-[16px] text-white placeholder:text-white/40 outline-none focus:ring-1 transition-all duration-200 ${
+                  emailValid === true
+                    ? "border-green-500/40 focus:border-green-500/60 focus:ring-green-500/10"
+                    : emailValid === false
+                      ? "border-red-500/40 focus:border-red-500/60 focus:ring-red-500/10"
+                      : "border-white/[0.08] focus:border-white/20 focus:ring-white/5"
+                }`}
+              />
+              {emailValid === true && (
+                <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />
+              )}
+              {emailValid === false && (
+                <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" />
+              )}
+            </div>
+          </div>
+
+          {/* Phone — secondary contact for the organizer in case of event
+              changes or refunds. Required for paid checkout for now;
+              promotion to optional waits until we either ship SMS or the
+              operator pricing tier covers it. */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-white/60" htmlFor="ticket-phone">
-              Mobile number
+              Phone number
             </label>
             <div className="relative">
               <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
@@ -430,35 +463,6 @@ export function TicketSection({
                 <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />
               )}
               {phoneValid === false && (
-                <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" />
-              )}
-            </div>
-          </div>
-
-          {/* Email — secondary; we still send the receipt + QR codes here. */}
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-white/60" htmlFor="ticket-email">
-              Email for your receipt
-            </label>
-            <div className="relative">
-              <input
-                id="ticket-email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className={`w-full rounded-xl border bg-white/[0.03] px-4 py-3.5 pr-10 text-[16px] text-white placeholder:text-white/40 outline-none focus:ring-1 transition-all duration-200 ${
-                  emailValid === true
-                    ? "border-green-500/40 focus:border-green-500/60 focus:ring-green-500/10"
-                    : emailValid === false
-                      ? "border-red-500/40 focus:border-red-500/60 focus:ring-red-500/10"
-                      : "border-white/[0.08] focus:border-white/20 focus:ring-white/5"
-                }`}
-              />
-              {emailValid === true && (
-                <Check className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-green-500" />
-              )}
-              {emailValid === false && (
                 <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-red-500" />
               )}
             </div>
