@@ -632,41 +632,47 @@ export function DashboardHome(props: DashboardHomeProps) {
 
         {/* Stats column — stacked */}
         <div className="grid grid-cols-3 md:grid-cols-1 gap-4">
-          <Card className="rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn/20 hover:shadow-md hover:shadow-nocturn/5 active:scale-[0.98]">
-            <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn/5">
-                <Calendar className="h-5 w-5 text-nocturn-light" />
-              </div>
-              <div className="text-center md:text-left">
-                <p className="text-xs text-muted-foreground">Upcoming</p>
-                <p className="text-xl font-bold text-nocturn-light">{props.upcomingCount}</p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn-teal/20 hover:shadow-md hover:shadow-nocturn-teal/5 active:scale-[0.98]">
-            <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn-teal/20 to-nocturn-teal/5">
-                <DollarSign className="h-5 w-5 text-nocturn-teal" />
-              </div>
-              <div className="text-center md:text-left min-w-0">
-                <p className="text-xs text-muted-foreground">Revenue</p>
-                <p className="text-xl font-bold truncate">
-                  ${props.totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn-coral/20 hover:shadow-md hover:shadow-nocturn-coral/5 active:scale-[0.98]">
-            <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn-coral/20 to-nocturn-coral/5">
-                <Users className="h-5 w-5 text-nocturn-coral" />
-              </div>
-              <div className="text-center md:text-left">
-                <p className="text-xs text-muted-foreground">Attendees</p>
-                <p className="text-xl font-bold">{props.totalAttendees}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <Link href="/dashboard/events">
+            <Card className="h-full rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn/20 hover:shadow-md hover:shadow-nocturn/5 active:scale-[0.98]">
+              <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn/20 to-nocturn/5">
+                  <Calendar className="h-5 w-5 text-nocturn-light" />
+                </div>
+                <div className="text-center md:text-left">
+                  <p className="text-xs text-muted-foreground">Upcoming</p>
+                  <p className="text-xl font-bold text-nocturn-light">{props.upcomingCount}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/finance">
+            <Card className="h-full rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn-teal/20 hover:shadow-md hover:shadow-nocturn-teal/5 active:scale-[0.98]">
+              <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn-teal/20 to-nocturn-teal/5">
+                  <DollarSign className="h-5 w-5 text-nocturn-teal" />
+                </div>
+                <div className="text-center md:text-left min-w-0">
+                  <p className="text-xs text-muted-foreground">Revenue</p>
+                  <p className="text-xl font-bold truncate">
+                    ${props.totalRevenue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/dashboard/attendees">
+            <Card className="h-full rounded-2xl transition-all duration-200 hover:ring-1 hover:ring-nocturn-coral/20 hover:shadow-md hover:shadow-nocturn-coral/5 active:scale-[0.98]">
+              <CardContent className="flex flex-col items-center gap-2 p-4 md:flex-row md:gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-nocturn-coral/20 to-nocturn-coral/5">
+                  <Users className="h-5 w-5 text-nocturn-coral" />
+                </div>
+                <div className="text-center md:text-left">
+                  <p className="text-xs text-muted-foreground">Attendees</p>
+                  <p className="text-xl font-bold">{props.totalAttendees}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       </div>
 
