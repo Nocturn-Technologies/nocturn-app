@@ -41,6 +41,8 @@ import {
   getEventActivity,
   getAITaskSuggestions,
   getEventDate,
+  getPlaybookSiblingsToShift,
+  shiftPlaybookSiblings,
 } from "@/app/actions/tasks";
 import { haptic } from "@/lib/haptics";
 
@@ -191,6 +193,18 @@ function EventTasksPageInner() {
   const [is100Celebration, setIs100Celebration] = useState(false);
   const prevDoneCountRef = useRef(0);
 
+  // Playbook anchor-shift prompt (NOC-49). After moving the announcement
+  // task's due date, ask whether to cascade the shift to the rest of the
+  // content chain. Inline banner instead of a confirm() dialog (which
+  // mobile QA already removed across the app).
+  const [shiftPrompt, setShiftPrompt] = useState<{
+    anchorTaskId: string;
+    siblingCount: number;
+    deltaMs: number;
+    deltaDays: number;
+  } | null>(null);
+  const [applyingShift, setApplyingShift] = useState(false);
+
   useEffect(() => {
     loadAll();
   }, [eventId]);
@@ -296,12 +310,61 @@ function EventTasksPageInner() {
   }
 
   async function handleSetDue(taskId: string, dueDate: string | null) {
+    // Capture the previous due_at BEFORE the optimistic state update so we
+    // can compute the cascade delta for playbook anchor tasks.
+    const previousDueAt =
+      (tasks.find((t) => (t.id as string) === taskId)?.due_at as string | null) ?? null;
+    const newDueAt = dueDate ? new Date(dueDate).toISOString() : null;
+
     setTasks((prev) =>
-      prev.map((t) => ((t.id as string) === taskId ? { ...t, due_at: dueDate ? new Date(dueDate).toISOString() : null } : t))
+      prev.map((t) => ((t.id as string) === taskId ? { ...t, due_at: newDueAt } : t))
     );
-    const res = await updateTaskDetails(taskId, { dueAt: dueDate ? new Date(dueDate).toISOString() : null });
+    const res = await updateTaskDetails(taskId, { dueAt: newDueAt });
     refreshActivity();
+
+    // After a successful move on a playbook anchor (first content task in a
+    // playbook chain), offer to cascade the same shift to downstream content
+    // tasks. Server-side decides what counts as an anchor, so we just ask.
+    if (!res.error && previousDueAt && newDueAt && previousDueAt !== newDueAt) {
+      try {
+        const preview = await getPlaybookSiblingsToShift(taskId, previousDueAt, newDueAt);
+        if (preview.canShift && preview.siblingCount > 0) {
+          setShiftPrompt({
+            anchorTaskId: taskId,
+            siblingCount: preview.siblingCount,
+            deltaMs: preview.deltaMs,
+            deltaDays: preview.deltaDays,
+          });
+        }
+      } catch {
+        // Preview is best-effort — never block the original due-date update.
+      }
+    }
+
     return res;
+  }
+
+  async function handleConfirmShift() {
+    if (!shiftPrompt) return;
+    setApplyingShift(true);
+    try {
+      const result = await shiftPlaybookSiblings(
+        shiftPrompt.anchorTaskId,
+        shiftPrompt.deltaMs,
+      );
+      if (!result.error) {
+        // Refresh tasks so the cascaded due_ats render immediately.
+        await loadAll(false);
+        refreshActivity();
+      }
+    } finally {
+      setApplyingShift(false);
+      setShiftPrompt(null);
+    }
+  }
+
+  function handleDismissShift() {
+    setShiftPrompt(null);
   }
 
   async function handleUpdateNote(taskId: string, note: string) {
@@ -493,6 +556,56 @@ function EventTasksPageInner() {
     <div className="space-y-6 overflow-x-hidden">
       {/* Completion animation */}
       <CompletionCelebration show={showCelebration} is100={is100Celebration} />
+
+      {/* Playbook anchor-shift prompt (NOC-49). Renders after the operator
+          moves the announcement task — offers to cascade the same delta to
+          every downstream content task in the playbook chain. Dismissible. */}
+      {shiftPrompt && (
+        <div className="rounded-2xl border border-nocturn/30 bg-nocturn/10 p-4 animate-fade-in-up">
+          <div className="flex items-start gap-3">
+            <CalendarClock className="h-5 w-5 text-nocturn shrink-0 mt-0.5" />
+            <div className="flex-1 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  Shift {shiftPrompt.siblingCount} other content task
+                  {shiftPrompt.siblingCount === 1 ? "" : "s"} by{" "}
+                  {shiftPrompt.deltaDays >= 0 ? "+" : "−"}
+                  {Math.abs(shiftPrompt.deltaDays)} day
+                  {Math.abs(shiftPrompt.deltaDays) === 1 ? "" : "s"}?
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your announcement moved — cascade the same shift to every
+                  downstream content post so the chain stays in sync. Ops
+                  tasks (vendor confirms, day-of) keep their original dates.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleConfirmShift}
+                  disabled={applyingShift}
+                  className="bg-nocturn hover:bg-nocturn-light text-white min-h-[40px]"
+                >
+                  {applyingShift ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+                  ) : null}
+                  Shift {shiftPrompt.siblingCount} task
+                  {shiftPrompt.siblingCount === 1 ? "" : "s"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleDismissShift}
+                  disabled={applyingShift}
+                  className="min-h-[40px]"
+                >
+                  Just this one
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Explicit back link — discoverable, text + icon */}
       <Link
