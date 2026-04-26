@@ -36,6 +36,10 @@ interface RsvpWidgetProps {
   isLoggedIn: boolean;
   /** User's phone number on file, if any — pre-fills the confirm form */
   initialPhone?: string | null;
+  /** User's email on file (from auth) — pre-fills the member confirm form */
+  initialEmail?: string | null;
+  /** User's full name on file (from user metadata) — pre-fills the form */
+  initialFullName?: string | null;
   /**
    * Access token from the email confirmation deep link. When present,
    * the user (even a guest) is authenticated as the owner of an existing
@@ -94,6 +98,8 @@ export function RsvpWidget({
   initialMyStatus,
   isLoggedIn,
   initialPhone,
+  initialEmail,
+  initialFullName,
   rsvpToken,
 }: RsvpWidgetProps) {
   // Token-auth is effectively "logged in" from the widget's POV — we
@@ -111,6 +117,8 @@ export function RsvpWidget({
   const [guestPhone, setGuestPhone] = useState("");
   const [guestName, setGuestName] = useState("");
   const [memberPhone, setMemberPhone] = useState(initialPhone ?? "");
+  const [memberEmail, setMemberEmail] = useState(initialEmail ?? "");
+  const [memberName, setMemberName] = useState(initialFullName ?? "");
   // "isChanging" = user has a status on record but wants to edit it.
   // We start in the confirmed view if they already had one on load.
   const [isChanging, setIsChanging] = useState(false);
@@ -197,20 +205,14 @@ export function RsvpWidget({
     }
 
     setPendingChoice(status);
-    // Logged-in users with a phone already on file (or who explicitly opted
-    // out by leaving it blank in a previous session) skip the member form
-    // entirely — we already have their email, and phone is optional. Submit
-    // the RSVP in one tap. Operators can still ask for phone later via the
-    // "Add phone" affordance on the confirmed panel.
+    // Always show the form for logged-in users so they can confirm/update
+    // email + full name + phone in one place. Email primary (we send the
+    // RSVP confirmation + organizer updates there); phone optional. The
+    // form pre-fills from auth so re-confirming is one tap when nothing
+    // changes — but it's no longer hidden behind a "phone-on-file"
+    // shortcut that ate edits to the other two fields silently.
     if (isLoggedIn) {
-      if (initialPhone) {
-        // Re-confirming with their existing phone. One tap, no extra form.
-        doSubmit(status, null, null, initialPhone);
-      } else {
-        // No phone on file yet — show the (now optional) form so they can
-        // add one if they want, or skip and just confirm.
-        setShowMemberForm(true);
-      }
+      setShowMemberForm(true);
     } else {
       setShowGuestForm(true);
     }
@@ -266,9 +268,17 @@ export function RsvpWidget({
   function handleMemberSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!pendingChoice) return;
-    // Phone is optional for members — we already have their email and we
-    // don't send SMS yet, so blocking a one-tap RSVP on phone entry was
-    // pure friction.
+    // Email is required (confirmation + organizer updates land there).
+    // Pre-fills from auth, but if the user clears it we hold the line.
+    const trimmedEmail = memberEmail.trim();
+    if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setError("Please enter a valid email");
+      return;
+    }
+    // Full name optional — public guest list falls back to "Guest" when
+    // missing. Server still trims + caps length downstream.
+    const trimmedName = memberName.trim();
+    // Phone optional. Validate format only if entered.
     const trimmedPhone = memberPhone.trim();
     if (trimmedPhone) {
       const phoneDigits = trimmedPhone.replace(/[^0-9]/g, "");
@@ -277,7 +287,12 @@ export function RsvpWidget({
         return;
       }
     }
-    doSubmit(pendingChoice, null, null, trimmedPhone || null);
+    doSubmit(
+      pendingChoice,
+      trimmedEmail,
+      trimmedName || null,
+      trimmedPhone || null,
+    );
   }
 
   // ── Confirmed view ──
@@ -565,7 +580,12 @@ export function RsvpWidget({
         </form>
       )}
 
-      {/* Member phone-only form (logged in — we already have name + email) */}
+      {/* Member confirm form — full name + email + phone, all editable.
+          Pre-fills from auth so re-confirming is one tap when nothing
+          changes. Email is required (organizer updates land there); name
+          + phone optional. (User feedback 2026-04-26: phone-only was
+          confusing because we DO send updates via email and they need
+          to know the organizer can reach them at the right address.) */}
       {showMemberForm && isLoggedIn && (
         <form
           ref={formRef}
@@ -573,9 +593,7 @@ export function RsvpWidget({
           className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in"
         >
           <p className="text-xs text-white/60">
-            {memberPhone
-              ? "Confirm your phone (optional) — organizer can reach you with updates."
-              : "Add your phone (optional) — organizer can reach you with updates."}
+            Confirm your details so the organizer can reach you with updates.
           </p>
           <p className="text-[11px] text-white/60 leading-snug">
             By submitting, you agree that Nocturn may share your name and email with the event organizer (and your phone if provided) so they can contact you about this event. Your <span className="text-white/60">first name and last initial</span> will show on the public guest list; email and phone stay private to the organizer. See our{" "}
@@ -585,16 +603,51 @@ export function RsvpWidget({
             .
           </p>
           <div className="relative">
-            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <label htmlFor="member-name" className="sr-only">Full name (optional)</label>
             <input
+              id="member-name"
+              type="text"
+              autoComplete="name"
+              enterKeyHint="next"
+              placeholder="Full name (optional)"
+              value={memberName}
+              onChange={(e) => setMemberName(e.target.value)}
+              maxLength={200}
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
+            />
+          </div>
+          <div className="relative">
+            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <label htmlFor="member-email" className="sr-only">Email for your confirmation</label>
+            <input
+              id="member-email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="next"
+              placeholder="Email for your confirmation"
+              value={memberEmail}
+              onChange={(e) => setMemberEmail(e.target.value)}
+              required
+              maxLength={320}
+              className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
+            />
+          </div>
+          <div className="relative">
+            <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
+            <label htmlFor="member-phone" className="sr-only">Phone number (optional)</label>
+            <input
+              id="member-phone"
               type="tel"
               inputMode="tel"
               autoComplete="tel"
               enterKeyHint="done"
-              placeholder="(555) 123-4567 (optional)"
+              placeholder="Phone number (optional)"
               value={memberPhone}
               onChange={(e) => setMemberPhone(e.target.value)}
-              autoFocus={!memberPhone}
               maxLength={32}
               /* text-base (16px) prevents iOS Safari zoom on focus */
               className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"

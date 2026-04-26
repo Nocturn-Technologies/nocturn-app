@@ -172,11 +172,32 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
       .maybeSingle();
 
     if (eventErr) {
-      console.error("[submitRsvp] event lookup failed:", eventErr);
+      console.error("[submitRsvp] event lookup failed:", {
+        eventId: input.eventId,
+        userId: user?.id ?? null,
+        err: eventErr,
+      });
       return { error: "Something went wrong" };
     }
-    if (!event) return { error: "Event not found" };
-    if (event.status !== "published") return { error: "This event is not accepting RSVPs" };
+    if (!event) {
+      // Log the full context — we've seen mobile clients submit with stale
+      // event ids from cached HTML after an event was deleted/recreated.
+      console.error("[submitRsvp] event not found for id:", {
+        eventId: input.eventId,
+        userId: user?.id ?? null,
+        status: input.status,
+        hasToken: !!input.rsvpToken,
+      });
+      return { error: "Event not found — try refreshing the page" };
+    }
+    if (event.status !== "published") {
+      console.warn("[submitRsvp] non-published event RSVP attempt:", {
+        eventId: event.id,
+        status: event.status,
+        userId: user?.id ?? null,
+      });
+      return { error: "This event is not accepting RSVPs" };
+    }
 
     // Upsert: one RSVP per (event, holder_party_id) or (event, email)
     // rsvps table uses holder_party_id (→ parties.id) instead of user_id.

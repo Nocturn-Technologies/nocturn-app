@@ -314,16 +314,21 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const isLoggedIn = !!currentUserResult;
   const initialPublicRsvps = publicRsvpsResult.rsvps;
 
-  // Pre-fill phone from the logged-in user's profile so the confirm form
-  // doesn't force them to retype it every time.
+  // Pre-fill name + email + phone from the logged-in user's profile so the
+  // confirm form doesn't force them to retype every time. Email comes from
+  // auth (always present); name + phone come from the users profile row.
   let viewerPhone: string | null = null;
+  let viewerEmail: string | null = null;
+  let viewerFullName: string | null = null;
   if (currentUserResult && showRsvp) {
+    viewerEmail = currentUserResult.email ?? null;
     const { data: viewerProfile } = await supabase
       .from("users")
-      .select("phone")
+      .select("phone, full_name")
       .eq("auth_id", currentUserResult.id)
       .maybeSingle();
     viewerPhone = viewerProfile?.phone ?? null;
+    viewerFullName = viewerProfile?.full_name ?? null;
   }
 
   // If the user landed here via the confirmation-email deep link
@@ -703,6 +708,8 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                 initialMyStatus={myRsvpStatus}
                 isLoggedIn={isLoggedIn}
                 initialPhone={viewerPhone}
+                initialEmail={viewerEmail}
+                initialFullName={viewerFullName}
                 rsvpToken={rsvpToken ?? null}
               />
             </div>
@@ -764,11 +771,14 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
           <div className="space-y-6 py-8 border-t border-white/[0.04]">
             <div className="flex items-center gap-3">
               <ShareButton url={publicUrl} title={event.title} />
+              {/* Match ShareButton's Copy/Share padding + bg so the three
+                  buttons read as one button row instead of "two buttons + an
+                  oddly-shaped tag" (user feedback 2026-04-26). */}
               <a
                 href={buildCalendarUrl(event, shareCardVenue)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-medium text-white/80 hover:bg-white/[0.08] transition-colors min-h-[44px]"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10 min-h-[44px]"
               >
                 <CalendarPlus className="h-4 w-4" />
                 Add to calendar
