@@ -400,7 +400,10 @@ export function TicketSection({
             </div>
           </div>
 
-          {/* Email */}
+          {/* Email primary — receipt + QR codes are emailed, so this is the
+              field buyers expect first. Phone is collected too but follows
+              email. (We don't have SMS notifications wired up yet, so leading
+              with phone would over-promise.) */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-white/60" htmlFor="ticket-email">
               Email for tickets
@@ -429,7 +432,10 @@ export function TicketSection({
             </div>
           </div>
 
-          {/* Phone */}
+          {/* Phone — secondary contact for the organizer in case of event
+              changes or refunds. Required for paid checkout for now;
+              promotion to optional waits until we either ship SMS or the
+              operator pricing tier covers it. */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-white/60" htmlFor="ticket-phone">
               Phone number

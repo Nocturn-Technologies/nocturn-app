@@ -8,6 +8,8 @@ import Link from "next/link";
 import { CollapsibleEventSection } from "@/components/events/collapsible-event-section";
 import { EventSuggestions } from "@/components/events/event-suggestions";
 import { getEventSuggestions } from "@/app/actions/event-suggestions";
+import { isDemoUser } from "@/lib/demo/demo-mode";
+import { DEMO_EVENT_ROWS } from "@/lib/demo/demo-events";
 
 export default async function EventsPage() {
   const supabase = await createClient();
@@ -71,6 +73,13 @@ export default async function EventsPage() {
     suggestions = suggestionsResult;
   } catch (err) {
     fetchError = err instanceof Error ? err.message : "Failed to load events";
+  }
+
+  // Demo-mode overlay — pitch account gets populated events when empty.
+  if (isDemoUser(user.email) && events.length === 0) {
+    events = DEMO_EVENT_ROWS as EventRow[];
+    if (collectiveIds.length === 0) collectiveIds = ["demo-collective"];
+    fetchError = null;
   }
 
   const now = new Date();

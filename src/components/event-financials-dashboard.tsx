@@ -52,9 +52,30 @@ export function EventFinancialsDashboard({ financials, forecast, trajectory }: P
     : 0;
 
   // ── Forecast scenarios ────────────────────────────────────────────
-  // Built from the same tier data the forecast action computes. Each row
-  // assumes a uniform sell-through across tiers — good enough for a "what
-  // if" view, and matches the mental model promoters use when planning.
+  // B03: switched from uniform per-tier sell-through to SEQUENTIAL tier
+  // fill. Cheapest tiers sell first in reality (Early Bird before Door),
+  // and the detailed P&L spreadsheet below already uses sequential fill.
+  // Two views of the same "50% sold" scenario were showing different
+  // numbers ($14,500 uniform vs $12,000 sequential). Operators trust the
+  // spreadsheet; the top block now matches it.
+  //
+  // The tier array is assumed ordered cheap→expensive (ticket_tiers.sort_order
+  // enforces this in createEvent and updateEvent).
+  function sequentialRevenueAtTarget(
+    tiers: NonNullable<typeof forecast>["tiers"],
+    targetTickets: number,
+  ): number {
+    let ticketsLeft = targetTickets;
+    let revenue = 0;
+    for (const t of tiers) {
+      if (ticketsLeft <= 0) break;
+      const fromThisTier = Math.min(t.capacity, ticketsLeft);
+      revenue += fromThisTier * t.price;
+      ticketsLeft -= fromThisTier;
+    }
+    return revenue;
+  }
+
   const scenarios = forecast
     ? [
         { label: "Current", pct: forecast.sellThroughRate, isCurrent: true },
@@ -62,18 +83,13 @@ export function EventFinancialsDashboard({ financials, forecast, trajectory }: P
         { label: "75% sold", pct: 0.75, isCurrent: false },
         { label: "Sell-out", pct: 1.0, isCurrent: false },
       ].map((s) => {
-        // Project revenue at this sell-through. For "Current" we use the
-        // actual revenue from tickets already sold. For the hypotheticals
-        // we apply the percentage to each tier's full capacity.
-        const projectedRevenue = s.isCurrent
-          ? forecast.tiers.reduce((sum, t) => sum + t.revenue, 0)
-          : forecast.tiers.reduce(
-              (sum, t) => sum + Math.round(t.capacity * s.pct) * t.price,
-              0
-            );
         const projectedTickets = s.isCurrent
           ? forecast.ticketsSoldSoFar
           : Math.round(forecast.totalCapacity * s.pct);
+        // Current = real sold revenue; scenarios = sequential fill
+        const projectedRevenue = s.isCurrent
+          ? forecast.tiers.reduce((sum, t) => sum + t.revenue, 0)
+          : sequentialRevenueAtTarget(forecast.tiers, projectedTickets);
         // Costs are fixed regardless of sell-through (artists, venue, etc.)
         const projectedProfit = projectedRevenue + (forecast.estimatedBarRevenue ?? 0) - totalCosts;
         return {

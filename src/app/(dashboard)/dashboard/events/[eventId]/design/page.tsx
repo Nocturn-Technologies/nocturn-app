@@ -478,8 +478,17 @@ export default function EventDesignPage() {
         }
       }
     } catch (err) {
+      // Surface the real error so we can debug instead of "Something went
+      // wrong" — the previous generic copy made it impossible to tell
+      // whether the file was rejected, the bucket call failed, or the
+      // server action crashed. Server-side errors include the action name
+      // prefix so they're searchable in Vercel logs.
       console.error("[design] flyer upload failed:", err);
-      setUploadError("Something went wrong. Please try again.");
+      const message =
+        err instanceof Error && err.message
+          ? `Upload failed: ${err.message}`
+          : "Upload failed — please try a different file or refresh the page.";
+      setUploadError(message);
     } finally {
       setUploadingFlyer(false);
       // Reset the input so the same file can be re-selected

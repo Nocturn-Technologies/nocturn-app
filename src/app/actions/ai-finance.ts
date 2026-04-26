@@ -235,8 +235,13 @@ export async function generateEventForecast(
 
   if (breakEvenTickets > totalCapacity * 0.8) {
     insights.push("⚠️ You need to sell 80%+ of tickets just to break even. Consider cutting costs.");
-  } else if (breakEvenTickets <= ticketsSoldSoFar) {
+  } else if (ticketsSoldSoFar > 0 && breakEvenTickets <= ticketsSoldSoFar) {
+    // B04: only claim "passed break-even" once real sales have actually
+    // covered costs. Previously this fired when 0 tix sold + $0 costs because
+    // 0 <= 0 is technically true.
     insights.push("✅ You've already passed break-even! Everything from here is profit.");
+  } else if (ticketsSoldSoFar === 0) {
+    insights.push(`📊 Break-even hits at ${breakEvenTickets} tickets sold.`);
   } else {
     insights.push(`📊 You need ${breakEvenTickets - ticketsSoldSoFar} more ticket sales to break even.`);
   }

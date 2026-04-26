@@ -197,8 +197,20 @@ export function RsvpWidget({
     }
 
     setPendingChoice(status);
+    // Logged-in users with a phone already on file (or who explicitly opted
+    // out by leaving it blank in a previous session) skip the member form
+    // entirely — we already have their email, and phone is optional. Submit
+    // the RSVP in one tap. Operators can still ask for phone later via the
+    // "Add phone" affordance on the confirmed panel.
     if (isLoggedIn) {
-      setShowMemberForm(true);
+      if (initialPhone) {
+        // Re-confirming with their existing phone. One tap, no extra form.
+        doSubmit(status, null, null, initialPhone);
+      } else {
+        // No phone on file yet — show the (now optional) form so they can
+        // add one if they want, or skip and just confirm.
+        setShowMemberForm(true);
+      }
     } else {
       setShowGuestForm(true);
     }
@@ -233,23 +245,39 @@ export function RsvpWidget({
       setError("Please enter a valid email");
       return;
     }
-    const phoneDigits = guestPhone.replace(/[^0-9]/g, "");
-    if (!guestPhone.trim() || phoneDigits.length < 7 || phoneDigits.length > 15) {
-      setError("Please enter a valid phone number");
-      return;
+    // Phone is optional — we don't have SMS infrastructure yet, so requiring
+    // it would just block conversion. Validate format only if provided.
+    const trimmedPhone = guestPhone.trim();
+    if (trimmedPhone) {
+      const phoneDigits = trimmedPhone.replace(/[^0-9]/g, "");
+      if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+        setError("Phone number looks off — leave it blank or enter a valid one");
+        return;
+      }
     }
-    doSubmit(pendingChoice, guestEmail.trim(), guestName.trim(), guestPhone.trim());
+    doSubmit(
+      pendingChoice,
+      guestEmail.trim(),
+      guestName.trim(),
+      trimmedPhone || null,
+    );
   }
 
   function handleMemberSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!pendingChoice) return;
-    const phoneDigits = memberPhone.replace(/[^0-9]/g, "");
-    if (!memberPhone.trim() || phoneDigits.length < 7 || phoneDigits.length > 15) {
-      setError("Please enter a valid phone number");
-      return;
+    // Phone is optional for members — we already have their email and we
+    // don't send SMS yet, so blocking a one-tap RSVP on phone entry was
+    // pure friction.
+    const trimmedPhone = memberPhone.trim();
+    if (trimmedPhone) {
+      const phoneDigits = trimmedPhone.replace(/[^0-9]/g, "");
+      if (phoneDigits.length < 7 || phoneDigits.length > 15) {
+        setError("Phone number looks off — leave it blank or enter a valid one");
+        return;
+      }
     }
-    doSubmit(pendingChoice, null, null, memberPhone.trim());
+    doSubmit(pendingChoice, null, null, trimmedPhone || null);
   }
 
   // ── Confirmed view ──
@@ -440,10 +468,10 @@ export function RsvpWidget({
           className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.02] p-4 animate-fade-in"
         >
           <p className="text-xs text-white/60">
-            Your name, email, and phone so the organizer knows who&apos;s coming and can reach you with updates.
+            Your name and email so the organizer knows who&apos;s coming and can send the confirmation. Phone is optional.
           </p>
           <p className="text-[11px] text-white/60 leading-snug">
-            By submitting, you agree that Nocturn may share your name, email, and phone with the event organizer so they can contact you about this event. Your <span className="text-white/60">first name and last initial</span> will show on the public guest list (e.g. &ldquo;Maya K.&rdquo;); email and phone stay private to the organizer. See our{" "}
+            By submitting, you agree that Nocturn may share your name and email with the event organizer (and your phone if provided) so they can contact you about this event. Your <span className="text-white/60">first name and last initial</span> will show on the public guest list (e.g. &ldquo;Maya K.&rdquo;); email and phone stay private to the organizer. See our{" "}
             <a href="/legal/privacy" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-white/70">
               Privacy Policy
             </a>
@@ -466,9 +494,12 @@ export function RsvpWidget({
             /* text-base (16px) prevents iOS Safari auto-zoom on focus. */
             className="w-full bg-zinc-900 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
           />
+          {/* Email primary — confirmation + organizer updates go via email
+              (we don't have SMS notifications yet). Phone follows as an
+              optional secondary contact. */}
           <div className="relative">
             <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
-            <label htmlFor="rsvp-email" className="sr-only">Email address</label>
+            <label htmlFor="rsvp-email" className="sr-only">Email for your confirmation</label>
             <input
               id="rsvp-email"
               type="email"
@@ -478,7 +509,7 @@ export function RsvpWidget({
               autoCorrect="off"
               spellCheck={false}
               enterKeyHint="next"
-              placeholder="you@example.com"
+              placeholder="Email for your confirmation"
               value={guestEmail}
               onChange={(e) => setGuestEmail(e.target.value)}
               required
@@ -488,17 +519,16 @@ export function RsvpWidget({
           </div>
           <div className="relative">
             <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-white/30" />
-            <label htmlFor="rsvp-phone" className="sr-only">Phone number</label>
+            <label htmlFor="rsvp-phone" className="sr-only">Phone number (optional)</label>
             <input
               id="rsvp-phone"
               type="tel"
               inputMode="tel"
               autoComplete="tel"
               enterKeyHint="done"
-              placeholder="(555) 123-4567"
+              placeholder="Phone number (optional)"
               value={guestPhone}
               onChange={(e) => setGuestPhone(e.target.value)}
-              required
               maxLength={32}
               className="w-full bg-zinc-900 border border-white/10 rounded-xl pl-11 pr-4 py-3 text-base text-white placeholder:text-white/40 outline-none focus:border-white/30 min-h-[48px]"
             />
@@ -544,11 +574,11 @@ export function RsvpWidget({
         >
           <p className="text-xs text-white/60">
             {memberPhone
-              ? "Confirm your phone so the organizer can reach you with updates."
-              : "Add your phone so the organizer can reach you with updates."}
+              ? "Confirm your phone (optional) — organizer can reach you with updates."
+              : "Add your phone (optional) — organizer can reach you with updates."}
           </p>
           <p className="text-[11px] text-white/60 leading-snug">
-            By submitting, you agree that Nocturn may share your name, email, and phone with the event organizer so they can contact you about this event. Your <span className="text-white/60">first name and last initial</span> will show on the public guest list; email and phone stay private to the organizer. See our{" "}
+            By submitting, you agree that Nocturn may share your name and email with the event organizer (and your phone if provided) so they can contact you about this event. Your <span className="text-white/60">first name and last initial</span> will show on the public guest list; email and phone stay private to the organizer. See our{" "}
             <a href="/legal/privacy" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-white/70">
               Privacy Policy
             </a>
@@ -561,10 +591,9 @@ export function RsvpWidget({
               inputMode="tel"
               autoComplete="tel"
               enterKeyHint="done"
-              placeholder="(555) 123-4567"
+              placeholder="(555) 123-4567 (optional)"
               value={memberPhone}
               onChange={(e) => setMemberPhone(e.target.value)}
-              required
               autoFocus={!memberPhone}
               maxLength={32}
               /* text-base (16px) prevents iOS Safari zoom on focus */

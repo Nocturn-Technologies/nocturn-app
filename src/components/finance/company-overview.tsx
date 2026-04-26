@@ -29,14 +29,16 @@ export function CompanyOverview({ financials }: CompanyOverviewProps) {
 
   const stats = [
     {
-      label: "Total Revenue",
+      label: "Revenue",
       value: formatMoney(totalRevenue),
       icon: DollarSign,
       color: "text-nocturn-light",
       bgColor: "bg-nocturn/10",
     },
     {
-      label: "Total Expenses",
+      // B18: drop "Total " prefix so "Total Expens…" doesn't truncate in the
+      // narrow 2-col mobile / 5-col desktop grid. "Expenses" reads fine.
+      label: "Expenses",
       value: formatMoney(totalExpenses),
       icon: Receipt,
       color: "text-orange-400",

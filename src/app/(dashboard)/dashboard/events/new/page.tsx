@@ -115,6 +115,15 @@ interface BudgetDraft {
     amount: number;
     currency: string;
   }>;
+  // Non-ticket revenue tracked alongside expenses so the forecast reflects
+  // the full P&L. Sponsorship, bar guarantees, merch, raffles, drink-ticket
+  // pre-sales — all the income streams that exist outside ticket sales.
+  // Stored in event currency (no FX) for v1; cross-currency revenue can
+  // come later if operators ask for it.
+  otherRevenue: Array<{
+    label: string;
+    amount: number;
+  }>;
 }
 
 function defaultBudgetDraft(eventCurrency = "usd"): BudgetDraft {
@@ -132,6 +141,7 @@ function defaultBudgetDraft(eventCurrency = "usd"): BudgetDraft {
     barMinimum: 0,
     deposit: 0,
     prodItems: [],
+    otherRevenue: [],
   };
 }
 
@@ -165,7 +175,9 @@ function flattenBudget(draft: BudgetDraft): ExpenseItem[] {
 // ─── Draft Persistence ─────────────────────────────────────────────────────
 
 const DRAFT_STORAGE_KEY = "nocturn-event-draft";
-const DRAFT_VERSION = 4;
+// Bumped from 4 → 5 when otherRevenue was added to BudgetDraft (NOC-48).
+// Old drafts without the field would crash the new render code.
+const DRAFT_VERSION = 5;
 
 type WizardStep = "details" | "venue" | "tickets" | "budget" | "review";
 
@@ -612,7 +624,12 @@ function getQuickDates(): Array<{ key: string; label: string; sub: string; ymd: 
   const fmt = (d: Date) =>
     d.toLocaleDateString("en", { month: "short", day: "numeric" });
 
-  return [
+  // B12: dedupe chips that collapse to the same calendar day. Happens when
+  // "tomorrow" IS the upcoming Friday/Saturday. Previously the picker showed
+  // "Tomorrow Apr 24" and "This Fri Apr 24" as two separate chips pointing
+  // at the same date, which looked like a bug to operators.
+  const seen = new Set<string>();
+  const chips = [
     { key: "tonight", label: "Tonight", sub: fmt(today), ymd: formatLocalYmd(today) },
     { key: "tomorrow", label: "Tomorrow", sub: fmt(tomorrow), ymd: formatLocalYmd(tomorrow) },
     { key: "this-fri", label: "This Fri", sub: fmt(thisFri), ymd: formatLocalYmd(thisFri) },
@@ -620,6 +637,11 @@ function getQuickDates(): Array<{ key: string; label: string; sub: string; ymd: 
     { key: "next-fri", label: "Next Fri", sub: fmt(nextFri), ymd: formatLocalYmd(nextFri) },
     { key: "next-sat", label: "Next Sat", sub: fmt(nextSat), ymd: formatLocalYmd(nextSat) },
   ];
+  return chips.filter((c) => {
+    if (seen.has(c.ymd)) return false;
+    seen.add(c.ymd);
+    return true;
+  });
 }
 
 function QuickDatePicker({ value, onChange }: { value: string; onChange: (ymd: string) => void }) {
@@ -1091,7 +1113,7 @@ function LiveForecast({
           <p className="text-[11px] text-muted-foreground mt-1">
             {totalExpenses > 0
               ? `${fmtCurrency(projections[2].net)} − ${fmtCurrency(totalExpenses)} expenses at sell-out`
-              : "max net revenue at sell-out"}
+              : "projected gross at sell-out"}
           </p>
         </div>
         <span className="shrink-0 text-[11px] text-muted-foreground bg-zinc-800 rounded-full px-2 py-0.5">
@@ -1285,7 +1307,11 @@ function PlaybookSelector({
                 )}
               </div>
               <p className="text-xs text-zinc-400 mt-0.5">{opt.description}</p>
-              <p className="text-[11px] text-muted-foreground mt-1">{opt.taskCount} tasks with auto-assigned due dates</p>
+              {/* B14: card advertises ops-task count; actual applied total also
+                  includes AI-generated content tasks. Show "+ content prompts"
+                  so the count operators see here matches the reality of the
+                  tasks page. */}
+              <p className="text-[11px] text-muted-foreground mt-1">{opt.taskCount} ops tasks + content prompts, auto-scheduled</p>
             </div>
           </button>
         ))}
@@ -1497,7 +1523,14 @@ function MoneyRow({ label, placeholder, value, onChange, eventCurrency, Icon, on
 
 // Chip-add row definitions for Production & Marketing. One tap adds a row
 // with the label + default category prefilled; operator fills amount + currency.
+// "Other talent" / "Opener" / "MC" let operators add multiple talent fees
+// beyond the headliner — e.g., support DJ, MC, opener — each with its own
+// amount + currency. They're all stored under the canonical "talent" category
+// so settlement + finance treat them identically.
 const PROD_CHIPS: Array<{ category: ExpenseCategory; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  { category: "talent",          label: "Other talent",    icon: Music },
+  { category: "talent",          label: "Opener",          icon: Music },
+  { category: "talent",          label: "MC / Host",       icon: Music },
   { category: "ads",             label: "Ads",             icon: Megaphone },
   { category: "graphic_design",  label: "Graphic design",  icon: Sparkles },
   { category: "photo",           label: "Photo",           icon: Sparkles },
@@ -1521,6 +1554,10 @@ interface BudgetStepProps {
   onSuggestTravel: () => void;
   tiers: TicketTier[];
   onApplySuggestedTiers: (tiers: TicketTier[]) => void;
+  // Free events skip ticket-priced break-even, sell-through scenarios,
+  // and recommended-tier suggestions — none of that math applies when
+  // there's no ticket price to charge.
+  isFree: boolean;
 }
 
 function BudgetStep({
@@ -1529,6 +1566,7 @@ function BudgetStep({
   projectedBarSales, barPercent, onProjectedBarSalesChange, onBarPercentChange,
   onSkip, onCalculate, onSuggestTravel,
   tiers, onApplySuggestedTiers,
+  isFree,
 }: BudgetStepProps) {
   const ec = draft.eventCurrency;
   // Local "just applied" announcement for the suggested-tiers button. Spells
@@ -1536,6 +1574,10 @@ function BudgetStep({
   // Tickets step to confirm what changed.
   const [appliedNote, setAppliedNote] = useState<string | null>(null);
   const [priceMultiplier, setPriceMultiplier] = useState(1);
+  // Calculate-Budget is enabled if any budget row has a positive amount —
+  // expenses OR other-revenue. Free events with sponsorship-only entries
+  // still want to see the net surfaced; gating purely on expenses would
+  // block that flow.
   const hasAnyExpense =
     draft.talentFee.amount > 0 ||
     draft.venueRental > 0 ||
@@ -1544,7 +1586,8 @@ function BudgetStep({
     draft.travel.hotel.amount > 0 ||
     draft.travel.transport.amount > 0 ||
     draft.travel.perDiem.amount > 0 ||
-    draft.prodItems.some(p => p.amount > 0);
+    draft.prodItems.some(p => p.amount > 0) ||
+    draft.otherRevenue.some(r => r.amount > 0);
 
   function updateTravel(key: keyof BudgetDraft["travel"], value: AmountInCurrency) {
     setDraft(prev => ({ ...prev, travel: { ...prev.travel, [key]: value } }));
@@ -1572,9 +1615,49 @@ function BudgetStep({
     setDraft(prev => ({ ...prev, prodItems: prev.prodItems.filter((_, i) => i !== idx) }));
   }
 
-  // Which prod chips are still available (already-added ones disappear from the tray).
+  // Other-revenue helpers — mirror the prodItems chip pattern but for income.
+  // Sponsorships, bar guarantees, merch, drink-ticket pre-sales, raffles —
+  // anything that adds to the night's revenue outside of ticket sales. Stored
+  // in event currency to keep the math simple for v1.
+  function addRevenueItem(label: string) {
+    setDraft(prev => ({
+      ...prev,
+      otherRevenue: [...prev.otherRevenue, { label, amount: 0 }],
+    }));
+  }
+
+  function addCustomRevenueItem() {
+    addRevenueItem("Other revenue");
+  }
+
+  function updateRevenueItem(idx: number, partial: Partial<BudgetDraft["otherRevenue"][number]>) {
+    setDraft(prev => ({
+      ...prev,
+      otherRevenue: prev.otherRevenue.map((r, i) => (i === idx ? { ...r, ...partial } : r)),
+    }));
+  }
+
+  function removeRevenueItem(idx: number) {
+    setDraft(prev => ({ ...prev, otherRevenue: prev.otherRevenue.filter((_, i) => i !== idx) }));
+  }
+
+  // Total non-ticket revenue in event currency. Folded into liveScenarios
+  // gross alongside ticket sales + bar share, so the 50/75/100% projections
+  // and the "free event" net all reflect the full P&L.
+  const otherRevenueTotal = draft.otherRevenue.reduce(
+    (sum, r) => sum + (Number.isFinite(r.amount) ? r.amount : 0),
+    0,
+  );
+
+  // Which prod chips are still available (already-added ones disappear from
+  // the tray). Talent chips are exempt — operators commonly add multiple
+  // talent rows (headliner + opener + MC), so we keep those available even
+  // after one's been added. Other chips (ads, photo, etc.) typically only
+  // need one entry per event, so they hide after first add to reduce clutter.
   const addedCategories = new Set(draft.prodItems.map(p => p.category));
-  const availableChips = PROD_CHIPS.filter(c => !addedCategories.has(c.category));
+  const availableChips = PROD_CHIPS.filter(
+    c => c.category === "talent" || !addedCategories.has(c.category),
+  );
   const suggestedPreview = result
     ? multiplyBudgetTiers(result.suggestedTiers, priceMultiplier)
     : [];
@@ -1600,7 +1683,10 @@ function BudgetStep({
           })),
           scenario.rate
         );
-        const gross = projection.revenue + barShareRevenue;
+        // Gross = ticket revenue + bar share + non-ticket income (sponsorship,
+        // merch, etc.). Fold otherRevenueTotal in here so the 50/75/100%
+        // projections reflect the real margin operators will see.
+        const gross = projection.revenue + barShareRevenue + otherRevenueTotal;
         return {
           label: scenario.label,
           ticketsSold: projection.ticketsSold,
@@ -1894,6 +1980,87 @@ function BudgetStep({
           )}
         </div>
 
+        {/* ── Other revenue ── */}
+        <div className="space-y-2 border-t border-white/5 pt-4">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
+              <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+              Other revenue
+            </span>
+            <span className="text-[11px] text-muted-foreground/70">offsets your costs in the forecast</span>
+          </div>
+
+          {draft.otherRevenue.length > 0 && (
+            <div className="space-y-2">
+              {draft.otherRevenue.map((r, i) => (
+                <div key={i} className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <input
+                      type="text"
+                      value={r.label}
+                      onChange={(e) => updateRevenueItem(i, { label: e.target.value })}
+                      placeholder="Label"
+                      maxLength={64}
+                      className="flex-1 bg-transparent text-xs font-medium text-zinc-300 placeholder:text-zinc-500 outline-none focus:text-white"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeRevenueItem(i)}
+                      aria-label={`Remove ${r.label}`}
+                      className="text-zinc-500 hover:text-red-400 transition-colors p-1"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <NumberInput
+                      value={r.amount}
+                      onChange={(n) => updateRevenueItem(i, { amount: n })}
+                      className="bg-zinc-900 border-white/10 rounded-lg min-h-[40px] focus:border-emerald-500/50 flex-1"
+                    />
+                    <span className="inline-flex items-center px-2 text-xs text-zinc-400 min-w-[44px] justify-center bg-zinc-900 border border-white/10 rounded-lg">
+                      {ec.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Chip tray for revenue */}
+          <div className="flex flex-wrap gap-2">
+            {[
+              "Sponsorship",
+              "Bar guarantee",
+              "Merch",
+              "Drink ticket pre-sales",
+              "Raffle / donation",
+            ].map((label) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => addRevenueItem(label)}
+                className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-300 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-white transition-all active:scale-[0.97] min-h-[44px]"
+              >
+                <Plus className="h-3 w-3" />
+                {label}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={addCustomRevenueItem}
+              className="flex items-center gap-1.5 rounded-full border border-white/10 bg-zinc-900 px-3 py-1.5 text-xs text-zinc-400 hover:border-emerald-500/40 hover:bg-emerald-500/10 hover:text-white transition-all active:scale-[0.97] min-h-[44px]"
+            >
+              <Plus className="h-3 w-3" />
+              Custom
+            </button>
+          </div>
+
+          {draft.otherRevenue.length === 0 && (
+            <p className="text-[11px] text-muted-foreground/70">Sponsorship, bar guarantee, merch — anything that adds revenue alongside tickets.</p>
+          )}
+        </div>
+
         {/* Calculate */}
         <Button
           onClick={onCalculate}
@@ -1938,22 +2105,72 @@ function BudgetStep({
               </div>
             )}
 
-            <p className="text-xs text-zinc-400 pt-1">
-              Break-even: <span className="text-white font-medium">{(liveBreakEven ?? result.breakEven).ticketsNeeded} tickets</span> at {(liveBreakEven ?? result.breakEven).atPrice} {result.eventCurrency.toUpperCase()}
-            </p>
-
-            <div className="space-y-1">
-              {liveScenarios.map((s, i) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{s.label} <span className="text-[11px] text-zinc-500">({s.ticketsSold} tix)</span></span>
-                  <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
-                    {s.profit >= 0 ? "+" : ""}{Math.round(s.profit).toLocaleString()} {result.eventCurrency.toUpperCase()}
+            {/* Other revenue summary — folded into the forecast math, surfaced
+                here so operators see why their net looks higher than ticket-only. */}
+            {otherRevenueTotal > 0 && (
+              <div className="space-y-1 pt-1 border-t border-white/5">
+                {draft.otherRevenue
+                  .filter((r) => r.amount > 0)
+                  .map((r, i) => (
+                    <div key={i} className="flex items-center justify-between text-[11px] text-emerald-400/80">
+                      <span>+ {r.label}</span>
+                      <span>{Math.round(r.amount).toLocaleString()} {ec.toUpperCase()}</span>
+                    </div>
+                  ))}
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <span className="text-emerald-400 font-medium">Other revenue</span>
+                  <span className="text-emerald-400 font-semibold">
+                    +{Math.round(otherRevenueTotal).toLocaleString()} {ec.toUpperCase()}
                   </span>
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
 
-            {result.suggestedTiers.length > 0 && (
+            {isFree ? (
+              // Free events have no ticket revenue → break-even, sell-through
+              // scenarios, and tier recommendations don't apply. If the operator
+              // has other revenue (sponsorship, etc.) we show net = revenue −
+              // costs so they know whether the night profits, breaks even, or
+              // costs them money. Otherwise the costs are pure out-of-pocket.
+              otherRevenueTotal > 0 ? (
+                (() => {
+                  const net = otherRevenueTotal - result.totalExpenses;
+                  const isProfit = net >= 0;
+                  return (
+                    <p className="text-xs text-zinc-400 pt-1">
+                      Free event net:{" "}
+                      <span className={`font-medium ${isProfit ? "text-green-400" : "text-red-400"}`}>
+                        {isProfit ? "+" : "−"}{Math.abs(Math.round(net)).toLocaleString()} {ec.toUpperCase()}
+                      </span>{" "}
+                      (other revenue − costs)
+                    </p>
+                  );
+                })()
+              ) : (
+                <p className="text-xs text-zinc-400 pt-1">
+                  Free event — these costs are out of pocket. Track them here so your settlement and P&amp;L stay accurate.
+                </p>
+              )
+            ) : (
+              <p className="text-xs text-zinc-400 pt-1">
+                Break-even: <span className="text-white font-medium">{(liveBreakEven ?? result.breakEven).ticketsNeeded} tickets</span> at {(liveBreakEven ?? result.breakEven).atPrice} {result.eventCurrency.toUpperCase()}
+              </p>
+            )}
+
+            {!isFree && (
+              <div className="space-y-1">
+                {liveScenarios.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">{s.label} <span className="text-[11px] text-zinc-500">({s.ticketsSold} tix)</span></span>
+                    <span className={`font-medium ${s.profit >= 0 ? "text-green-400" : "text-red-400"}`}>
+                      {s.profit >= 0 ? "+" : ""}{Math.round(s.profit).toLocaleString()} {result.eventCurrency.toUpperCase()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!isFree && result.suggestedTiers.length > 0 && (
               <div className="rounded-xl border border-white/10 bg-black/20 p-4 space-y-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -2035,8 +2252,9 @@ function BudgetStep({
 
         {/* Market pricing sanity-check — sits next to the cost-plus suggestion
             so operators don't anchor on expense-driven prices without seeing
-            what the local market is actually charging. */}
-        {result && venueCity && eventDate && result.suggestedTiers.length > 0 && (
+            what the local market is actually charging. Free events skip this
+            entirely (no price to sanity-check). */}
+        {!isFree && result && venueCity && eventDate && result.suggestedTiers.length > 0 && (
           <PricingInsight
             city={venueCity}
             date={eventDate}
@@ -3115,6 +3333,7 @@ export default function NewEventPage() {
             onApplySuggestedTiers={(nextTiers) => {
               setTiers(nextTiers);
             }}
+            isFree={formData.isFree}
           />
         )}
 

@@ -1,4 +1,4 @@
-# Nocturn — AI for Music Collectives and Promoters
+# Nocturn — Where Music Collectives Run Their Nights
 
 > This is the ONLY active codebase. The mobile repo (nocturn-mobile) is archived — all features were merged here.
 
@@ -385,3 +385,25 @@ cd nocturn-app
 npm install
 npm run dev
 ```
+
+## Deployment
+
+**Production (`main`)** auto-deploys on push → serves `app.trynocturn.com`.
+
+**QA (`QA`) does NOT auto-deploy.** Vercel's Preview Branch Tracking is intentionally disabled (Andrew's cost-control decision — prevents every feature branch, PR branch, and cloud-agent commit from burning build minutes). **Merging a PR to QA lands in GitHub but ships nothing** unless you also run:
+
+```bash
+cd nocturn-app
+git checkout QA && git pull --ff-only origin QA
+vercel deploy --yes
+```
+
+Returns a fresh `https://nocturn-<hash>-shawn-nocturns-projects.vercel.app` preview URL. ~50s build.
+
+### Hard rules
+
+- **Every `gh pr merge` targeting QA must be followed by `vercel deploy --yes`.** A merged-but-not-deployed PR creates the "I thought it shipped" failure mode — Shawn tests the QA URL, sees stale code, and debugging wastes time.
+- **Do not use Deploy Hooks** (Settings → Git → Deploy Hooks). Confirmed 2026-04-23 that hook jobs silently fail when Branch Tracking is off, even though the Vercel UI suggests otherwise.
+- **If a session cannot run the Vercel CLI** (e.g., a scheduled cloud agent without `vercel login` state), it **must not admin-merge non-schema PRs to QA.** Leave the PR open for a session that can deploy.
+- **Do not re-enable Preview Branch Tracking** without Andrew's sign-off. The current config is intentional.
+- **Production deploys** — `QA → main` merge triggers prod auto-deploy. Never `vercel --prod` without explicit Shawn approval.

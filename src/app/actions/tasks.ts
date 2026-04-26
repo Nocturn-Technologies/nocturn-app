@@ -2,9 +2,21 @@
 
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/config";
+import type { SupabaseClient } from "@supabase/supabase-js";
 // Canonical ownership check. Previously a local copy of this function —
 // now shared with guest-list/promo-codes/ai-theme via `src/lib/auth/ownership`.
 import { verifyEventOwnership as verifyEventAccess } from "@/lib/auth/ownership";
+
+// Type-bypass helper for event_tasks queries that read/write columns the
+// generated types don't know about. Prod Supabase has metadata + priority
+// + deleted_at + updated_at on event_tasks; QA's entity-architecture
+// rebuild stripped them and they haven't been restored yet (separate
+// schema ticket). The runtime gracefully degrades — if metadata is null
+// the anchor-shift logic just returns "no siblings to shift" — but the
+// generated types still complain at compile time.
+function untypedEventTasks(admin: ReturnType<typeof createAdminClient>) {
+  return (admin as unknown as SupabaseClient).from("event_tasks");
+}
 
 /** Auth + ownership check. Returns userId if authorized, null otherwise. */
 async function authAndVerifyEvent(eventId: string): Promise<string | null> {
@@ -609,5 +621,237 @@ export async function getEventTaskProgress(eventId: string) {
   } catch (err) {
     console.error("[getEventTaskProgress]", err);
     return null;
+  }
+}
+
+// ─── Playbook anchor-shift (NOC-49) ───────────────────────────────────────
+//
+// When an operator moves the announcement post (the first content task in a
+// playbook), every downstream content task should shift by the same delta so
+// the cascade stays intact. We call the first task in a `playbook:<id>:content`
+// group the "anchor" — its `metadata.position` is the lowest in the group
+// (typically 1000 per launch-playbook.ts numbering).
+//
+// Two actions:
+//   1. getPlaybookSiblingsToShift — preview-only. Returns sibling count + delta
+//      so the UI can render a confirmation banner ("Shift 8 other content
+//      tasks by +3 days?").
+//   2. shiftPlaybookSiblings — applies the shift. Re-derives siblings to
+//      avoid stale IDs and skips siblings already past their due date.
+//
+// We intentionally do NOT shift ops tasks (vendor confirms, day-of) — those
+// are anchored to the event date, not the announcement. We also skip
+// completed tasks so re-dating doesn't reopen past work.
+
+interface TaskMetadataLite {
+  source?: string;
+  position?: number;
+}
+
+function asTaskMetadata(value: unknown): TaskMetadataLite {
+  if (!value || typeof value !== "object") return {};
+  const obj = value as Record<string, unknown>;
+  return {
+    source: typeof obj.source === "string" ? obj.source : undefined,
+    position: typeof obj.position === "number" ? obj.position : undefined,
+  };
+}
+
+export async function getPlaybookSiblingsToShift(
+  taskId: string,
+  oldDueAt: string | null,
+  newDueAt: string | null,
+): Promise<{
+  canShift: boolean;
+  siblingCount: number;
+  deltaMs: number;
+  deltaDays: number;
+  groupSource: string | null;
+}> {
+  const empty = {
+    canShift: false,
+    siblingCount: 0,
+    deltaMs: 0,
+    deltaDays: 0,
+    groupSource: null,
+  };
+
+  try {
+    if (!taskId?.trim()) return empty;
+    if (!oldDueAt || !newDueAt) return empty;
+
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return empty;
+
+    const admin = createAdminClient();
+    const { data: anchorRaw, error: anchorErr } = await untypedEventTasks(admin)
+      .select("id, event_id, due_at, metadata, status")
+      .eq("id", taskId)
+      .maybeSingle() as {
+        data: {
+          id: string;
+          event_id: string;
+          due_at: string | null;
+          metadata: unknown;
+          status: string | null;
+        } | null;
+        error: { message: string } | null;
+      };
+    if (anchorErr || !anchorRaw) return empty;
+    const anchor = anchorRaw;
+
+    if (!(await verifyEventAccess(user.id, anchor.event_id))) return empty;
+
+    const meta = asTaskMetadata(anchor.metadata);
+    // Only content tasks act as anchors. Ops tasks anchor to the event date,
+    // not the announcement, so we don't cascade them.
+    if (!meta.source || !/^playbook:[^:]+:content$/.test(meta.source)) return empty;
+    if (meta.position == null) return empty;
+
+    const deltaMs = new Date(newDueAt).getTime() - new Date(oldDueAt).getTime();
+    if (!Number.isFinite(deltaMs) || deltaMs === 0) return empty;
+
+    // Verify this is the lowest-position task in its content group — i.e.
+    // the actual anchor. Mid-chain edits don't cascade.
+    const { data: groupMinRaw } = await untypedEventTasks(admin)
+      .select("id, metadata")
+      .eq("event_id", anchor.event_id)
+      .order("created_at", { ascending: true })
+      .limit(500) as {
+        data: Array<{ id: string; metadata: unknown }> | null;
+      };
+
+    if (!groupMinRaw) return empty;
+    const groupTasks = groupMinRaw
+      .map((t) => ({ id: t.id, meta: asTaskMetadata(t.metadata) }))
+      .filter((t) => t.meta.source === meta.source && t.meta.position != null);
+    const minPosition = Math.min(...groupTasks.map((t) => t.meta.position ?? Infinity));
+    if (meta.position !== minPosition) return empty;
+
+    // Count siblings that would shift: same group, position > anchor, has a
+    // due_at, not completed. (Completed work shouldn't be re-dated.)
+    const siblingCount = groupTasks.filter((t) => {
+      if (t.id === anchor.id) return false;
+      const pos = t.meta.position;
+      return pos != null && pos > meta.position!;
+    }).length;
+
+    if (siblingCount === 0) return empty;
+
+    const deltaDays = Math.round(deltaMs / 86400000);
+
+    return {
+      canShift: true,
+      siblingCount,
+      deltaMs,
+      deltaDays,
+      groupSource: meta.source,
+    };
+  } catch (err) {
+    console.error("[getPlaybookSiblingsToShift]", err);
+    return empty;
+  }
+}
+
+export async function shiftPlaybookSiblings(
+  taskId: string,
+  deltaMs: number,
+): Promise<{ error: string | null; shiftedCount: number }> {
+  try {
+    if (!taskId?.trim()) return { error: "Task ID is required", shiftedCount: 0 };
+    if (!Number.isFinite(deltaMs) || deltaMs === 0) {
+      return { error: "Invalid shift delta", shiftedCount: 0 };
+    }
+    // Cap at 365 days each direction to prevent runaway shifts.
+    const MAX_SHIFT_MS = 365 * 86400000;
+    if (Math.abs(deltaMs) > MAX_SHIFT_MS) {
+      return { error: "Shift too large (max 365 days)", shiftedCount: 0 };
+    }
+
+    const supabase = await createServerClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { error: "Not authenticated", shiftedCount: 0 };
+
+    const admin = createAdminClient();
+    const { data: anchorRaw } = await untypedEventTasks(admin)
+      .select("id, event_id, metadata")
+      .eq("id", taskId)
+      .maybeSingle() as {
+        data: { id: string; event_id: string; metadata: unknown } | null;
+      };
+    if (!anchorRaw) return { error: "Task not found", shiftedCount: 0 };
+    const anchor = anchorRaw;
+
+    if (!(await verifyEventAccess(user.id, anchor.event_id))) {
+      return { error: "Not authorized", shiftedCount: 0 };
+    }
+
+    const meta = asTaskMetadata(anchor.metadata);
+    if (!meta.source || !/^playbook:[^:]+:content$/.test(meta.source)) {
+      return { error: "Not a playbook anchor task", shiftedCount: 0 };
+    }
+    if (meta.position == null) {
+      return { error: "Anchor task has no position", shiftedCount: 0 };
+    }
+
+    // Re-fetch siblings live so we never trust a client-provided ID list.
+    const { data: candidatesRaw, error: candidatesErr } = await untypedEventTasks(admin)
+      .select("id, due_at, metadata, status")
+      .eq("event_id", anchor.event_id) as {
+        data: Array<{
+          id: string;
+          due_at: string | null;
+          metadata: unknown;
+          status: string | null;
+        }> | null;
+        error: { message: string } | null;
+      };
+    if (candidatesErr || !candidatesRaw) {
+      return { error: "Failed to look up siblings", shiftedCount: 0 };
+    }
+
+    const siblings = candidatesRaw.filter((t) => {
+      if (t.id === anchor.id) return false;
+      if (t.status === "done" || t.status === "completed") return false;
+      if (!t.due_at) return false;
+      const m = asTaskMetadata(t.metadata);
+      return (
+        m.source === meta.source &&
+        m.position != null &&
+        m.position > (meta.position ?? 0)
+      );
+    });
+
+    if (siblings.length === 0) return { error: null, shiftedCount: 0 };
+
+    // Apply the shift one at a time. Could be batched via RPC later if this
+    // becomes a hot path; ~10-20 siblings per playbook is typical so the
+    // per-row roundtrip cost is fine.
+    let shiftedCount = 0;
+    for (const sibling of siblings) {
+      const newDueAt = new Date(
+        new Date(sibling.due_at as string).getTime() + deltaMs,
+      ).toISOString();
+      const { error: updateErr } = await untypedEventTasks(admin)
+        .update({ due_at: newDueAt })
+        .eq("id", sibling.id);
+      if (!updateErr) shiftedCount++;
+    }
+
+    // Activity log entry so the change is auditable.
+    const days = Math.round(deltaMs / 86400000);
+    const direction = days >= 0 ? "+" : "−";
+    await admin.from("event_activity").insert({
+      event_id: anchor.event_id,
+      user_id: user.id,
+      action: "playbook_shift",
+      description: `Shifted ${shiftedCount} downstream content task${shiftedCount === 1 ? "" : "s"} by ${direction}${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} (anchor: announcement)`,
+    });
+
+    return { error: null, shiftedCount };
+  } catch (err) {
+    console.error("[shiftPlaybookSiblings]", err);
+    return { error: "Something went wrong", shiftedCount: 0 };
   }
 }

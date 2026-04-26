@@ -9,13 +9,16 @@ import {
 import Link from "next/link";
 import type { RevenueForecastItem } from "@/app/actions/company-financials";
 import { formatMoney } from "@/lib/utils";
+// B01 + B02: toLocaleDateString on a raw Date picks the env's TZ, which
+// diverges between SSR (UTC on Vercel) and the browser (operator-local).
+// That's the suspected root cause of React #418 on /dashboard/finance and
+// the "Apr 25 vs Apr 26" display drift. Use the TZ-anchored helper so
+// server and client render the same string.
+import { formatEventCardDate } from "@/lib/date";
 
 function formatDateShort(dateStr: string): string {
   if (!dateStr) return "--";
-  return new Date(dateStr).toLocaleDateString("en", {
-    month: "short",
-    day: "numeric",
-  });
+  return formatEventCardDate(dateStr);
 }
 
 interface RevenueForecastProps {

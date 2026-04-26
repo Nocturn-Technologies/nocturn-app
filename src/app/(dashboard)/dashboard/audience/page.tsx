@@ -6,7 +6,6 @@ import { ContactList } from "@/components/people/contact-list";
 import { ImportSheet } from "@/components/people/import-sheet";
 import { ContactDetailSheet } from "@/components/people/contact-detail-sheet";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Upload,
   MessageSquare,
@@ -20,6 +19,17 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { ReachInsight } from "@/app/actions/contacts";
+import { isDemoUser } from "@/lib/demo/demo-mode";
+import {
+  DEMO_AGG_STATS,
+  DEMO_EVENTS,
+  DEMO_HEADLINE,
+  DEMO_PEOPLE_CONTACTS,
+  DEMO_REACH_INSIGHTS,
+  DEMO_SEGMENT_COUNTS,
+} from "@/lib/demo/demo-audience";
+
+const DEMO_COLLECTIVE_ID = "demo-collective";
 
 interface EventOption {
   id: string;
@@ -35,6 +45,7 @@ export default function AudiencePage() {
     null
   );
   const [refreshKey, setRefreshKey] = useState(0);
+  const [demoMode, setDemoMode] = useState(false);
 
   // Per-event filter
   const [events, setEvents] = useState<EventOption[]>([]);
@@ -66,10 +77,24 @@ export default function AudiencePage() {
         .eq("user_id", user.id)
         .is("deleted_at", null);
 
-      const id =
+      let id =
         (
           memberships as { collective_id: string }[] | null
         )?.[0]?.collective_id ?? null;
+
+      // Demo-mode overlay — pitch account gets populated fan data so the
+      // screen feels fullsome even without any real tickets sold yet.
+      if (isDemoUser(user.email)) {
+        setDemoMode(true);
+        if (!id) id = DEMO_COLLECTIVE_ID;
+        setCollectiveId(id);
+        setEvents(DEMO_EVENTS);
+        setReachInsight(DEMO_HEADLINE);
+        setReachInsights(DEMO_REACH_INSIGHTS);
+        setLoading(false);
+        return;
+      }
+
       setCollectiveId(id);
 
       if (id) {
@@ -231,7 +256,8 @@ export default function AudiencePage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold font-heading tracking-tight text-foreground">
-            Your Fans
+            {/* B11: unified page title with nav label "Audience" */}
+            Audience
           </h1>
           {reachInsight ? (
             <p className="mt-1 text-sm text-muted-foreground flex items-center gap-1.5">
@@ -408,6 +434,9 @@ export default function AudiencePage() {
         onImportClick={() => setImportOpen(true)}
         eventFilter={selectedEventId}
         eventAttendeeEmails={selectedEventId ? eventAttendeeEmails : undefined}
+        demoContacts={demoMode ? DEMO_PEOPLE_CONTACTS : undefined}
+        demoAggStats={demoMode ? DEMO_AGG_STATS : undefined}
+        demoSegmentCounts={demoMode ? DEMO_SEGMENT_COUNTS : undefined}
       />
 
       {/* Import sheet */}

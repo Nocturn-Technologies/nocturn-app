@@ -14,10 +14,12 @@ import {
 } from "lucide-react";
 import type { EventFinancialSummary } from "@/app/actions/company-financials";
 import { formatMoney } from "@/lib/utils";
+// B02 — see revenue-forecast.tsx comment.
+import { formatEventDateTime, formatEventCardDate } from "@/lib/date";
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return "--";
-  return new Date(dateStr).toLocaleDateString("en", {
+  return formatEventDateTime(dateStr, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -26,10 +28,7 @@ function formatDate(dateStr: string): string {
 
 function formatDateShort(dateStr: string): string {
   if (!dateStr) return "--";
-  return new Date(dateStr).toLocaleDateString("en", {
-    month: "short",
-    day: "numeric",
-  });
+  return formatEventCardDate(dateStr);
 }
 
 type SortField =

@@ -49,16 +49,19 @@ interface DashboardShellProps {
   children: React.ReactNode;
 }
 
-/* ── Desktop sidebar nav items (6 core sections) ── */
+/* ── Desktop sidebar nav items ── */
+// B11: "Reach" → "Audience". Three different names for the same feature
+// (sidebar/Reach, spec/Audience, page-title/Your Fans) was confusing.
+// Canonical: Audience — matches the sprint plan spec and the function.
 const sidebarNavItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
   { href: "/dashboard/events", label: "Ops", icon: Calendar },
-  { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
+  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
   { href: "/dashboard/finance", label: "Money", icon: DollarSign },
 ];
 
-/* ── Mobile bottom tab bar items (4 tabs) ── */
+/* ── Mobile bottom tab bar items ── */
 const mobileTabItems = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/dashboard/events", label: "Ops", icon: Calendar },
@@ -68,7 +71,7 @@ const mobileTabItems = [
 /* ── More drawer items (items not in mobile tabs) ── */
 const moreDrawerItems = [
   { href: "/dashboard/discover", label: "Discover", icon: Compass },
-  { href: "/dashboard/audience", label: "Reach", icon: UsersRound },
+  { href: "/dashboard/audience", label: "Audience", icon: UsersRound },
 ];
 
 /* ── Promoter-specific nav ── */

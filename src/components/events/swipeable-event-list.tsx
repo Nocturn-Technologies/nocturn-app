@@ -8,6 +8,8 @@ import { SwipeableCard } from "@/components/swipeable-card";
 import { publishEvent, cancelEvent } from "@/app/actions/events";
 import { haptic } from "@/lib/haptics";
 import { MapPin, Clock, Loader2, ChevronRight } from "lucide-react";
+// B02: pin date/time formatting to the event's timezone (Toronto for now).
+import { formatEventMonthAbbr, formatEventDayNumber, formatEventTime } from "@/lib/date";
 
 interface EventItem {
   id: string;
@@ -120,16 +122,16 @@ function SwipeableEventCard({ event }: { event: EventItem }) {
             style={{ backgroundImage: `url(${event.flyer_url})` }}
           >
             <div className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/60 py-0.5 text-[11px] font-semibold uppercase text-white/80 backdrop-blur-sm">
-              {date.toLocaleDateString("en", { month: "short" })} {date.getDate()}
+              {formatEventMonthAbbr(date)} {formatEventDayNumber(date)}
             </div>
           </div>
         ) : (
           <div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-xl bg-nocturn/10 text-nocturn transition-colors duration-200 group-hover:bg-nocturn/15">
             <span className="text-xs font-medium uppercase leading-tight">
-              {date.toLocaleDateString("en", { month: "short" })}
+              {formatEventMonthAbbr(date)}
             </span>
             <span className="text-lg font-bold leading-none">
-              {date.getDate()}
+              {formatEventDayNumber(date)}
             </span>
           </div>
         )}
@@ -144,10 +146,7 @@ function SwipeableEventCard({ event }: { event: EventItem }) {
             )}
             <span className="flex items-center gap-1 shrink-0">
               <Clock className="h-3 w-3" />
-              {date.toLocaleTimeString("en", {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
+              {formatEventTime(date)}
             </span>
           </div>
         </div>

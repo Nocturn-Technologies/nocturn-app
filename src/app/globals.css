@@ -447,6 +447,17 @@ body::before {
   to { opacity: 1; }
 }
 .animate-fade-in { animation: fadeIn 0.5s ease-out both; }
+
+/* B17: tighten tw-animate-css's page-level fade-in.
+   The dashboard uses `animate-in fade-in duration-300` on most page roots.
+   The default start opacity (0) combined with a 300ms duration on top of
+   SSR latency made pages look frozen-disabled for a full second on first
+   paint. Lift the starting opacity so the content is legible immediately
+   while the fade still provides a subtle settle-in cue. */
+.animate-in.fade-in,
+.animate-in[class*="fade-in"] {
+  --tw-enter-opacity: 0.5;
+}
 .animate-fade-in-up { animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .animate-pulse-glow { animation: pulseGlow 2s ease-in-out infinite; }
 .animate-scale-in { animation: scaleIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }

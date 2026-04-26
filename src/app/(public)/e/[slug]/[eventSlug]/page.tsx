@@ -431,8 +431,12 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
 
-      {/* ═══ SCENE 1: THE POSTER — raw, asymmetric, bold ═══ */}
-      <div className="relative min-h-dvh flex items-end overflow-hidden">
+      {/* ═══ SCENE 1: THE POSTER — raw, asymmetric, bold ═══
+         B19: cap hero height on mobile so title/CTA land above the fold.
+         Was `min-h-dvh` (full viewport) which pushed everything below the
+         first screen at 375 px. Now 65dvh on mobile, full-height on ≥sm
+         where the larger viewport keeps the composition balanced. */}
+      <div className="relative min-h-[65dvh] sm:min-h-dvh flex items-end overflow-hidden">
         {/* Background layer */}
         {event.flyer_url ? (
           <>
