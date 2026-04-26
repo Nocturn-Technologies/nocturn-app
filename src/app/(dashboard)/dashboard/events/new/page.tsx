@@ -3467,7 +3467,8 @@ export default function NewEventPage() {
               )}
             </div>
 
-            {/* Pricing insight */}
+            {/* Pricing insight — paid events only. Free events have no ticket
+                price to sanity-check against the local market. */}
             {!formData.isFree && tiers.length > 0 && tiers.some(t => t.price > 0) && formData.venueCity && formData.date && (
               <PricingInsight
                 city={formData.venueCity}
@@ -3477,8 +3478,12 @@ export default function NewEventPage() {
               />
             )}
 
-            {/* Live forecast */}
-            {tiers.length > 0 && tiers.some(t => t.price > 0) && (
+            {/* Live forecast — paid events only. Free events don't sell
+                tickets, so the "What if you charge…" slider + 50/75/sell-out
+                projections don't apply. The Budget Summary already shows
+                free-event net (other revenue + bar share − costs) where
+                relevant. (User feedback 2026-04-26.) */}
+            {!formData.isFree && tiers.length > 0 && tiers.some(t => t.price > 0) && (
               <LiveForecast
                 tiers={tiers}
                 totalExpenses={totalExpenses}
