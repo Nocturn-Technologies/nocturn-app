@@ -2105,10 +2105,28 @@ function BudgetStep({
               </div>
             )}
 
-            {/* Other revenue summary — folded into the forecast math, surfaced
-                here so operators see why their net looks higher than ticket-only. */}
-            {otherRevenueTotal > 0 && (
+            {/* Non-ticket revenue summary — bar share + other revenue rows.
+                Both already feed liveScenarios.gross, but they were invisible
+                in the breakdown so operators couldn't see WHY their net beat
+                ticket revenue alone. Surfacing each on its own line. */}
+            {(otherRevenueTotal > 0 || barShareRevenue > 0) && (
               <div className="space-y-1 pt-1 border-t border-white/5">
+                {/* Bar revenue share — derived from projectedBarSales × barPercent.
+                    Shows the math inline so operators can sanity-check the cut
+                    against the bar guarantee they actually negotiated. */}
+                {barShareRevenue > 0 && (
+                  <div className="flex items-center justify-between text-[11px] text-emerald-400/80">
+                    <span>
+                      + Bar revenue share
+                      {typeof projectedBarSales === "number" && typeof barPercent === "number" && barPercent > 0 && (
+                        <span className="text-muted-foreground/70 ml-1">
+                          ({Math.round(projectedBarSales).toLocaleString()} {ec.toUpperCase()} × {barPercent}%)
+                        </span>
+                      )}
+                    </span>
+                    <span>{Math.round(barShareRevenue).toLocaleString()} {ec.toUpperCase()}</span>
+                  </div>
+                )}
                 {draft.otherRevenue
                   .filter((r) => r.amount > 0)
                   .map((r, i) => (
@@ -2118,9 +2136,9 @@ function BudgetStep({
                     </div>
                   ))}
                 <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-emerald-400 font-medium">Other revenue</span>
+                  <span className="text-emerald-400 font-medium">Non-ticket revenue</span>
                   <span className="text-emerald-400 font-semibold">
-                    +{Math.round(otherRevenueTotal).toLocaleString()} {ec.toUpperCase()}
+                    +{Math.round(otherRevenueTotal + barShareRevenue).toLocaleString()} {ec.toUpperCase()}
                   </span>
                 </div>
               </div>
@@ -2129,28 +2147,36 @@ function BudgetStep({
             {isFree ? (
               // Free events have no ticket revenue → break-even, sell-through
               // scenarios, and tier recommendations don't apply. If the operator
-              // has other revenue (sponsorship, etc.) we show net = revenue −
-              // costs so they know whether the night profits, breaks even, or
-              // costs them money. Otherwise the costs are pure out-of-pocket.
-              otherRevenueTotal > 0 ? (
-                (() => {
-                  const net = otherRevenueTotal - result.totalExpenses;
-                  const isProfit = net >= 0;
+              // has any non-ticket revenue (sponsorship, bar share, etc.) we
+              // show net = revenue − costs so they know whether the night
+              // profits, breaks even, or costs them money. Otherwise the costs
+              // are pure out-of-pocket.
+              (() => {
+                const nonTicketRevenue = otherRevenueTotal + barShareRevenue;
+                if (nonTicketRevenue === 0) {
                   return (
                     <p className="text-xs text-zinc-400 pt-1">
-                      Free event net:{" "}
-                      <span className={`font-medium ${isProfit ? "text-green-400" : "text-red-400"}`}>
-                        {isProfit ? "+" : "−"}{Math.abs(Math.round(net)).toLocaleString()} {ec.toUpperCase()}
-                      </span>{" "}
-                      (other revenue − costs)
+                      Free event — these costs are out of pocket. Track them here so your settlement and P&amp;L stay accurate.
                     </p>
                   );
-                })()
-              ) : (
-                <p className="text-xs text-zinc-400 pt-1">
-                  Free event — these costs are out of pocket. Track them here so your settlement and P&amp;L stay accurate.
-                </p>
-              )
+                }
+                const net = nonTicketRevenue - result.totalExpenses;
+                const isProfit = net >= 0;
+                // Build a label that reflects which revenue sources fed in.
+                const sources: string[] = [];
+                if (otherRevenueTotal > 0) sources.push("other revenue");
+                if (barShareRevenue > 0) sources.push("bar share");
+                const sourceLabel = sources.join(" + ");
+                return (
+                  <p className="text-xs text-zinc-400 pt-1">
+                    Free event net:{" "}
+                    <span className={`font-medium ${isProfit ? "text-green-400" : "text-red-400"}`}>
+                      {isProfit ? "+" : "−"}{Math.abs(Math.round(net)).toLocaleString()} {ec.toUpperCase()}
+                    </span>{" "}
+                    ({sourceLabel} − costs)
+                  </p>
+                );
+              })()
             ) : (
               <p className="text-xs text-zinc-400 pt-1">
                 Break-even: <span className="text-white font-medium">{(liveBreakEven ?? result.breakEven).ticketsNeeded} tickets</span> at {(liveBreakEven ?? result.breakEven).atPrice} {result.eventCurrency.toUpperCase()}
