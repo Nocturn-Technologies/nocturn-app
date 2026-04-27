@@ -29,7 +29,7 @@ async function sendInvitationEmail(
     await sendEmail({
       to: email,
       subject: `${inviterName} invited you to ${collectiveName} on Nocturn`,
-      html: invitationEmail(inviterName, collectiveName, role, inviteLink),
+      html: await invitationEmail(inviterName, collectiveName, role, inviteLink),
     });
   } catch (err) {
     console.error("[members] Failed to send invitation email:", err);

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { timingSafeEqual } from "crypto";
+import { sendEmail } from "@/lib/email/send";
+import { sanitizeSubject } from "@/lib/email/subject-helpers";
 
 function safeCompare(a: string, b: string): boolean {
   const aBuf = Buffer.from(a);
@@ -162,23 +164,17 @@ export async function POST(req: NextRequest) {
 </html>`;
 
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: process.env.RESEND_FROM_EMAIL || "Nocturn <noreply@trynocturn.com>",
-        to: [to],
-        subject: `${sanitizeHeaderValue(senderName)} wants to connect on Nocturn`,
-        html,
-      }),
+    // Route through sendEmail() so this gets retries, plain-text alt,
+    // and the verified FROM identity. Stage 2 will add senderEmail to the
+    // request body so we can set Reply-To for one-tap replies.
+    const result = await sendEmail({
+      to,
+      subject: sanitizeSubject(`${sanitizeHeaderValue(senderName)} wants to connect on Nocturn`),
+      html,
     });
 
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      console.error("Resend API error:", res.status, errData);
+    if (result.error) {
+      console.error("Marketplace inquiry email failed:", result.error);
       return NextResponse.json(
         { error: "Failed to send email" },
         { status: 500 }

@@ -61,7 +61,7 @@ export async function runPostPurchaseHooks(input: {
 
     const safeName = sanitizeBuyerName(input.buyerName?.split(" ")[0]);
 
-    const html = referralNudgeEmail(
+    const html = await referralNudgeEmail(
       event.title,
       safeName,
       referralLink,
@@ -133,7 +133,7 @@ export async function runPostPurchaseHooks(input: {
         (admins ?? []).map(async (a) => {
           const user = a.users as unknown as { email: string } | null;
           if (!user?.email) return;
-          const html = ticketMilestoneEmail(event.title, m.label, sold, totalCapacity, dashLink);
+          const html = await ticketMilestoneEmail(event.title, m.label, sold, totalCapacity, dashLink);
           await sendEmail({
             to: user.email,
             subject: `${safeTitle} — ${m.label} 🎉`,

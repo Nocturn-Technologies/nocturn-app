@@ -23,7 +23,7 @@ export async function sendTicketConfirmation(input: {
   qrCodes?: string[];
   ticketTokens?: string[];
 }) {
-  let html = ticketConfirmationEmail(
+  let html = await ticketConfirmationEmail(
     input.eventTitle,
     input.eventDate,
     input.venueName,
@@ -58,7 +58,7 @@ export async function sendWelcomeEmail(input: {
   name: string;
   collectiveName: string;
 }) {
-  const html = welcomeEmail(input.name, input.collectiveName);
+  const html = await welcomeEmail(input.name, input.collectiveName);
 
   return sendEmail({
     to: input.to,
@@ -75,7 +75,7 @@ export async function sendInvitationEmail(input: {
   role: string;
   inviteLink: string;
 }) {
-  const html = invitationEmail(
+  const html = await invitationEmail(
     input.inviterName,
     input.collectiveName,
     input.role,

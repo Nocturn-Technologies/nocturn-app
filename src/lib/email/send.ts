@@ -19,6 +19,7 @@ function getResend(): Resend | null {
 }
 
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Nocturn <noreply@trynocturn.com>";
+const REPLY_TO_EMAIL = process.env.RESEND_REPLY_TO || "hi@trynocturn.com";
 
 export interface EmailAttachment {
   /** Filename the recipient sees */
@@ -27,17 +28,71 @@ export interface EmailAttachment {
   content: string | Buffer;
 }
 
-export async function sendEmail({
-  to,
-  subject,
-  html,
-  attachments,
-}: {
+/**
+ * Convert HTML to plain text for the multipart text/plain alternative.
+ * Resend will use this automatically when both `html` and `text` are passed.
+ *
+ * Mail clients with HTML disabled, screen readers, and text-ratio spam
+ * filters all benefit. Postmaster Tools previously flagged the system
+ * for a 6% text ratio — providing a real text alternative fixes this.
+ */
+export function htmlToPlainText(html: string): string {
+  return (
+    html
+      // Drop entire <head>, <style>, <script> blocks
+      .replace(/<head[\s\S]*?<\/head>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      // Convert common block elements to newlines
+      .replace(/<\/(p|div|h[1-6]|li|tr|section|article|footer|header)>/gi, "\n")
+      .replace(/<br\s*\/?>(?!\n)/gi, "\n")
+      .replace(/<\/td>/gi, "\t")
+      // Strip remaining tags
+      .replace(/<[^>]+>/g, "")
+      // Decode common entities
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;|&apos;/g, "'")
+      .replace(/&[a-z0-9]+;/gi, "")
+      // Collapse 3+ newlines to 2, trim trailing spaces per line
+      .replace(/[ \t]+$/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+  );
+}
+
+export interface SendEmailOptions {
   to: string;
   subject: string;
   html: string;
+  /** Auto-generated from html if omitted. Pass to override. */
+  text?: string;
+  /** Override the reply-to address (default: hi@trynocturn.com) */
+  replyTo?: string;
+  /** Custom headers — e.g. List-Unsubscribe for promotional sends */
+  headers?: Record<string, string>;
+  /**
+   * Promotional emails get a `List-Unsubscribe` header with the given URL.
+   * Pass null to opt out (transactional emails skip this).
+   */
+  unsubscribeUrl?: string | null;
   attachments?: EmailAttachment[];
-}) {
+}
+
+export async function sendEmail(options: SendEmailOptions) {
+  const {
+    to,
+    subject,
+    html,
+    text,
+    replyTo,
+    headers: extraHeaders,
+    unsubscribeUrl,
+    attachments,
+  } = options;
   // Validate email format
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(to)) {
@@ -56,6 +111,14 @@ export async function sendEmail({
     return { error: null, messageId: "dev-mode" };
   }
 
+  // Build text alternative + headers
+  const textAlt = text ?? htmlToPlainText(html);
+  const headers: Record<string, string> = { ...extraHeaders };
+  if (unsubscribeUrl) {
+    headers["List-Unsubscribe"] = `<${unsubscribeUrl}>`;
+    headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+  }
+
   // Retry wrapper: up to 3 attempts with 1s delay, only retry on network/5xx errors
   const MAX_RETRIES = 3;
   let lastError: string | null = null;
@@ -67,6 +130,9 @@ export async function sendEmail({
         to,
         subject,
         html,
+        text: textAlt,
+        replyTo: replyTo ?? REPLY_TO_EMAIL,
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
         ...(attachments && attachments.length > 0 ? { attachments } : {}),
       });
 

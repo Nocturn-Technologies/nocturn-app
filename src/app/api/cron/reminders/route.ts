@@ -116,7 +116,7 @@ export async function GET(request: Request) {
         }
       }
 
-      const html = dayOfHypeEmail(
+      const html = await dayOfHypeEmail(
         event.title,
         event.venue_name ?? "TBA",
         doorsTime,
@@ -213,7 +213,7 @@ export async function GET(request: Request) {
         const user = m.users as unknown as { email: string; full_name: string } | null;
         if (!user?.email) continue;
 
-        const html = organizerCountdownEmail(
+        const html = await organizerCountdownEmail(
           event.title,
           eventDate,
           ticketsSold ?? 0,
@@ -323,7 +323,7 @@ export async function GET(request: Request) {
           ? new Date(lastEventCreatedAt).toLocaleDateString("en", { month: "long", day: "numeric" })
           : null;
 
-        const html = inactiveNudgeEmail(col.name, admin.full_name?.split(" ")[0] ?? "there", lastDate);
+        const html = await inactiveNudgeEmail(col.name, admin.full_name?.split(" ")[0] ?? "there", lastDate);
 
         await sendEmail({
           to: admin.email,
