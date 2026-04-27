@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { Navigation, Music, MapPin, CalendarPlus } from "lucide-react";
+import { CalendarPlus } from "lucide-react";
 import { TicketSection } from "@/components/public-event/ticket-section";
 import { ShareButton } from "@/components/public-event/share-button";
 import { PublicEventShareCard } from "@/components/public-event/public-event-share-card";
@@ -24,7 +24,6 @@ import { trackEventPageView } from "@/lib/analytics";
 import Link from "next/link";
 
 // Revalidate public event pages every 10 seconds (ISR)
-// Short window reduces stale capacity data shown to buyers (Gap 16)
 export const revalidate = 10;
 
 function buildCalendarUrl(event: { title: string; starts_at: string; ends_at: string | null; description: string | null; }, venueName?: string) {
@@ -62,9 +61,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   if (!collective) return { title: "Event Not Found" };
 
-  // Post-#93: venue data lives on flat columns (venue_name, city) on the
-  // event itself — the `venues` relation no longer exists (replaced by
-  // venue_profiles). `events.deleted_at` was also dropped.
   const { data: eventRaw } = await supabase
     .from("events")
     .select("title, description, flyer_url, starts_at, venue_name, city")
@@ -88,11 +84,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const appUrl = "https://app.trynocturn.com";
   const canonicalUrl = `${appUrl}/e/${slug}/${eventSlug}`;
 
-  // Always use the dynamic OG generator — even when a flyer exists.
-  // Portrait flyers (1080×1350 for IG stories) get cropped unreadably by
-  // social platforms that enforce 1.91:1 aspect ratio. The generator composites
-  // the flyer as a left panel and renders title/date/venue in the right panel,
-  // guaranteeing every share preview is readable regardless of flyer orientation.
   const venue = event.venues;
   const dateStr = event.starts_at
     ? new Date(event.starts_at).toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })
@@ -142,8 +133,6 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       canonical: canonicalUrl,
     },
     other: {
-      // iMessage / Apple link previews key off these, and some
-      // clients still read the legacy non-OG tags.
       "og:image:width": "1200",
       "og:image:height": "630",
     },
@@ -159,8 +148,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const { ref: referrerToken, rsvp: rsvpToken } = await searchParams;
   const supabase = createAdminClient();
 
-  // Fetch collective. PR #93 dropped instagram + description from collectives
-  // (bio is the replacement; no socials column yet).
+  // Fetch collective.
   const { data: collectiveRaw2 } = await supabase
     .from("collectives")
     .select("id, name, slug, logo_url, bio")
@@ -170,10 +158,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
   if (!collective) notFound();
 
-  // Fetch event. Post-#93 the venue lives on flat columns (venue_name /
-  // venue_address / city / capacity) on the event itself — the old
-  // `venues(...)` FK join no longer resolves because the `venues` table was
-  // replaced by `venue_profiles`. Also `events.deleted_at` was dropped.
+  // Fetch event.
   const { data: eventRaw2 } = await supabase
     .from("events")
     .select("id, title, slug, description, starts_at, ends_at, doors_at, status, flyer_url, vibe_tags, min_age, metadata, collective_id, is_free, venue_name, venue_address, city, capacity")
@@ -184,10 +169,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
 
   if (!eventRow || eventRow.status === "draft") notFound();
 
-  // Adapt to the legacy shape the rest of the page expects: synthesise a
-  // `venues` object from the flat columns. NOC-31: removed the event_mode
-  // placeholder — the column was dropped in PR #93 and mode is now derived
-  // from is_free + tier prices (see below).
   const event = {
     ...eventRow,
     venues: eventRow.venue_name
@@ -198,19 +179,10 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   // Track page view (non-blocking — never delays the render)
   trackEventPageView(event.id);
 
-  // Fetch all supplementary data in parallel (7 queries → 1 round-trip)
+  // Fetch all supplementary data in parallel
   const now = new Date();
   const weekFromNow = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
-  // Post-#93 schema notes:
-  // - `events.deleted_at` dropped (events use status lifecycle now)
-  // - `venues(name, city)` join no longer resolves (venues table replaced
-  //    by venue_profiles); flat `venue_name` / `city` columns on events
-  //    carry that data now.
-  // - `event_reactions` table removed; reactionCounts stays empty.
-  // - `event_artists` uses `party_id` FK + a `name` column; the old
-  //    `artists(name, genre)` embedded join is gone. We pull `name` + genre
-  //    via an `artist_profiles` join on party_id.
   const [
     { data: tiersRaw },
     { count: ticketsSold },
@@ -244,8 +216,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   ]);
 
   const tiers = tiersRaw as { id: string; name: string; price: number; capacity: number; sort_order: number }[] | null;
-  // Shape back into the legacy `{ artist_id, set_time, artists: {...} }` form
-  // the downstream JSX consumes.
   const artistsRawTyped = artistsRaw as { id: string; name: string | null; set_time: string | null; party_id: string | null; artist_profiles: { genre: string[] | null } | null }[] | null;
   const artists = artistsRawTyped
     ? artistsRawTyped.map((row) => ({
@@ -266,7 +236,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const pendingTierTickets = pendingTierTicketsRaw as { ticket_tier_id: string }[] | null;
 
   // Compute per-tier sold counts for accurate "remaining" display
-  // Include confirmed tickets + active pending reservations (< 30 min old) toward capacity
   const tierSoldCounts: Record<string, number> = {};
   for (const t of tierTickets || []) {
     tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
@@ -275,18 +244,9 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     tierSoldCounts[t.ticket_tier_id] = (tierSoldCounts[t.ticket_tier_id] || 0) + 1;
   }
 
-  // event_reactions table removed in schema rebuild — empty map keeps the widget happy
   const reactionCounts: Record<string, number> = {};
 
-  // Mode detection: NOC-31 — the `event_mode` column was dropped in PR #93.
-  // Mode is now derived from is_free + tier prices:
-  //   - is_free === true  OR  all tiers $0  OR  no tiers   → RSVP
-  //   - otherwise                                          → ticketed
-  //
-  // Hybrid mode (tickets + RSVP simultaneously) is not reachable here. It
-  // was an unused concept in practice — no UI path explicitly set it, and
-  // this derivation covers every real-world case. If product calls for it
-  // back, that's a schema change + feature ticket (not a silent bug).
+  // Mode detection (NOC-31)
   const allTiersFree = !!tiers && tiers.length > 0 && tiers.every((t) => Number(t.price) === 0);
   const noTiers = !tiers || tiers.length === 0;
   const isEffectivelyFree = event.is_free === true || allTiersFree || noTiers;
@@ -294,7 +254,7 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const showRsvp = eventMode === "rsvp";
   const showTickets = eventMode === "ticketed";
 
-  // RSVP counts + current user's RSVP + event updates — fetched in parallel for RSVP/hybrid events
+  // RSVP counts + current user's RSVP + event updates — fetched in parallel
   const [rsvpCountsResult, myRsvpResult, updatesResult, currentUserResult, publicRsvpsResult] = await Promise.all([
     showRsvp ? getRsvpCounts(event.id) : Promise.resolve({ error: null, counts: { yes: 0, maybe: 0, no: 0 } }),
     showRsvp ? getMyRsvp(event.id) : Promise.resolve({ error: null, rsvp: null }),
@@ -314,9 +274,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const isLoggedIn = !!currentUserResult;
   const initialPublicRsvps = publicRsvpsResult.rsvps;
 
-  // Pre-fill name + email + phone from the logged-in user's profile so the
-  // confirm form doesn't force them to retype every time. Email comes from
-  // auth (always present); name + phone come from the users profile row.
   let viewerPhone: string | null = null;
   let viewerEmail: string | null = null;
   let viewerFullName: string | null = null;
@@ -331,9 +288,6 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     viewerFullName = viewerProfile?.full_name ?? null;
   }
 
-  // If the user landed here via the confirmation-email deep link
-  // (`?rsvp=TOKEN`), resolve their RSVP by token so guests without
-  // a session still see their current status and can change it.
   if (showRsvp && rsvpToken && !myRsvpStatus) {
     const byToken = await getRsvpByToken(event.id, rsvpToken);
     if (byToken.rsvp) {
@@ -359,29 +313,80 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
   const dayName = eventDate.toLocaleDateString("en", { weekday: "short", timeZone: tz }).toUpperCase();
   const monthName = eventDate.toLocaleDateString("en", { month: "short", timeZone: tz }).toUpperCase();
   const dayNum = parseInt(eventDate.toLocaleDateString("en", { day: "numeric", timeZone: tz }));
+  const yearNum = parseInt(eventDate.toLocaleDateString("en", { year: "numeric", timeZone: tz }));
+  const month2 = String(eventDate.getUTCMonth() + 1).padStart(2, "0");
+  const day2 = String(dayNum).padStart(2, "0");
+  const year2 = String(yearNum).slice(-2);
 
   const startTime = eventDate.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz });
+  const startTime24 = eventDate.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz, hour12: false });
   const endTime = endsAt ? endsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz }) : null;
+  const endTime24 = endsAt ? endsAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz, hour12: false }) : null;
   const doorsTime = doorsAt ? doorsAt.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: tz }) : null;
+  const doorsTime24 = doorsAt ? doorsAt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz, hour12: false }) : null;
 
   const publicUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://app.trynocturn.com"}/e/${slug}/${eventSlug}`;
-  const mapsUrl = venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}` : null;
 
-  // Dress code / min age / host message from metadata
   const dressCode = metadata.dressCode || null;
   const hostMessage = metadata.hostMessage || null;
   const vibeTags = event.vibe_tags ?? [];
 
   // Share card data
-  const shareCardDate = `${dayName} ${monthName} ${dayNum} \u2022 ${startTime}`;
-  const shareCardVenue = venue ? `${venue.name} \u2022 ${venue.city}` : "";
-  // If the event is effectively free (no tiers, all $0 tiers, or is_free flag), always
-  // show "Free" — never "$0+".
+  const shareCardDate = `${dayName} ${monthName} ${dayNum} • ${startTime}`;
+  const shareCardVenue = venue ? `${venue.name} • ${venue.city}` : "";
   const lowestTierPrice = isEffectivelyFree
     ? "Free"
     : tiers && tiers.length > 0
       ? `$${Math.min(...tiers.map((t) => Number(t.price)))}+`
       : "Free";
+
+  // Total remaining capacity across tiers (for sticky bar urgency badge)
+  const totalRemaining = tiers
+    ? tiers.reduce((sum, t) => sum + Math.max(0, t.capacity - (tierSoldCounts[t.id] || 0)), 0)
+    : 0;
+
+  // Collective initials for stamp + watermark
+  const collectiveInitials = collective.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("") || collective.name[0]?.toUpperCase() || "N";
+  const heroWatermarkLetter = collectiveInitials[0] ?? "N";
+
+  // Event sequence number — derived from collective event count for stamp
+  const eventNumber = String(Math.max(1, collectiveEventCount ?? 1)).padStart(3, "0");
+
+  // Hero countdown footer line
+  const tzAbbr = (() => {
+    try {
+      const formatter = new Intl.DateTimeFormat("en", { timeZone: tz, timeZoneName: "short" });
+      const parts = formatter.formatToParts(eventDate);
+      return parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+    } catch {
+      return "";
+    }
+  })();
+  const countdownFooter = `${monthName} ${dayNum} · ${startTime}${tzAbbr ? ` ${tzAbbr}` : ""}`;
+
+  // Marquee items
+  const topMarqueeItems = [
+    ...vibeTags.slice(0, 4).map((t) => t.toLowerCase()),
+    ...(artists?.slice(0, 4).map((a) => a.artists?.name).filter((n): n is string => !!n) ?? []),
+    venue ? `${venue.city || venue.name}` : null,
+    `${dayName} ${monthName} ${dayNum}`,
+    typeof ticketsSold === "number" && ticketsSold > 0 ? `${ticketsSold} going` : null,
+  ].filter((s): s is string => !!s && s.length > 0);
+  const bottomMarqueeItems = [
+    "NOCTURN.",
+    event.title,
+    `${monthName} ${dayNum} · ${yearNum}`,
+    venue ? `${venue.name} · ${venue.city || ""}`.replace(/ · $/, "") : null,
+    !isEffectivelyFree && lowestTierPrice ? `FROM ${lowestTierPrice}` : null,
+    typeof ticketsSold === "number" && ticketsSold > 0 ? `${ticketsSold} GOING` : null,
+  ].filter((s): s is string => !!s && s.length > 0);
+
+  const mapsUrl = venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${venue.name} ${venue.address} ${venue.city}`)}` : null;
 
   // JSON-LD structured data for search engines
   const jsonLd = {
@@ -429,6 +434,31 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
     }),
   };
 
+  // Section indices (the chapter labels are stable but we skip ones that
+  // don't render — e.g. no description, no lineup — so the user only sees
+  // the chapters that actually contain content)
+  const sections: { key: string; label: string }[] = [];
+  if (venue) sections.push({ key: "venue", label: "VENUE" });
+  if ((event.description && event.description.trim().length > 0) || hostMessage || dressCode)
+    sections.push({ key: "night", label: "THE NIGHT" });
+  if (artists && artists.length > 0) sections.push({ key: "lineup", label: "LINEUP" });
+  if (isUpcoming && showTickets && tiers && tiers.length > 0) sections.push({ key: "entry", label: "ENTRY" });
+  if (isUpcoming && showRsvp) sections.push({ key: "rsvp", label: "RSVP" });
+  if (eventUpdates.length > 0) sections.push({ key: "dispatches", label: "DISPATCHES" });
+  sections.push({ key: "share", label: "ALSO BY THIS COLLECTIVE" });
+  if (nearbyEvents && nearbyEvents.length > 0) sections.push({ key: "alsoweek", label: "ALSO THIS WEEK" });
+  const sectionIndex = (key: string) => {
+    const idx = sections.findIndex((s) => s.key === key);
+    return idx === -1 ? null : String(idx + 1).padStart(2, "0");
+  };
+  const chapter = (key: string, label: string) => {
+    const num = sectionIndex(key);
+    return num ? `${num} / ${label}` : label;
+  };
+
+  const ctaAnchor = isEffectivelyFree ? "#rsvp" : "#tickets";
+  const ctaLabel = isEffectivelyFree ? "RSVP — Free" : `Get tickets — from ${lowestTierPrice}`;
+
   return (
     <div className="min-h-dvh bg-[#09090B] antialiased selection:bg-purple-500/20 overflow-x-hidden" style={{ scrollBehavior: "smooth" }}>
       <script
@@ -436,270 +466,489 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }}
       />
 
-      {/* ═══ SCENE 1: THE POSTER — raw, asymmetric, bold ═══
-         B19: cap hero height on mobile so title/CTA land above the fold.
-         Was `min-h-dvh` (full viewport) which pushed everything below the
-         first screen at 375 px. Now 65dvh on mobile, full-height on ≥sm
-         where the larger viewport keeps the composition balanced. */}
-      <div className="relative min-h-[65dvh] sm:min-h-dvh flex items-end overflow-hidden">
-        {/* Background layer */}
+      {/* ═══ TOP MARQUEE ═══ */}
+      {topMarqueeItems.length > 0 && (
+        <div className="brutalist-marquee" aria-hidden="true">
+          <div className="brutalist-marquee-track">
+            {[...topMarqueeItems, ...topMarqueeItems, ...topMarqueeItems, ...topMarqueeItems].map((item, i) => (
+              <span key={i}>
+                {item} <span style={{ color: accentColor, marginLeft: "1.25rem" }}>◆</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ HERO ═══ */}
+      <section className="relative overflow-hidden">
+        {/* Background — flyer or gradient */}
         {event.flyer_url ? (
           <>
             <Image
               src={event.flyer_url}
               alt={event.title}
               fill
-              className="object-cover"
+              className="object-cover opacity-30"
               priority
               sizes="100vw"
             />
-            <div className="absolute inset-0 bg-gradient-to-t from-[#09090B] via-[#09090B]/50 to-[#09090B]/10" />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#09090B]/70 via-[#09090B]/85 to-[#09090B]" />
           </>
         ) : (
           <>
-            <div className="absolute inset-0" style={{ background: `linear-gradient(160deg, ${accentColor}30 0%, #09090B 50%, #0a0a12 100%)` }} />
-            {/* Asymmetric glow shapes */}
-            <div className="absolute -top-[20%] -right-[15%] w-[70vw] h-[70vw] rounded-full blur-[60px]" style={{ background: `radial-gradient(circle, ${accentColor}20 0%, transparent 70%)` }} />
-            <div className="absolute bottom-[10%] -left-[20%] w-[50vw] h-[50vw] rounded-full blur-[80px]" style={{ background: `radial-gradient(circle, ${accentColor}10 0%, transparent 60%)` }} />
-            {/* Grain */}
-            <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E")`, backgroundSize: "128px 128px" }} />
+            <div className="absolute -top-[12%] -left-[12%] w-[55vw] h-[55vw] rounded-full blur-[110px] opacity-[0.22] pointer-events-none" style={{ background: `radial-gradient(circle, ${accentColor}88 0%, transparent 65%)` }} />
+            <div className="absolute -bottom-[10%] -right-[10%] w-[40vw] h-[40vw] rounded-full blur-[120px] opacity-[0.18] pointer-events-none" style={{ background: `radial-gradient(circle, ${accentColor}66 0%, transparent 60%)` }} />
           </>
         )}
 
-        {/* Giant date watermark — top right */}
-        <div className="absolute top-6 right-6 sm:right-12 z-10 text-right select-none pointer-events-none">
-          <div className="font-heading text-[8rem] sm:text-[12rem] font-black leading-[0.8] text-white/[0.05] tracking-[-0.05em]">
-            {String(dayNum).padStart(2, "0")}
-          </div>
-          <div className="text-[14px] font-bold tracking-[0.5em] uppercase" style={{ color: accentColor }}>
-            {monthName}
-          </div>
+        {/* Thin purple vertical accent bar, left edge */}
+        <div className="absolute left-0 top-0 h-[40vh] w-[3px] z-20 pointer-events-none" style={{ background: `linear-gradient(180deg, ${accentColor} 0%, ${accentColor}00 70%)` }} />
+
+        {/* Watermark — confined to hero via overflow:hidden */}
+        <div className="brutalist-watermark right-[-3vw] top-[4vh] z-0" style={{ fontSize: "clamp(14rem, 32vw, 30rem)" }}>
+          {heroWatermarkLetter}
         </div>
 
-        {/* Content — bottom-aligned, asymmetric */}
-        <div className="relative z-10 w-full px-5 sm:px-12 pb-12 pt-40">
-          {/* Collective pill */}
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 border border-white/[0.08] rounded-full backdrop-blur-sm mb-6">
-            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: accentColor }} />
-            <span className="text-[11px] font-semibold tracking-[0.2em] uppercase text-white/55">
-              {collective.name}
-            </span>
-          </div>
-
-          {/* Title — massive, poster-scale */}
-          <h1 className="font-heading text-[clamp(2.5rem,12vw,8rem)] font-black tracking-[-0.05em] text-white leading-[0.85] max-w-[85%] mb-8 break-words">
-            {event.title.split(" ").map((word: string, i: number, arr: string[]) => {
-              // Color the last word/number with accent
-              const isLast = i === arr.length - 1;
-              const isNumber = /\d/.test(word) || /^[IVXLC]+\.?$/.test(word);
-              return (
-                <span key={i}>
-                  {isLast || isNumber ? (
-                    <span style={{ color: accentColor }}>{word}</span>
-                  ) : (
-                    word
-                  )}
-                  {i < arr.length - 1 ? " " : ""}
-                </span>
-              );
-            })}
-          </h1>
-
-          {/* Info bar — utilitarian, separated by borders */}
-          <div className="flex flex-wrap gap-0 mb-6">
-            <div className="pr-5 sm:pr-6 border-r border-white/[0.06] py-1">
-              <div className="text-[11px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Date</div>
-              <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{dayName} {monthName} {dayNum}</div>
-            </div>
-            {doorsTime && (
-              <div className="px-5 sm:px-6 border-r border-white/[0.06] py-1">
-                <div className="text-[11px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Doors</div>
-                <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{doorsTime}</div>
-              </div>
-            )}
-            <div className="px-5 sm:px-6 border-r border-white/[0.06] py-1">
-              <div className="text-[11px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Show</div>
-              <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{startTime}{endTime ? ` — ${endTime}` : ""}</div>
-            </div>
-            {venue && (
-              <div className="pl-5 sm:pl-6 py-1">
-                <div className="text-[11px] font-bold tracking-[0.3em] uppercase text-white/50 mb-1">Venue</div>
-                <div className="font-heading text-[14px] sm:text-[15px] font-semibold">{venue.name}{venue.city ? `, ${venue.city}` : ""}</div>
-              </div>
-            )}
-          </div>
-
-          {/* Vibe tags */}
-          {vibeTags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-8">
-              {vibeTags.map((tag) => (
-                <span key={tag} className="text-[11px] font-semibold tracking-[0.15em] uppercase px-3.5 py-1.5 border border-white/[0.06] rounded-full text-white/50">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          {/* CTA — full-width on mobile. Anchors to #rsvp for free events, #tickets for paid. */}
-          {isUpcoming && (isEffectivelyFree || (tiers && tiers.length > 0)) && (
-            <a
-              href={isEffectivelyFree ? "#rsvp" : "#tickets"}
-              className="inline-flex items-center justify-center gap-2.5 w-full sm:w-auto px-10 py-[18px] rounded-[14px] text-[16px] font-bold text-white transition-all duration-300 hover:brightness-[1.15] hover:translate-y-[-2px] active:scale-[0.98] max-w-[400px]"
-              style={{ backgroundColor: accentColor }}
-            >
-              {isEffectivelyFree ? "RSVP — Free" : `Get Tickets — ${lowestTierPrice}`}
-              <span className="transition-transform duration-300 group-hover:translate-x-1">&rarr;</span>
-            </a>
-          )}
-        </div>
-      </div>
-
-      {/* Floating "going" badge */}
-      {(ticketsSold ?? 0) > 0 && (
-        <div className="fixed bottom-20 right-4 z-45 flex items-center gap-2 px-4 py-2.5 bg-[#09090B]/85 backdrop-blur-xl border border-white/[0.08] rounded-full text-[13px] text-white/50">
-          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          <span><span className="text-white font-semibold">{ticketsSold}</span> going</span>
-        </div>
-      )}
-
-      {/* ═══ SCENE 2: THE STORY — below the fold ═══ */}
-      <div className="mx-auto max-w-[640px] px-6">
-
-        {/* Countdown — only if upcoming */}
-        {isUpcoming && (
-          <div className="py-8 border-b border-white/[0.04]">
-            <EventCountdown targetDate={event.doors_at || event.starts_at} />
-          </div>
-        )}
-
-        {/* ═══ WHERE — brutalist venue card ═══ */}
-        {venue && (
-          <div className="py-8 border-t border-white/[0.04]">
-            <div className="rounded-[20px] overflow-hidden border border-white/[0.06] bg-white/[0.015]">
-              <div className="relative h-40 w-full bg-gradient-to-br from-[#1a1a2e] via-[#16162a] to-[#0e0e12] flex items-center justify-center">
-                <MapPin className="h-10 w-10 text-white/10" />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#0e0e12] via-transparent to-[#09090B]/40 pointer-events-none" />
-                <div className="absolute bottom-3 left-4 text-[11px] font-semibold tracking-[0.2em] uppercase text-white/50 px-2.5 py-1 border border-white/[0.08] rounded">VENUE</div>
-              </div>
-              <div className="px-6 py-5">
-                <p className="font-heading text-[24px] font-bold text-white">{venue.name}</p>
-                <p className="text-[14px] text-white/50 mt-1">
-                  {[venue.address, venue.city].filter((part) => typeof part === "string" && part.trim().length > 0).join(", ")}
-                </p>
-                {mapsUrl && (
-                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 mt-4 text-[13px] font-semibold transition-colors hover:text-white min-h-[44px] py-2"
-                    style={{ color: accentColor }}>
-                    <Navigation className="h-3.5 w-3.5" />
-                    Get directions &rarr;
-                  </a>
+        {/* Top row: collective pill + event stamp */}
+        <header className="relative z-30 px-5 sm:px-10 lg:px-14 pt-7 sm:pt-9 max-w-[1400px] mx-auto">
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              {collective.logo_url ? (
+                <Image
+                  src={collective.logo_url}
+                  alt={collective.name}
+                  width={28}
+                  height={28}
+                  className="w-7 h-7 rounded-full ring-1 ring-white/15 object-cover shrink-0"
+                />
+              ) : (
+                <div
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0 ring-1 ring-white/15"
+                  style={{ background: `linear-gradient(135deg, ${accentColor} 0%, ${accentColor}cc 100%)` }}
+                >
+                  {collectiveInitials.slice(0, 2)}
+                </div>
+              )}
+              <div className="font-mono text-[10.5px] sm:text-[11px] uppercase tracking-[0.28em] text-white/65 font-medium">
+                {collective.name}
+                {venue?.city && (
+                  <>
+                    {" "}<span className="text-white/30">·</span> {venue.city}
+                  </>
                 )}
               </div>
             </div>
-          </div>
-        )}
 
-        {/* ═══ THE STORY ═══ */}
-        {event.description && event.description.trim().length > 0 && (
-          <div className="py-8 border-t border-white/[0.04]">
-            <ExpandableText text={event.description} />
+            {/* Diagonal stamp top right */}
+            <div className="brutalist-stamp hidden sm:block" style={{ transform: "rotate(-6deg)" }}>
+              EVENT {eventNumber} · RUN BY {collectiveInitials} · {yearNum}
+            </div>
           </div>
-        )}
+        </header>
 
-        {/* Host message */}
-        {hostMessage && (
-          <div className="py-8 border-t border-white/[0.04]">
-            <div className="flex gap-4">
-              <div className="w-[2px] rounded-full shrink-0" style={{ background: `linear-gradient(180deg, ${accentColor}, transparent)` }} />
-              <div>
-                <p className="text-[16px] text-white/50 leading-[1.7] italic">&ldquo;{hostMessage}&rdquo;</p>
-                <div className="flex items-center gap-2 mt-3">
-                  {collective.logo_url ? (
-                    <Image src={collective.logo_url} alt={collective.name || "Collective logo"} width={20} height={20} className="h-5 w-5 rounded-full" />
-                  ) : (
-                    <div className="h-5 w-5 rounded-full text-[11px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: accentColor }}>
-                      {collective.name.charAt(0)}
+        {/* Main hero — content-sized, two-column on desktop */}
+        <div className="relative z-20 px-5 sm:px-10 lg:px-14 pt-8 sm:pt-10 lg:pt-12 pb-12 sm:pb-14 lg:pb-16 max-w-[1400px] mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+            {/* LEFT: title + meta + tags + CTA + going badge */}
+            <div className="lg:col-span-7 xl:col-span-7">
+              {/* Title — tamed scale */}
+              <h1
+                className="font-heading font-bold text-white mb-5 sm:mb-6 break-words"
+                style={{ letterSpacing: "-0.03em", lineHeight: 0.95, fontSize: "clamp(2.25rem, 7vw, 5rem)" }}
+              >
+                {(() => {
+                  const words = event.title.split(" ");
+                  return words.map((word, i) => {
+                    const isLast = i === words.length - 1;
+                    const isRoman = /^[IVXLC]+\.?$/.test(word) || /^\d+$/.test(word);
+                    if (isLast || isRoman) {
+                      return (
+                        <span key={i}>
+                          {i > 0 ? " " : ""}
+                          <span
+                            style={{ color: accentColor, fontWeight: 400, fontStyle: "italic", letterSpacing: "-0.02em" }}
+                          >
+                            {word}
+                          </span>
+                        </span>
+                      );
+                    }
+                    return <span key={i}>{i > 0 ? " " : ""}{word}</span>;
+                  });
+                })()}
+              </h1>
+
+              {/* One-line meta */}
+              <div className="font-body font-medium text-[14.5px] text-white/[0.78] mb-5 sm:mb-6 max-w-[720px]" style={{ letterSpacing: "-0.005em" }}>
+                <span className="brutalist-mono text-[13px] text-white/60" style={{ letterSpacing: "0.02em" }}>
+                  {dayName} {monthName} {dayNum}
+                </span>
+                <span className="text-white/30 mx-2">·</span>
+                <span>Doors {doorsTime || startTime}</span>
+                {venue && (
+                  <>
+                    <span className="text-white/30 mx-2">·</span>
+                    <span>{venue.name}{venue.city ? `, ${venue.city}` : ""}</span>
+                  </>
+                )}
+              </div>
+
+              {/* Vibe tags */}
+              {vibeTags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-6 sm:mb-7">
+                  {vibeTags.map((tag, i) => (
+                    <span
+                      key={tag}
+                      className={`text-[11px] font-mono font-medium tracking-[0.18em] uppercase px-3 py-1.5 border rounded-full ${
+                        i === vibeTags.length - 1
+                          ? "border-nocturn/40 bg-nocturn/5 text-nocturn-glow"
+                          : "border-white/[0.1] text-white/60"
+                      }`}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* CTA + going badge */}
+              {isUpcoming && (isEffectivelyFree || (tiers && tiers.length > 0)) && (
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5 sm:gap-5 max-w-[720px]">
+                  <a
+                    href={ctaAnchor}
+                    className="group relative inline-flex items-center justify-center gap-2.5 w-full sm:w-auto px-7 sm:px-9 py-[17px] rounded-[14px] text-white font-bold text-[15px] sm:text-[16px] transition-all duration-300 hover:brightness-[1.12] hover:translate-y-[-2px] active:translate-y-[1px] active:scale-[0.99]"
+                    style={{ backgroundColor: accentColor, letterSpacing: "-0.005em" }}
+                  >
+                    {ctaLabel}
+                    <span className="transition-transform duration-300 group-hover:translate-x-1 text-[18px] leading-none">→</span>
+                  </a>
+
+                  {(ticketsSold ?? 0) > 0 && (
+                    <div className="flex items-center gap-2.5 px-4 py-2.5 border border-white/10 rounded-full bg-white/[0.03] self-center sm:self-auto">
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-[12.5px] text-white/65">
+                        <span className="text-white font-bold brutalist-mono">{ticketsSold}</span> going
+                      </span>
                     </div>
                   )}
-                  <span className="text-[12px] text-white/50 font-medium">{collective.name}</span>
                 </div>
+              )}
+            </div>
+
+            {/* RIGHT: brutalist countdown */}
+            {isUpcoming && (
+              <aside className="lg:col-span-5 xl:col-span-5 mt-2 lg:mt-0">
+                <EventCountdown
+                  targetDate={event.doors_at || event.starts_at}
+                  variant="hero"
+                  footerLine={countdownFooter}
+                />
+              </aside>
+            )}
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ RECEIPT-STRIP INFO BAR ═══ */}
+      <section className="relative bg-[#09090B]">
+        <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 pt-6 sm:pt-7 pb-7 sm:pb-8">
+          <div className="grid grid-cols-2 sm:grid-cols-5 max-w-[1100px] mx-auto border-y border-white/[0.08]">
+            <div className="py-4 sm:pr-5 sm:border-r sm:border-white/[0.08] border-b sm:border-b-0 border-white/[0.08]">
+              <div className="brutalist-mono text-[10px] font-bold tracking-[0.32em] uppercase text-white/45 mb-1.5">Date</div>
+              <div className="brutalist-mono text-[15px] sm:text-[16px] font-medium text-white">
+                {dayName} {month2}.{day2}.{year2}
               </div>
             </div>
-          </div>
-        )}
-
-        {dressCode && (
-          <div className="py-4 border-t border-white/[0.04]">
-            <p className="text-[13px] text-white/60"><span className="text-white/60">Dress code</span> — {dressCode}</p>
-          </div>
-        )}
-
-        {/* ═══ LINEUP ═══ */}
-        {artists && artists.length > 0 && (
-          <div className="py-8 border-t border-white/[0.04]">
-            <div className="relative">
-              <div className="flex gap-3 overflow-x-auto pb-2 -mx-6 px-6 scrollbar-hide">
-                {artists.map((a) => {
-                  const artist = a.artists;
-                  if (!artist) return null;
-                  return (
-                    <div
-                      key={a.artist_id}
-                      className="flex-none rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 min-w-[150px] space-y-2.5 hover:border-white/[0.12] transition-all duration-300"
-                    >
-                      <div
-                        className="flex h-11 w-11 items-center justify-center rounded-xl"
-                        style={{ backgroundColor: `${accentColor}15` }}
-                      >
-                        <Music className="h-5 w-5" style={{ color: accentColor }} />
-                      </div>
-                      <p className="font-heading text-sm font-bold text-white tracking-tight">
-                        {artist.name}
-                      </p>
-                      {artist.genre && (
-                        <span
-                          className="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-medium tracking-wide truncate"
-                          style={{
-                            backgroundColor: `${accentColor}12`,
-                            color: `${accentColor}cc`,
-                          }}
-                        >
-                          {Array.isArray(artist.genre) ? artist.genre.join(" · ") : artist.genre}
-                        </span>
-                      )}
-                      {a.set_time && (
-                        <p className="text-[11px] text-white/50 font-medium">{new Date(a.set_time).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Toronto" })}</p>
-                      )}
-                    </div>
-                  );
-                })}
+            {doorsTime24 && (
+              <div className="py-4 sm:px-5 sm:border-r sm:border-white/[0.08] border-b sm:border-b-0 border-white/[0.08]">
+                <div className="brutalist-mono text-[10px] font-bold tracking-[0.32em] uppercase text-white/45 mb-1.5">Doors</div>
+                <div className="brutalist-mono text-[15px] sm:text-[16px] font-medium text-white">{doorsTime24}</div>
               </div>
-              {/* Right fade indicator */}
-              <div className="pointer-events-none absolute right-0 top-0 bottom-2 w-12 bg-gradient-to-l from-[#09090B] to-transparent" />
+            )}
+            <div className="py-4 sm:px-5 sm:border-r sm:border-white/[0.08] border-b sm:border-b-0 border-white/[0.08]">
+              <div className="brutalist-mono text-[10px] font-bold tracking-[0.32em] uppercase text-white/45 mb-1.5">Show</div>
+              <div className="brutalist-mono text-[15px] sm:text-[16px] font-medium text-white">
+                {startTime24}{endTime24 ? `–${endTime24}` : ""}
               </div>
             </div>
-          )}
+            {venue && (
+              <div className="py-4 sm:px-5 sm:border-r sm:border-white/[0.08] border-b sm:border-b-0 border-white/[0.08]">
+                <div className="brutalist-mono text-[10px] font-bold tracking-[0.32em] uppercase text-white/45 mb-1.5">Venue</div>
+                <div className="brutalist-mono text-[15px] sm:text-[16px] font-medium text-white truncate uppercase">{venue.name}</div>
+              </div>
+            )}
+            {event.min_age && (
+              <div className="py-4 sm:pl-5">
+                <div className="brutalist-mono text-[10px] font-bold tracking-[0.32em] uppercase text-white/45 mb-1.5">Min Age</div>
+                <div className="brutalist-mono text-[15px] sm:text-[16px] font-medium text-white">{event.min_age}+</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
-          {/* Status banners */}
-          {event.status === "cancelled" && (
+      {/* Status banners */}
+      {event.status === "cancelled" && (
+        <section className="relative border-t border-white/[0.06] bg-[#09090B]">
+          <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-10">
             <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-center">
               <p className="font-heading text-lg font-semibold text-red-400">
                 This event has been cancelled.
               </p>
             </div>
-          )}
-
-          {event.status === "completed" && (
+          </div>
+        </section>
+      )}
+      {event.status === "completed" && (
+        <section className="relative border-t border-white/[0.06] bg-[#09090B]">
+          <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-10">
             <div className="rounded-2xl border border-white/5 bg-white/[0.02] p-5 text-center">
               <p className="font-heading text-lg font-semibold text-white/50">
                 This event has ended. Thanks for coming!
               </p>
             </div>
-          )}
+          </div>
+        </section>
+      )}
 
-          {/* ═══ RSVP (free events) ═══ */}
-          {isUpcoming && showRsvp && (
-            <div className="py-10 border-t border-white/[0.04]">
+      {/* ═══ 01 / VENUE ═══ */}
+      {venue && (
+        <section className="relative border-t border-white/[0.06] bg-[#09090B]">
+          <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-16 sm:py-20">
+            <div className="flex items-baseline justify-between gap-4 mb-5 sm:mb-6">
+              <div className="brutalist-chapter">{chapter("venue", "VENUE")}</div>
+              {mapsUrl && (
+                <a href={mapsUrl} target="_blank" rel="noopener noreferrer" className="brutalist-chapter hover:text-white transition-colors">
+                  GET DIRECTIONS →
+                </a>
+              )}
+            </div>
+            <div className="brutalist-hairline mb-10 sm:mb-12" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-10">
+              <div className="lg:col-span-7 space-y-6">
+                <h3
+                  className="font-heading font-bold text-white"
+                  style={{ fontSize: "clamp(2.25rem, 6vw, 4.25rem)", letterSpacing: "-0.05em", lineHeight: 0.88 }}
+                >
+                  {venue.name}
+                </h3>
+                <div className="brutalist-mono text-[14px] sm:text-[15px] text-white/60 max-w-[520px] leading-[1.7]">
+                  {venue.address && <>{venue.address.toUpperCase()}<br /></>}
+                  {venue.city && venue.city.toUpperCase()}
+                </div>
+                <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                  {venue.capacity > 0 && (
+                    <div className="px-3 py-1.5 border border-white/10 rounded-full text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">
+                      Cap. {venue.capacity}
+                    </div>
+                  )}
+                  {event.min_age && (
+                    <div className="px-3 py-1.5 border border-white/10 rounded-full text-[11px] font-mono uppercase tracking-[0.18em] text-white/55">
+                      {event.min_age}+ entry
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Map placeholder (preserves the SVG grid look from mockup) */}
+              <div className="lg:col-span-5 relative h-56 sm:h-64 rounded-[2px] overflow-hidden border border-white/[0.08] bg-[#18181B]">
+                <svg className="absolute inset-0 w-full h-full opacity-30" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <defs>
+                    <pattern id="brut-grid" width="24" height="24" patternUnits="userSpaceOnUse">
+                      <path d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="0.5" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#brut-grid)" />
+                </svg>
+                <div className="absolute top-[42%] left-[45%] -translate-x-1/2 -translate-y-1/2">
+                  <div className="relative">
+                    <div className="absolute inset-0 w-8 h-8 rounded-full animate-ping -m-2" style={{ backgroundColor: `${accentColor}50` }} />
+                    <div className="w-4 h-4 rounded-full ring-2 ring-[#09090B]" style={{ backgroundColor: accentColor }} />
+                  </div>
+                </div>
+                {mapsUrl && (
+                  <a
+                    href={mapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute inset-0"
+                    aria-label="Open in Google Maps"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══ 02 / THE NIGHT — description, host quote, dress code ═══ */}
+      {((event.description && event.description.trim().length > 0) || hostMessage || dressCode) && (
+        <section className="relative border-t border-white/[0.06] bg-[#09090B] overflow-hidden">
+          <div className="brutalist-watermark -right-[5vw] top-[10%] z-0" style={{ fontSize: "clamp(14rem, 32vw, 36rem)" }}>
+            {collectiveInitials.slice(0, 2)}
+          </div>
+          <div className="relative z-10 max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-16 sm:py-20">
+            <div className="flex items-baseline justify-between gap-4 mb-5 sm:mb-6">
+              <div className="brutalist-chapter">{chapter("night", "THE NIGHT")}</div>
+              {hostMessage && <div className="brutalist-chapter hidden sm:block">A NOTE FROM {collective.name.toUpperCase()}</div>}
+            </div>
+            <div className="brutalist-hairline mb-10 sm:mb-14" />
+
+            <div className="brutalist-prose mx-auto">
+              {/* Host message — quote treatment */}
+              {hostMessage && (
+                <div className="mb-8 sm:mb-10">
+                  <div className="flex gap-4">
+                    <div className="w-[2px] rounded-full shrink-0" style={{ background: `linear-gradient(180deg, ${accentColor}, transparent)` }} />
+                    <div>
+                      <p className="font-heading text-[16px] sm:text-[18px] text-white/85 leading-[1.7] italic">&ldquo;{hostMessage}&rdquo;</p>
+                      <div className="flex items-center gap-2 mt-3">
+                        {collective.logo_url ? (
+                          <Image src={collective.logo_url} alt={collective.name || "Collective logo"} width={20} height={20} className="h-5 w-5 rounded-full" />
+                        ) : (
+                          <div className="h-5 w-5 rounded-full text-[11px] font-bold text-white flex items-center justify-center" style={{ backgroundColor: accentColor }}>
+                            {collective.name.charAt(0)}
+                          </div>
+                        )}
+                        <span className="text-[12px] text-white/50 font-medium">{collective.name}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Description body — uses ExpandableText */}
+              {event.description && event.description.trim().length > 0 && (
+                <ExpandableText text={event.description} />
+              )}
+
+              {/* Dress code receipt row */}
+              {dressCode && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 border-y border-white/[0.08] mt-10">
+                  <div className="py-4 sm:pr-5 sm:border-r sm:border-white/[0.08] border-b sm:border-b-0 border-white/[0.08]">
+                    <div className="brutalist-mono text-[10px] font-bold tracking-[0.32em] uppercase text-white/45 mb-1.5">Dress code</div>
+                    <div className="font-heading text-[15px] text-white">{dressCode}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══ 03 / LINEUP — type-led tiles ═══ */}
+      {artists && artists.length > 0 && (
+        <section className="relative border-t border-white/[0.06] bg-[#09090B]">
+          <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-16 sm:py-20">
+            <div className="flex items-baseline justify-between gap-4 mb-5 sm:mb-6">
+              <div className="brutalist-chapter">{chapter("lineup", "LINEUP")}</div>
+              <div className="brutalist-chapter hidden sm:block">{artists.length} ARTISTS · IN SET ORDER</div>
+            </div>
+            <div className="brutalist-hairline mb-10 sm:mb-14" />
+
+            <div className="-mx-5 sm:mx-0">
+              <div className={`flex sm:grid gap-0 overflow-x-auto sm:overflow-visible scrollbar-none snap-x snap-mandatory px-5 sm:px-0 ${
+                artists.length === 1 ? "sm:grid-cols-1" : artists.length === 2 ? "sm:grid-cols-2" : "sm:grid-cols-3"
+              }`}>
+                {artists.map((a, i) => {
+                  const artist = a.artists;
+                  if (!artist) return null;
+                  const setTime = a.set_time
+                    ? new Date(a.set_time).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: tz, hour12: false })
+                    : null;
+                  return (
+                    <div
+                      key={a.artist_id || i}
+                      className="snap-start flex-shrink-0 w-[82vw] sm:w-auto relative border border-white/[0.08] sm:border-r-0 last:sm:border-r p-6 sm:p-8 bg-white/[0.01] mr-3 sm:mr-0 group min-h-[300px] sm:min-h-[340px] flex flex-col justify-between transition-all hover:bg-white/[0.025]"
+                      style={{ borderColor: undefined }}
+                    >
+                      {/* top: set time prominent */}
+                      <div className="flex items-start justify-between mb-6">
+                        <div>
+                          <div className="brutalist-mono text-[10px] tracking-[0.32em] uppercase text-white/45 mb-1">Set</div>
+                          <div className="brutalist-mono text-[26px] sm:text-[28px] font-medium tracking-[-0.01em]" style={{ color: `${accentColor}cc` }}>
+                            {setTime || "—:—"}
+                          </div>
+                        </div>
+                        <div className="brutalist-mono text-[10px] tracking-[0.32em] uppercase text-white/30">
+                          {String(i + 1).padStart(2, "0")} / {String(artists.length).padStart(2, "0")}
+                        </div>
+                      </div>
+                      {/* name + meta */}
+                      <div>
+                        <div
+                          className="font-heading font-bold text-white mb-3 break-words"
+                          style={{ fontSize: "clamp(1.6rem, 4vw, 2.6rem)", letterSpacing: "-0.05em", lineHeight: 0.92 }}
+                        >
+                          {artist.name.toUpperCase()}
+                        </div>
+                        {artist.genre && (
+                          <div className="flex flex-wrap gap-1.5 mb-3">
+                            {(Array.isArray(artist.genre) ? artist.genre : [artist.genre]).slice(0, 3).map((g, gi) => (
+                              <span
+                                key={gi}
+                                className="text-[11px] font-mono uppercase tracking-[0.18em] px-2.5 py-1 border rounded-sm border-white/10 text-white/65"
+                              >
+                                {g}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══ 04 / ENTRY (paid tickets) ═══ */}
+      {isUpcoming && showTickets && tiers && tiers.length > 0 && (
+        <section id="tickets" className="relative border-t border-white/[0.06] bg-[#09090B] overflow-hidden">
+          <div className="brutalist-watermark -left-[3vw] top-[8%] z-0" style={{ fontSize: "clamp(12rem, 26vw, 28rem)" }}>
+            $
+          </div>
+          <div className="relative z-10 max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-16 sm:py-20">
+            <div className="flex items-baseline justify-between gap-4 mb-5 sm:mb-6">
+              <div className="brutalist-chapter">{chapter("entry", "ENTRY")}</div>
+              <div className="brutalist-chapter hidden sm:block">{tiers.length} {tiers.length === 1 ? "TIER" : "TIERS"} · USD</div>
+            </div>
+            <div className="brutalist-hairline mb-10 sm:mb-14" />
+
+            <TicketSection
+              tiers={tiers.map((t) => ({
+                id: t.id,
+                name: t.name,
+                price: Number(t.price),
+                capacity: t.capacity,
+                sold: tierSoldCounts[t.id] || 0,
+                remaining: Math.max(0, t.capacity - (tierSoldCounts[t.id] || 0)),
+              }))}
+              eventId={event.id}
+              accentColor={accentColor}
+              eventTitle={event.title}
+              eventDate={eventDate.toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}
+              eventVenue={venue?.name ?? "TBA"}
+              referrerToken={referrerToken}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ═══ 04 / RSVP (free events) ═══ */}
+      {isUpcoming && showRsvp && (
+        <section id="rsvp" className="relative border-t border-white/[0.06] bg-[#09090B]">
+          <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-16 sm:py-20">
+            <div className="flex items-baseline justify-between gap-4 mb-5 sm:mb-6">
+              <div className="brutalist-chapter">{chapter("rsvp", "RSVP")}</div>
+              <div className="brutalist-chapter hidden sm:block">FREE ENTRY</div>
+            </div>
+            <div className="brutalist-hairline mb-10 sm:mb-14" />
+
+            <div className="space-y-10">
               <RsvpWidget
                 eventId={event.id}
                 eventTitle={event.title}
@@ -712,158 +961,204 @@ export default async function PublicEventPage({ params, searchParams }: Props) {
                 initialFullName={viewerFullName}
                 rsvpToken={rsvpToken ?? null}
               />
-            </div>
-          )}
-
-          {/* ═══ LIVE GUEST LIST (free events) ═══
-              Partiful-style: first name + last initial, live counter,
-              avatar stack, flash animation on new RSVPs. Server strips
-              last names before they leave the server. */}
-          {isUpcoming && showRsvp && (
-            <div className="pb-10 border-t border-white/[0.04] pt-10">
               <PublicRsvpList
                 eventId={event.id}
                 accentColor={accentColor}
                 initialRsvps={initialPublicRsvps}
               />
             </div>
-          )}
-
-          {/* ═══ TICKETS ═══ */}
-          {isUpcoming && showTickets && tiers && tiers.length > 0 && (
-            <div id="tickets" className="py-10 border-t border-white/[0.04]">
-              <TicketSection
-                tiers={tiers.map((t) => ({
-                  id: t.id,
-                  name: t.name,
-                  price: Number(t.price),
-                  capacity: t.capacity,
-                  sold: tierSoldCounts[t.id] || 0,
-                  remaining: Math.max(0, t.capacity - (tierSoldCounts[t.id] || 0)),
-                }))}
-                eventId={event.id}
-                accentColor={accentColor}
-                eventTitle={event.title}
-                eventDate={eventDate.toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" })}
-                eventVenue={venue?.name ?? "TBA"}
-                referrerToken={referrerToken}
-              />
-            </div>
-          )}
-
-          {/* ═══ UPDATES FROM ORGANIZER ═══ */}
-          {eventUpdates.length > 0 && (
-            <div className="py-10 border-t border-white/[0.04]">
-              <EventUpdatesFeed
-                updates={eventUpdates}
-                accentColor={accentColor}
-                collectiveName={collective.name}
-              />
-            </div>
-          )}
-
-          {/* ═══ REACTIONS ═══ */}
-          <div className="py-8 border-t border-white/[0.04]">
-            <EventReactions eventId={event.id} initialCounts={reactionCounts} />
           </div>
+        </section>
+      )}
 
-          {/* ─── Share + About ─── */}
-          <div className="space-y-6 py-8 border-t border-white/[0.04]">
-            <div className="flex items-center gap-3">
-              <ShareButton url={publicUrl} title={event.title} />
-              {/* Match ShareButton's Copy/Share padding + bg so the three
-                  buttons read as one button row instead of "two buttons + an
-                  oddly-shaped tag" (user feedback 2026-04-26). */}
-              <a
-                href={buildCalendarUrl(event, shareCardVenue)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-white/10 min-h-[44px]"
-              >
-                <CalendarPlus className="h-4 w-4" />
-                Add to calendar
-              </a>
+      {/* ═══ 05 / DISPATCHES — organizer updates ═══ */}
+      {eventUpdates.length > 0 && (
+        <section className="relative border-t border-white/[0.06] bg-[#09090B]">
+          <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-16 sm:py-20">
+            <div className="flex items-baseline justify-between gap-4 mb-5 sm:mb-6">
+              <div className="brutalist-chapter">{chapter("dispatches", "DISPATCHES")}</div>
+              <div className="brutalist-chapter hidden sm:block">FROM {collectiveInitials} · {eventUpdates.length} POSTED</div>
             </div>
+            <div className="brutalist-hairline mb-10 sm:mb-14" />
 
-            <PublicEventShareCard
-              event={{
-                title: event.title,
-                date: shareCardDate,
-                venue: shareCardVenue,
-                price: lowestTierPrice,
-                flyerUrl: event.flyer_url,
-                publicUrl,
-              }}
+            <EventUpdatesFeed
+              updates={eventUpdates}
               accentColor={accentColor}
-            />
-
-            <CollectiveProfile
-              name={collective.name}
-              slug={collective.slug}
-              description={collective.bio ?? null}
-              logoUrl={collective.logo_url}
-              instagram={null}
-              eventCount={collectiveEventCount ?? 0}
-              accentColor={accentColor}
+              collectiveName={collective.name}
             />
           </div>
+        </section>
+      )}
 
-          {/* ─── Past Events ─── */}
-          <PastEvents
-            events={(pastEvents || []).map((e) => ({
-              title: e.title,
-              slug: e.slug,
-              flyerUrl: e.flyer_url,
-              startsAt: e.starts_at,
-            }))}
-            collectiveSlug={collective.slug}
-            collectiveName={collective.name}
+      {/* ═══ REACT + SHARE ═══ */}
+      <section className="relative border-t border-white/[0.06] bg-[#09090B]">
+        <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-14 sm:py-16">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 sm:gap-16">
+            <div>
+              <div className="flex items-baseline justify-between gap-4 mb-5">
+                <div className="brutalist-chapter">REACT</div>
+              </div>
+              <div className="brutalist-hairline mb-7" />
+              <EventReactions eventId={event.id} initialCounts={reactionCounts} />
+            </div>
+
+            <div>
+              <div className="flex items-baseline justify-between gap-4 mb-5">
+                <div className="brutalist-chapter">TAKE IT</div>
+                <div className="brutalist-chapter hidden sm:block">SHARE · CALENDAR</div>
+              </div>
+              <div className="brutalist-hairline mb-7" />
+              <div className="flex flex-col sm:flex-row gap-3">
+                <ShareButton url={publicUrl} title={event.title} />
+                <a
+                  href={buildCalendarUrl(event, shareCardVenue)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 inline-flex items-center justify-center gap-2.5 px-5 py-3.5 rounded-[10px] border border-white/15 bg-white/[0.03] text-white font-bold text-[14px] hover:bg-white/[0.07] hover:border-white/25 transition-all min-h-[44px]"
+                  style={{ letterSpacing: "-0.005em" }}
+                >
+                  <CalendarPlus className="w-4 h-4" />
+                  Add to calendar
+                </a>
+              </div>
+              <div className="mt-6">
+                <PublicEventShareCard
+                  event={{
+                    title: event.title,
+                    date: shareCardDate,
+                    venue: shareCardVenue,
+                    price: lowestTierPrice,
+                    flyerUrl: event.flyer_url,
+                    publicUrl,
+                  }}
+                  accentColor={accentColor}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ═══ 06 / ALSO BY THIS COLLECTIVE ═══ */}
+      <section className="relative border-t border-white/[0.06] bg-[#09090B] overflow-hidden">
+        <div className="brutalist-watermark -left-[6vw] -bottom-[6vh] z-0" style={{ fontSize: "clamp(14rem, 32vw, 36rem)" }}>
+          {collectiveInitials.slice(0, 2)}
+        </div>
+        <div className="relative z-10 max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-16 sm:py-20">
+          <div className="flex items-baseline justify-between gap-4 mb-5 sm:mb-6">
+            <div className="brutalist-chapter">{chapter("share", "ALSO BY THIS COLLECTIVE")}</div>
+          </div>
+          <div className="brutalist-hairline mb-10 sm:mb-14" />
+
+          <CollectiveProfile
+            name={collective.name}
+            slug={collective.slug}
+            description={collective.bio ?? null}
+            logoUrl={collective.logo_url}
+            instagram={null}
+            eventCount={collectiveEventCount ?? 0}
+            accentColor={accentColor}
           />
 
-      </div>
+          <div className="mt-12 sm:mt-16">
+            <PastEvents
+              events={(pastEvents || []).map((e) => ({
+                title: e.title,
+                slug: e.slug,
+                flyerUrl: e.flyer_url,
+                startsAt: e.starts_at,
+              }))}
+              collectiveSlug={collective.slug}
+              collectiveName={collective.name}
+            />
+          </div>
+        </div>
+      </section>
 
-      {/* Sticky ticket CTA — appears when scrolled past tickets (paid events only) */}
+      {/* ═══ 07 / ALSO THIS WEEK ═══ */}
+      {nearbyEvents && nearbyEvents.length > 0 && (
+        <section className="relative border-t border-white/[0.06] bg-[#09090B]">
+          <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-16 sm:py-20">
+            <div className="flex items-baseline justify-between gap-4 mb-5 sm:mb-6">
+              <div className="brutalist-chapter">{chapter("alsoweek", "ALSO THIS WEEK")}</div>
+              {venue?.city && <div className="brutalist-chapter hidden sm:block">{venue.city.toUpperCase()}</div>}
+            </div>
+            <div className="brutalist-hairline mb-10 sm:mb-14" />
+
+            <AlsoThisWeek
+              events={nearbyEvents.map((e) => {
+                const c = e.collectives;
+                const v = e.venues;
+                return {
+                  title: e.title,
+                  slug: e.slug,
+                  collectiveSlug: c?.slug || "",
+                  collectiveName: c?.name || "",
+                  startsAt: e.starts_at,
+                  flyerUrl: e.flyer_url,
+                  venueName: v?.name || null,
+                  venueCity: v?.city || null,
+                };
+              })}
+              city={venue?.city || undefined}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ═══ BOTTOM MARQUEE ═══ */}
+      {bottomMarqueeItems.length > 0 && (
+        <div className="brutalist-marquee" aria-hidden="true">
+          <div className="brutalist-marquee-track">
+            {[...bottomMarqueeItems, ...bottomMarqueeItems, ...bottomMarqueeItems, ...bottomMarqueeItems].map((item, i) => (
+              <span key={i}>
+                {item} <span style={{ color: accentColor, marginLeft: "1.25rem" }}>◆</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ═══ FOOTER — single brutalist row ═══ */}
+      <footer className="relative border-t border-white/[0.06] bg-[#09090B] overflow-hidden">
+        <div className="max-w-[1400px] mx-auto px-5 sm:px-10 lg:px-14 py-12 sm:py-16">
+          <div className="grid grid-cols-12 gap-6 items-end">
+            <div className="col-span-12 sm:col-span-7">
+              <div
+                className="font-heading font-bold text-white"
+                style={{ fontSize: "clamp(3rem, 9vw, 7rem)", letterSpacing: "-0.04em", lineHeight: 0.92 }}
+              >
+                NOCTURN<span style={{ color: accentColor }}>.</span>
+              </div>
+            </div>
+            <div className="col-span-12 sm:col-span-5 flex flex-wrap gap-x-6 gap-y-3 sm:justify-end">
+              <Link href="/legal/terms" className="font-mono text-[11px] uppercase tracking-[0.32em] text-white/45 hover:text-white transition-colors">
+                Terms
+              </Link>
+              <Link href="/legal/privacy" className="font-mono text-[11px] uppercase tracking-[0.32em] text-white/45 hover:text-white transition-colors">
+                Privacy
+              </Link>
+              <a href="https://trynocturn.com" target="_blank" rel="noopener" className="font-mono text-[11px] uppercase tracking-[0.32em] text-white/45 hover:text-white transition-colors">
+                About
+              </a>
+            </div>
+          </div>
+          <div className="mt-10 pt-6 border-t border-white/[0.05] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 brutalist-mono text-[10px] uppercase tracking-[0.32em] text-white/30">
+            <div>© {yearNum} Nocturn</div>
+            <div>YOU RUN THE NIGHT · NOCTURN RUNS THE BUSINESS</div>
+          </div>
+        </div>
+      </footer>
+
+      {/* Sticky ticket CTA — paid events only */}
       {isUpcoming && showTickets && tiers && tiers.length > 0 && (
         <StickyTicketBar
           lowestPrice={lowestTierPrice}
           accentColor={accentColor}
           ticketSectionId="tickets"
+          remaining={totalRemaining}
         />
       )}
-
-      {/* Cross-promotion: other events happening soon */}
-      <AlsoThisWeek
-        events={(nearbyEvents || []).map((e) => {
-          const c = e.collectives;
-          const v = e.venues;
-          return {
-            title: e.title,
-            slug: e.slug,
-            collectiveSlug: c?.slug || "",
-            collectiveName: c?.name || "",
-            startsAt: e.starts_at,
-            flyerUrl: e.flyer_url,
-            venueName: v?.name || null,
-            venueCity: v?.city || null,
-          };
-        })}
-        city={venue?.city || undefined}
-      />
-
-      {/* Footer */}
-      <footer className="border-t border-white/5 bg-[#09090B] px-6 py-8">
-        <div className="mx-auto max-w-[640px] flex flex-col items-center gap-3">
-          <div className="flex items-center gap-2 text-white/50">
-            <span className="text-sm">🌙</span>
-            <span className="text-xs font-semibold tracking-wide">nocturn.</span>
-          </div>
-          <div className="flex gap-4 text-[11px] text-white/50">
-            <Link href="/legal/terms" className="hover:text-white/40 transition-colors inline-flex items-center min-h-[44px] py-3">Terms</Link>
-            <Link href="/legal/privacy" className="hover:text-white/40 transition-colors inline-flex items-center min-h-[44px] py-3">Privacy</Link>
-            <a href="https://trynocturn.com" target="_blank" rel="noopener" className="hover:text-white/40 transition-colors inline-flex items-center min-h-[44px] py-3">About</a>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
