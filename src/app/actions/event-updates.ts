@@ -243,11 +243,8 @@ interface SendUpdateEmailsInput {
 }
 
 async function sendUpdateEmails(input: SendUpdateEmailsInput): Promise<void> {
-  const apiKey = process.env.RESEND_API_KEY;
-  if (!apiKey) {
-    console.warn("[sendUpdateEmails] RESEND_API_KEY missing, skipping send");
-    return;
-  }
+  const { sendEmail } = await import("@/lib/email/send");
+  const { sanitizeSubject } = await import("@/lib/email/subject-helpers");
 
   const admin = createAdminClient();
 
@@ -339,35 +336,29 @@ async function sendUpdateEmails(input: SendUpdateEmailsInput): Promise<void> {
     </div>
   `;
 
-  // Send in batches of 50 (Resend batch limit)
+  // Route through sendEmail() so each recipient gets retries, plain-text alt,
+  // List-Unsubscribe header, and verified FROM identity. Was a raw fetch to
+  // /emails/batch with hardcoded `updates@trynocturn.com` — that identity may
+  // not be verified in Resend, and batch sends bypass our retry logic.
+  const subject = sanitizeSubject(`Update · ${input.eventTitle}`);
+  const unsubscribeUrl = `${appUrl}/unsubscribe?event=${input.eventId}`;
   let sent = 0;
-  const BATCH = 50;
-  for (let i = 0; i < recipients.length; i += BATCH) {
-    const batch = recipients.slice(i, i + BATCH);
-    try {
-      const res = await fetch("https://api.resend.com/emails/batch", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(
-          batch.map((to) => ({
-            from: "Nocturn <updates@trynocturn.com>",
-            to,
-            subject: `Update: ${input.eventTitle}`,
-            html,
-          }))
-        ),
-      });
-      if (res.ok) {
-        sent += batch.length;
-      } else {
-        const txt = await res.text();
-        console.error("[sendUpdateEmails] batch failed:", res.status, txt);
-      }
-    } catch (err) {
-      console.error("[sendUpdateEmails] fetch error:", err);
+  const results = await Promise.allSettled(
+    recipients.map((to) =>
+      sendEmail({
+        to,
+        subject,
+        html,
+        unsubscribeUrl,
+      }),
+    ),
+  );
+  for (const r of results) {
+    if (r.status === "fulfilled" && !r.value.error) sent += 1;
+    else if (r.status === "rejected") {
+      console.error("[sendUpdateEmails] send error:", r.reason);
+    } else if (r.status === "fulfilled" && r.value.error) {
+      console.error("[sendUpdateEmails] resend error:", r.value.error);
     }
   }
 

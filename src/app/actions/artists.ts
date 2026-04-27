@@ -454,7 +454,7 @@ export async function createArtistAndAddToEvent(formData: {
 
         const { lineupInviteEmail } = await import("@/lib/email/templates");
         const { sendEmail } = await import("@/lib/email/send");
-        const html = lineupInviteEmail({
+        const html = await lineupInviteEmail({
           artistFirstName: firstName,
           collectiveName,
           eventTitle,

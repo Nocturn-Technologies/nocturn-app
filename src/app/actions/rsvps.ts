@@ -340,7 +340,7 @@ export async function submitRsvp(input: SubmitRsvpInput): Promise<{ error: strin
           subject: input.status === "yes"
             ? `You're going to ${event.title} 🎉`
             : `Got it — we'll save you a spot at ${event.title}`,
-          html: rsvpConfirmationEmail({
+          html: await rsvpConfirmationEmail({
             eventTitle: event.title ?? "the event",
             collectiveName: collective?.name ?? "the collective",
             startsAt: event.starts_at,
