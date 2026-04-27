@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Ticket } from "lucide-react";
 
 interface StickyTicketBarProps {
   lowestPrice: string;
   accentColor: string;
   ticketSectionId: string;
+  /** Optional remaining count for live urgency badge ("62 LEFT") */
+  remaining?: number;
 }
 
-export function StickyTicketBar({ lowestPrice, accentColor, ticketSectionId }: StickyTicketBarProps) {
+export function StickyTicketBar({ lowestPrice, accentColor, ticketSectionId, remaining }: StickyTicketBarProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -36,24 +37,34 @@ export function StickyTicketBar({ lowestPrice, accentColor, ticketSectionId }: S
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-40 animate-slide-in-up">
-      {/* B20: solid background on the sticky bar. Previously 95% opacity +
-          blur let description text bleed through visibly on mobile. */}
-      <div className="border-t border-white/5 bg-[#09090B] backdrop-blur-xl px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        <div className="mx-auto max-w-[640px] flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-white">Tickets available</p>
-            <p className="text-xs text-white/50">From {lowestPrice}</p>
+    <div
+      className="fixed bottom-0 left-0 right-0 z-40 animate-slide-in-up bg-[#09090B]/95 backdrop-blur-xl"
+      style={{ borderTop: `3px solid ${accentColor}` }}
+    >
+      <div className="px-4 sm:px-10 lg:px-14 h-[52px] flex items-center justify-between gap-3 pb-[env(safe-area-inset-bottom)]">
+        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+          <div className="brutalist-mono text-[12px] sm:text-[13px] flex items-baseline gap-1.5">
+            <span className="text-white/45 text-[10px] tracking-[0.22em] uppercase">FROM</span>
+            <span className="text-white font-bold tabular-nums">{lowestPrice}</span>
           </div>
-          <button
-            onClick={scrollToTickets}
-            className="flex items-center gap-2 rounded-xl px-5 py-3 min-h-[44px] text-sm font-bold text-white transition-all duration-200 hover:brightness-110 active:scale-[0.95]"
-            style={{ backgroundColor: accentColor }}
-          >
-            <Ticket className="h-4 w-4" />
-            Get Tickets
-          </button>
+          {typeof remaining === "number" && remaining > 0 && (
+            <>
+              <span className="text-white/15">·</span>
+              <div className="flex items-center gap-1.5 brutalist-mono text-[10.5px] uppercase tracking-[0.22em] text-white/45">
+                <span className="w-1 h-1 rounded-full bg-emerald-400 animate-pulse" />
+                <span>{remaining} LEFT</span>
+              </div>
+            </>
+          )}
         </div>
+        <button
+          onClick={scrollToTickets}
+          className="inline-flex items-center justify-center gap-2 px-4 sm:px-6 h-[36px] rounded-[8px] font-heading font-bold text-[12.5px] sm:text-[13px] text-white tracking-[-0.005em] hover:brightness-[1.12] transition-all uppercase"
+          style={{ backgroundColor: accentColor }}
+        >
+          Get tickets
+          <span className="text-[15px] leading-none">→</span>
+        </button>
       </div>
     </div>
   );

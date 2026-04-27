@@ -623,3 +623,122 @@ a[role="button"]:active {
     scroll-behavior: auto !important;
   }
 }
+
+/* ═══════════════════════════════════════
+   V1.1 BRUTALIST PRIMITIVES (NOC-52)
+   ═══════════════════════════════════════ */
+
+/* Numbered chapter section label — "01 / VENUE" */
+.brutalist-chapter {
+  font-family: var(--font-code), ui-monospace, monospace;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* 1.5px hairline divider */
+.brutalist-hairline {
+  height: 1.5px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 0;
+}
+
+/* Reading body — Inter 17.5px / 1.7 line-height for description sections */
+.brutalist-prose {
+  font-family: var(--font-body), Inter, sans-serif;
+  font-size: 17.5px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.78);
+  max-width: 720px;
+  letter-spacing: -0.005em;
+}
+.brutalist-prose p + p { margin-top: 1.4em; }
+
+/* Marquee — infinite horizontal scroll (used top + bottom of page) */
+@keyframes brutalist-marquee {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-50%, 0, 0); }
+}
+.brutalist-marquee {
+  overflow: hidden;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.015);
+}
+.brutalist-marquee-track {
+  display: inline-flex;
+  white-space: nowrap;
+  animation: brutalist-marquee 64s linear infinite;
+  font-family: var(--font-code), ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.45);
+  padding: 14px 0;
+}
+.brutalist-marquee-track > span { padding: 0 1.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .brutalist-marquee-track { animation: none; }
+}
+
+/* Diagonal stamp — JetBrains Mono "EVENT 003 · RUN BY AHC · 2026" */
+.brutalist-stamp {
+  font-family: var(--font-code), ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(168, 85, 247, 0.65);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  padding: 7px 12px;
+  display: inline-block;
+}
+
+/* Hero watermark — cropped letterform, hero-only via overflow:hidden on parent */
+.brutalist-watermark {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+  font-family: var(--font-heading), "Space Grotesk", sans-serif;
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.03);
+  letter-spacing: -0.05em;
+  line-height: 0.8;
+}
+
+/* Tier row in ENTRY printed price list */
+.brutalist-tier-row {
+  display: grid;
+  grid-template-columns: 32px 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 24px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.brutalist-tier-row:hover { background-color: rgba(255, 255, 255, 0.02); }
+.brutalist-tier-row.is-selected {
+  background: linear-gradient(90deg, rgba(123, 47, 247, 0.04) 0%, transparent 60%);
+  box-shadow: inset 3px 0 0 0 #7B2FF7;
+}
+.brutalist-tier-row.is-soldout { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+/* JetBrains Mono microtype helper for prices, ids, dates */
+.brutalist-mono {
+  font-family: var(--font-code), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* Sold-out diagonal stamp (used over tier rows) */
+.brutalist-sold-stamp {
+  transform: rotate(-10deg);
+  border: 2px solid rgba(255, 80, 80, 0.55);
+  color: rgba(255, 100, 100, 0.85);
+  font-family: var(--font-code), ui-monospace, monospace;
+  letter-spacing: 0.32em;
+  font-weight: 700;
+}
